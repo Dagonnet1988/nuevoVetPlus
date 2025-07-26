@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(npm start)",
+      "Bash(curl:*)",
+      "Bash(psql:*)",
+      "Bash(pkill:*)",
+      "Bash(node test-cajas.js)",
+      "Bash(cd:*)",
+      "Bash(cd:*)",
+      "Bash(cd:*)",
+      "Bash(find:*)",
+      "Bash(npm install:*)",
+      "Bash(cd:*)",
+      "Bash(cd:*)",
+      "Bash(rm:*)",
+      "Bash(grep:*)",
+      "Bash(diff:*)",
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(ng version)",
+      "Bash(ng new:*)",
+      "Bash(mv:*)",
+      "Bash(ng add:*)",
+      "Bash(ng build:*)",
+      "Bash(timeout 10 ng serve:*)",
+      "Bash(ng serve)",
+      "Bash(ng serve:*)",
+      "Bash(true)",
+      "Bash(cd:*)",
+      "Bash(cd:*)"
+    ],
+    "deny": []
+  }
+}

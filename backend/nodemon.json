@@ -1,0 +1,24 @@
+{
+  "watch": [
+    "server.js",
+    "src/"
+  ],
+  "ignore": [
+    "node_modules/",
+    "logs/",
+    "reports/",
+    "backups/",
+    "whatsapp_session/",
+    "*.log",
+    ".env*",
+    "package-lock.json",
+    ".git/"
+  ],
+  "ext": "js,json",
+  "delay": 1000,
+  "verbose": false,
+  "restartable": "rs",
+  "env": {
+    "NODE_ENV": "development"
+  }
+}

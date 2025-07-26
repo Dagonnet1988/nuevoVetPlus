@@ -1,0 +1,124 @@
+@use '@angular/material' as mat;
+
+// Incluir el core de Material Design
+@include mat.core();
+
+// ===============================
+// TEMA PRINCIPAL - VERDE VETERINARIO
+// ===============================
+$vetplus-primary: (
+  50: #e8f5e8,
+  100: #c8e6c9,
+  200: #a5d6a7,
+  300: #81c784,
+  400: #66bb6a,
+  500: #4caf50,
+  600: #43a047,
+  700: #388e3c,
+  800: #2e7d32,
+  900: #1b5e20,
+  A100: #b9f6ca,
+  A200: #69f0ae,
+  A400: #00e676,
+  A700: #00c853,
+  contrast: (
+    50: rgba(black, 0.87),
+    100: rgba(black, 0.87),
+    200: rgba(black, 0.87),
+    300: rgba(black, 0.87),
+    400: rgba(black, 0.87),
+    500: white,
+    600: white,
+    700: white,
+    800: white,
+    900: white,
+    A100: rgba(black, 0.87),
+    A200: rgba(black, 0.87),
+    A400: rgba(black, 0.87),
+    A700: rgba(black, 0.87),
+  )
+);
+
+$vetplus-accent: (
+  50: #fff3e0,
+  100: #ffe0b2,
+  200: #ffcc80,
+  300: #ffb74d,
+  400: #ffa726,
+  500: #ff9800,
+  600: #fb8c00,
+  700: #f57c00,
+  800: #ef6c00,
+  900: #e65100,
+  A100: #ffd180,
+  A200: #ffab40,
+  A400: #ff9100,
+  A700: #ff6d00,
+  contrast: (
+    50: rgba(black, 0.87),
+    100: rgba(black, 0.87),
+    200: rgba(black, 0.87),
+    300: rgba(black, 0.87),
+    400: rgba(black, 0.87),
+    500: rgba(black, 0.87),
+    600: rgba(black, 0.87),
+    700: rgba(black, 0.87),
+    800: white,
+    900: white,
+    A100: rgba(black, 0.87),
+    A200: rgba(black, 0.87),
+    A400: rgba(black, 0.87),
+    A700: rgba(black, 0.87),
+  )
+);
+
+// Usar Material 3 theming
+html {
+  @include mat.theme((
+    color: (
+      primary: $vetplus-primary,
+      tertiary: $vetplus-accent,
+    ),
+    typography: Roboto,
+    density: 0,
+  ));
+
+  // Tema claro por defecto
+  color-scheme: light;
+}
+
+// Tema oscuro
+.dark-theme {
+  @include mat.theme((
+    color: (
+      primary: $vetplus-primary,
+      tertiary: $vetplus-accent,
+    ),
+    typography: Roboto,
+    density: 0,
+  ));
+
+  color-scheme: dark;
+  
+  --background-color: #121212;
+  --surface-color: #1e1e1e;
+  --text-primary: #ffffff;
+  --text-secondary: #b3b3b3;
+}
+
+// Tema azul
+.blue-theme {
+  @include mat.theme((
+    color: (
+      primary: mat.$azure-palette,
+      tertiary: mat.$blue-palette,
+    ),
+    typography: Roboto,
+    density: 0,
+  ));
+
+  color-scheme: light;
+  
+  --primary-color: #1976D2;
+  --accent-color: #FFC107;
+}

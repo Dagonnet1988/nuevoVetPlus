@@ -1,0 +1,130 @@
+// Importar Material Design
+@use '@angular/material' as mat;
+
+// Incluir core y tema básico
+@include mat.core();
+
+// Definir tema verde veterinario
+html {
+  @include mat.theme((
+    color: (
+      primary: mat.$green-palette,
+      tertiary: mat.$orange-palette,
+    ),
+    typography: Roboto,
+    density: 0,
+  ));
+
+  color-scheme: light;
+}
+
+// Reset básico
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body { 
+  height: 100%; 
+  margin: 0;
+}
+
+body {
+  font-family: 'Roboto', 'Helvetica Neue', sans-serif;
+  line-height: 1.6;
+}
+
+// Espaciado
+$spacing-xs: 4px;
+$spacing-sm: 8px;
+$spacing-md: 16px;
+$spacing-lg: 24px;
+$spacing-xl: 32px;
+
+// Colores de estado para veterinaria
+$vet-healthy: #4CAF50;
+$vet-sick: #FF5722;
+$vet-treatment: #FF9800;
+$vet-recovered: #8BC34A;
+$vet-emergency: #F44336;
+
+// Utilidades básicas
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.text-left { text-align: left; }
+
+.mt-sm { margin-top: $spacing-sm; }
+.mt-md { margin-top: $spacing-md; }
+.mt-lg { margin-top: $spacing-lg; }
+
+.mb-sm { margin-bottom: $spacing-sm; }
+.mb-md { margin-bottom: $spacing-md; }
+.mb-lg { margin-bottom: $spacing-lg; }
+
+.p-sm { padding: $spacing-sm; }
+.p-md { padding: $spacing-md; }
+.p-lg { padding: $spacing-lg; }
+
+// Estados de veterinaria
+.status-healthy { color: $vet-healthy; }
+.status-sick { color: $vet-sick; }
+.status-treatment { color: $vet-treatment; }
+.status-recovered { color: $vet-recovered; }
+.status-emergency { color: $vet-emergency; }
+
+.bg-healthy { 
+  background-color: rgba($vet-healthy, 0.1); 
+  border-left: 3px solid $vet-healthy;
+  padding: $spacing-sm;
+}
+
+.bg-sick { 
+  background-color: rgba($vet-sick, 0.1); 
+  border-left: 3px solid $vet-sick;
+  padding: $spacing-sm;
+}
+
+.bg-treatment { 
+  background-color: rgba($vet-treatment, 0.1); 
+  border-left: 3px solid $vet-treatment;
+  padding: $spacing-sm;
+}
+
+.bg-emergency { 
+  background-color: rgba($vet-emergency, 0.1); 
+  border-left: 3px solid $vet-emergency;
+  padding: $spacing-sm;
+}
+
+// Flex utilities
+.d-flex { display: flex; }
+.flex-column { flex-direction: column; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.align-center { align-items: center; }
+
+// Width utilities
+.w-100 { width: 100%; }
+.w-50 { width: 50%; }
+
+// Temas adicionales
+.dark-theme {
+  color-scheme: dark;
+  
+  body {
+    background-color: #121212;
+    color: #ffffff;
+  }
+}
+
+.blue-theme {
+  @include mat.theme((
+    color: (
+      primary: mat.$azure-palette,
+      tertiary: mat.$blue-palette,
+    ),
+    typography: Roboto,
+    density: 0,
+  ));
+}
