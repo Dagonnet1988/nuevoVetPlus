@@ -919,36 +919,8 @@ export class PacienteDetailsComponent implements OnInit {
   activeFilter = signal('all');
   documentos = signal<any[]>([]);
 
-  // Datos mock para desarrollo
-  mockHistorial = [
-    {
-      id: '1',
-      tipo: 'consulta',
-      titulo: 'Consulta General',
-      fecha: '2024-01-15',
-      profesional: 'Dr. García',
-      descripcion: 'Consulta de rutina. Paciente en buen estado general.',
-      medicamentos: ['Vitaminas B-Complex', 'Antiparasitario']
-    },
-    {
-      id: '2',
-      tipo: 'vacuna',
-      titulo: 'Vacuna Triple',
-      fecha: '2024-01-10',
-      profesional: 'Dr. Pérez',
-      descripcion: 'Aplicación de vacuna triple viral.',
-      medicamentos: []
-    },
-    {
-      id: '3',
-      tipo: 'tratamiento',
-      titulo: 'Tratamiento Dermatológico',
-      fecha: '2023-12-20',
-      profesional: 'Dr. García',
-      descripcion: 'Tratamiento para dermatitis alérgica.',
-      medicamentos: ['Antihistamínico', 'Shampoo medicado']
-    }
-  ];
+  // Historia médica específica por paciente
+  historiaClinica = signal<any[]>([]);
 
   mockDocumentos = [
     {
@@ -986,48 +958,99 @@ export class PacienteDetailsComponent implements OnInit {
   private loadPacienteDetails(): void {
     this.loading.set(true);
     
-    // Simular carga de datos
-    setTimeout(() => {
-      // Datos mock del paciente (normalmente vendría del servicio)
-      const mockPaciente: Mascota = {
-        id_mascota: this.pacienteId,
-        id_cliente: '1',
-        nombre: 'Max',
-        especie: 'Perro',
-        raza: 'Golden Retriever',
-        sexo: 'M',
-        fecha_nacimiento: '2020-03-15',
-        peso: 25.5,
-        color: 'Dorado',
-        microchip: '982000123456789',
-        notas: 'Paciente muy dócil y tranquilo. Le gusta jugar con otros perros. Alérgico al pollo.',
-        activo: true,
-        fecha_registro: '2023-01-15',
-        cliente: {
-          id_cliente: '1',
-          nombre: 'Carlos Rodríguez',
-          telefono: '+57 301 234 5678',
-          email: 'carlos@email.com',
-          direccion: 'Calle 123 #45-67, Bogotá',
-          cedula: '12345678',
-          activo: true
-        }
-      };
-
-      this.paciente.set(mockPaciente);
-      
-      // Stats mock
-      this.statsResumen.set({
-        consultas: 12,
-        citas: 8,
-        vacunas: 6,
-        ultimaVisita: '15 de Enero, 2024',
-        proximaCita: '28 de Febrero, 2024'
-      });
-
-      this.documentos.set(this.mockDocumentos);
+    if (!this.pacienteId) {
       this.loading.set(false);
-    }, 1500);
+      this.snackBar.open('ID de paciente no válido', 'Cerrar', { duration: 3000 });
+      return;
+    }
+    
+    // Cargar datos reales del paciente desde la API
+    this.pacientesService.getMascotaById(this.pacienteId).subscribe({
+      next: (response) => {
+        // Verificar el formato de la respuesta
+        let pacienteData: Mascota;
+        
+        if (response.success && response.data) {
+          // El backend devuelve los datos del cliente mezclados con los de la mascota
+          const rawData = response.data;
+          
+          // Restructurar para que coincida con la interfaz frontend
+          pacienteData = {
+            id_mascota: rawData.id_mascota,
+            id_cliente: rawData.id_cliente,
+            nombre: rawData.nombre,
+            especie: rawData.especie,
+            raza: rawData.raza,
+            sexo: rawData.sexo,
+            fecha_nacimiento: rawData.fecha_nacimiento,
+            peso: rawData.peso,
+            color: rawData.color,
+            microchip: rawData.microchip,
+            activo: rawData.activo,
+            fecha_registro: rawData.created_at || rawData.fecha_registro,
+            cliente: {
+              id_cliente: rawData.id_cliente,
+              nombre: rawData.nombre_cliente,
+              telefono: rawData.telefono,
+              email: rawData.email,
+              direccion: rawData.direccion,
+              activo: true
+            }
+          };
+        } else if (response.id_mascota) {
+          // Respuesta directa sin wrapper
+          pacienteData = response;
+        } else {
+          throw new Error('Formato de respuesta inválido');
+        }
+        
+        this.paciente.set(pacienteData);
+        
+        // Stats mock (por ahora hasta implementar la historia clínica)
+        this.statsResumen.set({
+          consultas: 0,
+          citas: 0,
+          vacunas: 0,
+          ultimaVisita: 'No hay registros',
+          proximaCita: 'Sin citas programadas'
+        });
+
+        this.documentos.set([]);
+        
+        // Cargar historia clínica específica del paciente
+        this.loadHistoriaClinica(pacienteData.id_mascota || this.pacienteId || 'unknown');
+        
+        this.loading.set(false);
+      },
+      error: (error) => {
+        console.error('Error cargando detalles del paciente:', error);
+        this.loading.set(false);
+        
+        let mensaje = 'Error al cargar los detalles del paciente';
+        if (error.status === 404) {
+          mensaje = 'Paciente no encontrado';
+        }
+        
+        this.snackBar.open(mensaje, 'Cerrar', { duration: 5000 });
+        this.goBack();
+      }
+    });
+  }
+
+  private loadHistoriaClinica(pacienteId: string): void {
+    // Por ahora usaremos datos básicos hasta implementar el módulo de historia clínica
+    // En el futuro, esto será una llamada a la API para obtener consultas, vacunas, etc.
+    this.historiaClinica.set([
+      {
+        id: `${pacienteId}-1`,
+        tipo: 'consulta',
+        titulo: 'Sin registros médicos',
+        fecha: new Date().toISOString().split('T')[0],
+        profesional: 'Sistema',
+        descripcion: 'Este paciente no tiene historia clínica registrada aún.',
+        medicamentos: []
+      }
+    ]);
   }
 
   // Utilidades
@@ -1058,8 +1081,8 @@ export class PacienteDetailsComponent implements OnInit {
 
   filteredHistory() {
     const filter = this.activeFilter();
-    if (filter === 'all') return this.mockHistorial;
-    return this.mockHistorial.filter(evento => evento.tipo === filter);
+    if (filter === 'all') return this.historiaClinica();
+    return this.historiaClinica().filter(evento => evento.tipo === filter);
   }
 
   setFilter(filter: string): void {

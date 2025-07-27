@@ -29,7 +29,9 @@
       "Bash(ng serve:*)",
       "Bash(true)",
       "Bash(cd:*)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(node:*)",
+      "Bash(/dev/null)"
     ],
     "deny": []
   }

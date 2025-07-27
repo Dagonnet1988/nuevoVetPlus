@@ -69,31 +69,35 @@ export class PacientesService {
     if (filters?.cliente) {
       params = params.set('cliente', filters.cliente);
     }
-    if (filters?.activo !== undefined) {
+    if (filters?.activo !== undefined && filters.activo !== null) {
       params = params.set('activo', filters.activo.toString());
     }
 
-    return this.http.get<PacienteResponse>(`${this.API_URL}/mascotas`, { params });
+    return this.http.get<PacienteResponse>(`${this.API_URL}/pacientes`, { params });
   }
 
-  getMascotaById(id: string): Observable<Mascota> {
-    return this.http.get<Mascota>(`${this.API_URL}/mascotas/${id}`);
+  getMascotaById(id: string): Observable<any> {
+    return this.http.get<any>(`${this.API_URL}/pets/${id}`);
   }
 
   getMascotasByCliente(clienteId: string): Observable<Mascota[]> {
-    return this.http.get<Mascota[]>(`${this.API_URL}/clientes/${clienteId}/mascotas`);
+    return this.http.get<Mascota[]>(`${this.API_URL}/pets/client/${clienteId}`);
   }
 
   createMascota(mascota: Partial<Mascota>): Observable<Mascota> {
-    return this.http.post<Mascota>(`${this.API_URL}/mascotas`, mascota);
+    return this.http.post<Mascota>(`${this.API_URL}/pets`, mascota);
   }
 
   updateMascota(id: string, mascota: Partial<Mascota>): Observable<Mascota> {
-    return this.http.put<Mascota>(`${this.API_URL}/mascotas/${id}`, mascota);
+    return this.http.put<Mascota>(`${this.API_URL}/pets/${id}`, mascota);
+  }
+
+  updatePacienteCompleto(id: string, paciente: PacienteFormData): Observable<any> {
+    return this.http.put<any>(`${this.API_URL}/pacientes/${id}`, paciente);
   }
 
   deleteMascota(id: string): Observable<any> {
-    return this.http.delete(`${this.API_URL}/mascotas/${id}`);
+    return this.http.delete(`${this.API_URL}/pets/${id}`);
   }
 
   // ===============================
@@ -105,15 +109,19 @@ export class PacientesService {
   }
 
   getPacienteCompleto(clienteId: string): Observable<PacienteCompleto> {
-    return this.http.get<PacienteCompleto>(`${this.API_URL}/pacientes/${clienteId}`);
+    return this.http.get<PacienteCompleto>(`${this.API_URL}/clients/${clienteId}`);
+  }
+
+  getPacienteStats(): Observable<any> {
+    return this.http.get<any>(`${this.API_URL}/pacientes/stats`);
   }
 
   // ===============================
   // UTILIDADES
   // ===============================
 
-  getEspecies(): Observable<string[]> {
-    return this.http.get<string[]>(`${this.API_URL}/especies`);
+  getEspecies(): Observable<any> {
+    return this.http.get<any>(`${this.API_URL}/especies`);
   }
 
   getRazasByEspecie(especie: string): Observable<string[]> {

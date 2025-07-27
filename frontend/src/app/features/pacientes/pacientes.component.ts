@@ -649,7 +649,7 @@ export class PacientesComponent implements OnInit {
   totalRecords = signal(0);
   pageSize = signal(10);
   currentPage = signal(0);
-  especies = signal<string[]>([]);
+  especies = signal<string[]>(['Perro', 'Gato']); // Inicializar con datos básicos
 
   // Tabla y datos
   dataSource = new MatTableDataSource<Mascota>([]);
@@ -674,12 +674,13 @@ export class PacientesComponent implements OnInit {
       activo: [null]
     });
 
-    // Cargar especies
-    this.especies.set(this.pacientesService.getMockEspecies());
+    // Cargar especies desde el backend
+    this.loadEspecies();
   }
 
   ngOnInit(): void {
     this.loadPacientes();
+    this.loadEstadisticas();
     this.setupFilters();
   }
 
@@ -699,90 +700,58 @@ export class PacientesComponent implements OnInit {
       activo: this.filterForm.value.activo
     };
 
-    // Por ahora usaremos datos mock hasta que implementemos los endpoints del backend
-    this.loadMockData();
+    this.pacientesService.getMascotas(this.currentPage() + 1, this.pageSize(), filters)
+      .subscribe({
+        next: (response) => {
+          this.dataSource.data = response.data.pacientes;
+          this.totalRecords.set(response.data.pagination.total);
+          this.loading.set(false);
+        },
+        error: (error) => {
+          console.error('Error cargando pacientes:', error);
+          this.loading.set(false);
+          this.snackBar.open('Error cargando pacientes', 'Cerrar', { duration: 3000 });
+        }
+      });
   }
 
-  private loadMockData(): void {
-    // Simular llamada a la API con datos mock
-    setTimeout(() => {
-      const mockPacientes: Mascota[] = [
-        {
-          id_mascota: '1',
-          id_cliente: '1',
-          nombre: 'Max',
-          especie: 'Perro',
-          raza: 'Golden Retriever',
-          sexo: 'M',
-          fecha_nacimiento: '2020-03-15',
-          peso: 25.5,
-          color: 'Dorado',
-          activo: true,
-          fecha_registro: '2023-01-15',
-          cliente: {
-            id_cliente: '1',
-            nombre: 'Carlos Rodríguez',
-            telefono: '+57 301 234 5678',
-            email: 'carlos@email.com',
-            direccion: 'Calle 123 #45-67',
-            activo: true
-          }
-        },
-        {
-          id_mascota: '2',
-          id_cliente: '2',
-          nombre: 'Luna',
-          especie: 'Gato',
-          raza: 'Persa',
-          sexo: 'H',
-          fecha_nacimiento: '2021-07-22',
-          peso: 4.2,
-          color: 'Blanco',
-          activo: true,
-          fecha_registro: '2023-02-20',
-          cliente: {
-            id_cliente: '2',
-            nombre: 'María García',
-            telefono: '+57 312 987 6543',
-            email: 'maria@email.com',
-            direccion: 'Carrera 45 #12-34',
-            activo: true
-          }
-        },
-        {
-          id_mascota: '3',
-          id_cliente: '1',
-          nombre: 'Rocky',
-          especie: 'Perro',
-          raza: 'Bulldog Francés',
-          sexo: 'M',
-          fecha_nacimiento: '2019-11-08',
-          peso: 12.8,
-          color: 'Atigrado',
-          activo: true,
-          fecha_registro: '2023-03-10',
-          cliente: {
-            id_cliente: '1',
-            nombre: 'Carlos Rodríguez',
-            telefono: '+57 301 234 5678',
-            email: 'carlos@email.com',
-            direccion: 'Calle 123 #45-67',
-            activo: true
-          }
+  private loadEspecies(): void {
+    this.pacientesService.getEspecies().subscribe({
+      next: (response) => {
+        // Verificar que sea un array
+        if (response && response.data && Array.isArray(response.data)) {
+          this.especies.set(response.data);
+        } else if (Array.isArray(response)) {
+          this.especies.set(response);
+        } else {
+          console.warn('Respuesta de especies no es un array:', response);
+          this.especies.set(this.pacientesService.getMockEspecies());
         }
-      ];
+      },
+      error: (error) => {
+        console.error('Error cargando especies:', error);
+        // Fallback a datos locales
+        this.especies.set(this.pacientesService.getMockEspecies());
+      }
+    });
+  }
 
-      this.dataSource.data = mockPacientes;
-      this.totalPacientes.set(mockPacientes.length);
-      this.totalClientes.set(2);
-      this.totalEspecies.set(2);
-      this.totalRecords.set(mockPacientes.length);
-      this.loading.set(false);
-    }, 1000);
+  private loadEstadisticas(): void {
+    this.pacientesService.getPacienteStats().subscribe({
+      next: (stats) => {
+        this.totalPacientes.set(stats.data.totalPacientes);
+        this.totalClientes.set(stats.data.totalClientes);
+        this.totalEspecies.set(stats.data.totalEspecies);
+      },
+      error: (error) => {
+        console.error('Error cargando estadísticas:', error);
+      }
+    });
   }
 
   onFilterChange(): void {
-    // Aplicar filtros localmente por ahora
+    // Reiniciar a la primera página cuando cambien los filtros
+    this.currentPage.set(0);
     this.loadPacientes();
   }
 
@@ -803,8 +772,7 @@ export class PacientesComponent implements OnInit {
   }
 
   viewDetails(paciente: Mascota): void {
-    // TODO: Implementar vista de detalles
-    this.snackBar.open(`Ver detalles de ${paciente.nombre} - En desarrollo`, 'Cerrar', { duration: 3000 });
+    this.router.navigate(['/pacientes', paciente.id_mascota]);
   }
 
   editPaciente(paciente: Mascota): void {
@@ -821,13 +789,40 @@ export class PacientesComponent implements OnInit {
     const message = `¿Estás seguro de ${action} a ${paciente.nombre}?`;
     
     if (confirm(message)) {
-      // Actualizar estado (por ahora mock)
-      paciente.activo = !paciente.activo;
-      this.snackBar.open(
-        `${paciente.nombre} ha sido ${paciente.activo ? 'activado' : 'desactivado'}`,
-        'Cerrar',
-        { duration: 3000 }
-      );
+      const nuevoEstado = !paciente.activo;
+      
+      console.log('=== TOGGLE STATUS DEBUG ===');
+      console.log('Paciente ID:', paciente.id_mascota);
+      console.log('Estado actual:', paciente.activo);
+      console.log('Nuevo estado:', nuevoEstado);
+      console.log('Datos enviados:', { activo: nuevoEstado });
+      console.log('===========================');
+      
+      this.pacientesService.updateMascota(paciente.id_mascota!, { activo: nuevoEstado }).subscribe({
+        next: (response) => {
+          console.log('Respuesta del servidor:', response);
+          
+          // Actualizar en la tabla
+          paciente.activo = nuevoEstado;
+          
+          // Recargar la lista para verificar persistencia
+          this.loadPacientes();
+          
+          this.snackBar.open(
+            `${paciente.nombre} ha sido ${nuevoEstado ? 'activado' : 'desactivado'}`,
+            'Cerrar',
+            { duration: 3000 }
+          );
+        },
+        error: (error) => {
+          console.error('Error actualizando estado:', error);
+          this.snackBar.open(
+            'Error al actualizar el estado del paciente',
+            'Cerrar',
+            { duration: 3000 }
+          );
+        }
+      });
     }
   }
 

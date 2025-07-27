@@ -61,8 +61,14 @@ export interface PacienteFilter {
 
 export interface PacienteResponse {
   success: boolean;
-  data: Mascota[];
-  total: number;
-  page: number;
-  limit: number;
+  message: string;
+  data: {
+    pacientes: Mascota[];
+    pagination: {
+      currentPage: number;
+      limit: number;
+      total: number;
+      pages: number;
+    };
+  };
 }

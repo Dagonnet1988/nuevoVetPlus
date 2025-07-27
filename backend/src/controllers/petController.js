@@ -216,6 +216,7 @@ export const getPetById = async (req, res) => {
             SELECT 
                 m.*,
                 c.nombre as nombre_cliente,
+                c.cedula,
                 c.telefono,
                 c.email,
                 c.direccion,
@@ -340,15 +341,23 @@ export const updatePet = async (req, res) => {
                 fecha_nacimiento = COALESCE($8, fecha_nacimiento),
                 esterilizado = COALESCE($9, esterilizado),
                 microchip = COALESCE($10, microchip),
+                activo = COALESCE($11, activo),
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id_mascota = $11
+            WHERE id_mascota = $12
             RETURNING *
         `;
 
         const values = [
             nombre, especie, raza, edad, sexo, peso, color,
-            fecha_nacimiento, esterilizado, microchip, id
+            fecha_nacimiento, esterilizado, microchip, req.body.activo, id
         ];
+
+        console.log('=== UPDATE PET DEBUG ===');
+        console.log('ID:', id);
+        console.log('Body completo:', req.body);
+        console.log('Campo activo recibido:', req.body.activo);
+        console.log('Valores SQL:', values);
+        console.log('========================');
 
         const result = await query(updateSQL, values);
         const mascotaActualizada = result.rows[0];

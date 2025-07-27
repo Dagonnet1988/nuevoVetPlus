@@ -1,8 +1,11 @@
 import express from 'express';
 import clientRoutes from './clients.js';
 import petRoutes from './pets.js';
+import pacientesRoutes from './pacientes.js';
 import consultationRoutes from './consultations.js';
 import appointmentRoutes from './appointments.js';
+import { getEspecies, getRazasByEspecie } from '../controllers/pacientesController.js';
+import { authenticateToken, authorize } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -13,15 +16,32 @@ router.get('/test', (req, res) => {
     message: 'Rutas del módulo clínico funcionando correctamente',
     timestamp: new Date().toISOString(),
     module: 'clinical',
-    endpoints: ['clients', 'pets', 'consultations', 'appointments']
+    endpoints: ['clients', 'pets', 'pacientes', 'consultations', 'appointments']
   });
 });
 
 // Montar las rutas de clientes
 router.use('/clients', clientRoutes);
+router.use('/clientes', clientRoutes); // Alias en español
 
 // Montar las rutas de mascotas
 router.use('/pets', petRoutes);
+
+// Montar las rutas de pacientes (combinadas)
+router.use('/pacientes', pacientesRoutes);
+
+// Rutas de especies directas
+router.get('/especies', 
+  authenticateToken,
+  authorize(['admin', 'vet', 'aux']),
+  getEspecies
+);
+
+router.get('/especies/:especie/razas',
+  authenticateToken, 
+  authorize(['admin', 'vet', 'aux']),
+  getRazasByEspecie
+);
 
 // Montar las rutas de consultas clínicas
 router.use('/consultations', consultationRoutes);

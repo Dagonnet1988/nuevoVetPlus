@@ -91,7 +91,7 @@ import { Cliente, Mascota, PacienteFormData } from '../models/paciente.interface
                 <mat-autocomplete #clienteAuto="matAutocomplete"
                                   [displayWith]="displayCliente.bind(this)"
                                   (optionSelected)="onClienteSelected($event)">
-                  @for (cliente of filteredClientes(); track cliente.id_cliente) {
+                  @for (cliente of (filteredClientes() || []); track cliente.id_cliente) {
                     <mat-option [value]="cliente">
                       <div class="cliente-option">
                         <div class="cliente-info">
@@ -185,7 +185,7 @@ import { Cliente, Mascota, PacienteFormData } from '../models/paciente.interface
                 <mat-form-field appearance="outline" class="flex-1">
                   <mat-label>Especie *</mat-label>
                   <mat-select formControlName="especie" (selectionChange)="onEspecieChange($event)">
-                    @for (especie of especies(); track especie) {
+                    @for (especie of (especies() || []); track especie) {
                       <mat-option [value]="especie">{{ especie }}</mat-option>
                     }
                   </mat-select>
@@ -199,7 +199,7 @@ import { Cliente, Mascota, PacienteFormData } from '../models/paciente.interface
                 <mat-form-field appearance="outline" class="flex-1">
                   <mat-label>Raza</mat-label>
                   <mat-select formControlName="raza">
-                    @for (raza of razasDisponibles(); track raza) {
+                    @for (raza of (razasDisponibles() || []); track raza) {
                       <mat-option [value]="raza">{{ raza }}</mat-option>
                     }
                   </mat-select>
@@ -478,8 +478,8 @@ export class PacienteFormComponent implements OnInit {
   loading = signal(false);
   isEditing = signal(false);
   clienteSeleccionado = signal<Cliente | null>(null);
-  especies = signal<string[]>([]);
-  razasDisponibles = signal<string[]>([]);
+  especies = signal<string[]>(['Perro', 'Gato', 'Ave', 'Hamster', 'Conejo', 'Reptil', 'Pez', 'Otro']); // Inicializar con datos básicos
+  razasDisponibles = signal<string[]>(['Mestizo', 'Otro']);
   filteredClientes = signal<Cliente[]>([]);
 
   // Formularios
@@ -488,26 +488,7 @@ export class PacienteFormComponent implements OnInit {
   
   // Datos
   pacienteId?: string;
-  mockClientes: Cliente[] = [
-    {
-      id_cliente: '1',
-      nombre: 'Carlos Rodríguez',
-      telefono: '+57 301 234 5678',
-      email: 'carlos@email.com',
-      direccion: 'Calle 123 #45-67',
-      cedula: '12345678',
-      activo: true
-    },
-    {
-      id_cliente: '2',
-      nombre: 'María García',
-      telefono: '+57 312 987 6543',
-      email: 'maria@email.com',
-      direccion: 'Carrera 45 #12-34',
-      cedula: '87654321',
-      activo: true
-    }
-  ];
+  mockClientes: Cliente[] = [];
 
   constructor(
     private fb: FormBuilder,
@@ -565,11 +546,36 @@ export class PacienteFormComponent implements OnInit {
   }
 
   private loadData(): void {
-    // Cargar especies
-    this.especies.set(this.pacientesService.getMockEspecies());
+    // Cargar especies desde el backend
+    this.pacientesService.getEspecies().subscribe({
+      next: (response: any) => {
+        // Verificar que la respuesta contenga un array válido
+        let especiesArray: string[] = [];
+        
+        if (response && typeof response === 'object' && 'success' in response && Array.isArray(response.data)) {
+          especiesArray = response.data;
+        } else if (Array.isArray(response)) {
+          especiesArray = response;
+        } else {
+          especiesArray = this.pacientesService.getMockEspecies();
+        }
+        
+        // Asegurar que siempre haya al menos las especies básicas
+        if (especiesArray.length === 0) {
+          especiesArray = this.pacientesService.getMockEspecies();
+        }
+        
+        this.especies.set(especiesArray);
+      },
+      error: (error) => {
+        console.error('Error cargando especies:', error);
+        // Fallback a datos mock
+        this.especies.set(this.pacientesService.getMockEspecies());
+      }
+    });
     
     // Cargar clientes para búsqueda
-    this.filteredClientes.set(this.mockClientes);
+    this.loadClientes();
   }
 
   private checkEditMode(): void {
@@ -585,24 +591,133 @@ export class PacienteFormComponent implements OnInit {
   }
 
   private loadPacienteForEdit(id: string): void {
-    // TODO: Implementar carga real del backend
-    console.log('Cargando paciente para editar:', id);
+    this.loading.set(true);
+    
+    this.pacientesService.getMascotaById(id).subscribe({
+      next: (response) => {
+        console.log('Respuesta completa del backend:', response);
+        let pacienteData: any;
+        
+        if (response.success && response.data) {
+          pacienteData = response.data;
+        } else {
+          pacienteData = response;
+        }
+        
+        console.log('Datos del paciente procesados:', pacienteData);
+        
+        // Asegurar que tenemos los datos del cliente
+        const clienteData = {
+          nombre: pacienteData.nombre_cliente || pacienteData.cliente?.nombre || '',
+          cedula: pacienteData.cedula || pacienteData.cliente?.cedula || '',
+          telefono: pacienteData.telefono || pacienteData.cliente?.telefono || '',
+          email: pacienteData.email || pacienteData.cliente?.email || '',
+          direccion: pacienteData.direccion || pacienteData.cliente?.direccion || ''
+        };
+        
+        console.log('Datos del cliente extraídos:', clienteData);
+        
+        // Cargar especies y razas primero
+        this.loadData();
+        
+        // Esperar a que se carguen las especies
+        setTimeout(() => {
+          // Cargar razas para la especie seleccionada
+          if (pacienteData.especie) {
+            this.updateRazas(pacienteData.especie);
+          }
+          
+          // Esperar a que se carguen las razas
+          setTimeout(() => {
+            // Convertir sexo de base de datos (Macho/Hembra) a frontend (M/H)
+            let sexoFrontend = '';
+            if (pacienteData.sexo === 'Macho') {
+              sexoFrontend = 'M';
+            } else if (pacienteData.sexo === 'Hembra') {
+              sexoFrontend = 'H';
+            }
+            
+            // Llenar el formulario con los datos del paciente
+            const formData = {
+              nombre_cliente: clienteData.nombre,
+              cedula: clienteData.cedula,
+              telefono: clienteData.telefono,
+              email: clienteData.email,
+              direccion: clienteData.direccion,
+              
+              nombre_mascota: pacienteData.nombre || '',
+              especie: pacienteData.especie || '',
+              raza: pacienteData.raza || '',
+              sexo: sexoFrontend,
+              fecha_nacimiento: pacienteData.fecha_nacimiento ? new Date(pacienteData.fecha_nacimiento) : null,
+              peso: pacienteData.peso || '',
+              color: pacienteData.color || '',
+              microchip: pacienteData.microchip || '',
+              notas: pacienteData.notas || ''
+            };
+            
+            console.log('Datos del formulario a asignar:', formData);
+            
+            // Resetear formulario y luego aplicar valores
+            this.pacienteForm.reset();
+            this.pacienteForm.patchValue(formData);
+            
+            // Forzar actualización de Material Design
+            setTimeout(() => {
+              // Marcar todos los campos como touched para activar labels
+              Object.keys(this.pacienteForm.controls).forEach(key => {
+                const control = this.pacienteForm.get(key);
+                if (control) {
+                  control.markAsTouched();
+                  control.markAsDirty();
+                  // Trigger change detection
+                  control.updateValueAndValidity();
+                }
+              });
+              
+              // Force change detection cycle
+              this.pacienteForm.updateValueAndValidity();
+              
+              this.loading.set(false);
+            }, 200);
+          }, 400);
+        }, 200);
+      },
+      error: (error) => {
+        console.error('Error cargando paciente para editar:', error);
+        this.loading.set(false);
+        this.snackBar.open('Error al cargar los datos del paciente', 'Cerrar', { duration: 3000 });
+      }
+    });
+  }
+
+  private loadClientes(): void {
+    this.pacientesService.getClientes(1, 50).subscribe({
+      next: (response) => {
+        this.filteredClientes.set(response.data.clients);
+      },
+      error: (error) => {
+        console.error('Error cargando clientes:', error);
+        // Fallback a datos mock
+        this.filteredClientes.set(this.mockClientes);
+      }
+    });
   }
 
   private searchClientes(searchTerm: string): void {
     if (!searchTerm || searchTerm.length < 2) {
-      this.filteredClientes.set(this.mockClientes);
+      this.loadClientes();
       return;
     }
 
-    const filtered = this.mockClientes.filter(cliente =>
-      cliente.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cliente.telefono.includes(searchTerm) ||
-      cliente.cedula?.includes(searchTerm) ||
-      cliente.email?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
-    this.filteredClientes.set(filtered);
+    this.pacientesService.getClientes(1, 20, searchTerm).subscribe({
+      next: (response) => {
+        this.filteredClientes.set(response.data.clients);
+      },
+      error: (error) => {
+        console.error('Error buscando clientes:', error);
+      }
+    });
   }
 
   onEspecieChange(event: any): void {
@@ -613,8 +728,33 @@ export class PacienteFormComponent implements OnInit {
   }
 
   private updateRazas(especie: string): void {
-    const razas = this.pacientesService.getMockRazas(especie);
-    this.razasDisponibles.set(razas);
+    this.pacientesService.getRazasByEspecie(especie).subscribe({
+      next: (response: any) => {
+        // Verificar que la respuesta contenga un array válido
+        let razasArray: string[] = [];
+        
+        if (response && typeof response === 'object' && 'success' in response && Array.isArray(response.data)) {
+          razasArray = response.data;
+        } else if (Array.isArray(response)) {
+          razasArray = response;
+        } else {
+          razasArray = this.pacientesService.getMockRazas(especie);
+        }
+        
+        // Asegurar que siempre haya al menos una opción
+        if (razasArray.length === 0) {
+          razasArray = ['Mestizo', 'Otro'];
+        }
+        
+        this.razasDisponibles.set(razasArray);
+      },
+      error: (error) => {
+        console.error('Error cargando razas:', error);
+        // Fallback a datos mock
+        const razas = this.pacientesService.getMockRazas(especie);
+        this.razasDisponibles.set(razas);
+      }
+    });
   }
 
   onClienteSelected(event: any): void {
@@ -657,21 +797,57 @@ export class PacienteFormComponent implements OnInit {
 
       const formData: PacienteFormData = this.pacienteForm.value;
       
-      // Simular guardado
-      setTimeout(() => {
-        this.loading.set(false);
-        
-        const mensaje = this.isEditing() 
-          ? `${formData.nombre_mascota} ha sido actualizado correctamente`
-          : `${formData.nombre_mascota} ha sido registrado correctamente`;
-          
-        this.snackBar.open(mensaje, 'Cerrar', {
-          duration: 3000,
-          panelClass: ['success-snackbar']
+      if (this.isEditing()) {
+        // Actualizar paciente existente
+        this.pacientesService.updatePacienteCompleto(this.pacienteId!, formData).subscribe({
+          next: (response) => {
+            this.loading.set(false);
+            this.snackBar.open(
+              `${formData.nombre_mascota} ha sido actualizado correctamente`,
+              'Cerrar',
+              { duration: 3000, panelClass: ['success-snackbar'] }
+            );
+            this.router.navigate(['/pacientes', this.pacienteId]);
+          },
+          error: (error) => {
+            this.loading.set(false);
+            console.error('Error actualizando paciente:', error);
+            
+            let mensaje = 'Error al actualizar el paciente';
+            if (error.status === 404) {
+              mensaje = 'El paciente no fue encontrado';
+            } else if (error.status === 409) {
+              mensaje = 'Ya existe un cliente con esa cédula';
+            }
+            
+            this.snackBar.open(mensaje, 'Cerrar', { duration: 5000 });
+          }
         });
-
-        this.router.navigate(['/pacientes']);
-      }, 2000);
+      } else {
+        // Crear nuevo paciente
+        this.pacientesService.createPacienteCompleto(formData).subscribe({
+          next: (response) => {
+            this.loading.set(false);
+            this.snackBar.open(
+              `${formData.nombre_mascota} ha sido registrado correctamente`,
+              'Cerrar',
+              { duration: 3000, panelClass: ['success-snackbar'] }
+            );
+            this.router.navigate(['/pacientes']);
+          },
+          error: (error) => {
+            this.loading.set(false);
+            console.error('Error guardando paciente:', error);
+            
+            let mensaje = 'Error al registrar el paciente';
+            if (error.status === 409) {
+              mensaje = 'Ya existe un cliente con esa cédula';
+            }
+            
+            this.snackBar.open(mensaje, 'Cerrar', { duration: 5000 });
+          }
+        });
+      }
     } else {
       this.markFormGroupTouched();
     }

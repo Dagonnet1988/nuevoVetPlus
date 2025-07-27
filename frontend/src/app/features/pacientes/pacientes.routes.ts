@@ -10,12 +10,11 @@ export const PACIENTES_ROUTES: Routes = [
     loadComponent: () => import('./components/paciente-form.component').then(m => m.PacienteFormComponent)
   },
   {
+    path: ':id',
+    loadComponent: () => import('./components/paciente-details.component').then(m => m.PacienteDetailsComponent)
+  },
+  {
     path: ':id/editar',
     loadComponent: () => import('./components/paciente-form.component').then(m => m.PacienteFormComponent)
   }
-  // TODO: Implementar vista de detalles
-  // {
-  //   path: ':id',
-  //   loadComponent: () => import('./components/paciente-details.component').then(m => m.PacienteDetailsComponent)
-  // }
 ];
