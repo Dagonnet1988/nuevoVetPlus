@@ -2,6 +2,8 @@ import { query } from '../config/database.js';
 import { validationResult } from 'express-validator';
 import { v4 as uuidv4 } from 'uuid';
 import { calculatePetAge } from '../utils/ageCalculator.js';
+import { eliminarFotoAnterior, getFotoDefaultPorEspecie } from '../middleware/uploadMiddleware.js';
+import path from 'path';
 
 /**
  * Crear paciente completo (cliente + mascota en una sola operación)
@@ -19,6 +21,7 @@ export async function createPacienteCompleto(req, res) {
 
     const {
       // Datos del cliente
+      id_cliente_existente, // Nuevo campo opcional para usar cliente existente
       nombre_cliente,
       cedula,
       telefono,
@@ -37,6 +40,26 @@ export async function createPacienteCompleto(req, res) {
       notas
     } = req.body;
 
+    // Validaciones adicionales de negocio que no se pueden hacer con express-validator
+    if (!id_cliente_existente) {
+      // Si no hay cliente existente, validar que los campos del cliente estén presentes
+      if (!nombre_cliente?.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: 'El nombre del cliente es requerido cuando no se selecciona un cliente existente',
+          errors: [{ field: 'nombre_cliente', message: 'Campo requerido para cliente nuevo' }]
+        });
+      }
+      
+      if (!telefono?.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: 'El teléfono del cliente es requerido cuando no se selecciona un cliente existente',
+          errors: [{ field: 'telefono', message: 'Campo requerido para cliente nuevo' }]
+        });
+      }
+    }
+
     // Convertir sexo del frontend (M/H) al formato de base de datos (Macho/Hembra)
     const sexoDb = sexo === 'M' ? 'Macho' : sexo === 'H' ? 'Hembra' : sexo;
 
@@ -44,44 +67,67 @@ export async function createPacienteCompleto(req, res) {
     await query('BEGIN');
 
     try {
-      // Generar UUIDs
-      const id_cliente = uuidv4();
-      const id_mascota = uuidv4();
+      let cliente;
+      let id_cliente;
 
-      // 1. Crear cliente
-      const clienteQuery = `
-        INSERT INTO clinical.clientes (
-          id_cliente, nombre, cedula, telefono, email, direccion, activo, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        RETURNING *
-      `;
+      if (id_cliente_existente) {
+        // Usar cliente existente
+        const clienteResult = await query(
+          'SELECT * FROM clinical.clientes WHERE id_cliente = $1 AND activo = true',
+          [id_cliente_existente]
+        );
 
-      const clienteValues = [
-        id_cliente,
-        nombre_cliente,
-        cedula || null,
-        telefono,
-        email || null,
-        direccion || null
-      ];
+        if (clienteResult.rows.length === 0) {
+          await query('ROLLBACK');
+          return res.status(404).json({
+            success: false,
+            message: 'Cliente no encontrado'
+          });
+        }
 
-      const clienteResult = await query(clienteQuery, clienteValues);
-      const cliente = clienteResult.rows[0];
+        cliente = clienteResult.rows[0];
+        id_cliente = id_cliente_existente;
+      } else {
+        // Crear nuevo cliente
+        id_cliente = uuidv4();
 
-      // 2. Calcular edad si hay fecha de nacimiento
+        const clienteQuery = `
+          INSERT INTO clinical.clientes (
+            id_cliente, nombre, cedula, telefono, email, direccion, activo, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          RETURNING *
+        `;
+
+        const clienteValues = [
+          id_cliente,
+          nombre_cliente,
+          cedula || null,
+          telefono,
+          email || null,
+          direccion || null
+        ];
+
+        const clienteResult = await query(clienteQuery, clienteValues);
+        cliente = clienteResult.rows[0];
+      }
+
+      // Calcular edad si hay fecha de nacimiento
       let edad = null;
       if (fecha_nacimiento) {
         const edadData = calculatePetAge(fecha_nacimiento);
         edad = edadData ? edadData.años : null;
       }
 
-      // 3. Crear mascota
+      // Crear mascota con foto por defecto
+      const id_mascota = uuidv4();
+      const fotoDefault = getFotoDefaultPorEspecie(especie);
+      
       const mascotaQuery = `
         INSERT INTO clinical.mascotas (
           id_mascota, id_cliente, nombre, especie, raza, edad, sexo, 
-          peso, color, fecha_nacimiento, microchip, notas, activo, 
+          peso, color, fecha_nacimiento, microchip, notas, foto_url, activo, 
           created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         RETURNING *
       `;
 
@@ -97,7 +143,8 @@ export async function createPacienteCompleto(req, res) {
         color || null,
         fecha_nacimiento || null,
         microchip || null,
-        notas || null
+        notas || null,
+        fotoDefault
       ];
 
       const mascotaResult = await query(mascotaQuery, mascotaValues);
@@ -138,6 +185,207 @@ export async function createPacienteCompleto(req, res) {
       });
     }
 
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor',
+      error: error.message
+    });
+  }
+}
+
+/**
+ * Actualizar paciente completo (cliente + mascota)
+ */
+/**
+ * Obtener paciente completo por ID (mascota con datos del cliente)
+ */
+export async function getPacienteById(req, res) {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de paciente requerido'
+      });
+    }
+
+    // Obtener información completa del paciente
+    const pacienteQuery = `
+      SELECT 
+        m.id_mascota,
+        m.nombre,
+        m.especie,
+        m.raza,
+        m.sexo,
+        m.edad,
+        m.peso,
+        m.color,
+        m.fecha_nacimiento,
+        m.esterilizado,
+        m.microchip,
+        m.notas,
+        m.foto_url,
+        m.activo,
+        m.created_at,
+        m.updated_at,
+        -- Datos del cliente
+        c.id_cliente,
+        c.nombre as nombre_cliente,
+        c.cedula,
+        c.telefono,
+        c.email,
+        c.direccion,
+        c.created_at as cliente_created_at
+      FROM clinical.mascotas m
+      INNER JOIN clinical.clientes c ON m.id_cliente = c.id_cliente
+      WHERE m.id_mascota = $1 AND c.activo = true
+    `;
+
+    const result = await query(pacienteQuery, [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Paciente no encontrado'
+      });
+    }
+
+    const paciente = result.rows[0];
+
+    // Formatear la respuesta
+    const pacienteFormatted = {
+      id_mascota: paciente.id_mascota,
+      nombre: paciente.nombre,
+      especie: paciente.especie,
+      raza: paciente.raza,
+      sexo: paciente.sexo,
+      edad: paciente.edad,
+      peso: paciente.peso,
+      color: paciente.color,
+      fecha_nacimiento: paciente.fecha_nacimiento,
+      esterilizado: paciente.esterilizado,
+      microchip: paciente.microchip,
+      notas: paciente.notas,
+      foto_url: paciente.foto_url,
+      activo: paciente.activo,
+      created_at: paciente.created_at,
+      updated_at: paciente.updated_at,
+      
+      // Datos del cliente
+      id_cliente: paciente.id_cliente,
+      nombre_cliente: paciente.nombre_cliente,
+      cedula: paciente.cedula,
+      telefono: paciente.telefono,
+      email: paciente.email,
+      direccion: paciente.direccion,
+      
+      // También incluir en formato anidado para compatibilidad
+      cliente: {
+        id_cliente: paciente.id_cliente,
+        nombre: paciente.nombre_cliente,
+        cedula: paciente.cedula,
+        telefono: paciente.telefono,
+        email: paciente.email,
+        direccion: paciente.direccion,
+        created_at: paciente.cliente_created_at
+      },
+
+      // Calcular edad si hay fecha de nacimiento
+      edadCompleta: paciente.fecha_nacimiento ? calculatePetAge(paciente.fecha_nacimiento) : null
+    };
+
+    res.json({
+      success: true,
+      data: pacienteFormatted
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo paciente por ID:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor',
+      error: error.message
+    });
+  }
+}
+
+/**
+ * Actualizar solo una mascota
+ */
+export async function updateMascota(req, res) {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de mascota requerido'
+      });
+    }
+
+    // Verificar que la mascota existe
+    const mascotaExiste = await query(
+      'SELECT id_mascota FROM clinical.mascotas WHERE id_mascota = $1',
+      [id]
+    );
+
+    if (mascotaExiste.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Mascota no encontrada'
+      });
+    }
+
+    // Construir la query de actualización dinámicamente
+    const allowedFields = ['activo', 'nombre', 'especie', 'raza', 'sexo', 'peso', 'color', 'microchip', 'notas'];
+    const updateFields = [];
+    const values = [];
+    let paramIndex = 1;
+
+    for (const [key, value] of Object.entries(updates)) {
+      if (allowedFields.includes(key)) {
+        updateFields.push(`${key} = $${paramIndex}`);
+        values.push(value);
+        paramIndex++;
+      }
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No hay campos válidos para actualizar'
+      });
+    }
+
+    // Agregar el ID al final
+    values.push(id);
+
+    const updateQuery = `
+      UPDATE clinical.mascotas 
+      SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP
+      WHERE id_mascota = $${paramIndex}
+      RETURNING *
+    `;
+
+    const result = await query(updateQuery, values);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Error actualizando la mascota'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Mascota actualizada exitosamente',
+      data: result.rows[0]
+    });
+
+  } catch (error) {
+    console.error('Error actualizando mascota:', error);
     res.status(500).json({
       success: false,
       message: 'Error interno del servidor',
@@ -334,6 +582,7 @@ export async function getMascotasConCliente(req, res) {
         m.color,
         m.fecha_nacimiento,
         m.microchip,
+        m.foto_url,
         m.activo,
         m.created_at as fecha_registro,
         c.id_cliente,
@@ -369,11 +618,16 @@ export async function getMascotasConCliente(req, res) {
       queryParams.push(especie);
     }
 
-    // Filtro por estado activo
+    // Filtro por estado activo (por defecto solo mostrar activos)
     if (activo !== undefined) {
       paramCount++;
       queryText += ` AND m.activo = $${paramCount}`;
       queryParams.push(activo === 'true');
+    } else {
+      // Por defecto, solo mostrar pacientes activos
+      paramCount++;
+      queryText += ` AND m.activo = $${paramCount}`;
+      queryParams.push(true);
     }
 
     // Ordenamiento
@@ -426,6 +680,11 @@ export async function getMascotasConCliente(req, res) {
       countParamCount++;
       countQuery += ` AND m.activo = $${countParamCount}`;
       countParams.push(activo === 'true');
+    } else {
+      // Por defecto, solo contar pacientes activos
+      countParamCount++;
+      countQuery += ` AND m.activo = $${countParamCount}`;
+      countParams.push(true);
     }
 
     const countResult = await query(countQuery, countParams);
@@ -442,6 +701,7 @@ export async function getMascotasConCliente(req, res) {
       color: row.color,
       fecha_nacimiento: row.fecha_nacimiento,
       microchip: row.microchip,
+      foto_url: row.foto_url,
       activo: row.activo,
       fecha_registro: row.fecha_registro,
       edadCompleta: calculatePetAge(row.fecha_nacimiento),
@@ -598,6 +858,214 @@ export async function getEstadisticasPacientes(req, res) {
 
   } catch (error) {
     console.error('Error obteniendo estadísticas:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor',
+      error: error.message
+    });
+  }
+}
+
+/**
+ * Subir foto de paciente
+ */
+export async function uploadFotoPaciente(req, res) {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de mascota requerido'
+      });
+    }
+
+    // Verificar que se subió un archivo
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No se ha proporcionado ningún archivo'
+      });
+    }
+
+    // Verificar que la mascota existe
+    const mascotaResult = await query(
+      'SELECT foto_url FROM clinical.mascotas WHERE id_mascota = $1',
+      [id]
+    );
+
+    if (mascotaResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Mascota no encontrada'
+      });
+    }
+
+    const fotoAnterior = mascotaResult.rows[0].foto_url;
+    const nuevaFotoUrl = `/uploads/pacientes/${req.file.filename}`;
+
+    // Actualizar la URL de la foto en la base de datos
+    const updateResult = await query(
+      'UPDATE clinical.mascotas SET foto_url = $1, updated_at = CURRENT_TIMESTAMP WHERE id_mascota = $2 RETURNING *',
+      [nuevaFotoUrl, id]
+    );
+
+    if (updateResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Error actualizando la foto'
+      });
+    }
+
+    // Eliminar foto anterior (si no es imagen por defecto)
+    eliminarFotoAnterior(fotoAnterior);
+
+    res.json({
+      success: true,
+      message: 'Foto subida exitosamente',
+      data: {
+        foto_url: nuevaFotoUrl,
+        filename: req.file.filename
+      }
+    });
+
+  } catch (error) {
+    console.error('Error subiendo foto:', error);
+    
+    // Handle Multer specific errors
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({
+        success: false,
+        message: 'El archivo es demasiado grande. Máximo 5MB permitido.'
+      });
+    }
+    
+    if (error.code === 'LIMIT_UNEXPECTED_FILE') {
+      return res.status(400).json({
+        success: false,
+        message: 'Campo de archivo inesperado.'
+      });
+    }
+    
+    if (error.message && error.message.includes('Solo se permiten archivos de imagen')) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor',
+      error: error.message
+    });
+  }
+}
+
+/**
+ * Eliminar foto de paciente y restaurar imagen por defecto
+ */
+export async function eliminarFotoPaciente(req, res) {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de mascota requerido'
+      });
+    }
+
+    // Obtener datos actuales de la mascota
+    const mascotaResult = await query(
+      'SELECT foto_url, especie FROM clinical.mascotas WHERE id_mascota = $1',
+      [id]
+    );
+
+    if (mascotaResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Mascota no encontrada'
+      });
+    }
+
+    const { foto_url, especie } = mascotaResult.rows[0];
+    const fotoDefault = getFotoDefaultPorEspecie(especie);
+
+    // Actualizar con imagen por defecto
+    const updateResult = await query(
+      'UPDATE clinical.mascotas SET foto_url = $1, updated_at = CURRENT_TIMESTAMP WHERE id_mascota = $2 RETURNING *',
+      [fotoDefault, id]
+    );
+
+    if (updateResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Error restaurando imagen por defecto'
+      });
+    }
+
+    // Eliminar foto anterior (si no es imagen por defecto)
+    eliminarFotoAnterior(foto_url);
+
+    res.json({
+      success: true,
+      message: 'Foto eliminada y restaurada imagen por defecto',
+      data: {
+        foto_url: fotoDefault
+      }
+    });
+
+  } catch (error) {
+    console.error('Error eliminando foto:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor',
+      error: error.message
+    });
+  }
+}
+
+/**
+ * Obtener foto de paciente
+ */
+export async function getFotoPaciente(req, res) {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de mascota requerido'
+      });
+    }
+
+    // Obtener URL de la foto
+    const result = await query(
+      'SELECT foto_url, nombre, especie FROM clinical.mascotas WHERE id_mascota = $1',
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Mascota no encontrada'
+      });
+    }
+
+    const { foto_url, nombre, especie } = result.rows[0];
+
+    res.json({
+      success: true,
+      data: {
+        foto_url: foto_url || getFotoDefaultPorEspecie(especie),
+        nombre,
+        especie
+      }
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo foto:', error);
     res.status(500).json({
       success: false,
       message: 'Error interno del servidor',

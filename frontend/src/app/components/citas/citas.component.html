@@ -1,0 +1,219 @@
+<div class="citas-container">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <div class="title-section">
+        <h1 class="page-title">
+          <mat-icon class="page-icon">event</mat-icon>
+          Gestión de Citas
+        </h1>
+        <p class="page-subtitle">Calendario integrado con Google Calendar</p>
+      </div>
+      <div class="actions-section">
+        <button mat-raised-button
+                color="primary"
+                (click)="openCreateDialog()"
+                class="create-button">
+          <mat-icon>add</mat-icon>
+          Nueva Cita
+        </button>
+        <button mat-stroked-button
+                (click)="syncWithGoogle()"
+                [disabled]="syncing()"
+                class="sync-button">
+          <mat-icon>sync</mat-icon>
+          Sincronizar
+        </button>
+        <button mat-stroked-button
+                (click)="openExportDialog()"
+                class="export-button">
+          <mat-icon>download</mat-icon>
+          Exportar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Layout principal: Calendario + Panel lateral -->
+  <div class="main-layout">
+    <!-- Calendario (elemento principal) -->
+    <div class="calendar-section">
+      <mat-card class="calendar-card">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>calendar_view_month</mat-icon>
+            Calendario de Citas
+          </mat-card-title>
+          <div class="calendar-actions">
+            <mat-button-toggle-group
+              [value]="currentView()"
+              (change)="changeView($event)"
+              class="view-toggle">
+              <mat-button-toggle value="dayGridMonth">Mes</mat-button-toggle>
+              <mat-button-toggle value="timeGridWeek">Semana</mat-button-toggle>
+              <mat-button-toggle value="timeGridDay">Día</mat-button-toggle>
+            </mat-button-toggle-group>
+          </div>
+        </mat-card-header>
+
+        <mat-card-content>
+          @if (loading()) {
+            <div class="loading-container">
+              <div class="loading-spinner">
+                <mat-spinner diameter="60"></mat-spinner>
+              </div>
+              <div class="loading-text">
+                <h3>Cargando calendario...</h3>
+                <p>Preparando las citas programadas</p>
+              </div>
+            </div>
+          } @else {
+            <div class="calendar-wrapper">
+              <full-calendar
+                [options]="calendarOptions"
+                #calendar>
+              </full-calendar>
+            </div>
+          }
+        </mat-card-content>
+      </mat-card>
+    </div>
+
+    <!-- Panel lateral compacto -->
+    <div class="sidebar-section">
+      <!-- Estadísticas compactas -->
+      <mat-card class="stats-card">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>assessment</mat-icon>
+            Estadísticas
+          </mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="compact-stats">
+            <div class="compact-stat">
+              <mat-icon class="stat-icon primary-color">event</mat-icon>
+              <div class="stat-data">
+                <span class="stat-number">{{ stats()?.total_citas || 0 }}</span>
+                <span class="stat-label">Total</span>
+              </div>
+            </div>
+
+            <div class="compact-stat">
+              <mat-icon class="stat-icon accent-color">today</mat-icon>
+              <div class="stat-data">
+                <span class="stat-number">{{ stats()?.citas_hoy || 0 }}</span>
+                <span class="stat-label">Hoy</span>
+              </div>
+            </div>
+
+            <div class="compact-stat">
+              <mat-icon class="stat-icon warn-color">pending</mat-icon>
+              <div class="stat-data">
+                <span class="stat-number">{{ stats()?.citas_pendientes || 0 }}</span>
+                <span class="stat-label">Pendientes</span>
+              </div>
+            </div>
+
+            <div class="compact-stat">
+              <mat-icon class="stat-icon success-color">assessment</mat-icon>
+              <div class="stat-data">
+                <span class="stat-number">{{ stats()?.tasa_ocupacion || 0 }}%</span>
+                <span class="stat-label">Ocupación</span>
+              </div>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Filtros compactos -->
+      <mat-card class="filters-card">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>filter_list</mat-icon>
+            Filtros
+          </mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <form [formGroup]="filterForm" class="compact-filters">
+            <mat-form-field appearance="outline" class="compact-field">
+              <mat-label>Veterinario</mat-label>
+              <mat-select formControlName="id_veterinario" (selectionChange)="onFilterChange()">
+                <mat-option value="">Todos</mat-option>
+                @for (vet of veterinarios(); track vet.id) {
+                  <mat-option [value]="vet.id">{{ vet.nombre }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="compact-field">
+              <mat-label>Estado</mat-label>
+              <mat-select formControlName="estado" (selectionChange)="onFilterChange()">
+                <mat-option value="">Todos</mat-option>
+                @for (estado of estadosCita; track estado.value) {
+                  <mat-option [value]="estado.value">{{ estado.label }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="compact-field">
+              <mat-label>Tipo</mat-label>
+              <mat-select formControlName="tipo" (selectionChange)="onFilterChange()">
+                <mat-option value="">Todos</mat-option>
+                @for (tipo of tiposCita; track tipo.value) {
+                  <mat-option [value]="tipo.value">{{ tipo.label }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+
+            <button mat-stroked-button
+                    type="button"
+                    (click)="clearFilters()"
+                    class="clear-filters-btn">
+              <mat-icon>clear</mat-icon>
+              Limpiar
+            </button>
+          </form>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Leyenda de estados -->
+      <mat-card class="legend-card">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>palette</mat-icon>
+            Estados
+          </mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="legend-items">
+            <div class="legend-item">
+              <span class="legend-color pendiente"></span>
+              <span class="legend-text">Pendiente</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-color confirmada"></span>
+              <span class="legend-text">Confirmada</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-color en_progreso"></span>
+              <span class="legend-text">En progreso</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-color completada"></span>
+              <span class="legend-text">Completada</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-color cancelada"></span>
+              <span class="legend-text">Cancelada</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-color no_asistio"></span>
+              <span class="legend-text">No asistió</span>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+  </div>
+</div>

@@ -1,4 +1,5 @@
 import express from 'express';
+import { query } from '../config/database.js';
 import { 
     createAppointment,
     getAppointments,
@@ -12,7 +13,8 @@ import {
     forceSyncWithGoogle,
     syncAllPendingAppointments,
     getVeterinarianAvailability,
-    suggestAvailableSlots
+    suggestAvailableSlots,
+    getAppointmentStats
 } from '../controllers/appointmentController.js';
 
 import {
@@ -38,7 +40,7 @@ router.use(authenticateToken);
  */
 router.post(
     '/',
-    authorize(['veterinario', 'admin']),
+    authorize(['admin', 'vet']),
     validateCreateAppointment,
     validateRequest,
     createAppointment
@@ -51,7 +53,7 @@ router.post(
  */
 router.get(
     '/',
-    authorize(['veterinario', 'admin', 'auxiliar']),
+    authorize(['admin', 'vet', 'aux']),
     validateGetAppointments,
     validateRequest,
     getAppointments
@@ -64,8 +66,19 @@ router.get(
  */
 router.get(
     '/calendar',
-    authorize(['veterinario', 'admin', 'auxiliar']),
+    authorize(['admin', 'vet', 'aux']),
     getCalendarView
+);
+
+/**
+ * @route   GET /api/clinical/appointments/stats
+ * @desc    Obtener estadísticas de citas
+ * @access  Veterinario, Admin, Auxiliar
+ */
+router.get(
+    '/stats',
+    authorize(['admin', 'vet', 'aux']),
+    getAppointmentStats
 );
 
 /**
@@ -75,7 +88,7 @@ router.get(
  */
 router.get(
     '/vet/:id',
-    authorize(['veterinario', 'admin']),
+    authorize(['admin', 'vet']),
     validateUUIDParam,
     validateRequest,
     (req, res, next) => {
@@ -98,7 +111,7 @@ router.get(
  */
 router.get(
     '/pet/:id',
-    authorize(['veterinario', 'admin', 'auxiliar']),
+    authorize(['admin', 'vet', 'aux']),
     validateUUIDParam,
     validateRequest,
     getAppointmentsByPet
@@ -111,7 +124,7 @@ router.get(
  */
 router.get(
     '/:id',
-    authorize(['veterinario', 'admin', 'auxiliar']),
+    authorize(['admin', 'vet', 'aux']),
     validateUUIDParam,
     validateRequest,
     getAppointmentById
@@ -124,7 +137,7 @@ router.get(
  */
 router.put(
     '/:id',
-    authorize(['veterinario', 'admin']),
+    authorize(['admin', 'vet']),
     validateUpdateAppointment,
     validateRequest,
     updateAppointment
@@ -137,7 +150,7 @@ router.put(
  */
 router.patch(
     '/:id/status',
-    authorize(['veterinario', 'admin', 'auxiliar']),
+    authorize(['admin', 'vet', 'aux']),
     validateUpdateAppointmentStatus,
     validateRequest,
     updateAppointmentStatus
@@ -150,7 +163,7 @@ router.patch(
  */
 router.delete(
     '/:id',
-    authorize(['veterinario', 'admin']),
+    authorize(['admin', 'vet']),
     validateUUIDParam,
     validateRequest,
     cancelAppointment
@@ -163,10 +176,21 @@ router.delete(
  */
 router.post(
     '/:id/sync-google',
-    authorize(['vet', 'admin']),
+    authorize(['admin', 'vet']),
     validateUUIDParam,
     validateRequest,
     forceSyncWithGoogle
+);
+
+/**
+ * @route   POST /api/clinical/appointments/force-sync-google
+ * @desc    Forzar sincronización con Google Calendar (todas las citas pendientes)
+ * @access  Admin
+ */
+router.post(
+    '/force-sync-google',
+    authorize(['admin']),
+    syncAllPendingAppointments
 );
 
 /**
@@ -187,7 +211,7 @@ router.post(
  */
 router.get(
     '/vet/:id/availability',
-    authorize(['vet', 'admin']),
+    authorize(['admin', 'vet']),
     validateUUIDParam,
     validateRequest,
     getVeterinarianAvailability
@@ -200,10 +224,49 @@ router.get(
  */
 router.get(
     '/vet/:id/suggest-slots',
-    authorize(['vet', 'admin', 'auxiliar']),
+    authorize(['admin', 'vet', 'aux']),
     validateUUIDParam,
     validateRequest,
     suggestAvailableSlots
+);
+
+/**
+ * @route   GET /api/clinical/veterinarians
+ * @desc    Obtener lista de veterinarios activos
+ * @access  Veterinario, Admin, Auxiliar
+ */
+router.get(
+    '/veterinarians',
+    authorize(['admin', 'vet', 'aux']),
+    async (req, res) => {
+        try {
+            const result = await query(`
+                SELECT 
+                    id_usuario as id,
+                    CONCAT(nombre, ' ', apellido) as nombre,
+                    email,
+                    especialidad,
+                    numero_licencia
+                FROM auth.usuarios 
+                WHERE rol IN ('vet', 'admin') 
+                AND activo = true
+                ORDER BY nombre ASC
+            `);
+            
+            console.log(`📋 Veterinarios encontrados: ${result.rows.length}`);
+            
+            res.json({
+                success: true,
+                data: result.rows
+            });
+        } catch (error) {
+            console.error('Error obteniendo veterinarios:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor'
+            });
+        }
+    }
 );
 
 export default router;

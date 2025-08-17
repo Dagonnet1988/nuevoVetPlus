@@ -11,10 +11,17 @@ class GoogleCalendarService {
 
     async initializeAuth() {
         try {
+            console.log('🔧 Inicializando autenticación de Google Calendar...');
             // Obtener configuración activa de la base de datos
             await this.loadConfig();
             
             if (this.config) {
+                console.log('📋 Configuración encontrada:', {
+                    client_id: this.config.client_id ? `${this.config.client_id.substring(0, 10)}...` : 'NO',
+                    redirect_uri: this.config.redirect_uri,
+                    has_refresh_token: !!this.config.refresh_token
+                });
+                
                 this.auth = new google.auth.OAuth2(
                     this.config.client_id,
                     this.config.client_secret,
@@ -22,6 +29,7 @@ class GoogleCalendarService {
                 );
 
                 if (this.config.refresh_token) {
+                    console.log('🔑 Configurando tokens existentes...');
                     this.auth.setCredentials({
                         refresh_token: this.config.refresh_token,
                         access_token: this.config.access_token
@@ -29,9 +37,12 @@ class GoogleCalendarService {
                 }
 
                 this.calendar = google.calendar({ version: 'v3', auth: this.auth });
+                console.log('✅ Google Calendar Auth inicializado exitosamente');
+            } else {
+                console.log('⚠️ No se encontró configuración de Google Calendar');
             }
         } catch (error) {
-            console.error('Error inicializando Google Calendar Auth:', error);
+            console.error('❌ Error inicializando Google Calendar Auth:', error);
         }
     }
 
@@ -618,16 +629,31 @@ class GoogleCalendarService {
      * Obtener URL de autorización (para configuración inicial)
      */
     getAuthUrl() {
-        const scopes = [
-            'https://www.googleapis.com/auth/calendar',
-            'https://www.googleapis.com/auth/calendar.events'
-        ];
+        try {
+            console.log('🔗 Generando URL de autorización...');
+            
+            if (!this.auth) {
+                console.log('❌ Auth no inicializado');
+                return null;
+            }
+            
+            const scopes = [
+                'https://www.googleapis.com/auth/calendar',
+                'https://www.googleapis.com/auth/calendar.events'
+            ];
 
-        return this.auth.generateAuthUrl({
-            access_type: 'offline',
-            scope: scopes,
-            prompt: 'consent'
-        });
+            const authUrl = this.auth.generateAuthUrl({
+                access_type: 'offline',
+                scope: scopes,
+                prompt: 'consent'
+            });
+            
+            console.log('✅ URL de autorización generada exitosamente');
+            return authUrl;
+        } catch (error) {
+            console.error('❌ Error generando URL de autorización:', error);
+            return null;
+        }
     }
 
     /**
@@ -642,6 +668,231 @@ class GoogleCalendarService {
             };
         } catch (error) {
             console.error('Error obteniendo tokens:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    /**
+     * Configurar webhook para recibir notificaciones de cambios
+     */
+    async setupWebhook() {
+        try {
+            if (!await this.hasValidTokens()) {
+                return {
+                    success: false,
+                    error: 'Google Calendar no está configurado'
+                };
+            }
+
+            // URL del webhook (debe ser HTTPS en producción)
+            const webhookUrl = process.env.GOOGLE_WEBHOOK_URL || 
+                              `${process.env.BASE_URL || 'http://localhost:3000'}/api/google-calendar-webhook`;
+            
+            // Token de verificación
+            const verifyToken = process.env.GOOGLE_WEBHOOK_VERIFY_TOKEN || 'vetplus-webhook-token';
+
+            console.log('🔔 Configurando webhook de Google Calendar:', webhookUrl);
+
+            // Configurar el canal de notificaciones
+            const channelId = `vetplus-${Date.now()}`;
+            const expiration = Date.now() + (7 * 24 * 60 * 60 * 1000); // 7 días
+
+            const response = await this.calendar.events.watch({
+                calendarId: this.config.calendar_id || 'primary',
+                resource: {
+                    id: channelId,
+                    type: 'web_hook',
+                    address: webhookUrl,
+                    token: verifyToken,
+                    expiration: expiration.toString()
+                }
+            });
+
+            // Guardar información del webhook en la configuración
+            await query(`
+                UPDATE auth.google_calendar_config 
+                SET 
+                    webhook_channel_id = $1,
+                    webhook_url = $2,
+                    webhook_expiration = $3,
+                    webhook_resource_id = $4,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE is_active = true
+            `, [channelId, webhookUrl, new Date(expiration), response.data.resourceId]);
+
+            console.log('✅ Webhook configurado exitosamente:', {
+                channelId: response.data.id,
+                resourceId: response.data.resourceId,
+                expiration: new Date(expiration)
+            });
+
+            return {
+                success: true,
+                channelId: response.data.id,
+                resourceId: response.data.resourceId,
+                expiration: new Date(expiration),
+                webhookUrl: webhookUrl
+            };
+
+        } catch (error) {
+            console.error('❌ Error configurando webhook:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    /**
+     * Detener webhook existente
+     */
+    async stopWebhook() {
+        try {
+            // Obtener información del webhook actual
+            const configResult = await query(`
+                SELECT webhook_channel_id, webhook_resource_id 
+                FROM auth.google_calendar_config 
+                WHERE is_active = true 
+                AND webhook_channel_id IS NOT NULL
+            `);
+
+            if (configResult.rows.length === 0) {
+                return {
+                    success: false,
+                    error: 'No hay webhook activo configurado'
+                };
+            }
+
+            const { webhook_channel_id, webhook_resource_id } = configResult.rows[0];
+
+            // Detener el canal de notificaciones
+            await this.calendar.channels.stop({
+                resource: {
+                    id: webhook_channel_id,
+                    resourceId: webhook_resource_id
+                }
+            });
+
+            // Limpiar información del webhook en la configuración
+            await query(`
+                UPDATE auth.google_calendar_config 
+                SET 
+                    webhook_channel_id = NULL,
+                    webhook_url = NULL,
+                    webhook_expiration = NULL,
+                    webhook_resource_id = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE is_active = true
+            `);
+
+            console.log('✅ Webhook detenido exitosamente');
+
+            return {
+                success: true,
+                message: 'Webhook detenido exitosamente'
+            };
+
+        } catch (error) {
+            console.error('❌ Error deteniendo webhook:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    /**
+     * Verificar estado del webhook
+     */
+    async getWebhookStatus() {
+        try {
+            const configResult = await query(`
+                SELECT 
+                    webhook_channel_id,
+                    webhook_url,
+                    webhook_expiration,
+                    webhook_resource_id
+                FROM auth.google_calendar_config 
+                WHERE is_active = true
+            `);
+
+            if (configResult.rows.length === 0) {
+                return {
+                    success: true,
+                    status: 'not_configured',
+                    message: 'Google Calendar no está configurado'
+                };
+            }
+
+            const config = configResult.rows[0];
+
+            if (!config.webhook_channel_id) {
+                return {
+                    success: true,
+                    status: 'not_active',
+                    message: 'Webhook no está configurado'
+                };
+            }
+
+            const expiration = new Date(config.webhook_expiration);
+            const now = new Date();
+
+            if (expiration <= now) {
+                return {
+                    success: true,
+                    status: 'expired',
+                    message: 'Webhook ha expirado',
+                    expiredAt: expiration
+                };
+            }
+
+            return {
+                success: true,
+                status: 'active',
+                channelId: config.webhook_channel_id,
+                webhookUrl: config.webhook_url,
+                expiration: expiration,
+                timeUntilExpiration: expiration - now
+            };
+
+        } catch (error) {
+            console.error('Error verificando estado del webhook:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    /**
+     * Renovar webhook antes de que expire
+     */
+    async renewWebhook() {
+        try {
+            console.log('🔄 Renovando webhook de Google Calendar...');
+
+            // Detener webhook actual si existe
+            const stopResult = await this.stopWebhook();
+            if (stopResult.success) {
+                console.log('✅ Webhook anterior detenido');
+            }
+
+            // Configurar nuevo webhook
+            const setupResult = await this.setupWebhook();
+            
+            if (setupResult.success) {
+                console.log('✅ Webhook renovado exitosamente');
+                return setupResult;
+            } else {
+                console.error('❌ Error renovando webhook:', setupResult.error);
+                return setupResult;
+            }
+
+        } catch (error) {
+            console.error('❌ Error renovando webhook:', error);
             return {
                 success: false,
                 error: error.message

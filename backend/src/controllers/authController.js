@@ -23,14 +23,14 @@ class AuthController {
         });
       }
 
-      const { email, password } = req.body;
+      const { documento, password } = req.body;
       const ip = req.ip || req.connection.remoteAddress;
       const userAgent = req.get('User-Agent');
 
-      // Buscar usuario por email
+      // Buscar usuario por documento
       const userResult = await query(
-        'SELECT id_usuario, nombre, email, password_hash, rol, activo, intentos_login, bloqueado_hasta, password_temporal, debe_cambiar_password FROM auth.usuarios WHERE email = $1',
-        [email.toLowerCase()]
+        'SELECT id_usuario, nombre, apellido, email, documento, password_hash, rol, activo, intentos_login, bloqueado_hasta, password_temporal, debe_cambiar_password FROM auth.usuarios WHERE documento = $1',
+        [documento]
       );
 
       if (userResult.rows.length === 0) {
@@ -54,11 +54,13 @@ class AuthController {
 
       // Verificar si el usuario está bloqueado
       if (user.bloqueado_hasta && new Date() < new Date(user.bloqueado_hasta)) {
+        const minutosRestantes = Math.ceil((new Date(user.bloqueado_hasta) - new Date()) / 60000);
         return res.status(423).json({
           success: false,
-          message: 'Usuario bloqueado temporalmente',
+          message: `Usuario bloqueado temporalmente. Intenta de nuevo en ${minutosRestantes} minuto(s).`,
           error: 'USER_LOCKED',
-          bloqueado_hasta: user.bloqueado_hasta
+          bloqueado_hasta: user.bloqueado_hasta,
+          minutos_restantes: minutosRestantes
         });
       }
 
@@ -66,10 +68,10 @@ class AuthController {
       const isValidPassword = await bcrypt.compare(password, user.password_hash);
 
       if (!isValidPassword) {
-        // Incrementar intentos fallidos
+        // DESARROLLO: Rate limiting más permisivo
         const nuevosIntentos = (user.intentos_login || 0) + 1;
-        const bloqueadoHasta = nuevosIntentos >= 5 
-          ? new Date(Date.now() + 15 * 60 * 1000) // 15 minutos
+        const bloqueadoHasta = nuevosIntentos >= 50  // Aumentado de 5 a 50 intentos
+          ? new Date(Date.now() + 2 * 60 * 1000)     // Reducido de 15 a 2 minutos
           : null;
 
         await query(
@@ -78,13 +80,13 @@ class AuthController {
         );
 
         // Log de intento fallido (simplificado)
-        console.log(`⚠️  Login fallido para ${email} desde IP ${ip}`);
+        console.log(`⚠️  Login fallido para ${documento} desde IP ${ip} (Intento ${nuevosIntentos}/50)`);
 
         return res.status(401).json({
           success: false,
           message: 'Credenciales inválidas',
           error: 'INVALID_CREDENTIALS',
-          intentos_restantes: Math.max(0, 5 - nuevosIntentos)
+          intentos_restantes: Math.max(0, 50 - nuevosIntentos)
         });
       }
 
@@ -101,12 +103,14 @@ class AuthController {
       const token = generateToken({
         id_usuario: user.id_usuario,
         email: user.email,
+        documento: user.documento,
         nombre: user.nombre,
+        apellido: user.apellido,
         rol: user.rol
       });
 
       // Log de login exitoso (simplificado)
-      console.log(`✅ Login exitoso para ${user.email} desde IP ${ip}`);
+      console.log(`✅ Login exitoso para ${user.documento} (${user.email}) desde IP ${ip}`);
 
       res.json({
         success: true,
@@ -116,7 +120,9 @@ class AuthController {
           user: {
             id: user.id_usuario,
             nombre: user.nombre,
+            apellido: user.apellido,
             email: user.email,
+            documento: user.documento,
             rol: user.rol
           },
           must_change_password: needsPasswordChange
@@ -145,7 +151,7 @@ class AuthController {
         // Agregar token a blacklist
         await query(
           'INSERT INTO auth.blacklisted_tokens (token, id_usuario, razon) VALUES ($1, $2, $3)',
-          [token, req.user?.id, 'logout']
+          [token, req.user?.id_usuario, 'logout']
         );
 
         // Log de logout (simplificado)

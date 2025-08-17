@@ -25,8 +25,8 @@ html {
   box-sizing: border-box;
 }
 
-html, body { 
-  height: 100%; 
+html, body {
+  height: 100%;
   margin: 0;
 }
 
@@ -73,26 +73,26 @@ $vet-emergency: #F44336;
 .status-recovered { color: $vet-recovered; }
 .status-emergency { color: $vet-emergency; }
 
-.bg-healthy { 
-  background-color: rgba($vet-healthy, 0.1); 
+.bg-healthy {
+  background-color: rgba($vet-healthy, 0.1);
   border-left: 3px solid $vet-healthy;
   padding: $spacing-sm;
 }
 
-.bg-sick { 
-  background-color: rgba($vet-sick, 0.1); 
+.bg-sick {
+  background-color: rgba($vet-sick, 0.1);
   border-left: 3px solid $vet-sick;
   padding: $spacing-sm;
 }
 
-.bg-treatment { 
-  background-color: rgba($vet-treatment, 0.1); 
+.bg-treatment {
+  background-color: rgba($vet-treatment, 0.1);
   border-left: 3px solid $vet-treatment;
   padding: $spacing-sm;
 }
 
-.bg-emergency { 
-  background-color: rgba($vet-emergency, 0.1); 
+.bg-emergency {
+  background-color: rgba($vet-emergency, 0.1);
   border-left: 3px solid $vet-emergency;
   padding: $spacing-sm;
 }
@@ -111,7 +111,7 @@ $vet-emergency: #F44336;
 // Temas adicionales
 .dark-theme {
   color-scheme: dark;
-  
+
   body {
     background-color: #121212;
     color: #ffffff;
@@ -127,4 +127,16 @@ $vet-emergency: #F44336;
     typography: Roboto,
     density: 0,
   ));
+}
+
+// Estilos globales para diálogo de imagen
+.image-dialog {
+  .mat-mdc-dialog-container {
+    padding: 0 !important;
+  }
+
+  .mat-mdc-dialog-surface {
+    border-radius: 12px !important;
+    overflow: hidden;
+  }
 }

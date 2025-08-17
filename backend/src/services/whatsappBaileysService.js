@@ -11,6 +11,7 @@ import {
     generateWAMessageFromContent,
     prepareWAMessageMedia
 } from '@whiskeysockets/baileys';
+import P from 'pino';
 import { Boom } from '@hapi/boom';
 import qrcode from 'qrcode';
 import fs from 'fs/promises';
@@ -89,10 +90,8 @@ class WhatsAppBaileysService {
             this.sock = makeWASocket({
                 auth: state,
                 printQRInTerminal: false,
-                logger: {
-                    level: 'silent',
-                    child: () => ({ level: 'silent' })
-                }
+                logger: P({ level: 'silent' }),
+                browser: ['VetPlus', 'Desktop', '1.0.0']
             });
 
             // Manejar eventos de conexión
@@ -291,7 +290,7 @@ class WhatsAppBaileysService {
             // Obtener datos de la factura para el mensaje
             const facturaResult = await query(`
                 SELECT 
-                    fv.numero_factura,
+                    fv.codigo_factura,
                     fv.fecha,
                     fv.total,
                     c.nombre as cliente_nombre,
@@ -310,13 +309,13 @@ class WhatsAppBaileysService {
             // Generar mensaje personalizado
             const mensaje = this.config.mensaje_whatsapp_factura
                 .replace('{cliente_nombre}', clienteNombre || factura.cliente_nombre)
-                .replace('{numero_factura}', factura.numero_factura)
+                .replace('{codigo_factura}', factura.codigo_factura)
                 .replace('{fecha}', new Date(factura.fecha).toLocaleDateString('es-CO'))
                 .replace('{total}', Number(factura.total).toLocaleString('es-CO'))
                 .replace('{empresa}', this.config.nombre_empresa);
 
             // Enviar PDF con mensaje
-            const filename = `Factura-${factura.numero_factura}.pdf`;
+            const filename = `Factura-${factura.codigo_factura}.pdf`;
             const resultado = await this.sendDocument(
                 numeroTelefono || factura.cliente_telefono,
                 pdfPath,

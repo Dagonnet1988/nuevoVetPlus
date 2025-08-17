@@ -1,0 +1,51 @@
+<mat-card class="activity-card">
+  <mat-card-header>
+    <mat-card-title>
+      <mat-icon>history</mat-icon>
+      Actividad Reciente
+    </mat-card-title>
+    <button mat-icon-button routerLink="/actividad" class="header-action">
+      <mat-icon>more_vert</mat-icon>
+    </button>
+  </mat-card-header>
+
+  <mat-card-content class="activity-content">
+    @if (activities && activities.length > 0) {
+      <mat-list class="activity-list">
+        @for (activity of activities; track activity.id) {
+          <mat-list-item class="activity-item">
+            <div class="activity-icon" [style.background-color]="getIconBgColor(activity.color)">
+              <mat-icon [style.color]="activity.color">{{ activity.icono }}</mat-icon>
+            </div>
+            
+            <div class="activity-info">
+              <p class="activity-description">{{ activity.descripcion }}</p>
+              <div class="activity-meta">
+                <span class="activity-user">{{ activity.usuario }}</span>
+                <span class="activity-time">{{ getRelativeTime(activity.fecha) }}</span>
+              </div>
+            </div>
+
+            <div class="activity-type">
+              <span class="type-badge" [class]="'type-' + activity.tipo">
+                {{ getTypeLabel(activity.tipo) }}
+              </span>
+            </div>
+          </mat-list-item>
+        }
+      </mat-list>
+    } @else {
+      <div class="no-activity">
+        <mat-icon>inbox</mat-icon>
+        <p>No hay actividad reciente</p>
+      </div>
+    }
+  </mat-card-content>
+
+  <mat-card-actions class="activity-actions">
+    <button mat-button routerLink="/actividad" color="primary">
+      <mat-icon>visibility</mat-icon>
+      Ver Todo el Historial
+    </button>
+  </mat-card-actions>
+</mat-card>

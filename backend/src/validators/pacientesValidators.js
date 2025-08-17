@@ -4,8 +4,15 @@ import { body, query, param } from 'express-validator';
  * Validador para crear paciente completo (cliente + mascota)
  */
 export const validateCreatePacienteCompleto = [
+  // Campo opcional para usar cliente existente
+  body('id_cliente_existente')
+    .optional()
+    .isUUID()
+    .withMessage('El ID del cliente debe ser un UUID válido'),
+
   // Validaciones del cliente
   body('nombre_cliente')
+    .optional()
     .trim()
     .isLength({ min: 2, max: 100 })
     .withMessage('El nombre del cliente debe tener entre 2 y 100 caracteres'),
@@ -17,6 +24,7 @@ export const validateCreatePacienteCompleto = [
     .withMessage('La cédula no puede tener más de 20 caracteres'),
   
   body('telefono')
+    .optional()
     .trim()
     .isLength({ min: 7, max: 20 })
     .withMessage('El teléfono debe tener entre 7 y 20 caracteres'),

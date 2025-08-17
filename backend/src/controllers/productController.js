@@ -28,12 +28,20 @@ class ProductController {
         descripcion,
         tipo,
         categoria,
-        proveedor,
+        subcategoria,
+        marca,
         precio_compra,
         precio_venta,
         stock_minimo,
         stock_actual,
+        stock_maximo,
+        unidad_medida,
+        lote,
+        fecha_vencimiento,
+        ubicacion,
         inventariable,
+        requiere_receta,
+        iva_aplicable,
         sesiones_incluidas,
         duracion_sesion
       } = req.body;
@@ -55,10 +63,11 @@ class ProductController {
       // Crear producto
       const result = await query(`
         INSERT INTO financial.productos (
-          codigo, codigo_barras, nombre, descripcion, tipo, categoria, proveedor,
-          precio_compra, precio_venta, stock_minimo, stock_actual,
-          inventariable, sesiones_incluidas, duracion_sesion, created_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          codigo, codigo_barras, nombre, descripcion, tipo, categoria, subcategoria, marca,
+          precio_compra, precio_venta, stock_minimo, stock_actual, stock_maximo,
+          unidad_medida, lote, fecha_vencimiento, ubicacion, inventariable,
+          requiere_receta, iva_aplicable, sesiones_incluidas, duracion_sesion, created_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
         RETURNING *
       `, [
         codigo,
@@ -67,12 +76,20 @@ class ProductController {
         descripcion || null,
         tipo,
         categoria,
-        proveedor || null,
+        subcategoria || null,
+        marca || null,
         precio_compra || null,
         precio_venta,
         stock_minimo || 0,
         stock_actual || 0,
+        stock_maximo || null,
+        unidad_medida || 'unidad',
+        lote || null,
+        fecha_vencimiento || null,
+        ubicacion || null,
         inventariable || false,
+        requiere_receta || false,
+        iva_aplicable || 16.00,
         sesiones_incluidas || null,
         duracion_sesion || null,
         req.user.id
@@ -185,13 +202,21 @@ class ProductController {
           descripcion,
           tipo,
           categoria,
-          proveedor,
+          subcategoria,
+          marca,
           precio_compra,
           precio_venta,
           stock_minimo,
           stock_actual,
+          stock_maximo,
+          unidad_medida,
+          lote,
+          fecha_vencimiento,
+          ubicacion,
           inventariable,
           activo,
+          requiere_receta,
+          iva_aplicable,
           sesiones_incluidas,
           duracion_sesion,
           created_at,
@@ -338,9 +363,10 @@ class ProductController {
       let paramCount = 0;
 
       const allowedFields = [
-        'codigo', 'codigo_barras', 'nombre', 'descripcion', 'tipo', 'categoria', 'proveedor',
-        'precio_compra', 'precio_venta', 'stock_minimo', 'stock_actual',
-        'inventariable', 'activo', 'sesiones_incluidas', 'duracion_sesion'
+        'codigo', 'codigo_barras', 'nombre', 'descripcion', 'tipo', 'categoria', 'subcategoria', 'marca',
+        'precio_compra', 'precio_venta', 'stock_minimo', 'stock_actual', 'stock_maximo',
+        'unidad_medida', 'lote', 'fecha_vencimiento', 'ubicacion', 'inventariable', 'activo',
+        'requiere_receta', 'iva_aplicable', 'sesiones_incluidas', 'duracion_sesion'
       ];
 
       for (const field of allowedFields) {

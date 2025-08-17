@@ -1,0 +1,262 @@
+<div class="pacientes-container">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <div class="title-section">
+        <h1 class="page-title">
+          <mat-icon class="page-icon">pets</mat-icon>
+          Gestión de Pacientes
+        </h1>
+        <p class="page-subtitle">Administra la información de mascotas y sus propietarios</p>
+      </div>
+      <div class="actions-section">
+        <button mat-raised-button
+                color="primary"
+                (click)="openCreateDialog()"
+                class="create-button">
+          <mat-icon>add</mat-icon>
+          Nuevo Paciente
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <mat-card class="filters-card">
+    <mat-card-content>
+      <form [formGroup]="filterForm" class="filters-form">
+        <div class="filter-row">
+          <!-- Búsqueda general -->
+          <mat-form-field appearance="outline" class="search-field">
+            <mat-label>Buscar paciente o propietario</mat-label>
+            <input matInput
+                   formControlName="search"
+                   placeholder="Nombre de mascota, propietario, teléfono..."
+                   (input)="onFilterChange()">
+            <mat-icon matSuffix>search</mat-icon>
+          </mat-form-field>
+
+          <!-- Filtro por especie -->
+          <mat-form-field appearance="outline" class="species-field">
+            <mat-label>Especie</mat-label>
+            <mat-select formControlName="especie" (selectionChange)="onFilterChange()">
+              <mat-option value="">Todas las especies</mat-option>
+              @for (especie of especies(); track especie) {
+                <mat-option [value]="especie">{{ especie }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+
+          <!-- Filtro por estado -->
+          <mat-form-field appearance="outline" class="status-field">
+            <mat-label>Estado</mat-label>
+            <mat-select formControlName="activo" (selectionChange)="onFilterChange()">
+              <mat-option [value]="null">Todos</mat-option>
+              <mat-option [value]="true">Activos</mat-option>
+              <mat-option [value]="false">Inactivos</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <!-- Botón limpiar filtros -->
+          <button mat-stroked-button
+                  type="button"
+                  (click)="clearFilters()"
+                  class="clear-filters-btn">
+            <mat-icon>clear</mat-icon>
+            Limpiar
+          </button>
+        </div>
+      </form>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Estadísticas rápidas -->
+  <div class="stats-row">
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <div class="stat-content">
+          <mat-icon class="stat-icon primary-color">pets</mat-icon>
+          <div class="stat-info">
+            <span class="stat-number">{{ totalPacientes() }}</span>
+            <span class="stat-label">Total Pacientes</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <div class="stat-content">
+          <mat-icon class="stat-icon accent-color">people</mat-icon>
+          <div class="stat-info">
+            <span class="stat-number">{{ totalClientes() }}</span>
+            <span class="stat-label">Propietarios</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <div class="stat-content">
+          <mat-icon class="stat-icon warn-color">category</mat-icon>
+          <div class="stat-info">
+            <span class="stat-number">{{ totalEspecies() }}</span>
+            <span class="stat-label">Especies</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <!-- Tabla de pacientes -->
+  <mat-card class="table-card">
+    <mat-card-content>
+      @if (loading()) {
+        <div class="loading-container">
+          <mat-spinner diameter="50"></mat-spinner>
+          <p>Cargando pacientes...</p>
+        </div>
+      } @else {
+        <div class="table-container">
+          <table mat-table
+                 [dataSource]="dataSource"
+                 matSort
+                 class="pacientes-table"
+                 multiTemplateDataRows>
+
+            <!-- Columna Avatar/Foto -->
+            <ng-container matColumnDef="avatar">
+              <th mat-header-cell *matHeaderCellDef class="avatar-column">Foto</th>
+              <td mat-cell *matCellDef="let paciente" class="avatar-column">
+                <div class="patient-avatar">
+                  @if (paciente.foto_url && paciente.foto_url.trim() !== '') {
+                    <img [src]="getImageUrl(paciente.foto_url)"
+                         [alt]="paciente.nombre"
+                         class="patient-image"
+                         crossorigin="anonymous"
+                         (error)="onImageError($event)">
+                  } @else {
+                    <mat-icon class="animal-icon">pets</mat-icon>
+                  }
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Columna Paciente -->
+            <ng-container matColumnDef="paciente">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Paciente</th>
+              <td mat-cell *matCellDef="let paciente" class="paciente-column">
+                <div class="patient-info">
+                  <span class="patient-name">{{ paciente.nombre }}</span>
+                  <span class="patient-details">
+                    {{ paciente.especie }}
+                    @if (paciente.raza) {
+                      • {{ paciente.raza }}
+                    }
+                  </span>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Columna Propietario -->
+            <ng-container matColumnDef="propietario">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Propietario</th>
+              <td mat-cell *matCellDef="let paciente" class="propietario-column">
+                <div class="owner-info">
+                  <span class="owner-name">{{ paciente.cliente?.nombre || 'Sin asignar' }}</span>
+                  @if (paciente.cliente?.telefono) {
+                    <span class="owner-phone">{{ paciente.cliente.telefono }}</span>
+                  }
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Columna Edad/Sexo -->
+            <ng-container matColumnDef="edad">
+              <th mat-header-cell *matHeaderCellDef>Edad/Sexo</th>
+              <td mat-cell *matCellDef="let paciente" class="edad-column">
+                <div class="age-sex-info">
+                  @if (paciente.fecha_nacimiento) {
+                    <span class="age">{{ calculateAge(paciente.fecha_nacimiento) }}</span>
+                  } @else {
+                    <span class="age">N/A</span>
+                  }
+                  <mat-chip class="sex-chip" [class.male]="paciente.sexo === 'M'" [class.female]="paciente.sexo === 'H'">
+                    {{ paciente.sexo === 'M' ? 'Macho' : 'Hembra' }}
+                  </mat-chip>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Columna Estado -->
+            <ng-container matColumnDef="estado">
+              <th mat-header-cell *matHeaderCellDef>Estado</th>
+              <td mat-cell *matCellDef="let paciente" class="estado-column">
+                <mat-chip [class.active]="paciente.activo" [class.inactive]="!paciente.activo">
+                  {{ paciente.activo ? 'Activo' : 'Inactivo' }}
+                </mat-chip>
+              </td>
+            </ng-container>
+
+            <!-- Columna Acciones -->
+            <ng-container matColumnDef="acciones">
+              <th mat-header-cell *matHeaderCellDef class="actions-column">Acciones</th>
+              <td mat-cell *matCellDef="let paciente" class="actions-column">
+                <button mat-icon-button
+                        [matMenuTriggerFor]="actionsMenu"
+                        [matTooltip]="'Más opciones'"
+                        (click)="$event.stopPropagation()">
+                  <mat-icon>more_vert</mat-icon>
+                </button>
+
+                <mat-menu #actionsMenu="matMenu">
+                  <button mat-menu-item (click)="$event.stopPropagation(); editPaciente(paciente)">
+                    <mat-icon>edit</mat-icon>
+                    <span>Editar</span>
+                  </button>
+                  <mat-divider></mat-divider>
+                  <button mat-menu-item
+                          (click)="$event.stopPropagation(); toggleStatus(paciente)"
+                          [class.warn-action]="paciente.activo">
+                    <mat-icon>{{ paciente.activo ? 'block' : 'check_circle' }}</mat-icon>
+                    <span>{{ paciente.activo ? 'Desactivar' : 'Activar' }}</span>
+                  </button>
+                </mat-menu>
+              </td>
+            </ng-container>
+
+            <!-- Definir columnas mostradas -->
+            <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+            <tr mat-row
+                *matRowDef="let row; columns: displayedColumns;"
+                class="table-row"
+                (click)="viewDetails(row)"></tr>
+          </table>
+
+          <!-- Paginador -->
+          <mat-paginator #paginator
+                       [length]="totalRecords()"
+                       [pageSize]="pageSize()"
+                       [pageSizeOptions]="[10, 25, 50, 100]"
+                       showFirstLastButtons
+                       (page)="onPageChange($event)">
+          </mat-paginator>
+
+          <!-- Mensaje cuando no hay datos -->
+          @if (dataSource.data.length === 0 && !loading()) {
+            <div class="no-data-container">
+              <mat-icon class="no-data-icon">pets</mat-icon>
+              <h3>No se encontraron pacientes</h3>
+              <p>No hay pacientes registrados que coincidan con los filtros aplicados.</p>
+              <button mat-raised-button color="primary" (click)="openCreateDialog()">
+                <mat-icon>add</mat-icon>
+                Registrar primer paciente
+              </button>
+            </div>
+          }
+        </div>
+      }
+    </mat-card-content>
+  </mat-card>
+</div>

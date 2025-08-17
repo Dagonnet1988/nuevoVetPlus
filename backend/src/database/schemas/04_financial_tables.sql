@@ -79,17 +79,26 @@ CREATE TRIGGER update_proveedores_updated_at
 CREATE TABLE financial.productos (
     id_producto UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     codigo VARCHAR(50) UNIQUE NOT NULL,
+    codigo_barras VARCHAR(50) UNIQUE,
     nombre VARCHAR(150) NOT NULL,
     descripcion TEXT,
     tipo VARCHAR(30) NOT NULL CHECK (tipo IN ('Producto', 'Servicio', 'Terapia Individual', 'Terapia Paquete')),
     categoria VARCHAR(50),
+    subcategoria VARCHAR(50), -- Nueva subcategoría
     marca VARCHAR(100),
     precio_compra DECIMAL(15,2),
     precio_venta DECIMAL(15,2) NOT NULL,
     stock_actual INTEGER DEFAULT 0,
     stock_minimo INTEGER DEFAULT 0,
+    stock_maximo INTEGER DEFAULT 0, -- Nuevo stock máximo
+    unidad_medida VARCHAR(20) DEFAULT 'unidad', -- Nueva unidad de medida
+    lote VARCHAR(50), -- Nuevo lote/batch
+    fecha_vencimiento DATE, -- Nueva fecha de vencimiento
+    ubicacion VARCHAR(100), -- Nueva ubicación física
     inventariable BOOLEAN NOT NULL DEFAULT true,
     activo BOOLEAN DEFAULT true,
+    requiere_receta BOOLEAN DEFAULT false, -- Nueva validación receta
+    iva_aplicable DECIMAL(5,2) DEFAULT 16.00, -- Nuevo IVA aplicable
     -- Campos específicos para terapias
     sesiones_incluidas INTEGER, -- Para paquetes de terapia
     duracion_sesion INTEGER, -- En minutos

@@ -1,0 +1,111 @@
+<div class="login-container">
+  <div class="login-wrapper">
+    <!-- Logo y título -->
+    <div class="login-header">
+      <div class="logo-container">
+        <mat-icon class="logo-icon">pets</mat-icon>
+      </div>
+      <h1 class="app-title">VetPlus</h1>
+      <p class="app-subtitle">Sistema de Gestión Veterinaria</p>
+    </div>
+
+    <!-- Formulario de login -->
+    <mat-card class="login-card">
+      <mat-card-header>
+        <mat-card-title>Iniciar Sesión</mat-card-title>
+        <mat-card-subtitle>Ingresa tus credenciales para acceder</mat-card-subtitle>
+      </mat-card-header>
+
+      <mat-card-content>
+        <form [formGroup]="loginForm" (ngSubmit)="onLogin()" class="login-form">
+          <!-- Documento -->
+          <mat-form-field appearance="outline" class="w-100">
+            <mat-label>Documento de identidad</mat-label>
+            <input matInput
+                   type="text"
+                   formControlName="documento"
+                   placeholder="Número de documento"
+                   autocomplete="username">
+            <mat-icon matSuffix>badge</mat-icon>
+            @if (loginForm.get('documento')?.invalid && loginForm.get('documento')?.touched) {
+              <mat-error>
+                @if (loginForm.get('documento')?.errors?.['required']) {
+                  El documento es requerido
+                }
+                @if (loginForm.get('documento')?.errors?.['minlength']) {
+                  Mínimo 5 caracteres
+                }
+                @if (loginForm.get('documento')?.errors?.['maxlength']) {
+                  Máximo 20 caracteres
+                }
+              </mat-error>
+            }
+          </mat-form-field>
+
+          <!-- Password -->
+          <mat-form-field appearance="outline" class="w-100">
+            <mat-label>Contraseña</mat-label>
+            <input matInput
+                   [type]="hidePassword() ? 'password' : 'text'"
+                   formControlName="password"
+                   placeholder="Ingresa tu contraseña"
+                   autocomplete="current-password">
+            <button mat-icon-button
+                    matSuffix
+                    type="button"
+                    (click)="togglePasswordVisibility()"
+                    [attr.aria-label]="'Hide password'"
+                    [attr.aria-pressed]="hidePassword()">
+              <mat-icon>{{hidePassword() ? 'visibility_off' : 'visibility'}}</mat-icon>
+            </button>
+            @if (loginForm.get('password')?.invalid && loginForm.get('password')?.touched) {
+              <mat-error>
+                @if (loginForm.get('password')?.errors?.['required']) {
+                  La contraseña es requerida
+                }
+                @if (loginForm.get('password')?.errors?.['minlength']) {
+                  Mínimo 6 caracteres
+                }
+              </mat-error>
+            }
+          </mat-form-field>
+
+          <!-- Botón de login -->
+          <button mat-raised-button
+                  color="primary"
+                  type="submit"
+                  class="login-button w-100"
+                  [disabled]="loginForm.invalid || authService.loading()">
+            @if (authService.loading()) {
+              <mat-spinner diameter="20" class="mr-sm"></mat-spinner>
+              Iniciando sesión...
+            } @else {
+              <ng-container>
+                <mat-icon class="mr-sm">login</mat-icon>
+                Iniciar Sesión
+              </ng-container>
+            }
+          </button>
+        </form>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Información adicional -->
+    <div class="login-footer">
+      <p class="text-muted">
+        <mat-icon class="info-icon">info</mat-icon>
+        Solo usuarios autorizados pueden acceder al sistema
+      </p>
+      <p class="version-info">VetPlus v1.0.0</p>
+    </div>
+
+    <!-- Selector de tema -->
+    <div class="theme-selector">
+      <button mat-icon-button
+              (click)="toggleTheme()"
+              [matTooltip]="'Cambiar tema'">
+        <mat-icon>palette</mat-icon>
+      </button>
+    </div>
+  </div>
+</div>

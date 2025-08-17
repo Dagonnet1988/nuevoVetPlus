@@ -1,0 +1,251 @@
+<div class="google-calendar-config-container">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <button mat-icon-button (click)="onBack()" class="back-button">
+        <mat-icon>arrow_back</mat-icon>
+      </button>
+      
+      <div class="title-section">
+        <h1 class="page-title">
+          <mat-icon class="page-icon">event</mat-icon>
+          Configuración de Google Calendar
+        </h1>
+        <p class="page-subtitle">Integra VetPlus con Google Calendar para sincronizar citas automáticamente</p>
+      </div>
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="loading-container">
+      <mat-spinner diameter="50"></mat-spinner>
+      <p>Cargando configuración...</p>
+    </div>
+  } @else {
+    <!-- Estado de Conexión -->
+    <mat-card class="status-card">
+      <mat-card-header>
+        <mat-card-title>
+          <mat-icon>cloud</mat-icon>
+          Estado de Conexión
+        </mat-card-title>
+      </mat-card-header>
+      
+      <mat-card-content>
+        <div class="status-info">
+          <div class="status-indicator">
+            <mat-icon [style.color]="getStatusColor()">{{ getStatusIcon() }}</mat-icon>
+            <div class="status-details">
+              <h3>{{ getStatusText() }}</h3>
+              @if (status()?.calendar_name) {
+                <p class="calendar-name">{{ status()!.calendar_name }}</p>
+              }
+              @if (status()?.last_sync) {
+                <p class="last-sync">Última sincronización: {{ status()!.last_sync | date:'short' }}</p>
+              }
+              @if (status()?.error_message) {
+                <p class="error-message">Error: {{ status()!.error_message }}</p>
+              }
+            </div>
+          </div>
+          
+          <div class="status-actions">
+            <button mat-raised-button 
+                    color="primary" 
+                    (click)="onTestConnection()"
+                    [disabled]="testing() || !configForm.get('client_id')?.value">
+              @if (testing()) {
+                <mat-spinner diameter="16"></mat-spinner>
+              }
+              Probar Conexión
+            </button>
+            
+            @if (status()?.connected) {
+              <button mat-stroked-button 
+                      (click)="onForceSync()"
+                      [disabled]="testing()">
+                <mat-icon>sync</mat-icon>
+                Sincronizar Ahora
+              </button>
+            } @else {
+              <button mat-raised-button 
+                      color="accent"
+                      (click)="onAuthorize()"
+                      [disabled]="!configForm.get('client_id')?.value">
+                <mat-icon>vpn_key</mat-icon>
+                Autorizar Acceso
+              </button>
+            }
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Formulario de Configuración -->
+    <form [formGroup]="configForm" (ngSubmit)="onSave()">
+      <!-- Configuración General -->
+      <mat-card class="config-section">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>settings</mat-icon>
+            Configuración General
+          </mat-card-title>
+        </mat-card-header>
+        
+        <mat-card-content>
+          <div class="form-row">
+            <mat-slide-toggle formControlName="enabled">
+              Habilitar integración con Google Calendar
+            </mat-slide-toggle>
+          </div>
+          
+          <mat-divider class="section-divider"></mat-divider>
+          
+          <div class="form-grid">
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Client ID</mat-label>
+              <input matInput formControlName="client_id" 
+                     placeholder="Tu Client ID de Google Cloud Console">
+              <mat-icon matSuffix matTooltip="ID del cliente OAuth2 de Google">help</mat-icon>
+              <mat-error>
+                @if (configForm.get('client_id')?.hasError('required')) {
+                  El Client ID es obligatorio
+                }
+              </mat-error>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Client Secret</mat-label>
+              <input matInput type="password" formControlName="client_secret" 
+                     placeholder="Tu Client Secret de Google Cloud Console">
+              <mat-icon matSuffix matTooltip="Secreto del cliente OAuth2 de Google">help</mat-icon>
+              <mat-error>
+                @if (configForm.get('client_secret')?.hasError('required')) {
+                  El Client Secret es obligatorio
+                }
+              </mat-error>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>ID del Calendario</mat-label>
+              <input matInput formControlName="calendar_id" 
+                     placeholder="primary">
+              <mat-hint>Usa 'primary' para el calendario principal</mat-hint>
+            </mat-form-field>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Configuración de Sincronización -->
+      <mat-card class="config-section">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>sync</mat-icon>
+            Opciones de Sincronización
+          </mat-card-title>
+        </mat-card-header>
+        
+        <mat-card-content>
+          <div class="form-grid">
+            <div class="form-row">
+              <mat-slide-toggle formControlName="automatic_sync">
+                Sincronización automática
+              </mat-slide-toggle>
+            </div>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Intervalo de sincronización (minutos)</mat-label>
+              <input matInput type="number" 
+                     formControlName="sync_interval_minutes"
+                     min="5" max="1440">
+              <mat-hint>Entre 5 y 1440 minutos (24 horas)</mat-hint>
+              <mat-error>
+                @if (configForm.get('sync_interval_minutes')?.hasError('min')) {
+                  Mínimo 5 minutos
+                }
+                @if (configForm.get('sync_interval_minutes')?.hasError('max')) {
+                  Máximo 1440 minutos
+                }
+              </mat-error>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Duración predeterminada (minutos)</mat-label>
+              <input matInput type="number" 
+                     formControlName="default_event_duration"
+                     min="15" max="480">
+              <mat-hint>Duración por defecto para nuevos eventos</mat-hint>
+              <mat-error>
+                @if (configForm.get('default_event_duration')?.hasError('min')) {
+                  Mínimo 15 minutos
+                }
+                @if (configForm.get('default_event_duration')?.hasError('max')) {
+                  Máximo 480 minutos
+                }
+              </mat-error>
+            </mat-form-field>
+          </div>
+
+          <div class="form-row">
+            <mat-slide-toggle formControlName="send_notifications">
+              Enviar notificaciones por email
+            </mat-slide-toggle>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Instrucciones -->
+      <mat-card class="instructions-card">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>info</mat-icon>
+            Cómo obtener las credenciales de Google
+          </mat-card-title>
+        </mat-card-header>
+        
+        <mat-card-content>
+          <div class="instructions-content">
+            <ol class="instructions-list">
+              <li>
+                <strong>Ve a Google Cloud Console:</strong>
+                <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">
+                  https://console.cloud.google.com/
+                  <mat-icon>open_in_new</mat-icon>
+                </a>
+              </li>
+              <li><strong>Crea un nuevo proyecto</strong> o selecciona uno existente</li>
+              <li>Habilita la <strong>Google Calendar API</strong> en el proyecto</li>
+              <li>Ve a <strong>"Credenciales"</strong> y crea credenciales OAuth 2.0</li>
+              <li>Configura las <strong>URLs de redirección autorizadas:</strong>
+                <mat-chip-set>
+                  <mat-chip>{{ getRedirectUrl() }}</mat-chip>
+                </mat-chip-set>
+              </li>
+              <li>Copia el <strong>Client ID</strong> y <strong>Client Secret</strong> aquí</li>
+              <li>Guarda la configuración y autoriza el acceso</li>
+            </ol>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </form>
+
+    <!-- Acciones -->
+    <div class="actions-section">
+      <button mat-button (click)="onReset()" [disabled]="saving()">
+        Restablecer
+      </button>
+      
+      <div class="main-actions">
+        <button mat-raised-button 
+                color="primary" 
+                (click)="onSave()"
+                [disabled]="configForm.invalid || saving()">
+          @if (saving()) {
+            <mat-spinner diameter="16"></mat-spinner>
+          }
+          Guardar Configuración
+        </button>
+      </div>
+    </div>
+  }
+</div>

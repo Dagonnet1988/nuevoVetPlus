@@ -1,0 +1,342 @@
+<div class="form-container">
+  <!-- Header -->
+  <div class="form-header">
+    <div class="header-content">
+      <div class="title-section">
+        <h1 class="form-title">
+          <mat-icon class="title-icon">{{ isEditMode() ? 'edit' : 'person_add' }}</mat-icon>
+          {{ isEditMode() ? 'Editar Usuario' : 'Nuevo Usuario' }}
+        </h1>
+        <p class="form-subtitle">
+          {{ isEditMode() ? 'Modifica la información del usuario' : 'Completa la información del nuevo usuario' }}
+        </p>
+      </div>
+      <div class="actions-section">
+        <button mat-stroked-button
+                (click)="onCancelar()"
+                [disabled]="saving()"
+                class="cancel-button">
+          <mat-icon>close</mat-icon>
+          Cancelar
+        </button>
+        <button mat-raised-button
+                color="primary"
+                (click)="onSubmit()"
+                [disabled]="!isCreateButtonEnabled()"
+                class="save-button">
+          @if (saving()) {
+            <mat-spinner diameter="20"></mat-spinner>
+          } @else {
+            <mat-icon>{{ isEditMode() ? 'save' : 'person_add' }}</mat-icon>
+          }
+          {{ isEditMode() ? 'Actualizar' : 'Crear Usuario' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="loading-container">
+      <mat-spinner diameter="50"></mat-spinner>
+      <p>Cargando información del usuario...</p>
+    </div>
+  } @else {
+    <!-- Stepper Form -->
+    <mat-stepper #stepper orientation="horizontal" linear="false" class="form-stepper" (selectionChange)="onStepChange($event)">
+
+      <!-- Paso 1: Información Personal -->
+      <mat-step [stepControl]="personalForm" label="Información Personal" icon="person">
+        <mat-card class="step-card">
+          <mat-card-header>
+            <mat-card-title>
+              <mat-icon>person</mat-icon>
+              Datos Personales
+            </mat-card-title>
+            <mat-card-subtitle>Información básica del usuario</mat-card-subtitle>
+          </mat-card-header>
+
+          <mat-card-content>
+            <form [formGroup]="personalForm" class="form-grid">
+              <div class="form-row">
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>Nombre</mat-label>
+                  <input matInput formControlName="nombre" placeholder="Ingresa el nombre">
+                  <mat-icon matSuffix>person</mat-icon>
+                  <mat-error>{{ getFieldError(personalForm, 'nombre') }}</mat-error>
+                </mat-form-field>
+
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>Apellido</mat-label>
+                  <input matInput formControlName="apellido" placeholder="Ingresa el apellido">
+                  <mat-icon matSuffix>person</mat-icon>
+                  <mat-error>{{ getFieldError(personalForm, 'apellido') }}</mat-error>
+                </mat-form-field>
+              </div>
+
+              <div class="form-row">
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>Email</mat-label>
+                  <input matInput formControlName="email" type="email" placeholder="correo@ejemplo.com">
+                  <mat-icon matSuffix>email</mat-icon>
+                  <mat-error>{{ getFieldError(personalForm, 'email') }}</mat-error>
+                </mat-form-field>
+
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>Teléfono</mat-label>
+                  <input matInput formControlName="telefono" placeholder="+57 300 123 4567">
+                  <mat-icon matSuffix>phone</mat-icon>
+                  <mat-error>{{ getFieldError(personalForm, 'telefono') }}</mat-error>
+                </mat-form-field>
+              </div>
+
+              <div class="form-row">
+                <mat-form-field appearance="outline" class="form-field-medium">
+                  <mat-label>Tipo de Documento</mat-label>
+                  <mat-select formControlName="tipo_documento">
+                    @for (tipo of tiposDocumento; track tipo.value) {
+                      <mat-option [value]="tipo.value">{{ tipo.label }}</mat-option>
+                    }
+                  </mat-select>
+                  <mat-icon matSuffix>badge</mat-icon>
+                  <mat-error>{{ getFieldError(personalForm, 'tipo_documento') }}</mat-error>
+                </mat-form-field>
+
+                <mat-form-field appearance="outline" class="form-field-medium">
+                  <mat-label>Documento</mat-label>
+                  <input matInput formControlName="documento" placeholder="12345678">
+                  <mat-icon matSuffix>badge</mat-icon>
+                  <mat-error>{{ getFieldError(personalForm, 'documento') }}</mat-error>
+                </mat-form-field>
+              </div>
+
+              <div class="form-row">
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>Dirección</mat-label>
+                  <textarea matInput formControlName="direccion" rows="3" placeholder="Dirección completa (opcional)"></textarea>
+                  <mat-icon matSuffix>location_on</mat-icon>
+                  <mat-error>{{ getFieldError(personalForm, 'direccion') }}</mat-error>
+                </mat-form-field>
+              </div>
+            </form>
+          </mat-card-content>
+        </mat-card>
+      </mat-step>
+
+      <!-- Paso 2: Configuración del Rol -->
+      <mat-step [stepControl]="configuracionForm" label="Rol y Permisos" icon="admin_panel_settings">
+        <mat-card class="step-card">
+          <mat-card-header>
+            <mat-card-title>
+              <mat-icon>admin_panel_settings</mat-icon>
+              Configuración del Rol
+            </mat-card-title>
+            <mat-card-subtitle>Asigna el rol y permisos del usuario</mat-card-subtitle>
+          </mat-card-header>
+
+          <mat-card-content>
+            <form [formGroup]="configuracionForm" class="form-grid">
+
+              <!-- Selector de Rol -->
+              <div class="rol-selector">
+                <h3 class="section-title">
+                  <mat-icon>groups</mat-icon>
+                  Seleccionar Rol
+                </h3>
+                <div class="rol-options">
+                  @for (rol of roles; track rol.value) {
+                    <mat-card
+                      class="rol-card"
+                      [class.selected]="configuracionForm.get('rol')?.value === rol.value"
+                      (click)="configuracionForm.patchValue({rol: rol.value})">
+                      <mat-card-content>
+                        <div class="rol-content">
+                          <mat-icon
+                            class="rol-icon"
+                            [style.color]="rol.color">
+                            {{ rol.icon }}
+                          </mat-icon>
+                          <div class="rol-info">
+                            <h4 class="rol-title">{{ rol.label }}</h4>
+                            <p class="rol-description">
+                              @switch (rol.value) {
+                                @case ('admin') {
+                                  Acceso completo al sistema y gestión de usuarios
+                                }
+                                @case ('veterinario') {
+                                  Gestión de pacientes, citas e historia clínica
+                                }
+                                @case ('auxiliar') {
+                                  Soporte en consultas y gestión básica
+                                }
+                              }
+                            </p>
+                          </div>
+                          <mat-icon class="check-icon" *ngIf="configuracionForm.get('rol')?.value === rol.value">
+                            check_circle
+                          </mat-icon>
+                        </div>
+                      </mat-card-content>
+                    </mat-card>
+                  }
+                </div>
+              </div>
+
+              <mat-divider></mat-divider>
+
+              <!-- Campos específicos para Veterinario -->
+              @if (isVeterinario) {
+                <div class="veterinario-section">
+                  <h3 class="section-title">
+                    <mat-icon>medical_services</mat-icon>
+                    Información Profesional
+                  </h3>
+                  <div class="form-row">
+                    <mat-form-field appearance="outline" class="full-width">
+                      <mat-label>Especialidad</mat-label>
+                      <mat-select formControlName="especialidad">
+                        @for (especialidad of especialidades; track especialidad) {
+                          <mat-option [value]="especialidad">{{ especialidad }}</mat-option>
+                        }
+                      </mat-select>
+                      <mat-icon matSuffix>medical_services</mat-icon>
+                      <mat-error>{{ getFieldError(configuracionForm, 'especialidad') }}</mat-error>
+                    </mat-form-field>
+
+                    <mat-form-field appearance="outline" class="full-width">
+                      <mat-label>Número de Licencia</mat-label>
+                      <input matInput formControlName="numero_licencia" placeholder="VET-001">
+                      <mat-icon matSuffix>card_membership</mat-icon>
+                      <mat-error>{{ getFieldError(configuracionForm, 'numero_licencia') }}</mat-error>
+                    </mat-form-field>
+                  </div>
+                </div>
+
+                <mat-divider></mat-divider>
+              }
+
+              <!-- Estado del Usuario -->
+              <div class="estado-section">
+                <h3 class="section-title">
+                  <mat-icon>toggle_on</mat-icon>
+                  Estado del Usuario
+                </h3>
+                <div class="toggle-container">
+                  <mat-slide-toggle
+                    formControlName="activo"
+                    [color]="'primary'"
+                    class="estado-toggle">
+                    <span class="toggle-label">
+                      Usuario {{ configuracionForm.get('activo')?.value ? 'Activo' : 'Inactivo' }}
+                    </span>
+                  </mat-slide-toggle>
+                  <p class="toggle-description">
+                    {{ configuracionForm.get('activo')?.value
+                       ? 'El usuario podrá acceder al sistema normalmente'
+                       : 'El usuario no podrá acceder al sistema' }}
+                  </p>
+                </div>
+              </div>
+
+            </form>
+          </mat-card-content>
+        </mat-card>
+      </mat-step>
+
+      <!-- Paso 3: Seguridad (Solo para usuarios nuevos) -->
+      @if (isNewUser()) {
+        <mat-step [stepControl]="seguridadForm" label="Seguridad" icon="security">
+          <mat-card class="step-card">
+            <mat-card-header>
+              <mat-card-title>
+                <mat-icon>security</mat-icon>
+                Configuración de Seguridad
+              </mat-card-title>
+              <mat-card-subtitle>Configura el acceso inicial del usuario</mat-card-subtitle>
+            </mat-card-header>
+
+            <mat-card-content>
+              <form [formGroup]="seguridadForm" class="form-grid">
+
+                <div class="security-section">
+                  <h3 class="section-title">
+                    <mat-icon>password</mat-icon>
+                    Contraseña Temporal
+                  </h3>
+
+                  <div class="form-row">
+                    <mat-form-field appearance="outline" class="password-field">
+                      <mat-label>Contraseña Temporal</mat-label>
+                      <input matInput formControlName="password_temporal" readonly>
+                      <mat-icon matSuffix>lock</mat-icon>
+                      <mat-hint>Esta contraseña se generó automáticamente</mat-hint>
+                    </mat-form-field>
+
+                    <button mat-stroked-button
+                            type="button"
+                            (click)="generateTemporalPassword()"
+                            class="generate-password-btn">
+                      <mat-icon>refresh</mat-icon>
+                      Generar Nueva
+                    </button>
+                  </div>
+                </div>
+
+                <mat-divider></mat-divider>
+
+                <div class="notification-section">
+                  <h3 class="section-title">
+                    <mat-icon>notifications</mat-icon>
+                    Notificaciones
+                  </h3>
+
+                  <div class="checkbox-container">
+                    <mat-checkbox formControlName="enviar_credenciales" color="primary">
+                      <span class="checkbox-label">Enviar credenciales por email</span>
+                      <p class="checkbox-description">
+                        Se enviará un email con las credenciales de acceso al usuario
+                      </p>
+                    </mat-checkbox>
+                  </div>
+
+                  <div class="checkbox-container">
+                    <mat-checkbox formControlName="forzar_cambio_password" color="primary">
+                      <span class="checkbox-label">Forzar cambio de contraseña</span>
+                      <p class="checkbox-description">
+                        El usuario deberá cambiar su contraseña en el primer acceso
+                      </p>
+                    </mat-checkbox>
+                  </div>
+                </div>
+
+              </form>
+            </mat-card-content>
+          </mat-card>
+        </mat-step>
+      }
+
+    </mat-stepper>
+
+    <!-- Botones de acción flotantes -->
+    <div class="floating-actions">
+      <button mat-stroked-button
+              (click)="onCancelar()"
+              [disabled]="saving()"
+              class="floating-cancel">
+        <mat-icon>close</mat-icon>
+        Cancelar
+      </button>
+      <button mat-raised-button
+              color="primary"
+              (click)="onSubmit()"
+              [disabled]="!isCreateButtonEnabled()"
+              class="floating-save">
+        @if (saving()) {
+          <mat-spinner diameter="20"></mat-spinner>
+        } @else {
+          <mat-icon>{{ isEditMode() ? 'save' : 'person_add' }}</mat-icon>
+        }
+        {{ isEditMode() ? 'Actualizar Usuario' : 'Crear Usuario' }}
+      </button>
+    </div>
+  }
+</div>

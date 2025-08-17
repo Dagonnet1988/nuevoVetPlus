@@ -1,0 +1,359 @@
+<div class="historia-clinica-container">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <div class="title-section">
+        <h1 class="page-title">
+          <mat-icon class="page-icon">assignment</mat-icon>
+          Historia Clínica
+        </h1>
+        <p class="page-subtitle">Gestión completa de consultas y expedientes médicos</p>
+      </div>
+      <div class="actions-section">
+        <button mat-raised-button 
+                color="primary" 
+                (click)="openCreateDialog()"
+                class="create-button">
+          <mat-icon>add</mat-icon>
+          Nueva Consulta
+        </button>
+        <button mat-stroked-button 
+                (click)="exportarHistoria()"
+                [disabled]="!selectedPaciente()"
+                class="export-button">
+          <mat-icon>file_download</mat-icon>
+          Exportar Historia
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Estadísticas rápidas -->
+  <div class="stats-row">
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <div class="stat-content">
+          <mat-icon class="stat-icon primary-color">assignment</mat-icon>
+          <div class="stat-info">
+            <span class="stat-number">{{ totalConsultas() }}</span>
+            <span class="stat-label">Total Consultas</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <div class="stat-content">
+          <mat-icon class="stat-icon accent-color">pets</mat-icon>
+          <div class="stat-info">
+            <span class="stat-number">{{ pacientes().length }}</span>
+            <span class="stat-label">Pacientes con Historia</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <div class="stat-content">
+          <mat-icon class="stat-icon success-color">check_circle</mat-icon>
+          <div class="stat-info">
+            <span class="stat-number">{{ consultasCompletadas }}</span>
+            <span class="stat-label">Completadas</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <div class="stat-content">
+          <mat-icon class="stat-icon warn-color">schedule</mat-icon>
+          <div class="stat-info">
+            <span class="stat-number">{{ consultasEnProgreso }}</span>
+            <span class="stat-label">En Progreso</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <!-- Selector de vista -->
+  <mat-card class="view-selector-card">
+    <mat-card-content>
+      <mat-button-toggle-group 
+        [value]="currentView()" 
+        (change)="changeView($event.value)"
+        class="view-toggle">
+        <mat-button-toggle value="lista">
+          <mat-icon>list</mat-icon>
+          Lista
+        </mat-button-toggle>
+        <mat-button-toggle value="timeline">
+          <mat-icon>timeline</mat-icon>
+          Timeline
+        </mat-button-toggle>
+        <mat-button-toggle value="estadisticas">
+          <mat-icon>analytics</mat-icon>
+          Estadísticas
+        </mat-button-toggle>
+      </mat-button-toggle-group>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Filtros -->
+  <mat-card class="filters-card">
+    <mat-card-content>
+      <form [formGroup]="filterForm" class="filters-form">
+        <div class="filter-row">
+          <mat-form-field appearance="outline" class="paciente-field">
+            <mat-label>Paciente</mat-label>
+            <mat-select formControlName="mascota">
+              <mat-option value="">Todos los pacientes</mat-option>
+              @for (paciente of pacientes(); track paciente.id_mascota) {
+                <mat-option [value]="paciente.id_mascota">
+                  {{ paciente.nombre }} - {{ paciente.cliente?.nombre }}
+                </mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="veterinario-field">
+            <mat-label>Veterinario</mat-label>
+            <mat-select formControlName="veterinario">
+              <mat-option value="">Todos los veterinarios</mat-option>
+              @for (vet of veterinarios(); track vet.id) {
+                <mat-option [value]="vet.id">{{ vet.nombre }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="estado-field">
+            <mat-label>Estado</mat-label>
+            <mat-select formControlName="estado">
+              <mat-option value="">Todos los estados</mat-option>
+              @for (estado of estadosConsulta; track estado.value) {
+                <mat-option [value]="estado.value">{{ estado.label }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="search-field">
+            <mat-label>Buscar</mat-label>
+            <input matInput formControlName="search" placeholder="Motivo, diagnóstico...">
+            <mat-icon matSuffix>search</mat-icon>
+          </mat-form-field>
+
+          <button mat-stroked-button 
+                  type="button"
+                  (click)="clearFilters()"
+                  class="clear-filters-btn">
+            <mat-icon>clear</mat-icon>
+            Limpiar
+          </button>
+        </div>
+
+        <div class="filter-row">
+          <mat-form-field appearance="outline" class="date-field">
+            <mat-label>Fecha inicio</mat-label>
+            <input matInput [matDatepicker]="startPicker" formControlName="fecha_inicio">
+            <mat-datepicker-toggle matIconSuffix [for]="startPicker"></mat-datepicker-toggle>
+            <mat-datepicker #startPicker></mat-datepicker>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="date-field">
+            <mat-label>Fecha fin</mat-label>
+            <input matInput [matDatepicker]="endPicker" formControlName="fecha_fin">
+            <mat-datepicker-toggle matIconSuffix [for]="endPicker"></mat-datepicker-toggle>
+            <mat-datepicker #endPicker></mat-datepicker>
+          </mat-form-field>
+        </div>
+      </form>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Paciente seleccionado -->
+  @if (selectedPaciente()) {
+    <mat-card class="selected-patient-card">
+      <mat-card-content>
+        <div class="patient-info">
+          <div class="patient-avatar">
+            <mat-icon>pets</mat-icon>
+          </div>
+          <div class="patient-details">
+            <h3>{{ selectedPaciente().nombre }}</h3>
+            <p>{{ selectedPaciente().especie }} - {{ selectedPaciente().raza }}</p>
+            <p>Propietario: {{ selectedPaciente().cliente?.nombre }}</p>
+          </div>
+          <button mat-icon-button (click)="selectedPaciente.set(null)">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  }
+
+  <!-- Contenido principal según vista -->
+  @switch (currentView()) {
+    @case ('lista') {
+      <!-- Vista de Lista -->
+      <mat-card class="table-card">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>list</mat-icon>
+            Consultas Clínicas
+          </mat-card-title>
+        </mat-card-header>
+
+        <mat-card-content>
+          @if (loading()) {
+            <div class="loading-container">
+              <mat-spinner diameter="50"></mat-spinner>
+              <p>Cargando consultas...</p>
+            </div>
+          } @else {
+            <div class="table-container">
+              <table mat-table [dataSource]="consultas()" matSort class="consultas-table">
+                
+                <!-- Columna Fecha -->
+                <ng-container matColumnDef="fecha_consulta">
+                  <th mat-header-cell *matHeaderCellDef mat-sort-header>Fecha</th>
+                  <td mat-cell *matCellDef="let consulta">
+                    {{ formatearFecha(consulta.fecha_consulta) }}
+                  </td>
+                </ng-container>
+
+                <!-- Columna Código -->
+                <ng-container matColumnDef="codigo_consulta">
+                  <th mat-header-cell *matHeaderCellDef>Código</th>
+                  <td mat-cell *matCellDef="let consulta">
+                    <span class="codigo-consulta">{{ consulta.codigo_consulta }}</span>
+                  </td>
+                </ng-container>
+
+                <!-- Columna Mascota -->
+                <ng-container matColumnDef="mascota">
+                  <th mat-header-cell *matHeaderCellDef>Paciente</th>
+                  <td mat-cell *matCellDef="let consulta">
+                    <div class="mascota-info">
+                      <span class="mascota-nombre">{{ consulta.mascota?.nombre }}</span>
+                      <span class="mascota-cliente">{{ consulta.mascota?.cliente?.nombre }}</span>
+                    </div>
+                  </td>
+                </ng-container>
+
+                <!-- Columna Veterinario -->
+                <ng-container matColumnDef="veterinario">
+                  <th mat-header-cell *matHeaderCellDef>Veterinario</th>
+                  <td mat-cell *matCellDef="let consulta">
+                    {{ consulta.veterinario?.nombre }}
+                  </td>
+                </ng-container>
+
+                <!-- Columna Motivo -->
+                <ng-container matColumnDef="motivo">
+                  <th mat-header-cell *matHeaderCellDef>Motivo</th>
+                  <td mat-cell *matCellDef="let consulta">
+                    <span [matTooltip]="consulta.motivo">
+                      {{ truncateText(consulta.motivo, 30) }}
+                    </span>
+                  </td>
+                </ng-container>
+
+                <!-- Columna Diagnóstico -->
+                <ng-container matColumnDef="diagnostico">
+                  <th mat-header-cell *matHeaderCellDef>Diagnóstico</th>
+                  <td mat-cell *matCellDef="let consulta">
+                    <span [matTooltip]="consulta.diagnostico">
+                      {{ truncateText(consulta.diagnostico || 'Sin diagnóstico', 30) }}
+                    </span>
+                  </td>
+                </ng-container>
+
+                <!-- Columna Estado -->
+                <ng-container matColumnDef="estado">
+                  <th mat-header-cell *matHeaderCellDef>Estado</th>
+                  <td mat-cell *matCellDef="let consulta">
+                    <mat-chip [style.background-color]="getEstadoColor(consulta.estado)"
+                              [style.color]="'white'">
+                      {{ consulta.estado }}
+                    </mat-chip>
+                  </td>
+                </ng-container>
+
+                <!-- Columna Acciones -->
+                <ng-container matColumnDef="acciones">
+                  <th mat-header-cell *matHeaderCellDef>Acciones</th>
+                  <td mat-cell *matCellDef="let consulta">
+                    <button mat-icon-button [matMenuTriggerFor]="consultaMenu">
+                      <mat-icon>more_vert</mat-icon>
+                    </button>
+                    <mat-menu #consultaMenu="matMenu">
+                      <button mat-menu-item (click)="$event.stopPropagation(); viewConsulta(consulta)">
+                        <mat-icon>visibility</mat-icon>
+                        Ver Detalles
+                      </button>
+                      <button mat-menu-item (click)="$event.stopPropagation(); editConsulta(consulta)">
+                        <mat-icon>edit</mat-icon>
+                        Editar
+                      </button>
+                      <mat-divider></mat-divider>
+                      <button mat-menu-item (click)="$event.stopPropagation(); deleteConsulta(consulta)" class="delete-item">
+                        <mat-icon>delete</mat-icon>
+                        Eliminar
+                      </button>
+                    </mat-menu>
+                  </td>
+                </ng-container>
+
+                <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+                <tr mat-row *matRowDef="let row; columns: displayedColumns;" 
+                    (click)="viewConsulta(row)" 
+                    class="clickable-row"></tr>
+              </table>
+
+              @if (consultas().length === 0) {
+                <div class="no-data">
+                  <mat-icon>assignment</mat-icon>
+                  <h3>No hay consultas</h3>
+                  <p>No se encontraron consultas con los filtros aplicados</p>
+                </div>
+              }
+            </div>
+          }
+        </mat-card-content>
+      </mat-card>
+    }
+
+    @case ('timeline') {
+      <!-- Vista Timeline -->
+      <mat-card class="timeline-card">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>timeline</mat-icon>
+            Timeline de Consultas
+          </mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>Vista timeline en desarrollo...</p>
+        </mat-card-content>
+      </mat-card>
+    }
+
+    @case ('estadisticas') {
+      <!-- Vista Estadísticas -->
+      <mat-card class="stats-card">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>analytics</mat-icon>
+            Estadísticas de Consultas
+          </mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>Vista estadísticas en desarrollo...</p>
+        </mat-card-content>
+      </mat-card>
+    }
+  }
+</div>

@@ -1,0 +1,30 @@
+<mat-card class="quick-actions-card">
+  <mat-card-header>
+    <mat-card-title>
+      <mat-icon>flash_on</mat-icon>
+      Accesos Rápidos
+    </mat-card-title>
+  </mat-card-header>
+
+  <mat-card-content class="actions-content">
+    <div class="actions-grid">
+      @for (action of filteredActions; track action.route) {
+        <button 
+          mat-stroked-button 
+          [routerLink]="action.route"
+          class="action-button"
+          [class]="'action-' + action.color">
+          <div class="action-icon">
+            <mat-icon>{{ action.icon }}</mat-icon>
+          </div>
+          <div class="action-info">
+            <span class="action-title">{{ action.title }}</span>
+            @if (action.description) {
+              <span class="action-description">{{ action.description }}</span>
+            }
+          </div>
+        </button>
+      }
+    </div>
+  </mat-card-content>
+</mat-card>

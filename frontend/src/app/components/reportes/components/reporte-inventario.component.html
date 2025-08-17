@@ -1,0 +1,432 @@
+<div class="reporte-inventario-container">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <div class="title-section">
+        <h1 class="page-title">
+          <mat-icon class="page-icon">inventory</mat-icon>
+          Análisis de Inventario
+        </h1>
+        <p class="page-subtitle">Análisis ABC, rotación y valorización del inventario</p>
+      </div>
+      <div class="actions-section">
+        <button mat-stroked-button 
+                (click)="volverAReportes()"
+                class="back-button">
+          <mat-icon>arrow_back</mat-icon>
+          Volver
+        </button>
+        <!-- Funcionalidad de exportación removida -->
+        <mat-chip>Exportación no disponible</mat-chip>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <mat-card class="filters-card">
+    <mat-card-content>
+      <form [formGroup]="filtrosForm" class="filters-form">
+        <div class="filter-row">
+          <mat-form-field appearance="outline" class="date-field">
+            <mat-label>Fecha Inicio</mat-label>
+            <input matInput [matDatepicker]="fechaInicioPicker" formControlName="fecha_inicio">
+            <mat-datepicker-toggle matSuffix [for]="fechaInicioPicker"></mat-datepicker-toggle>
+            <mat-datepicker #fechaInicioPicker></mat-datepicker>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="date-field">
+            <mat-label>Fecha Fin</mat-label>
+            <input matInput [matDatepicker]="fechaFinPicker" formControlName="fecha_fin">
+            <mat-datepicker-toggle matSuffix [for]="fechaFinPicker"></mat-datepicker-toggle>
+            <mat-datepicker #fechaFinPicker></mat-datepicker>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="filter-field">
+            <mat-label>Categoría</mat-label>
+            <mat-select formControlName="categoria_id">
+              <mat-option value="">Todas las categorías</mat-option>
+              <mat-option value="1">Medicamentos</mat-option>
+              <mat-option value="2">Suplementos</mat-option>
+              <mat-option value="3">Accesorios</mat-option>
+              <mat-option value="4">Instrumental</mat-option>
+              <mat-option value="5">Consumibles</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="filter-field">
+            <mat-label>Tipo de Análisis</mat-label>
+            <mat-select formControlName="tipo_analisis">
+              <mat-option value="abc">Análisis ABC</mat-option>
+              <mat-option value="rotacion">Rotación</mat-option>
+              <mat-option value="valoracion">Valoración</mat-option>
+              <mat-option value="movimientos">Movimientos</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+      </form>
+    </mat-card-content>
+  </mat-card>
+
+  @if (loading()) {
+    <div class="loading-container">
+      <mat-spinner diameter="50"></mat-spinner>
+      <p>Analizando inventario...</p>
+    </div>
+  } @else if (resumenInventario()) {
+    <!-- Resumen de Inventario -->
+    <div class="summary-row">
+      <mat-card class="summary-card">
+        <mat-card-content>
+          <div class="summary-content">
+            <mat-icon class="summary-icon valor-color">account_balance_wallet</mat-icon>
+            <div class="summary-info">
+              <span class="summary-number">{{ formatearMoneda(resumenInventario()!.valor_total) }}</span>
+              <span class="summary-label">Valor Total Inventario</span>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="summary-card">
+        <mat-card-content>
+          <div class="summary-content">
+            <mat-icon class="summary-icon activos-color">inventory_2</mat-icon>
+            <div class="summary-info">
+              <span class="summary-number">{{ formatearNumero(resumenInventario()!.productos_activos) }}</span>
+              <span class="summary-label">Productos Activos</span>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="summary-card">
+        <mat-card-content>
+          <div class="summary-content">
+            <mat-icon class="summary-icon warning-color">warning</mat-icon>
+            <div class="summary-info">
+              <span class="summary-number">{{ formatearNumero(resumenInventario()!.productos_bajo_stock) }}</span>
+              <span class="summary-label">Bajo Stock</span>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="summary-card">
+        <mat-card-content>
+          <div class="summary-content">
+            <mat-icon class="summary-icon vencer-color">schedule</mat-icon>
+            <div class="summary-info">
+              <span class="summary-number">{{ formatearNumero(resumenInventario()!.productos_por_vencer) }}</span>
+              <span class="summary-label">Por Vencer</span>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+
+    <!-- Alertas Críticas -->
+    @if (alertasCriticas().length > 0) {
+      <mat-card class="alerts-card">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>priority_high</mat-icon>
+            Alertas Críticas de Inventario
+          </mat-card-title>
+          <mat-card-subtitle>Productos que requieren atención inmediata</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="alerts-grid">
+            @for (alerta of alertasCriticas(); track alerta.producto_nombre) {
+              <div class="alert-item" [class]="'alert-' + alerta.gravedad">
+                <div class="alert-icon">
+                  <mat-icon [color]="getAlertaColor(alerta.gravedad)">{{ getAlertaIcon(alerta.tipo) }}</mat-icon>
+                </div>
+                <div class="alert-content">
+                  <h4 class="alert-product">{{ alerta.producto_nombre }}</h4>
+                  <p class="alert-description">{{ alerta.descripcion }}</p>
+                  <span class="alert-date">{{ alerta.fecha_alerta }}</span>
+                </div>
+                <mat-chip class="alert-severity" [color]="getAlertaColor(alerta.gravedad)">
+                  {{ alerta.gravedad.toUpperCase() }}
+                </mat-chip>
+              </div>
+            }
+          </div>
+        </mat-card-content>
+      </mat-card>
+    }
+
+    <!-- Gráficos Principales -->
+    <div class="main-charts-section">
+      <!-- Valor de Inventario por Categoría -->
+      <mat-card class="chart-card">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>pie_chart</mat-icon>
+            Distribución de Valor por Categoría
+          </mat-card-title>
+          <mat-card-subtitle>Análisis de la composición del inventario por valor</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="chart-container">
+            <canvas #valorInventarioChart></canvas>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Análisis ABC -->
+      <mat-card class="chart-card">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>analytics</mat-icon>
+            Análisis ABC
+          </mat-card-title>
+          <mat-card-subtitle>Clasificación de productos por valor e importancia</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="chart-container">
+            <canvas #abcChart></canvas>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+
+    <!-- Análisis de Rotación -->
+    <mat-card class="chart-card full-width">
+      <mat-card-header>
+        <mat-card-title>
+          <mat-icon>sync</mat-icon>
+          Rotación de Inventario - Top Productos
+        </mat-card-title>
+        <mat-card-subtitle>Productos con mayor rotación en el período analizado</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="chart-container">
+          <canvas #rotacionChart></canvas>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Movimientos de Inventario -->
+    <mat-card class="chart-card full-width">
+      <mat-card-header>
+        <mat-card-title>
+          <mat-icon>timeline</mat-icon>
+          Movimientos de Inventario
+        </mat-card-title>
+        <mat-card-subtitle>Entradas y salidas de inventario por período</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="chart-container">
+          <canvas #movimientosChart></canvas>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Tablas de Análisis -->
+    <div class="tables-section">
+      <mat-tab-group class="analysis-tabs">
+        <!-- Análisis ABC -->
+        <mat-tab label="Análisis ABC">
+          <div class="tab-content">
+            <div class="table-header">
+              <h3>Clasificación ABC de Productos</h3>
+              <p>Productos clasificados por su valor e importancia en el inventario</p>
+            </div>
+            <div class="table-container">
+              <table mat-table [dataSource]="reporteData()?.analisis_abc || []" class="abc-table">
+                <ng-container matColumnDef="categoria">
+                  <th mat-header-cell *matHeaderCellDef>Categoría</th>
+                  <td mat-cell *matCellDef="let element">
+                    <mat-chip class="abc-chip" 
+                             [style.background-color]="getCategoriaABCColor(element.categoria_abc)"
+                             [style.color]="'white'">
+                      {{ element.categoria_abc }}
+                    </mat-chip>
+                  </td>
+                </ng-container>
+
+                <ng-container matColumnDef="producto">
+                  <th mat-header-cell *matHeaderCellDef>Producto</th>
+                  <td mat-cell *matCellDef="let element">{{ element.producto_nombre }}</td>
+                </ng-container>
+
+                <ng-container matColumnDef="valor">
+                  <th mat-header-cell *matHeaderCellDef>Valor Inventario</th>
+                  <td mat-cell *matCellDef="let element">
+                    <strong>{{ formatearMoneda(element.valor_inventario) }}</strong>
+                  </td>
+                </ng-container>
+
+                <ng-container matColumnDef="porcentaje">
+                  <th mat-header-cell *matHeaderCellDef>% Individual</th>
+                  <td mat-cell *matCellDef="let element">
+                    {{ formatearPorcentaje((element.valor_inventario / resumenInventario()!.valor_total) * 100) }}
+                  </td>
+                </ng-container>
+
+                <ng-container matColumnDef="acumulado">
+                  <th mat-header-cell *matHeaderCellDef>% Acumulado</th>
+                  <td mat-cell *matCellDef="let element">
+                    <strong>{{ formatearPorcentaje(element.porcentaje_acumulado) }}</strong>
+                  </td>
+                </ng-container>
+
+                <tr mat-header-row *matHeaderRowDef="displayedColumnsABC"></tr>
+                <tr mat-row *matRowDef="let row; columns: displayedColumnsABC;"></tr>
+              </table>
+            </div>
+          </div>
+        </mat-tab>
+
+        <!-- Rotación de Productos -->
+        <mat-tab label="Rotación">
+          <div class="tab-content">
+            <div class="table-header">
+              <h3>Análisis de Rotación de Productos</h3>
+              <p>Productos ordenados por su índice de rotación</p>
+            </div>
+            <div class="table-container">
+              <table mat-table [dataSource]="reporteData()?.productos_mas_rotacion || []" class="rotation-table">
+                <ng-container matColumnDef="producto">
+                  <th mat-header-cell *matHeaderCellDef>Producto</th>
+                  <td mat-cell *matCellDef="let element">{{ element.nombre }}</td>
+                </ng-container>
+
+                <ng-container matColumnDef="categoria">
+                  <th mat-header-cell *matHeaderCellDef>Categoría</th>
+                  <td mat-cell *matCellDef="let element">
+                    <mat-chip class="category-chip">{{ element.categoria }}</mat-chip>
+                  </td>
+                </ng-container>
+
+                <ng-container matColumnDef="rotacion">
+                  <th mat-header-cell *matHeaderCellDef>Rotación (veces/año)</th>
+                  <td mat-cell *matCellDef="let element">
+                    <span class="rotation-value" 
+                          [class.high-rotation]="element.rotacion > 6"
+                          [class.medium-rotation]="element.rotacion > 3 && element.rotacion <= 6"
+                          [class.low-rotation]="element.rotacion <= 3">
+                      {{ element.rotacion.toFixed(1) }}
+                    </span>
+                  </td>
+                </ng-container>
+
+                <ng-container matColumnDef="dias">
+                  <th mat-header-cell *matHeaderCellDef>Días de Inventario</th>
+                  <td mat-cell *matCellDef="let element">{{ element.dias_inventario }} días</td>
+                </ng-container>
+
+                <ng-container matColumnDef="stock">
+                  <th mat-header-cell *matHeaderCellDef>Stock Promedio</th>
+                  <td mat-cell *matCellDef="let element">{{ formatearNumero(element.stock_promedio) }}</td>
+                </ng-container>
+
+                <tr mat-header-row *matHeaderRowDef="displayedColumnsRotacion"></tr>
+                <tr mat-row *matRowDef="let row; columns: displayedColumnsRotacion;"></tr>
+              </table>
+            </div>
+          </div>
+        </mat-tab>
+
+        <!-- Movimientos -->
+        <mat-tab label="Movimientos">
+          <div class="tab-content">
+            <div class="table-header">
+              <h3>Movimientos Recientes de Inventario</h3>
+              <p>Últimos movimientos registrados en el período</p>
+            </div>
+            <div class="table-container">
+              <table mat-table [dataSource]="reporteData()?.movimientos_periodo || []" class="movements-table">
+                <ng-container matColumnDef="fecha">
+                  <th mat-header-cell *matHeaderCellDef>Fecha</th>
+                  <td mat-cell *matCellDef="let element">{{ element.fecha }}</td>
+                </ng-container>
+
+                <ng-container matColumnDef="tipo">
+                  <th mat-header-cell *matHeaderCellDef>Tipo</th>
+                  <td mat-cell *matCellDef="let element">
+                    <mat-chip [class]="'movement-chip movement-' + element.tipo_movimiento">
+                      <mat-icon>{{ element.tipo_movimiento === 'entrada' ? 'arrow_downward' : 'arrow_upward' }}</mat-icon>
+                      {{ element.tipo_movimiento }}
+                    </mat-chip>
+                  </td>
+                </ng-container>
+
+                <ng-container matColumnDef="producto">
+                  <th mat-header-cell *matHeaderCellDef>Producto</th>
+                  <td mat-cell *matCellDef="let element">{{ element.producto_nombre }}</td>
+                </ng-container>
+
+                <ng-container matColumnDef="cantidad">
+                  <th mat-header-cell *matHeaderCellDef>Cantidad</th>
+                  <td mat-cell *matCellDef="let element">
+                    <strong>{{ formatearNumero(element.cantidad) }}</strong>
+                  </td>
+                </ng-container>
+
+                <ng-container matColumnDef="costo">
+                  <th mat-header-cell *matHeaderCellDef>Costo Total</th>
+                  <td mat-cell *matCellDef="let element">
+                    {{ formatearMoneda(element.costo_total) }}
+                  </td>
+                </ng-container>
+
+                <tr mat-header-row *matHeaderRowDef="displayedColumnsMovimientos"></tr>
+                <tr mat-row *matRowDef="let row; columns: displayedColumnsMovimientos;"></tr>
+              </table>
+            </div>
+          </div>
+        </mat-tab>
+      </mat-tab-group>
+    </div>
+
+    <!-- Insights y Recomendaciones -->
+    <mat-card class="insights-card">
+      <mat-card-header>
+        <mat-card-title>
+          <mat-icon>psychology</mat-icon>
+          Insights y Recomendaciones
+        </mat-card-title>
+        <mat-card-subtitle>Análisis automático basado en los datos del inventario</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="insights-grid">
+          <div class="insight-item">
+            <mat-icon class="insight-icon positive">trending_up</mat-icon>
+            <div class="insight-content">
+              <h4>Productos de Alta Rotación</h4>
+              <p>Los productos de categoría A representan el mayor valor del inventario. Considera aumentar el stock de seguridad para evitar desabastecimientos.</p>
+            </div>
+          </div>
+          
+          <mat-divider></mat-divider>
+          
+          <div class="insight-item">
+            <mat-icon class="insight-icon warning">inventory_2</mat-icon>
+            <div class="insight-content">
+              <h4>Optimización de Stock</h4>
+              <p>{{ resumenInventario()!.productos_bajo_stock }} productos están por debajo del stock mínimo. Es recomendable realizar pedidos urgentes.</p>
+            </div>
+          </div>
+          
+          <mat-divider></mat-divider>
+          
+          <div class="insight-item">
+            <mat-icon class="insight-icon info">schedule</mat-icon>
+            <div class="insight-content">
+              <h4>Productos Próximos a Vencer</h4>
+              <p>{{ resumenInventario()!.productos_por_vencer }} productos están próximos a vencer. Considera ofertas especiales o devoluciones al proveedor.</p>
+            </div>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  } @else {
+    <div class="no-data">
+      <mat-icon>inventory</mat-icon>
+      <h3>No hay datos disponibles</h3>
+      <p>No se encontraron datos de inventario para el período seleccionado</p>
+    </div>
+  }
+</div>

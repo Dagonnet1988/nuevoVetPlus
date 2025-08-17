@@ -55,7 +55,7 @@ export const validateCreateAppointment = [
     body('tipo')
         .notEmpty()
         .withMessage('El tipo de cita es obligatorio')
-        .isIn(['Consulta', 'Terapia', 'Cirugía', 'Control', 'Vacunación', 'Emergencia'])
+        .isIn(['consulta_general', 'vacunacion', 'cirugia', 'control', 'emergencia', 'revision', 'desparasitacion', 'estetica', 'otro', 'Consulta', 'Terapia', 'Cirugía', 'Control', 'Vacunación', 'Emergencia'])
         .withMessage('El tipo de cita no es válido'),
     
     body('motivo')
@@ -133,12 +133,12 @@ export const validateUpdateAppointment = [
     
     body('tipo')
         .optional()
-        .isIn(['Consulta', 'Terapia', 'Cirugía', 'Control', 'Vacunación', 'Emergencia'])
+        .isIn(['consulta_general', 'vacunacion', 'cirugia', 'control', 'emergencia', 'revision', 'desparasitacion', 'estetica', 'otro', 'Consulta', 'Terapia', 'Cirugía', 'Control', 'Vacunación', 'Emergencia'])
         .withMessage('El tipo de cita no es válido'),
     
     body('estado')
         .optional()
-        .isIn(['Programada', 'Confirmada', 'En Curso', 'Completada', 'Cancelada', 'No Asistió'])
+        .isIn(['Programada', 'Confirmada', 'En Curso', 'Completada', 'Cancelada', 'No Asistió', 'pendiente', 'confirmada', 'en_progreso', 'completada', 'cancelada', 'no_asistio'])
         .withMessage('El estado de la cita no es válido'),
     
     body('motivo')
@@ -170,7 +170,7 @@ export const validateUpdateAppointmentStatus = [
     body('estado')
         .notEmpty()
         .withMessage('El estado es obligatorio')
-        .isIn(['Programada', 'Confirmada', 'En Curso', 'Completada', 'Cancelada', 'No Asistió'])
+        .isIn(['Programada', 'Confirmada', 'En Curso', 'Completada', 'Cancelada', 'No Asistió', 'pendiente', 'confirmada', 'en_progreso', 'completada', 'cancelada', 'no_asistio'])
         .withMessage('El estado de la cita no es válido'),
     
     body('notas')
@@ -185,8 +185,8 @@ export const validateUpdateAppointmentStatus = [
 export const validateGetAppointments = [
     query('limit')
         .optional()
-        .isInt({ min: 1, max: 100 })
-        .withMessage('El límite debe ser un número entre 1 y 100'),
+        .isInt({ min: 1, max: 1000 })
+        .withMessage('El límite debe ser un número entre 1 y 1000'),
     
     query('offset')
         .optional()
@@ -195,22 +195,44 @@ export const validateGetAppointments = [
     
     query('fecha_inicio')
         .optional()
-        .isISO8601()
-        .withMessage('La fecha de inicio debe ser una fecha válida (ISO 8601)'),
+        .custom((value) => {
+            // Aceptar tanto YYYY-MM-DD como YYYY-MM-DDTHH:MM:SS
+            const dateRegex = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?)?$/;
+            if (!dateRegex.test(value)) {
+                throw new Error('La fecha de inicio debe estar en formato YYYY-MM-DD o YYYY-MM-DDTHH:MM:SS');
+            }
+            // Verificar que la fecha sea válida
+            const date = new Date(value);
+            if (isNaN(date.getTime())) {
+                throw new Error('La fecha de inicio no es válida');
+            }
+            return true;
+        }),
     
     query('fecha_fin')
         .optional()
-        .isISO8601()
-        .withMessage('La fecha de fin debe ser una fecha válida (ISO 8601)'),
+        .custom((value) => {
+            // Aceptar tanto YYYY-MM-DD como YYYY-MM-DDTHH:MM:SS
+            const dateRegex = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?)?$/;
+            if (!dateRegex.test(value)) {
+                throw new Error('La fecha de fin debe estar en formato YYYY-MM-DD o YYYY-MM-DDTHH:MM:SS');
+            }
+            // Verificar que la fecha sea válida
+            const date = new Date(value);
+            if (isNaN(date.getTime())) {
+                throw new Error('La fecha de fin no es válida');
+            }
+            return true;
+        }),
     
     query('estado')
         .optional()
-        .isIn(['Programada', 'Confirmada', 'En Curso', 'Completada', 'Cancelada', 'No Asistió'])
+        .isIn(['Programada', 'Confirmada', 'En Curso', 'Completada', 'Cancelada', 'No Asistió', 'pendiente', 'confirmada', 'en_progreso', 'completada', 'cancelada', 'no_asistio'])
         .withMessage('El estado de la cita no es válido'),
     
     query('tipo')
         .optional()
-        .isIn(['Consulta', 'Terapia', 'Cirugía', 'Control', 'Vacunación', 'Emergencia'])
+        .isIn(['consulta_general', 'vacunacion', 'cirugia', 'control', 'emergencia', 'revision', 'desparasitacion', 'estetica', 'otro', 'Consulta', 'Terapia', 'Cirugía', 'Control', 'Vacunación', 'Emergencia'])
         .withMessage('El tipo de cita no es válido'),
     
     query('id_veterinario')

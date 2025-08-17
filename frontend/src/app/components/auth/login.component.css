@@ -1,0 +1,120 @@
+.login-container {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%);
+  padding: 16px;
+}
+
+.login-wrapper {
+  max-width: 400px;
+  width: 100%;
+  position: relative;
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.logo-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.logo-icon {
+  font-size: 48px;
+  width: 48px;
+  height: 48px;
+  color: #2e7d32;
+}
+
+.app-title {
+  font-size: 32px;
+  font-weight: 300;
+  margin: 0;
+  color: #2e7d32;
+}
+
+.app-subtitle {
+  color: #666;
+  margin: 8px 0 0 0;
+  font-size: 14px;
+}
+
+.login-card {
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+  border-radius: 16px !important;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.login-button {
+  height: 48px;
+  border-radius: 8px !important;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.login-footer {
+  text-align: center;
+  margin-top: 24px;
+}
+
+.text-muted {
+  color: #666;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+}
+
+.info-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}
+
+.version-info {
+  color: #999;
+  font-size: 11px;
+  margin: 8px 0 0 0;
+}
+
+.theme-selector {
+  position: absolute;
+  top: -60px;
+  right: 0;
+}
+
+.mr-sm {
+  margin-right: 8px;
+}
+
+.w-100 {
+  width: 100%;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .login-container {
+    padding: 8px;
+  }
+
+  .login-wrapper {
+    max-width: 100%;
+  }
+
+  .app-title {
+    font-size: 28px;
+  }
+}

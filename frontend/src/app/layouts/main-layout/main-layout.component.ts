@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core';
+import { Component, signal, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { MatSidenavModule } from '@angular/material/sidenav';
@@ -6,10 +6,10 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatListModule } from '@angular/material/list';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
-import { MatMenuModule } from '@angular/material/menu';
+import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
 import { MatBadgeModule } from '@angular/material/badge';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { AuthService } from '../../core/auth/auth.service';
+import { AuthService } from '../../services/auth.service';
 import { Router } from '@angular/router';
 import { NotificationsComponent } from '../../shared/components/notifications/notifications.component';
 
@@ -119,11 +119,18 @@ interface MenuItem {
           <app-notifications></app-notifications>
 
           <!-- Menú de usuario -->
-          <button mat-icon-button [matMenuTriggerFor]="userMenu" [matTooltip]="'Opciones de usuario'">
+          <button mat-icon-button 
+                  [matMenuTriggerFor]="userMenu" 
+                  [matTooltip]="'Opciones de usuario'"
+                  type="button"
+                  (click)="openUserMenu()"
+                  aria-label="Abrir menú de usuario">
             <mat-icon>account_circle</mat-icon>
           </button>
 
-          <mat-menu #userMenu="matMenu" xPosition="before">
+          <mat-menu #userMenu="matMenu" xPosition="before" class="user-dropdown-menu"
+                    [hasBackdrop]="true"
+                    [overlapTrigger]="false">
             <div class="user-menu-header">
               <p class="user-menu-name">{{ authService.getCurrentUserName() }}</p>
               <p class="user-menu-email">{{ authService.getCurrentUserEmail() }}</p>
@@ -301,6 +308,14 @@ interface MenuItem {
       color: #f44336 !important;
     }
 
+    ::ng-deep .user-dropdown-menu {
+      z-index: 9999 !important;
+    }
+
+    ::ng-deep .cdk-overlay-pane {
+      z-index: 9999 !important;
+    }
+
     /* Responsive */
     @media (max-width: 768px) {
       .sidenav {
@@ -338,6 +353,8 @@ interface MenuItem {
   `]
 })
 export class MainLayoutComponent {
+  @ViewChild(MatMenuTrigger) userMenuTrigger!: MatMenuTrigger;
+  
   isMobile = signal(false);
   notificationCount = signal(3);
 
@@ -371,13 +388,13 @@ export class MainLayoutComponent {
       label: 'Inventario',
       icon: 'inventory',
       route: '/inventario',
-      roles: ['admin', 'aux']
+      roles: ['admin', 'vet']
     },
     {
       label: 'Facturación',
       icon: 'receipt',
       route: '/facturacion',
-      roles: ['admin', 'aux']
+      roles: ['admin', 'vet', 'aux']
     },
     {
       label: 'Reportes',
@@ -431,6 +448,15 @@ export class MainLayoutComponent {
 
   logout(): void {
     this.authService.logout();
+  }
+
+  openUserMenu(): void {
+    console.log('Intentando abrir menú de usuario...');
+    if (this.userMenuTrigger) {
+      this.userMenuTrigger.openMenu();
+    } else {
+      console.warn('UserMenuTrigger no está disponible');
+    }
   }
 
   private checkScreenSize(): void {

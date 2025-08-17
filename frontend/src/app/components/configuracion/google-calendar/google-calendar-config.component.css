@@ -1,0 +1,373 @@
+/* Container principal */
+.google-calendar-config-container {
+  padding: 24px;
+  max-width: 900px;
+  margin: 0 auto;
+  background-color: #f5f5f5;
+  min-height: 100vh;
+}
+
+/* Loading */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  color: #666;
+}
+
+.loading-container p {
+  margin-top: 16px;
+  font-size: 16px;
+}
+
+/* Header */
+.page-header {
+  margin-bottom: 24px;
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: white;
+  padding: 20px 24px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.back-button {
+  color: #1976d2;
+}
+
+.title-section {
+  flex: 1;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #1976d2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-icon {
+  font-size: 28px;
+}
+
+.page-subtitle {
+  margin: 4px 0 0 0;
+  color: #666;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* Cards */
+.status-card,
+.config-section,
+.instructions-card {
+  margin-bottom: 24px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.status-card mat-card-header,
+.config-section mat-card-header,
+.instructions-card mat-card-header {
+  background: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+  margin: -24px -24px 24px -24px;
+  padding: 16px 24px;
+}
+
+.status-card mat-card-title,
+.config-section mat-card-title,
+.instructions-card mat-card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+/* Estado de conexión */
+.status-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+}
+
+.status-indicator mat-icon {
+  font-size: 32px;
+  width: 32px;
+  height: 32px;
+}
+
+.status-details h3 {
+  margin: 0 0 4px 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.calendar-name {
+  margin: 0 0 4px 0;
+  color: #4285f4;
+  font-weight: 500;
+}
+
+.last-sync {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.error-message {
+  margin: 4px 0 0 0;
+  color: #f44336;
+  font-size: 14px;
+}
+
+.status-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.status-actions button {
+  min-width: 140px;
+}
+
+/* Formulario */
+.form-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.form-row {
+  margin-bottom: 16px;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.section-divider {
+  margin: 24px 0;
+}
+
+/* Instrucciones */
+.instructions-content {
+  line-height: 1.6;
+}
+
+.instructions-list {
+  padding-left: 20px;
+  margin: 0;
+}
+
+.instructions-list li {
+  margin-bottom: 12px;
+  color: #333;
+}
+
+.instructions-list strong {
+  color: #1976d2;
+}
+
+.instructions-list a {
+  color: #1976d2;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+}
+
+.instructions-list a:hover {
+  text-decoration: underline;
+}
+
+.instructions-list a mat-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}
+
+/* Chips */
+mat-chip-set {
+  margin: 8px 0;
+}
+
+::ng-deep .mat-mdc-chip {
+  background-color: #e3f2fd !important;
+  color: #1976d2 !important;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+}
+
+/* Acciones */
+.actions-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-top: 24px;
+}
+
+.main-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.main-actions button {
+  min-width: 140px;
+}
+
+/* Spinners en botones */
+.status-actions button mat-spinner,
+.main-actions button mat-spinner {
+  margin-right: 8px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .google-calendar-config-container {
+    padding: 16px;
+  }
+
+  .header-content {
+    flex-direction: column;
+    text-align: center;
+    gap: 12px;
+  }
+
+  .page-title {
+    font-size: 20px;
+    justify-content: center;
+  }
+
+  .status-info {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .status-indicator {
+    flex-direction: column;
+    text-align: center;
+    gap: 12px;
+  }
+
+  .status-actions {
+    justify-content: center;
+  }
+
+  .actions-section {
+    flex-direction: column;
+    gap: 16px;
+    text-align: center;
+  }
+
+  .main-actions {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .main-actions button,
+  .status-actions button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .status-actions {
+    flex-direction: column;
+  }
+
+  .status-actions button {
+    width: 100%;
+  }
+
+  .instructions-list {
+    padding-left: 16px;
+  }
+}
+
+/* Animaciones */
+.status-card,
+.config-section,
+.instructions-card,
+.actions-section {
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Estados de validación */
+.mat-mdc-form-field.mat-form-field-invalid .mat-mdc-text-field-wrapper {
+  border-color: #f44336;
+}
+
+/* Mejoras de accesibilidad */
+.status-card:focus-within,
+.config-section:focus-within {
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
+}
+
+/* Tooltips */
+::ng-deep .mat-mdc-tooltip {
+  font-size: 12px;
+  max-width: 250px;
+}
+
+/* Slide toggles */
+::ng-deep .mat-mdc-slide-toggle {
+  margin: 8px 0;
+}
+
+::ng-deep .mat-mdc-slide-toggle .mdc-form-field {
+  color: #333;
+  font-weight: 500;
+}
+
+/* Snackbar personalizados */
+::ng-deep .success-snackbar {
+  --mdc-snackbar-container-color: #4caf50;
+  --mdc-snackbar-supporting-text-color: white;
+}
+
+::ng-deep .warning-snackbar {
+  --mdc-snackbar-container-color: #ff9800;
+  --mdc-snackbar-supporting-text-color: white;
+}
+
+::ng-deep .error-snackbar {
+  --mdc-snackbar-container-color: #f44336;
+  --mdc-snackbar-supporting-text-color: white;
+}

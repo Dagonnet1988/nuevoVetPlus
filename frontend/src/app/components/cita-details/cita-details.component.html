@@ -1,0 +1,300 @@
+<div class="cita-details-container">
+  @if (loading()) {
+    <div class="loading-container">
+      <mat-spinner diameter="50"></mat-spinner>
+      <p>Cargando información de la cita...</p>
+    </div>
+  } @else if (cita()) {
+    <!-- Header con acciones -->
+    <div class="header-section">
+      <div class="header-content">
+        <button mat-icon-button (click)="onBack()" class="back-button">
+          <mat-icon>arrow_back</mat-icon>
+        </button>
+        
+        <div class="title-section">
+          <h1 class="page-title">
+            <mat-icon>event</mat-icon>
+            Detalles de Cita
+          </h1>
+          <p class="cita-codigo">{{ cita()!.codigo_cita }}</p>
+        </div>
+
+        <div class="header-actions">
+          @if (canEditCita()) {
+            <button mat-raised-button color="primary" (click)="onEdit()" [disabled]="updating()">
+              <mat-icon>edit</mat-icon>
+              Editar
+            </button>
+          }
+          
+          <button mat-button [matMenuTriggerFor]="statusMenu" [disabled]="updating()">
+            <mat-icon>more_vert</mat-icon>
+            Más acciones
+          </button>
+          
+          <mat-menu #statusMenu="matMenu">
+            @for (estado of getAvailableStatusTransitions(); track estado.value) {
+              <button mat-menu-item (click)="onUpdateStatus(estado.value)">
+                <mat-icon>check_circle</mat-icon>
+                <span>Marcar como {{ estado.label }}</span>
+              </button>
+            }
+            
+            <mat-divider></mat-divider>
+            
+            <button mat-menu-item (click)="onSyncWithGoogle()">
+              <mat-icon>sync</mat-icon>
+              <span>Sincronizar con Google</span>
+            </button>
+            
+            @if (canCancelCita()) {
+              <mat-divider></mat-divider>
+              <button mat-menu-item (click)="onCancel()" class="cancel-action">
+                <mat-icon>cancel</mat-icon>
+                <span>Cancelar Cita</span>
+              </button>
+            }
+          </mat-menu>
+        </div>
+      </div>
+    </div>
+
+    <!-- Acceso rápido para cambiar estado -->
+    @if (getAvailableStatusTransitions().length > 0) {
+      <mat-card class="quick-actions-card">
+        <mat-card-content>
+          <div class="quick-actions">
+            <span class="quick-label">Cambiar estado:</span>
+            @for (estado of getAvailableStatusTransitions(); track estado.value) {
+              <button mat-stroked-button 
+                      [style.border-color]="estado.color"
+                      [style.color]="estado.color"
+                      (click)="onUpdateStatus(estado.value)"
+                      [disabled]="updating()"
+                      class="quick-status-btn">
+                <mat-icon>{{ getStatusIcon(estado.value) }}</mat-icon>
+                {{ estado.label }}
+              </button>
+            }
+          </div>
+        </mat-card-content>
+      </mat-card>
+    }
+
+    <!-- Información principal -->
+    <div class="main-content">
+      <!-- Card de información básica -->
+      <mat-card class="info-card">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>info</mat-icon>
+            Información General
+          </mat-card-title>
+        </mat-card-header>
+        
+        <mat-card-content>
+          <div class="info-grid">
+            <!-- Estado y tipo -->
+            <div class="info-section">
+              <div class="info-item">
+                <label>Estado:</label>
+                <mat-chip [style.background-color]="getEstadoInfo(cita()!.estado).color" 
+                          class="status-chip">
+                  {{ getEstadoInfo(cita()!.estado).label }}
+                </mat-chip>
+              </div>
+              
+              <div class="info-item">
+                <label>Tipo de cita:</label>
+                <mat-chip [style.background-color]="getTipoInfo(cita()!.tipo).color" 
+                          class="type-chip">
+                  {{ getTipoInfo(cita()!.tipo).label }}
+                </mat-chip>
+              </div>
+            </div>
+
+            <!-- Fecha y hora -->
+            <div class="info-section">
+              <div class="info-item">
+                <label>Fecha:</label>
+                <div class="date-info">
+                  <mat-icon>calendar_today</mat-icon>
+                  <span>{{ formatDate(cita()!.fecha_inicio) }}</span>
+                </div>
+              </div>
+              
+              <div class="info-item">
+                <label>Horario:</label>
+                <div class="time-info">
+                  <mat-icon>access_time</mat-icon>
+                  <span>{{ formatTime(cita()!.fecha_inicio) }} - {{ formatTime(cita()!.fecha_fin) }}</span>
+                  <span class="duration">({{ calculateDuration() }})</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Sincronización con Google -->
+            @if (getSyncStatusInfo(); as syncInfo) {
+              <div class="info-section">
+                <div class="info-item">
+                  <label>Google Calendar:</label>
+                  <div class="sync-status" [class]="syncInfo.color">
+                    <mat-icon>{{ syncInfo.icon }}</mat-icon>
+                    <span>{{ syncInfo.message }}</span>
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Tabs con información detallada -->
+      <mat-card class="details-card">
+        <mat-tab-group>
+          <!-- Tab: Paciente -->
+          <mat-tab label="Paciente">
+            <div class="tab-content">
+              @if (cita()!.mascota) {
+                <div class="patient-info">
+                  <div class="patient-header">
+                    <div class="patient-avatar">
+                      <mat-icon>pets</mat-icon>
+                    </div>
+                    <div class="patient-details">
+                      <h3>{{ cita()!.mascota!.nombre }}</h3>
+                      <p class="species">{{ cita()!.mascota!.especie }}</p>
+                      @if (cita()!.mascota!.raza) {
+                        <p class="breed">{{ cita()!.mascota!.raza }}</p>
+                      }
+                    </div>
+                    <button mat-stroked-button (click)="onViewPaciente()" class="view-patient-btn">
+                      <mat-icon>visibility</mat-icon>
+                      Ver Perfil
+                    </button>
+                  </div>
+                  
+                  @if (cita()!.mascota!.cliente) {
+                    <mat-divider></mat-divider>
+                    <div class="owner-info">
+                      <h4>Información del Propietario</h4>
+                      <div class="owner-details">
+                        <div class="detail-item">
+                          <mat-icon>person</mat-icon>
+                          <span>{{ cita()!.mascota!.cliente!.nombre }}</span>
+                        </div>
+                        @if (cita()!.mascota!.cliente!.telefono) {
+                          <div class="detail-item">
+                            <mat-icon>phone</mat-icon>
+                            <span>{{ cita()!.mascota!.cliente!.telefono }}</span>
+                          </div>
+                        }
+                        @if (cita()!.mascota!.cliente!.email) {
+                          <div class="detail-item">
+                            <mat-icon>email</mat-icon>
+                            <span>{{ cita()!.mascota!.cliente!.email }}</span>
+                          </div>
+                        }
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          </mat-tab>
+
+          <!-- Tab: Veterinario -->
+          <mat-tab label="Veterinario">
+            <div class="tab-content">
+              @if (cita()!.veterinario) {
+                <div class="vet-info">
+                  <div class="vet-header">
+                    <div class="vet-avatar">
+                      <mat-icon>medical_services</mat-icon>
+                    </div>
+                    <div class="vet-details">
+                      <h3>{{ cita()!.veterinario!.nombre }}</h3>
+                      @if (cita()!.veterinario!.especialidad) {
+                        <p class="specialty">{{ cita()!.veterinario!.especialidad }}</p>
+                      }
+                      @if (cita()!.veterinario!.email) {
+                        <div class="contact-item">
+                          <mat-icon>email</mat-icon>
+                          <span>{{ cita()!.veterinario!.email }}</span>
+                        </div>
+                      }
+                    </div>
+                  </div>
+                </div>
+              }
+            </div>
+          </mat-tab>
+
+          <!-- Tab: Detalles de la Cita -->
+          <mat-tab label="Detalles">
+            <div class="tab-content">
+              <div class="appointment-details">
+                @if (cita()!.motivo) {
+                  <div class="detail-section">
+                    <h4>
+                      <mat-icon>assignment</mat-icon>
+                      Motivo de la consulta
+                    </h4>
+                    <p class="motivo-text">{{ cita()!.motivo }}</p>
+                  </div>
+                }
+
+                @if (cita()!.observaciones) {
+                  <div class="detail-section">
+                    <h4>
+                      <mat-icon>note</mat-icon>
+                      Observaciones
+                    </h4>
+                    <p class="observaciones-text">{{ cita()!.observaciones }}</p>
+                  </div>
+                }
+
+                @if (cita()!.precio) {
+                  <div class="detail-section">
+                    <h4>
+                      <mat-icon>attach_money</mat-icon>
+                      Precio
+                    </h4>
+                    <p class="precio-text">${{ cita()!.precio | number:'1.2-2' }}</p>
+                  </div>
+                }
+
+                <div class="detail-section">
+                  <h4>
+                    <mat-icon>history</mat-icon>
+                    Información de registro
+                  </h4>
+                  <div class="timestamps">
+                    <div class="timestamp-item">
+                      <label>Creada:</label>
+                      <span>{{ formatDateTime(cita()!.fecha_creacion) }}</span>
+                    </div>
+                    <div class="timestamp-item">
+                      <label>Última actualización:</label>
+                      <span>{{ formatDateTime(cita()!.fecha_actualizacion) }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </mat-tab>
+        </mat-tab-group>
+      </mat-card>
+    </div>
+  } @else {
+    <div class="error-container">
+      <mat-icon class="error-icon">error</mat-icon>
+      <h2>Cita no encontrada</h2>
+      <p>La cita que buscas no existe o ha sido eliminada.</p>
+      <button mat-raised-button color="primary" (click)="onBack()">
+        Volver al calendario
+      </button>
+    </div>
+  }
+</div>

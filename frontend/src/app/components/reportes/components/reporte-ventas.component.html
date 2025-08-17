@@ -1,0 +1,284 @@
+<div class="reporte-ventas-container">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <div class="title-section">
+        <h1 class="page-title">
+          <mat-icon class="page-icon">trending_up</mat-icon>
+          Reporte de Ventas
+        </h1>
+        <p class="page-subtitle">Análisis detallado de ventas y rendimiento comercial</p>
+      </div>
+      <div class="actions-section">
+        <button mat-stroked-button 
+                (click)="volverAReportes()"
+                class="back-button">
+          <mat-icon>arrow_back</mat-icon>
+          Volver
+        </button>
+        <!-- Funcionalidad de exportación removida -->
+        <mat-chip>Exportación no disponible</mat-chip>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <mat-card class="filters-card">
+    <mat-card-content>
+      <form [formGroup]="filtrosForm" class="filters-form">
+        <div class="filter-row">
+          <mat-form-field appearance="outline" class="date-field">
+            <mat-label>Fecha Inicio</mat-label>
+            <input matInput [matDatepicker]="fechaInicioPicker" formControlName="fecha_inicio">
+            <mat-datepicker-toggle matSuffix [for]="fechaInicioPicker"></mat-datepicker-toggle>
+            <mat-datepicker #fechaInicioPicker></mat-datepicker>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="date-field">
+            <mat-label>Fecha Fin</mat-label>
+            <input matInput [matDatepicker]="fechaFinPicker" formControlName="fecha_fin">
+            <mat-datepicker-toggle matSuffix [for]="fechaFinPicker"></mat-datepicker-toggle>
+            <mat-datepicker #fechaFinPicker></mat-datepicker>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="filter-field">
+            <mat-label>Veterinario</mat-label>
+            <mat-select formControlName="veterinario_id">
+              <mat-option value="">Todos los veterinarios</mat-option>
+              <mat-option value="1">Dr. Carlos Rodríguez</mat-option>
+              <mat-option value="2">Dra. Ana García</mat-option>
+              <mat-option value="3">Dr. Luis Martínez</mat-option>
+              <mat-option value="4">Dra. María López</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="filter-field">
+            <mat-label>Tipo de Reporte</mat-label>
+            <mat-select formControlName="tipo_reporte">
+              <mat-option value="diario">Diario</mat-option>
+              <mat-option value="semanal">Semanal</mat-option>
+              <mat-option value="mensual">Mensual</mat-option>
+              <mat-option value="anual">Anual</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+      </form>
+    </mat-card-content>
+  </mat-card>
+
+  @if (loading()) {
+    <div class="loading-container">
+      <mat-spinner diameter="50"></mat-spinner>
+      <p>Generando reporte de ventas...</p>
+    </div>
+  } @else if (resumenVentas()) {
+    <!-- Resumen de Ventas -->
+    <div class="summary-row">
+      <mat-card class="summary-card">
+        <mat-card-content>
+          <div class="summary-content">
+            <mat-icon class="summary-icon primary-color">attach_money</mat-icon>
+            <div class="summary-info">
+              <span class="summary-number">{{ formatearMoneda(resumenVentas()!.total_ventas) }}</span>
+              <span class="summary-label">Total Ventas</span>
+            </div>
+            <div class="summary-change positive" *ngIf="resumenVentas()!.crecimiento > 0">
+              <mat-icon>trending_up</mat-icon>
+              <span>{{ formatearPorcentaje(resumenVentas()!.crecimiento) }}</span>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="summary-card">
+        <mat-card-content>
+          <div class="summary-content">
+            <mat-icon class="summary-icon success-color">receipt</mat-icon>
+            <div class="summary-info">
+              <span class="summary-number">{{ formatearNumero(resumenVentas()!.total_facturas) }}</span>
+              <span class="summary-label">Total Facturas</span>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="summary-card">
+        <mat-card-content>
+          <div class="summary-content">
+            <mat-icon class="summary-icon info-color">analytics</mat-icon>
+            <div class="summary-info">
+              <span class="summary-number">{{ formatearMoneda(resumenVentas()!.promedio_venta) }}</span>
+              <span class="summary-label">Promedio por Venta</span>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+
+    <!-- Gráficos -->
+    <div class="charts-section">
+      <!-- Gráfico de Ventas por Período -->
+      <mat-card class="chart-card full-width">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>timeline</mat-icon>
+            Evolución de Ventas
+          </mat-card-title>
+          <mat-card-subtitle>Tendencia de ventas y cantidad de facturas por período</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="chart-container">
+            <canvas #ventasPorPeriodoChart></canvas>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Gráficos de Categorías y Veterinarios -->
+      <div class="charts-row">
+        <mat-card class="chart-card">
+          <mat-card-header>
+            <mat-card-title>
+              <mat-icon>pie_chart</mat-icon>
+              Ventas por Categoría
+            </mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="chart-container">
+              <canvas #ventasPorCategoriaChart></canvas>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <mat-card class="chart-card">
+          <mat-card-header>
+            <mat-card-title>
+              <mat-icon>bar_chart</mat-icon>
+              Rendimiento por Veterinario
+            </mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="chart-container">
+              <canvas #ventasPorVeterinarioChart></canvas>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+    </div>
+
+    <!-- Detalles Adicionales -->
+    <div class="details-section">
+      <!-- Top Servicios -->
+      <mat-card class="details-card">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>star</mat-icon>
+            Top Servicios
+          </mat-card-title>
+          <mat-card-subtitle>Servicios más solicitados del período</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="services-list">
+            @for (servicio of reporteData()?.top_servicios; track servicio.servicio) {
+              <div class="service-item">
+                <div class="service-info">
+                  <span class="service-name">{{ servicio.servicio }}</span>
+                  <span class="service-quantity">{{ servicio.cantidad }} servicios</span>
+                </div>
+                <div class="service-revenue">
+                  <span class="service-amount">{{ formatearMoneda(servicio.total_ventas) }}</span>
+                </div>
+              </div>
+              @if (!$last) {
+                <mat-divider></mat-divider>
+              }
+            }
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Tendencias y Análisis -->
+      <mat-card class="details-card">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>insights</mat-icon>
+            Análisis y Tendencias
+          </mat-card-title>
+          <mat-card-subtitle>Patrones identificados en las ventas</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="trends-list">
+            <div class="trend-item">
+              <mat-icon class="trend-icon">calendar_today</mat-icon>
+              <div class="trend-content">
+                <h4>Mejor Día de la Semana</h4>
+                <p>{{ reporteData()?.tendencias?.mejor_dia_semana }}</p>
+              </div>
+            </div>
+            
+            <mat-divider></mat-divider>
+            
+            <div class="trend-item">
+              <mat-icon class="trend-icon">access_time</mat-icon>
+              <div class="trend-content">
+                <h4>Mejor Horario</h4>
+                <p>{{ reporteData()?.tendencias?.mejor_hora }}</p>
+              </div>
+            </div>
+            
+            <mat-divider></mat-divider>
+            
+            <div class="trend-item">
+              <mat-icon class="trend-icon">trending_up</mat-icon>
+              <div class="trend-content">
+                <h4>Predicción Próximo Mes</h4>
+                <p>{{ formatearMoneda(reporteData()?.tendencias?.prediccion_proximo_mes || 0) }}</p>
+              </div>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+
+    <!-- Comparación con Período Anterior -->
+    @if (reporteData()?.comparacion_periodo_anterior) {
+      <mat-card class="comparison-card">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>compare_arrows</mat-icon>
+            Comparación con Período Anterior
+          </mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="comparison-content">
+            <div class="comparison-item">
+              <span class="comparison-label">Período Anterior:</span>
+              <span class="comparison-value">
+                {{ formatearMoneda(reporteData()!.comparacion_periodo_anterior!.periodo_anterior) }}
+              </span>
+            </div>
+            <div class="comparison-item">
+              <span class="comparison-label">Período Actual:</span>
+              <span class="comparison-value">
+                {{ formatearMoneda(resumenVentas()!.total_ventas) }}
+              </span>
+            </div>
+            <div class="comparison-item highlight">
+              <span class="comparison-label">Cambio:</span>
+              <span class="comparison-change" [class.positive]="reporteData()!.comparacion_periodo_anterior!.porcentaje_cambio > 0">
+                <mat-icon>{{ reporteData()!.comparacion_periodo_anterior!.porcentaje_cambio > 0 ? 'trending_up' : 'trending_down' }}</mat-icon>
+                {{ formatearPorcentaje(reporteData()!.comparacion_periodo_anterior!.porcentaje_cambio) }}
+                ({{ formatearMoneda(getAbsoluteValue(reporteData()!.comparacion_periodo_anterior!.diferencia_absoluta)) }})
+              </span>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    }
+  } @else {
+    <div class="no-data">
+      <mat-icon>assessment</mat-icon>
+      <h3>No hay datos disponibles</h3>
+      <p>No se encontraron datos de ventas para el período seleccionado</p>
+    </div>
+  }
+</div>

@@ -1,0 +1,574 @@
+/* Container principal */
+.cita-details-container {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+  background-color: #f5f5f5;
+  min-height: 100vh;
+}
+
+/* Loading */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  color: #666;
+}
+
+.loading-container p {
+  margin-top: 16px;
+  font-size: 16px;
+}
+
+/* Error state */
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  text-align: center;
+  color: #666;
+}
+
+.error-icon {
+  font-size: 64px;
+  color: #f44336;
+  margin-bottom: 16px;
+}
+
+.error-container h2 {
+  margin: 0 0 8px 0;
+  color: #333;
+}
+
+.error-container p {
+  margin: 0 0 24px 0;
+  font-size: 16px;
+}
+
+/* Header */
+.header-section {
+  margin-bottom: 24px;
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: white;
+  padding: 20px 24px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.back-button {
+  color: #1976d2;
+}
+
+.title-section {
+  flex: 1;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #1976d2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cita-codigo {
+  margin: 4px 0 0 0;
+  color: #666;
+  font-size: 14px;
+  font-family: 'Courier New', monospace;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* Quick actions card */
+.quick-actions-card {
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+}
+
+.quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.quick-label {
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.quick-status-btn {
+  border-radius: 20px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.quick-status-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.quick-status-btn mat-icon {
+  font-size: 18px;
+}
+
+/* Main content */
+.main-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Info card */
+.info-card {
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.info-card mat-card-header {
+  background: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+  margin: -24px -24px 24px -24px;
+  padding: 16px 24px;
+}
+
+.info-card mat-card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.info-grid {
+  display: grid;
+  gap: 24px;
+}
+
+.info-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.info-item label {
+  font-weight: 600;
+  color: #666;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Chips */
+.status-chip,
+.type-chip {
+  color: white !important;
+  font-weight: 500;
+  width: fit-content;
+  border-radius: 16px;
+}
+
+/* Date and time info */
+.date-info,
+.time-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #333;
+  font-size: 16px;
+}
+
+.time-info .duration {
+  color: #666;
+  font-size: 14px;
+  margin-left: 8px;
+}
+
+/* Sync status */
+.sync-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.sync-status.success {
+  color: #4caf50;
+}
+
+.sync-status.warn {
+  color: #ff9800;
+}
+
+/* Details card */
+.details-card {
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.tab-content {
+  padding: 24px;
+}
+
+/* Patient info */
+.patient-info {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.patient-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.patient-avatar {
+  width: 60px;
+  height: 60px;
+  background: #1976d2;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.patient-avatar mat-icon {
+  font-size: 32px;
+}
+
+.patient-details {
+  flex: 1;
+}
+
+.patient-details h3 {
+  margin: 0 0 4px 0;
+  font-size: 20px;
+  color: #333;
+}
+
+.species {
+  margin: 0 0 2px 0;
+  color: #1976d2;
+  font-weight: 500;
+}
+
+.breed {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.view-patient-btn {
+  border-color: #1976d2;
+  color: #1976d2;
+}
+
+/* Owner info */
+.owner-info {
+  padding: 16px 0;
+}
+
+.owner-info h4 {
+  margin: 0 0 12px 0;
+  color: #333;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.owner-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detail-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #333;
+}
+
+.detail-item mat-icon {
+  color: #666;
+  font-size: 18px;
+}
+
+/* Vet info */
+.vet-info {
+  padding: 16px;
+}
+
+.vet-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.vet-avatar {
+  width: 60px;
+  height: 60px;
+  background: #4caf50;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.vet-avatar mat-icon {
+  font-size: 32px;
+}
+
+.vet-details {
+  flex: 1;
+}
+
+.vet-details h3 {
+  margin: 0 0 4px 0;
+  font-size: 20px;
+  color: #333;
+}
+
+.specialty {
+  margin: 0 0 8px 0;
+  color: #4caf50;
+  font-weight: 500;
+  font-style: italic;
+}
+
+.contact-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #666;
+  font-size: 14px;
+}
+
+/* Appointment details */
+.appointment-details {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.detail-section {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.detail-section h4 {
+  background: #f8f9fa;
+  margin: 0;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.detail-section h4 mat-icon {
+  color: #1976d2;
+  font-size: 18px;
+}
+
+.motivo-text,
+.observaciones-text,
+.precio-text {
+  padding: 16px;
+  margin: 0;
+  line-height: 1.5;
+  color: #333;
+}
+
+.precio-text {
+  font-size: 18px;
+  font-weight: 600;
+  color: #4caf50;
+}
+
+/* Timestamps */
+.timestamps {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.timestamp-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.timestamp-item label {
+  font-weight: 500;
+  color: #666;
+}
+
+.timestamp-item span {
+  color: #333;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+}
+
+/* Menu actions */
+.cancel-action {
+  color: #f44336 !important;
+}
+
+.cancel-action mat-icon {
+  color: #f44336 !important;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .cita-details-container {
+    padding: 16px;
+  }
+
+  .header-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .header-actions {
+    justify-content: center;
+  }
+
+  .patient-header,
+  .vet-header {
+    flex-direction: column;
+    text-align: center;
+    gap: 12px;
+  }
+
+  .view-patient-btn {
+    align-self: center;
+  }
+
+  .timestamp-item {
+    flex-direction: column;
+    align-items: start;
+    gap: 4px;
+  }
+
+  .info-grid {
+    gap: 16px;
+  }
+
+  .tab-content {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .page-title {
+    font-size: 20px;
+  }
+
+  .patient-avatar,
+  .vet-avatar {
+    width: 50px;
+    height: 50px;
+  }
+
+  .patient-avatar mat-icon,
+  .vet-avatar mat-icon {
+    font-size: 24px;
+  }
+
+  .header-actions {
+    flex-direction: column;
+  }
+
+  .header-actions button {
+    width: 100%;
+  }
+}
+
+/* Animations */
+.info-card,
+.details-card {
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Tab styles */
+::ng-deep .mat-mdc-tab-group {
+  --mdc-tab-indicator-active-indicator-color: #1976d2;
+}
+
+::ng-deep .mat-mdc-tab .mdc-tab__text-label {
+  color: #666;
+  font-weight: 500;
+}
+
+::ng-deep .mat-mdc-tab.mdc-tab--active .mdc-tab__text-label {
+  color: #1976d2;
+  font-weight: 600;
+}
+
+/* Chip improvements */
+::ng-deep .mat-mdc-chip {
+  border-radius: 16px;
+  font-weight: 500;
+}
+
+/* Menu improvements */
+::ng-deep .mat-mdc-menu-panel {
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}

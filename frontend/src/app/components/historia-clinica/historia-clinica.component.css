@@ -1,0 +1,431 @@
+.historia-clinica-container {
+  padding: 24px;
+  background: #f5f5f5;
+  min-height: calc(100vh - 64px);
+}
+
+/* Header */
+.page-header {
+  margin-bottom: 24px;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.title-section {
+  flex: 1;
+}
+
+.page-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 8px 0;
+  font-size: 28px;
+  font-weight: 500;
+  color: #2e7d32;
+}
+
+.page-icon {
+  font-size: 32px;
+  width: 32px;
+  height: 32px;
+}
+
+.page-subtitle {
+  margin: 0;
+  color: #666;
+  font-size: 16px;
+}
+
+.actions-section {
+  display: flex;
+  gap: 12px;
+}
+
+.create-button {
+  background: linear-gradient(45deg, #2e7d32, #4caf50);
+}
+
+.export-button {
+  border-color: #2e7d32;
+  color: #2e7d32;
+}
+
+/* Estadísticas */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  transition: transform 0.2s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+}
+
+.stat-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 4px;
+}
+
+.stat-icon {
+  font-size: 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-icon.primary-color { background: rgba(46, 125, 50, 0.1); color: #2e7d32; }
+.stat-icon.accent-color { background: rgba(255, 152, 0, 0.1); color: #ff9800; }
+.stat-icon.success-color { background: rgba(76, 175, 80, 0.1); color: #4caf50; }
+.stat-icon.warn-color { background: rgba(255, 193, 7, 0.1); color: #ffc107; }
+
+.stat-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-number {
+  font-size: 24px;
+  font-weight: 600;
+  color: #333;
+  line-height: 1;
+}
+
+.stat-label {
+  font-size: 14px;
+  color: #666;
+  margin-top: 4px;
+}
+
+/* Selector de vista */
+.view-selector-card {
+  margin-bottom: 16px;
+  border-radius: 12px;
+}
+
+.view-toggle {
+  display: flex;
+  gap: 8px;
+}
+
+.view-toggle .mat-button-toggle {
+  border-radius: 8px;
+  border: none;
+}
+
+/* Filtros */
+.filters-card {
+  margin-bottom: 16px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.filters-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.filter-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.paciente-field { flex: 2; min-width: 200px; }
+.veterinario-field { flex: 1.5; min-width: 150px; }
+.estado-field { flex: 1; min-width: 120px; }
+.search-field { flex: 2; min-width: 200px; }
+.date-field { flex: 1; min-width: 140px; }
+
+.clear-filters-btn {
+  height: 40px;
+  border-color: #666;
+  color: #666;
+}
+
+/* Paciente seleccionado */
+.selected-patient-card {
+  margin-bottom: 16px;
+  border-radius: 12px;
+  border-left: 4px solid #2e7d32;
+}
+
+.patient-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.patient-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #2e7d32;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.patient-details {
+  flex: 1;
+}
+
+.patient-details h3 {
+  margin: 0 0 4px 0;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.patient-details p {
+  margin: 2px 0;
+  font-size: 14px;
+  color: #666;
+}
+
+/* Tabla */
+.table-card {
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.consultas-table {
+  width: 100%;
+  background: white;
+}
+
+.consultas-table .mat-mdc-header-cell {
+  font-weight: 600;
+  color: #2e7d32;
+  border-bottom: 2px solid #2e7d32;
+}
+
+.consultas-table .mat-mdc-cell {
+  border-bottom: 1px solid #e0e0e0;
+  padding: 12px 8px;
+}
+
+.consultas-table .mat-mdc-row:hover {
+  background-color: rgba(46, 125, 50, 0.05);
+}
+
+/* Contenido de celdas */
+.codigo-consulta {
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  color: #2e7d32;
+  background: rgba(46, 125, 50, 0.1);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.mascota-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mascota-nombre {
+  font-weight: 500;
+  color: #333;
+}
+
+.mascota-cliente {
+  font-size: 12px;
+  color: #666;
+}
+
+/* Estados */
+.mat-mdc-chip {
+  font-size: 12px;
+  height: 24px;
+  border-radius: 12px;
+}
+
+/* Loading */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+  gap: 16px;
+}
+
+.loading-container p {
+  color: #666;
+  margin: 0;
+}
+
+/* No data */
+.no-data {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+  text-align: center;
+  color: #666;
+}
+
+.no-data .mat-icon {
+  font-size: 64px;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.no-data h3 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.no-data p {
+  margin: 0;
+  font-size: 14px;
+}
+
+/* Timeline y Estadísticas */
+.timeline-card,
+.stats-card {
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  margin-bottom: 16px;
+}
+
+/* Menu de acciones */
+.delete-item {
+  color: #f44336 !important;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .historia-clinica-container {
+    padding: 16px;
+  }
+
+  .header-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .page-title {
+    font-size: 24px;
+  }
+
+  .stats-row {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+  }
+
+  .filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-row > * {
+    flex: none !important;
+    min-width: auto !important;
+    width: 100%;
+  }
+
+  .view-toggle {
+    flex-wrap: wrap;
+  }
+
+  .patient-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .table-container {
+    font-size: 14px;
+  }
+
+  .displayedColumns {
+    /* Ocultar algunas columnas en móvil */
+  }
+}
+
+/* Dark theme support */
+.dark-theme .historia-clinica-container {
+  background: #121212;
+}
+
+.dark-theme .page-title {
+  color: #4caf50;
+}
+
+.dark-theme .page-subtitle {
+  color: #aaa;
+}
+
+.dark-theme .stat-card,
+.dark-theme .filters-card,
+.dark-theme .table-card,
+.dark-theme .timeline-card,
+.dark-theme .stats-card {
+  background: #1e1e1e;
+  border: 1px solid #333;
+}
+
+.dark-theme .consultas-table {
+  background: #1e1e1e;
+}
+
+.dark-theme .consultas-table .mat-mdc-header-cell {
+  color: #4caf50;
+  border-bottom-color: #4caf50;
+}
+
+.dark-theme .consultas-table .mat-mdc-cell {
+  border-bottom-color: #333;
+}
+
+.dark-theme .consultas-table .mat-mdc-row:hover {
+  background-color: rgba(76, 175, 80, 0.1);
+}
+
+/* Filas clickeables */
+.clickable-row {
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.clickable-row:hover {
+  background-color: #f5f5f5 !important;
+}
+
+.clickable-row:active {
+  background-color: #e0e0e0 !important;
+}

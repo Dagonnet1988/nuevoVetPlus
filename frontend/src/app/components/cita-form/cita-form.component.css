@@ -1,0 +1,398 @@
+/* Container principal */
+.cita-form-container {
+  padding: 24px;
+  max-width: 800px;
+  margin: 0 auto;
+  background-color: #f5f5f5;
+  min-height: 100vh;
+}
+
+/* Card del formulario */
+.form-card {
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.form-card mat-card-header {
+  background: linear-gradient(135deg, #1976d2 0%, #42a5f5 100%);
+  color: white;
+  padding: 24px;
+  margin: 0;
+}
+
+.form-card mat-card-title {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.form-card mat-card-subtitle {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 16px;
+  margin: 8px 0 0 0;
+}
+
+.form-card mat-card-content {
+  padding: 32px;
+}
+
+/* Loading */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #666;
+}
+
+.loading-container p {
+  margin-top: 16px;
+  font-size: 16px;
+}
+
+/* Formulario */
+.cita-form {
+  width: 100%;
+}
+
+/* Secciones del formulario */
+.form-section {
+  margin-bottom: 32px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.section-title {
+  background: #f8f9fa;
+  padding: 16px 20px;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.section-title mat-icon {
+  color: #1976d2;
+  font-size: 20px;
+}
+
+.form-section .form-row {
+  padding: 20px;
+}
+
+/* Filas del formulario */
+.form-row {
+  display: flex;
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 16px;
+}
+
+.form-row:last-child {
+  margin-bottom: 0;
+}
+
+/* Campos de formulario */
+.full-width {
+  width: 100%;
+}
+
+.date-field {
+  flex: 2;
+}
+
+.time-field {
+  flex: 1;
+}
+
+.duration-field {
+  flex: 1;
+}
+
+.tipo-field {
+  flex: 2;
+}
+
+.estado-field {
+  flex: 1;
+}
+
+.precio-field {
+  flex: 1;
+  max-width: 200px;
+}
+
+/* Opciones personalizadas */
+.paciente-option,
+.veterinario-option,
+.tipo-option,
+.estado-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.paciente-nombre,
+.vet-nombre {
+  font-weight: 600;
+  color: #333;
+}
+
+.paciente-info {
+  font-size: 12px;
+  color: #666;
+}
+
+.vet-especialidad {
+  font-size: 12px;
+  color: #1976d2;
+  font-style: italic;
+}
+
+.tipo-option,
+.estado-option {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.tipo-color,
+.estado-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* Hora de finalización */
+.hora-fin-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #e3f2fd;
+  border-radius: 6px;
+  color: #1976d2;
+  font-weight: 500;
+  margin-top: 16px;
+}
+
+.hora-fin-display mat-icon {
+  font-size: 18px;
+}
+
+/* Sugerencias de horarios */
+.sugerencias-section {
+  margin-top: 20px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.sugerencias-section h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #666;
+}
+
+.sugerencias-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sugerencia-chip {
+  background: #fff;
+  border: 1px solid #1976d2;
+  color: #1976d2;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sugerencia-chip:hover {
+  background: #1976d2;
+  color: white;
+}
+
+/* Acciones del formulario */
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 24px 32px;
+  background: #f8f9fa;
+  border-top: 1px solid #e0e0e0;
+  margin: 0;
+}
+
+.form-actions button {
+  min-width: 120px;
+}
+
+.form-actions button mat-spinner {
+  margin-right: 8px;
+}
+
+/* Estados de campos */
+.mat-mdc-form-field-error {
+  color: #f44336;
+  font-size: 12px;
+}
+
+/* Campos de texto área */
+.mat-mdc-form-field textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .cita-form-container {
+    padding: 16px;
+  }
+
+  .form-card mat-card-content {
+    padding: 20px;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .form-row .mat-mdc-form-field {
+    width: 100%;
+    margin-bottom: 16px;
+  }
+
+  .date-field,
+  .time-field,
+  .duration-field,
+  .tipo-field,
+  .estado-field,
+  .precio-field {
+    flex: none;
+    max-width: none;
+  }
+
+  .section-title {
+    padding: 12px 16px;
+    font-size: 16px;
+  }
+
+  .form-section .form-row {
+    padding: 16px;
+  }
+
+  .form-actions {
+    flex-direction: column;
+    padding: 20px;
+  }
+
+  .form-actions button {
+    width: 100%;
+  }
+
+  .sugerencias-chips {
+    flex-direction: column;
+  }
+
+  .sugerencia-chip {
+    text-align: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .form-card mat-card-title {
+    font-size: 20px;
+  }
+
+  .form-card mat-card-subtitle {
+    font-size: 14px;
+  }
+
+  .form-card mat-card-content {
+    padding: 16px;
+  }
+
+  .section-title {
+    font-size: 14px;
+  }
+
+  .form-section .form-row {
+    padding: 12px;
+  }
+}
+
+/* Animaciones */
+.form-section {
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Estados de validación */
+.mat-mdc-form-field.mat-form-field-invalid .mat-mdc-text-field-wrapper {
+  border-color: #f44336;
+}
+
+.mat-mdc-form-field.mat-form-field-invalid .mat-mdc-floating-label {
+  color: #f44336;
+}
+
+/* Mejoras de accesibilidad */
+.form-section:focus-within {
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
+}
+
+/* Estilos para mat-select custom */
+::ng-deep .mat-mdc-select-panel {
+  max-height: 300px;
+}
+
+::ng-deep .mat-mdc-option {
+  padding: 12px 16px;
+}
+
+::ng-deep .mat-mdc-option .paciente-option,
+::ng-deep .mat-mdc-option .veterinario-option {
+  line-height: 1.4;
+}
+
+/* Chips de estado */
+::ng-deep .mat-mdc-chip {
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+::ng-deep .mat-mdc-chip.sugerencia-chip {
+  transition: all 0.2s ease;
+}
+
+::ng-deep .mat-mdc-chip.sugerencia-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}

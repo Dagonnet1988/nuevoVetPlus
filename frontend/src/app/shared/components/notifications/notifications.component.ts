@@ -7,7 +7,7 @@ import { MatBadgeModule } from '@angular/material/badge';
 import { MatListModule } from '@angular/material/list';
 import { MatDividerModule } from '@angular/material/divider';
 import { Subscription } from 'rxjs';
-import { DashboardService, Notification } from '../../services/dashboard.service';
+import { DashboardService, Notification } from '../../../services/dashboard.service';
 
 @Component({
   selector: 'app-notifications',

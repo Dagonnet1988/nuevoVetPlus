@@ -140,7 +140,12 @@ export const validateUpdatePet = [
         .isLength({ max: 15 })
         .withMessage('El número de microchip no puede exceder 15 caracteres')
         .matches(/^[0-9A-Z]*$/)
-        .withMessage('El microchip solo puede contener números y letras mayúsculas')
+        .withMessage('El microchip solo puede contener números y letras mayúsculas'),
+    
+    body('activo')
+        .optional()
+        .isBoolean()
+        .withMessage('El campo activo debe ser true o false')
 ];
 
 // ✅ VALIDADOR PARA ID DE MASCOTA

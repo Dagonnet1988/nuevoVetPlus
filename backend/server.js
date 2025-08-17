@@ -11,16 +11,19 @@ import financialRoutes from './src/routes/index.js';
 import financialConfigRoutes from './src/routes/financialConfig.js';
 import clinicalRoutes from './src/routes/clinical.js';
 import auditRoutes from './src/routes/audit.js';
-import googleCalendarRoutes from './src/routes/googleCalendar.js';
+import googleCalendarRoutes from './src/routes/googleCalendarSimple.js';
 import reportsRoutes from './src/routes/reports.js';
 import empresaConfigRoutes from './src/routes/empresaConfigRoutes.js';
-// import whatsappRoutes from './src/routes/whatsappRoutes.js'; // Comentado temporalmente
+import whatsappRoutes from './src/routes/whatsappRoutes.js';
+import notificationRoutes from './src/routes/notifications.js';
+import appointmentExportRoutes from './src/routes/appointmentExport.js';
+import googleCalendarWebhookRoutes from './src/routes/googleCalendarWebhook.js';
 
 // Importar middleware de auditoría
 import { setAuditContext, auditActivity, auditAuthActivity } from './src/middleware/auditMiddleware.js';
 
-// Importar scheduler de sincronización
-// import syncScheduler from './src/services/syncScheduler.js'; // Comentado temporalmente
+// Importar servicio de notificaciones automáticas
+import autoNotificationService from './src/services/autoNotificationService.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -29,9 +32,17 @@ const PORT = process.env.PORT || 3000;
 app.set('trust proxy', 1);
 
 // Middleware de seguridad
-app.use(helmet());
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:4200',
+app.use(helmet({
+  crossOriginResourcePolicy: false,
+  crossOriginEmbedderPolicy: false
+}));
+
+// Aplicar CORS SOLO a rutas API
+app.use('/api', cors({
+  origin: [
+    process.env.FRONTEND_URL || 'http://localhost:4200',
+    'http://localhost:4201'
+  ],
   credentials: true
 }));
 
@@ -42,7 +53,7 @@ app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Middleware de auditoría (después de parsing JSON)
+// Middleware de auditoría
 app.use(setAuditContext);
 app.use(auditActivity);
 
@@ -65,31 +76,36 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Rutas principales
+// Rutas principales API
 app.use('/api/auth', auditAuthActivity, authRoutes);
 app.use('/api/financial', financialRoutes);
 app.use('/api/financial/config', financialConfigRoutes);
-
-// Rutas del módulo clínico  
 app.use('/api/clinical', clinicalRoutes);
-
-// Rutas de auditoría (solo admin)
 app.use('/api/audit', auditRoutes);
-
-// Rutas de Google Calendar (solo admin/vet)
 app.use('/api/google-calendar', googleCalendarRoutes);
-
-// Rutas de reportes y analytics
 app.use('/api/reports', reportsRoutes);
-
-// Rutas de configuración de empresa
 app.use('/api/admin/empresa', empresaConfigRoutes);
+app.use('/api/whatsapp', whatsappRoutes);
+app.use('/api/admin/notifications', notificationRoutes);
+app.use('/api/appointments/export', appointmentExportRoutes);
+app.use('/api/google-calendar-webhook', googleCalendarWebhookRoutes);
 
-// Rutas de WhatsApp
-// app.use('/api/whatsapp', whatsappRoutes); // Comentado temporalmente
+// Servir archivos estáticos de /uploads con CORS abierto
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
 
-// Servir archivos estáticos (logos, PDFs generados)
-app.use('/uploads', express.static('uploads'));
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+
+  next();
+}, express.static('uploads'));
+
+// Archivos generados
 app.use('/generated-docs', express.static('generated-docs'));
 
 // Middleware de manejo de errores
@@ -109,7 +125,7 @@ app.use((req, res) => {
   });
 });
 
-// Función para inicializar la base de datos
+// Inicializar base de datos
 async function initializeDatabase() {
   try {
     console.log('🔧 INICIALIZANDO BASE DE DATOS...');
@@ -118,16 +134,10 @@ async function initializeDatabase() {
     const dbInit = new DBInit();
     const success = await dbInit.initialize();
     
-    if (!success) {
-      throw new Error('DBInit.initialize() retornó false');
-    }
+    if (!success) throw new Error('DBInit.initialize() retornó false');
     
     console.log('✅ Base de datos inicializada correctamente');
     console.log('═'.repeat(40));
-    
-    // Inicializar scheduler de sincronización
-    // await syncScheduler.initialize(); // Comentado temporalmente para evitar errores de WhatsApp
-    
     return true;
   } catch (error) {
     console.error('❌ Error al inicializar base de datos:', error.message);
@@ -135,24 +145,27 @@ async function initializeDatabase() {
   }
 }
 
-// Función para iniciar el servidor
+// Iniciar el servidor
 async function startServer() {
   try {
-    // 1. Inicializar base de datos
     const dbReady = await initializeDatabase();
-    
     if (!dbReady) {
       console.error('❌ No se pudo inicializar la base de datos. Cerrando servidor.');
       process.exit(1);
     }
 
-    // 2. Iniciar servidor Express
+    // Inicializar servicio de notificaciones automáticas
+    console.log('🔔 Inicializando servicio de notificaciones automáticas...');
+    await autoNotificationService.initialize();
+    console.log('✅ Servicio de notificaciones inicializado');
+
     app.listen(PORT, () => {
       console.log(`🚀 VetPlus API iniciada en puerto ${PORT}`);
       console.log(`📍 URL: http://localhost:${PORT}`);
       console.log(`🏥 Módulos: Clínico y Financiero`);
       console.log(`🔒 Autenticación: JWT habilitada`);
       console.log(`📊 Base de datos: Lista y verificada`);
+      console.log(`🔔 Notificaciones automáticas: Activas`);
     });
 
   } catch (error) {
@@ -161,7 +174,6 @@ async function startServer() {
   }
 }
 
-// Iniciar la aplicación
 startServer();
 
 export default app;

@@ -1,0 +1,338 @@
+.pacientes-container {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.title-section {
+  flex: 1;
+}
+
+.page-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 8px 0;
+  font-size: 28px;
+  font-weight: 500;
+  color: #2e7d32;
+}
+
+.page-icon {
+  font-size: 32px;
+  width: 32px;
+  height: 32px;
+}
+
+.page-subtitle {
+  margin: 0;
+  color: #666;
+  font-size: 16px;
+}
+
+.actions-section {
+  display: flex;
+  gap: 12px;
+}
+
+.create-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Filtros */
+.filters-card {
+  margin-bottom: 24px;
+}
+
+.filters-form {
+  width: 100%;
+}
+
+.filter-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.search-field {
+  flex: 2;
+  min-width: 300px;
+}
+
+.species-field,
+.status-field {
+  flex: 1;
+  min-width: 150px;
+}
+
+.clear-filters-btn {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Stats */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: linear-gradient(135deg, #f5f5f5 0%, #ffffff 100%);
+}
+
+.stat-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.stat-icon {
+  font-size: 32px;
+  width: 32px;
+  height: 32px;
+}
+
+.primary-color { color: #2e7d32; }
+.accent-color { color: #1976d2; }
+.warn-color { color: #f57c00; }
+
+.stat-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-number {
+  font-size: 24px;
+  font-weight: 600;
+  color: #333;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Tabla */
+.table-card {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.table-container {
+  overflow-x: auto;
+}
+
+.pacientes-table {
+  width: 100%;
+  min-width: 800px;
+}
+
+.table-row {
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.table-row:hover {
+  background-color: #f5f5f5;
+}
+
+/* Columnas específicas */
+.avatar-column {
+  width: 70px;
+  text-align: center;
+}
+
+.patient-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 2px solid #e0e0e0;
+}
+
+.patient-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.animal-icon {
+  color: #2e7d32;
+  font-size: 20px;
+}
+
+.paciente-column {
+  min-width: 200px;
+}
+
+.patient-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.patient-name {
+  font-weight: 500;
+  color: #333;
+}
+
+.patient-details {
+  font-size: 12px;
+  color: #666;
+}
+
+.propietario-column {
+  min-width: 180px;
+}
+
+.owner-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.owner-name {
+  font-weight: 400;
+  color: #333;
+}
+
+.owner-phone {
+  font-size: 12px;
+  color: #666;
+}
+
+.edad-column {
+  min-width: 120px;
+}
+
+.age-sex-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.age {
+  font-size: 14px;
+  color: #333;
+}
+
+.sex-chip {
+  font-size: 11px;
+  height: 20px;
+  line-height: 20px;
+}
+
+.sex-chip.male {
+  background-color: #e3f2fd;
+  color: #1976d2;
+}
+
+.sex-chip.female {
+  background-color: #fce4ec;
+  color: #c2185b;
+}
+
+.estado-column {
+  min-width: 100px;
+}
+
+.active {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.inactive {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+.actions-column {
+  width: 60px;
+  text-align: center;
+}
+
+.warn-action {
+  color: #d32f2f;
+}
+
+/* Loading y estados vacíos */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 48px;
+  color: #666;
+}
+
+.no-data-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 48px;
+  text-align: center;
+  color: #666;
+}
+
+.no-data-icon {
+  font-size: 64px;
+  width: 64px;
+  height: 64px;
+  opacity: 0.5;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .pacientes-container {
+    padding: 16px;
+  }
+  
+  .header-content {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .filter-row {
+    flex-direction: column;
+  }
+  
+  .search-field,
+  .species-field,
+  .status-field {
+    min-width: auto;
+    width: 100%;
+  }
+  
+  .stats-row {
+    grid-template-columns: 1fr;
+  }
+}

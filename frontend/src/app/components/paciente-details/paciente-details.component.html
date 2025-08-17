@@ -1,0 +1,422 @@
+<div class="details-container" *ngIf="!loading(); else loadingTemplate">
+  <!-- Header con información básica -->
+  <div class="details-header">
+    <button mat-icon-button (click)="goBack()" class="back-button">
+      <mat-icon>arrow_back</mat-icon>
+    </button>
+
+    <div class="header-content">
+      <div class="patient-avatar">
+        @if (paciente()?.foto_url) {
+          <img [src]="getImageUrl(paciente()?.foto_url!)"
+               [alt]="paciente()?.nombre"
+               class="patient-image clickable"
+               crossorigin="anonymous"
+               (click)="openImageDialog(getImageUrl(paciente()?.foto_url!), paciente()?.nombre!)"
+               (error)="onImageError($event)"
+               matTooltip="Clic para ver en grande">
+        } @else {
+          <mat-icon class="avatar-icon">pets</mat-icon>
+        }
+      </div>
+
+      <div class="patient-basic-info">
+        <h1 class="patient-name">{{ paciente()?.nombre }}</h1>
+        <div class="patient-meta">
+          <span class="species-breed">{{ paciente()?.especie }}</span>
+          @if (paciente()?.raza) {
+            <span class="separator">•</span>
+            <span class="species-breed">{{ paciente()?.raza }}</span>
+          }
+          <span class="separator">•</span>
+          <span class="age">{{ calculateAge(paciente()?.fecha_nacimiento) }}</span>
+        </div>
+        <div class="patient-status">
+          <mat-chip [class.active]="paciente()?.activo" [class.inactive]="!paciente()?.activo">
+            {{ paciente()?.activo ? 'Activo' : 'Inactivo' }}
+          </mat-chip>
+          <mat-chip [class.male]="paciente()?.sexo === 'M'" [class.female]="paciente()?.sexo === 'H'">
+            {{ paciente()?.sexo === 'M' ? 'Macho' : 'Hembra' }}
+          </mat-chip>
+        </div>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <button mat-stroked-button (click)="editPaciente()" class="action-button">
+        <mat-icon>edit</mat-icon>
+        Editar
+      </button>
+
+      <button mat-button [matMenuTriggerFor]="actionsMenu" class="action-button">
+        <mat-icon>more_vert</mat-icon>
+      </button>
+
+      <mat-menu #actionsMenu="matMenu">
+        <button mat-menu-item (click)="newConsulta()">
+          <mat-icon>medical_services</mat-icon>
+          Nueva Consulta
+        </button>
+        <button mat-menu-item (click)="newCita()">
+          <mat-icon>event</mat-icon>
+          Agendar Cita
+        </button>
+        <button mat-menu-item (click)="viewHistory()">
+          <mat-icon>history</mat-icon>
+          Historia Clínica
+        </button>
+        <mat-divider></mat-divider>
+        <button mat-menu-item (click)="changePhoto()">
+          <mat-icon>photo_camera</mat-icon>
+          Cambiar Foto
+        </button>
+        <mat-divider></mat-divider>
+        <button mat-menu-item (click)="generateReport()">
+          <mat-icon>description</mat-icon>
+          Generar Reporte
+        </button>
+        <button mat-menu-item (click)="exportData()">
+          <mat-icon>file_download</mat-icon>
+          Exportar Datos
+        </button>
+        <mat-divider></mat-divider>
+        <button mat-menu-item (click)="toggleStatus()" [class.warn]="paciente()?.activo">
+          <mat-icon>{{ paciente()?.activo ? 'block' : 'check_circle' }}</mat-icon>
+          {{ paciente()?.activo ? 'Desactivar' : 'Activar' }}
+        </button>
+      </mat-menu>
+
+      <!-- Input oculto para seleccionar foto -->
+      <input type="file"
+             #photoInput
+             accept="image/*"
+             (change)="onPhotoSelected($event)"
+             style="display: none;">
+    </div>
+  </div>
+
+  <!-- Contenido principal con tabs -->
+  <mat-tab-group class="details-tabs" animationDuration="300ms">
+
+    <!-- Tab: Información General -->
+    <mat-tab label="Información General">
+      <div class="tab-content">
+        <div class="info-grid">
+
+          <!-- Card: Datos de la Mascota -->
+          <mat-card class="info-card">
+            <mat-card-header>
+              <mat-card-title>
+                <mat-icon class="card-icon">pets</mat-icon>
+                Datos de la Mascota
+              </mat-card-title>
+            </mat-card-header>
+
+            <mat-card-content>
+              <div class="info-grid-2">
+                <div class="info-item">
+                  <span class="label">Nombre:</span>
+                  <span class="value">{{ paciente()?.nombre || 'N/A' }}</span>
+                </div>
+
+                <div class="info-item">
+                  <span class="label">Especie:</span>
+                  <span class="value">{{ paciente()?.especie || 'N/A' }}</span>
+                </div>
+
+                <div class="info-item">
+                  <span class="label">Raza:</span>
+                  <span class="value">{{ paciente()?.raza || 'No especificada' }}</span>
+                </div>
+
+                <div class="info-item">
+                  <span class="label">Sexo:</span>
+                  <span class="value">{{ paciente()?.sexo === 'M' ? 'Macho' : 'Hembra' }}</span>
+                </div>
+
+                <div class="info-item">
+                  <span class="label">Fecha de nacimiento:</span>
+                  <span class="value">{{ formatDate(paciente()?.fecha_nacimiento) || 'No especificada' }}</span>
+                </div>
+
+                <div class="info-item">
+                  <span class="label">Edad:</span>
+                  <span class="value">{{ calculateAge(paciente()?.fecha_nacimiento) }}</span>
+                </div>
+
+                <div class="info-item">
+                  <span class="label">Peso:</span>
+                  <span class="value">{{ paciente()?.peso ? paciente()?.peso + ' kg' : 'No registrado' }}</span>
+                </div>
+
+                <div class="info-item">
+                  <span class="label">Color:</span>
+                  <span class="value">{{ paciente()?.color || 'No especificado' }}</span>
+                </div>
+
+                <div class="info-item">
+                  <span class="label">Microchip:</span>
+                  <span class="value">{{ paciente()?.microchip || 'No registrado' }}</span>
+                </div>
+
+                <div class="info-item">
+                  <span class="label">Fecha de registro:</span>
+                  <span class="value">{{ formatDate(paciente()?.fecha_registro) || 'N/A' }}</span>
+                </div>
+              </div>
+
+              @if (paciente()?.notas) {
+                <mat-divider class="notes-divider"></mat-divider>
+                <div class="notes-section">
+                  <span class="label">Notas:</span>
+                  <p class="notes-content">{{ paciente()?.notas }}</p>
+                </div>
+              }
+            </mat-card-content>
+          </mat-card>
+
+          <!-- Card: Datos del Propietario -->
+          <mat-card class="info-card">
+            <mat-card-header>
+              <mat-card-title>
+                <mat-icon class="card-icon">person</mat-icon>
+                Propietario
+              </mat-card-title>
+              <button mat-icon-button (click)="viewOwnerDetails()" matTooltip="Ver detalles completos">
+                <mat-icon>open_in_new</mat-icon>
+              </button>
+            </mat-card-header>
+
+            <mat-card-content>
+              <div class="owner-info">
+                <div class="owner-avatar">
+                  <mat-icon>person</mat-icon>
+                </div>
+                <div class="owner-details">
+                  <h3 class="owner-name">{{ paciente()?.cliente?.nombre || 'Sin asignar' }}</h3>
+
+                  @if (paciente()?.cliente?.telefono) {
+                    <div class="contact-item">
+                      <mat-icon class="contact-icon">phone</mat-icon>
+                      <span>{{ paciente()?.cliente?.telefono }}</span>
+                      <button mat-icon-button (click)="callOwner()" matTooltip="Llamar">
+                        <mat-icon>call</mat-icon>
+                      </button>
+                    </div>
+                  }
+
+                  @if (paciente()?.cliente?.email) {
+                    <div class="contact-item">
+                      <mat-icon class="contact-icon">email</mat-icon>
+                      <span>{{ paciente()?.cliente?.email }}</span>
+                      <button mat-icon-button (click)="emailOwner()" matTooltip="Enviar email">
+                        <mat-icon>mail</mat-icon>
+                      </button>
+                    </div>
+                  }
+
+                  @if (paciente()?.cliente?.direccion) {
+                    <div class="contact-item">
+                      <mat-icon class="contact-icon">location_on</mat-icon>
+                      <span>{{ paciente()?.cliente?.direccion }}</span>
+                      <button mat-icon-button (click)="showMap()" matTooltip="Ver en mapa">
+                        <mat-icon>map</mat-icon>
+                      </button>
+                    </div>
+                  }
+
+                  @if (paciente()?.cliente?.cedula) {
+                    <div class="contact-item">
+                      <mat-icon class="contact-icon">badge</mat-icon>
+                      <span>CC: {{ paciente()?.cliente?.cedula }}</span>
+                    </div>
+                  }
+                </div>
+              </div>
+            </mat-card-content>
+          </mat-card>
+
+          <!-- Card: Estadísticas Rápidas -->
+          <mat-card class="info-card stats-card">
+            <mat-card-header>
+              <mat-card-title>
+                <mat-icon class="card-icon">analytics</mat-icon>
+                Resumen Médico
+              </mat-card-title>
+            </mat-card-header>
+
+            <mat-card-content>
+              <div class="stats-grid">
+                <div class="stat-item">
+                  <mat-icon class="stat-icon primary">medical_services</mat-icon>
+                  <div class="stat-info">
+                    <span class="stat-number">{{ statsResumen()?.consultas || 0 }}</span>
+                    <span class="stat-label">Consultas</span>
+                  </div>
+                </div>
+
+                <div class="stat-item">
+                  <mat-icon class="stat-icon accent">event</mat-icon>
+                  <div class="stat-info">
+                    <span class="stat-number">{{ statsResumen()?.citas || 0 }}</span>
+                    <span class="stat-label">Citas</span>
+                  </div>
+                </div>
+
+                <div class="stat-item">
+                  <mat-icon class="stat-icon warn">vaccines</mat-icon>
+                  <div class="stat-info">
+                    <span class="stat-number">{{ statsResumen()?.vacunas || 0 }}</span>
+                    <span class="stat-label">Vacunas</span>
+                  </div>
+                </div>
+              </div>
+
+              <mat-divider class="stats-divider"></mat-divider>
+
+              <div class="last-visit">
+                <span class="label">Última visita:</span>
+                <span class="value">{{ statsResumen()?.ultimaVisita || 'Nunca' }}</span>
+              </div>
+
+              <div class="next-appointment">
+                <span class="label">Próxima cita:</span>
+                <span class="value">{{ statsResumen()?.proximaCita || 'No programada' }}</span>
+              </div>
+            </mat-card-content>
+          </mat-card>
+        </div>
+      </div>
+    </mat-tab>
+
+    <!-- Tab: Historia Médica -->
+    <mat-tab label="Historia Médica">
+      <div class="tab-content">
+        <div class="history-container">
+
+          <!-- Filtros rápidos -->
+          <div class="history-filters">
+            <button mat-stroked-button [class.active]="activeFilter() === 'all'" (click)="setFilter('all')">
+              Todos
+            </button>
+            <button mat-stroked-button [class.active]="activeFilter() === 'consultas'" (click)="setFilter('consultas')">
+              Consultas
+            </button>
+            <button mat-stroked-button [class.active]="activeFilter() === 'vacunas'" (click)="setFilter('vacunas')">
+              Vacunas
+            </button>
+            <button mat-stroked-button [class.active]="activeFilter() === 'tratamientos'" (click)="setFilter('tratamientos')">
+              Tratamientos
+            </button>
+          </div>
+
+          <!-- Timeline de eventos médicos -->
+          <div class="medical-timeline">
+            @for (evento of filteredHistory(); track evento.id) {
+              <div class="timeline-item">
+                <div class="timeline-marker" [class]="evento.tipo">
+                  <mat-icon>{{ getEventIcon(evento.tipo) }}</mat-icon>
+                </div>
+                <div class="timeline-content">
+                  <mat-card class="event-card">
+                    <mat-card-header>
+                      <mat-card-title>{{ evento.titulo }}</mat-card-title>
+                      <mat-card-subtitle>{{ formatDate(evento.fecha) }} - {{ evento.profesional }}</mat-card-subtitle>
+                    </mat-card-header>
+                    <mat-card-content>
+                      <p>{{ evento.descripcion }}</p>
+                      @if (evento.medicamentos && evento.medicamentos.length > 0) {
+                        <div class="medications">
+                          <strong>Medicamentos:</strong>
+                          <ul>
+                            @for (med of evento.medicamentos; track med) {
+                              <li>{{ med }}</li>
+                            }
+                          </ul>
+                        </div>
+                      }
+                    </mat-card-content>
+                    <mat-card-actions>
+                      <button mat-button (click)="viewEventDetails(evento)">
+                        <mat-icon>visibility</mat-icon>
+                        Ver detalles
+                      </button>
+                    </mat-card-actions>
+                  </mat-card>
+                </div>
+              </div>
+            } @empty {
+              <div class="no-history">
+                <mat-icon class="no-history-icon">history</mat-icon>
+                <h3>Sin historial médico</h3>
+                <p>No hay registros médicos para este paciente.</p>
+                <button mat-raised-button color="primary" (click)="newConsulta()">
+                  <mat-icon>add</mat-icon>
+                  Nueva Consulta
+                </button>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+    </mat-tab>
+
+    <!-- Tab: Documentos -->
+    <mat-tab label="Documentos">
+      <div class="tab-content">
+        <div class="documents-container">
+          <div class="documents-header">
+            <h3>Documentos del Paciente</h3>
+            <button mat-raised-button color="primary" (click)="uploadDocument()">
+              <mat-icon>upload</mat-icon>
+              Subir Documento
+            </button>
+          </div>
+
+          <!-- Lista de documentos -->
+          <div class="documents-list">
+            @for (doc of documentos(); track doc.id) {
+              <mat-card class="document-card">
+                <mat-card-content>
+                  <div class="document-info">
+                    <mat-icon class="document-icon">{{ getDocumentIcon(doc.tipo) }}</mat-icon>
+                    <div class="document-details">
+                      <h4>{{ doc.nombre }}</h4>
+                      <p>{{ doc.descripcion }}</p>
+                      <span class="document-date">{{ formatDate(doc.fecha) }}</span>
+                    </div>
+                  </div>
+                </mat-card-content>
+                <mat-card-actions>
+                  <button mat-icon-button (click)="downloadDocument(doc)" matTooltip="Descargar">
+                    <mat-icon>download</mat-icon>
+                  </button>
+                  <button mat-icon-button (click)="viewDocument(doc)" matTooltip="Ver">
+                    <mat-icon>visibility</mat-icon>
+                  </button>
+                  <button mat-icon-button (click)="deleteDocument(doc)" matTooltip="Eliminar" class="delete-btn">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </mat-card-actions>
+              </mat-card>
+            } @empty {
+              <div class="no-documents">
+                <mat-icon class="no-docs-icon">folder_open</mat-icon>
+                <h3>Sin documentos</h3>
+                <p>No hay documentos registrados para este paciente.</p>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+</div>
+
+<!-- Loading template -->
+<ng-template #loadingTemplate>
+  <div class="loading-container">
+    <mat-spinner diameter="50"></mat-spinner>
+    <p>Cargando información del paciente...</p>
+  </div>
+</ng-template>

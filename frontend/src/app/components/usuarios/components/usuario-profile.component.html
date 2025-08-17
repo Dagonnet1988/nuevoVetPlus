@@ -1,0 +1,444 @@
+<div class="profile-container">
+  @if (loading()) {
+    <div class="loading-container">
+      <mat-spinner diameter="50"></mat-spinner>
+      <p>Cargando perfil del usuario...</p>
+    </div>
+  } @else if (usuario()) {
+    <!-- Header del Perfil -->
+    <div class="profile-header">
+      <div class="header-content">
+        <div class="user-info">
+          <div class="user-avatar-large">
+            @if (usuario()?.avatar_url) {
+              <img [src]="usuario()!.avatar_url" [alt]="usuario()!.nombre">
+            } @else {
+              <mat-icon>person</mat-icon>
+            }
+          </div>
+          <div class="user-details">
+            <h1 class="user-name">{{ usuario()!.nombre }} {{ usuario()!.apellido }}</h1>
+            <div class="user-meta">
+              <mat-chip [style.background-color]="getColorRol(usuario()!.rol)"
+                        [style.color]="'white'"
+                        class="role-chip">
+                <mat-icon>{{ getIconoRol(usuario()!.rol) }}</mat-icon>
+                {{ formatearRol(usuario()!.rol) }}
+              </mat-chip>
+              <mat-chip [class]="'status-' + (isUsuarioActivo() ? 'active' : 'inactive')"
+                        class="status-chip">
+                <mat-icon>{{ isUsuarioActivo() ? 'check_circle' : 'cancel' }}</mat-icon>
+                {{ isUsuarioActivo() ? 'Activo' : 'Inactivo' }}
+              </mat-chip>
+              @if (usuario()!.debe_cambiar_password) {
+                <mat-chip class="first-access-chip">
+                  <mat-icon>schedule</mat-icon>
+                  Debe Cambiar Contraseña
+                </mat-chip>
+              }
+            </div>
+            <div class="contact-info">
+              <div class="contact-item">
+                <mat-icon>email</mat-icon>
+                <span>{{ usuario()!.email }}</span>
+              </div>
+              @if (usuario()!.telefono) {
+                <div class="contact-item">
+                  <mat-icon>phone</mat-icon>
+                  <span>{{ usuario()!.telefono }}</span>
+                </div>
+              }
+              <div class="contact-item">
+                <mat-icon>badge</mat-icon>
+                <span>{{ formatearTipoDocumento(usuario()!.tipo_documento) }}: {{ usuario()!.documento }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="actions-section">
+          <button mat-stroked-button
+                  (click)="editarUsuario()"
+                  class="action-button">
+            <mat-icon>edit</mat-icon>
+            Editar
+          </button>
+          <button mat-button
+                  [matMenuTriggerFor]="actionsMenu"
+                  class="action-button">
+            <mat-icon>more_vert</mat-icon>
+            Más acciones
+          </button>
+          <mat-menu #actionsMenu="matMenu">
+            <button mat-menu-item (click)="resetearPassword()">
+              <mat-icon>lock_reset</mat-icon>
+              Resetear Contraseña
+            </button>
+            @if (usuario()!.password_temporal || usuario()!.debe_cambiar_password) {
+              <button mat-menu-item
+                      disabled
+                      matTooltip="Próximamente disponible">
+                <mat-icon>email</mat-icon>
+                Enviar Credenciales
+              </button>
+            }
+            <button mat-menu-item (click)="forzarCambioPassword()">
+              <mat-icon>lock_reset</mat-icon>
+              Forzar Cambio de Contraseña
+            </button>
+            <mat-divider></mat-divider>
+            <button mat-menu-item
+                    (click)="toggleEstadoUsuario()"
+                    [class]="isUsuarioActivo() ? 'danger-item' : 'success-item'">
+              <mat-icon>{{ isUsuarioActivo() ? 'block' : 'check_circle' }}</mat-icon>
+              {{ isUsuarioActivo() ? 'Desactivar' : 'Activar' }}
+            </button>
+          </mat-menu>
+        </div>
+      </div>
+    </div>
+
+    <!-- Estadísticas Rápidas -->
+    @if (usuario()!.rol === 'vet') {
+      <div class="stats-section">
+        <h2 class="section-title">
+          <mat-icon>analytics</mat-icon>
+          Estadísticas de Rendimiento
+        </h2>
+        <div class="stats-grid">
+          @for (stat of estadisticasResumen(); track stat.label) {
+            <mat-card class="stat-card">
+              <mat-card-content>
+                <div class="stat-content">
+                  <mat-icon class="stat-icon" [style.color]="stat.color">{{ stat.icon }}</mat-icon>
+                  <div class="stat-info">
+                    <span class="stat-number">{{ stat.value }}</span>
+                    <span class="stat-label">{{ stat.label }}</span>
+                  </div>
+                </div>
+              </mat-card-content>
+            </mat-card>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- Tabs de Información -->
+    <mat-tab-group class="profile-tabs" animationDuration="300ms">
+
+      <!-- Tab: Información Personal -->
+      <mat-tab label="Información Personal">
+        <div class="tab-content">
+          <mat-card class="info-card">
+            <mat-card-header>
+              <mat-card-title>
+                <mat-icon>person</mat-icon>
+                Datos Personales
+              </mat-card-title>
+            </mat-card-header>
+            <mat-card-content>
+              <div class="info-grid">
+                <div class="info-item">
+                  <label>Nombre Completo</label>
+                  <span>{{ usuario()!.nombre }} {{ usuario()!.apellido }}</span>
+                </div>
+                <div class="info-item">
+                  <label>Email</label>
+                  <span>{{ usuario()!.email }}</span>
+                </div>
+                <div class="info-item">
+                  <label>Teléfono</label>
+                  <span>{{ usuario()!.telefono || 'No especificado' }}</span>
+                </div>
+                <div class="info-item">
+                  <label>Documento</label>
+                  <span>{{ formatearTipoDocumento(usuario()!.tipo_documento) }}: {{ usuario()!.documento }}</span>
+                </div>
+                @if (usuario()!.direccion) {
+                  <div class="info-item full-width">
+                    <label>Dirección</label>
+                    <span>{{ usuario()!.direccion }}</span>
+                  </div>
+                }
+                <div class="info-item">
+                  <label>Fecha de Creación</label>
+                  <span>{{ formatearFecha(usuario()!.created_at) }}</span>
+                </div>
+                @if (usuario()!.ultimo_login) {
+                  <div class="info-item">
+                    <label>Último Acceso</label>
+                    <span>{{ formatearFecha(usuario()!.ultimo_login!) }}</span>
+                  </div>
+                }
+              </div>
+            </mat-card-content>
+          </mat-card>
+
+          @if (usuario()!.rol === 'vet') {
+            <mat-card class="info-card">
+              <mat-card-header>
+                <mat-card-title>
+                  <mat-icon>medical_services</mat-icon>
+                  Información Profesional
+                </mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <div class="info-grid">
+                  <div class="info-item">
+                    <label>Especialidad</label>
+                    <span>{{ usuario()!.especialidad || 'No especificada' }}</span>
+                  </div>
+                  <div class="info-item">
+                    <label>Número de Licencia</label>
+                    <span>{{ usuario()!.numero_licencia || 'No especificado' }}</span>
+                  </div>
+                </div>
+              </mat-card-content>
+            </mat-card>
+          }
+        </div>
+      </mat-tab>
+
+      <!-- Tab: Actividad Reciente -->
+      <mat-tab label="Actividad Reciente">
+        <div class="tab-content">
+          <mat-card class="activity-card">
+            <mat-card-header>
+              <mat-card-title>
+                <mat-icon>history</mat-icon>
+                Últimas Actividades
+              </mat-card-title>
+              <mat-card-subtitle>Registro de las últimas 10 acciones del usuario</mat-card-subtitle>
+            </mat-card-header>
+            <mat-card-content>
+              @if (loadingLogs()) {
+                <div class="loading-small">
+                  <mat-spinner diameter="30"></mat-spinner>
+                  <span>Cargando actividad...</span>
+                </div>
+              } @else {
+                <mat-list class="activity-list">
+                  @for (log of logsActividad(); track log.id_log) {
+                    <mat-list-item class="activity-item">
+                      <mat-icon matListItemIcon
+                                [style.color]="getColorTipoLog(log.tipo)"
+                                class="activity-icon">
+                        {{ getIconoTipoLog(log.tipo) }}
+                      </mat-icon>
+                      <div matListItemTitle class="activity-title">{{ log.accion }}</div>
+                      <div matListItemLine class="activity-description">{{ log.descripcion }}</div>
+                      <div matListItemLine class="activity-meta">
+                        <span class="activity-module">{{ log.modulo }}</span>
+                        <span class="activity-time">{{ formatearFechaRelativa(log.fecha) }}</span>
+                      </div>
+                      <mat-chip matListItemMeta
+                                [class]="'result-' + log.resultado"
+                                class="result-chip">
+                        {{ log.resultado }}
+                      </mat-chip>
+                    </mat-list-item>
+                    @if (!$last) {
+                      <mat-divider></mat-divider>
+                    }
+                  }
+                </mat-list>
+
+                @if (logsActividad().length === 0) {
+                  <div class="no-data">
+                    <mat-icon>history</mat-icon>
+                    <h3>Sin actividad reciente</h3>
+                    <p>Los logs de actividad estarán disponibles próximamente</p>
+                  </div>
+                }
+
+                @if (logsActividad().length > 0) {
+                  <div class="view-more">
+                    <button mat-stroked-button
+                            disabled
+                            matTooltip="Próximamente disponible">
+                      <mat-icon>visibility</mat-icon>
+                      Ver toda la actividad
+                    </button>
+                  </div>
+                }
+              }
+            </mat-card-content>
+          </mat-card>
+        </div>
+      </mat-tab>
+
+      <!-- Tab: Sesiones Activas -->
+      <mat-tab>
+        <ng-template mat-tab-label>
+          <span>Sesiones</span>
+          @if (sesionesActivas().length > 0) {
+            <mat-icon matBadge="{{ sesionesActivas().length }}" matBadgeColor="warn" class="tab-badge-icon">devices</mat-icon>
+          }
+        </ng-template>
+        <div class="tab-content">
+          <mat-card class="sessions-card">
+            <mat-card-header>
+              <mat-card-title>
+                <mat-icon>devices</mat-icon>
+                Sesiones Activas
+              </mat-card-title>
+              <mat-card-subtitle>Dispositivos desde los que el usuario ha iniciado sesión</mat-card-subtitle>
+            </mat-card-header>
+            <mat-card-content>
+              <div class="sessions-actions">
+                @if (sesionesActivas().length > 0) {
+                  <button mat-stroked-button
+                          color="warn"
+                          disabled
+                          matTooltip="Próximamente disponible"
+                          class="close-all-sessions">
+                    <mat-icon>logout</mat-icon>
+                    Cerrar Todas las Sesiones
+                  </button>
+                }
+              </div>
+
+              @if (loadingSesiones()) {
+                <div class="loading-small">
+                  <mat-spinner diameter="30"></mat-spinner>
+                  <span>Cargando sesiones...</span>
+                </div>
+              } @else {
+                <mat-list class="sessions-list">
+                  @for (sesion of sesionesActivas(); track sesion.id_sesion) {
+                    <mat-list-item class="session-item">
+                      <mat-icon matListItemIcon class="device-icon">
+                        {{ sesion.dispositivo.includes('iPhone') || sesion.dispositivo.includes('Android') ? 'smartphone' : 'computer' }}
+                      </mat-icon>
+                      <div matListItemTitle class="session-title">{{ sesion.dispositivo }}</div>
+                      <div matListItemLine class="session-browser">{{ sesion.navegador }}</div>
+                      <div matListItemLine class="session-location">
+                        <mat-icon class="small-icon">location_on</mat-icon>
+                        {{ sesion.ubicacion || 'Ubicación desconocida' }}
+                      </div>
+                      <div matListItemLine class="session-ip">
+                        <mat-icon class="small-icon">router</mat-icon>
+                        {{ sesion.ip_address }}
+                      </div>
+                      <div matListItemLine class="session-time">
+                        <span>Iniciada: {{ formatearFechaRelativa(sesion.fecha_inicio) }}</span>
+                        <span>Última actividad: {{ formatearFechaRelativa(sesion.ultima_actividad) }}</span>
+                      </div>
+                      <button matListItemMeta
+                              mat-icon-button
+                              color="warn"
+                              disabled
+                              matTooltip="Próximamente disponible">
+                        <mat-icon>logout</mat-icon>
+                      </button>
+                    </mat-list-item>
+                    @if (!$last) {
+                      <mat-divider></mat-divider>
+                    }
+                  }
+                </mat-list>
+
+                @if (sesionesActivas().length === 0) {
+                  <div class="no-data">
+                    <mat-icon>devices_off</mat-icon>
+                    <h3>Sin sesiones activas</h3>
+                    <p>La gestión de sesiones estará disponible próximamente</p>
+                  </div>
+                }
+
+                @if (sesionesActivas().length > 0) {
+                  <div class="view-more">
+                    <button mat-stroked-button
+                            disabled
+                            matTooltip="Próximamente disponible">
+                      <mat-icon>visibility</mat-icon>
+                      Ver historial completo de sesiones
+                    </button>
+                  </div>
+                }
+              }
+            </mat-card-content>
+          </mat-card>
+        </div>
+      </mat-tab>
+
+      <!-- Tab: Configuración -->
+      <mat-tab label="Configuración">
+        <div class="tab-content">
+          <mat-card class="config-card">
+            <mat-card-header>
+              <mat-card-title>
+                <mat-icon>settings</mat-icon>
+                Configuración del Usuario
+              </mat-card-title>
+            </mat-card-header>
+            <mat-card-content>
+              <div class="config-grid">
+                <div class="config-section">
+                  <h3>Preferencias de Interface</h3>
+                  <div class="config-item">
+                    <label>Tema</label>
+                    <span>{{ usuario()?.configuraciones?.tema || 'Claro' }}</span>
+                  </div>
+                  <div class="config-item">
+                    <label>Idioma</label>
+                    <span>{{ (usuario()?.configuraciones?.idioma === 'es') ? 'Español' : 'Inglés' }}</span>
+                  </div>
+                  <div class="config-item">
+                    <label>Zona Horaria</label>
+                    <span>{{ usuario()?.configuraciones?.timezone || 'America/Bogota' }}</span>
+                  </div>
+                </div>
+
+                <div class="config-section">
+                  <h3>Notificaciones</h3>
+                  <div class="config-item">
+                    <label>Email</label>
+                    <mat-icon class="config-status"
+                              [style.color]="usuario()?.configuraciones?.notificaciones_email ? '#38a169' : '#e53e3e'">
+                      {{ usuario()?.configuraciones?.notificaciones_email ? 'check_circle' : 'cancel' }}
+                    </mat-icon>
+                  </div>
+                  <div class="config-item">
+                    <label>Push</label>
+                    <mat-icon class="config-status"
+                              [style.color]="usuario()?.configuraciones?.notificaciones_push ? '#38a169' : '#e53e3e'">
+                      {{ usuario()?.configuraciones?.notificaciones_push ? 'check_circle' : 'cancel' }}
+                    </mat-icon>
+                  </div>
+                </div>
+
+                <div class="config-section">
+                  <h3>Formato</h3>
+                  <div class="config-item">
+                    <label>Fecha</label>
+                    <span>{{ usuario()?.configuraciones?.formato_fecha || 'DD/MM/YYYY' }}</span>
+                  </div>
+                  <div class="config-item">
+                    <label>Hora</label>
+                    <span>{{ usuario()?.configuraciones?.formato_hora || '24h' }}</span>
+                  </div>
+                  <div class="config-item">
+                    <label>Items por página</label>
+                    <span>{{ usuario()?.configuraciones?.items_por_pagina || 25 }}</span>
+                  </div>
+                </div>
+              </div>
+            </mat-card-content>
+          </mat-card>
+        </div>
+      </mat-tab>
+
+    </mat-tab-group>
+  } @else {
+    <div class="error-container">
+      <mat-icon>error_outline</mat-icon>
+      <h2>Usuario no encontrado</h2>
+      <p>El usuario solicitado no existe o no tienes permisos para verlo</p>
+      <button mat-raised-button color="primary" routerLink="/usuarios">
+        <mat-icon>arrow_back</mat-icon>
+        Volver a la lista
+      </button>
+    </div>
+  }
+</div>

@@ -129,7 +129,7 @@ const requireAdmin = authorize(['admin']);
 
 /**
  * @swagger
- * /api/admin/whatsapp/status:
+ * /api/whatsapp/status:
  *   get:
  *     summary: Obtener estado de conexión de WhatsApp
  *     tags: [WhatsApp]
@@ -150,11 +150,11 @@ const requireAdmin = authorize(['admin']);
  *       403:
  *         description: Acceso denegado
  */
-router.get('/admin/status', authenticateToken, requireAdmin, getWhatsAppStatus);
+router.get('/status', authenticateToken, requireAdmin, getWhatsAppStatus);
 
 /**
  * @swagger
- * /api/admin/whatsapp/qr:
+ * /api/whatsapp/qr:
  *   get:
  *     summary: Obtener código QR para conectar WhatsApp
  *     tags: [WhatsApp]
@@ -183,7 +183,7 @@ router.get('/admin/status', authenticateToken, requireAdmin, getWhatsAppStatus);
  *       403:
  *         description: Acceso denegado
  */
-router.get('/admin/qr', authenticateToken, requireAdmin, getWhatsAppQR);
+router.get('/qr', authenticateToken, requireAdmin, getWhatsAppQR);
 
 /**
  * @swagger
@@ -199,7 +199,7 @@ router.get('/admin/qr', authenticateToken, requireAdmin, getWhatsAppQR);
  *       403:
  *         description: Acceso denegado
  */
-router.post('/admin/restart', authenticateToken, requireAdmin, restartWhatsApp);
+router.post('/restart', authenticateToken, requireAdmin, restartWhatsApp);
 
 /**
  * @swagger
@@ -215,7 +215,7 @@ router.post('/admin/restart', authenticateToken, requireAdmin, restartWhatsApp);
  *       403:
  *         description: Acceso denegado
  */
-router.post('/admin/logout', authenticateToken, requireAdmin, logoutWhatsApp);
+router.post('/logout', authenticateToken, requireAdmin, logoutWhatsApp);
 
 /**
  * @swagger
@@ -249,7 +249,7 @@ router.post('/admin/logout', authenticateToken, requireAdmin, logoutWhatsApp);
  *       403:
  *         description: Acceso denegado
  */
-router.post('/admin/test-message', authenticateToken, requireAdmin, validateTestMessage, sendTestMessage);
+router.post('/test-message', authenticateToken, requireAdmin, validateTestMessage, sendTestMessage);
 
 /**
  * @swagger
@@ -356,7 +356,7 @@ router.post('/send-formula', authenticateToken, validateSendFormula, sendFormula
  *       403:
  *         description: Acceso denegado
  */
-router.get('/admin/stats', authenticateToken, requireAdmin, validateStatsQuery, getWhatsAppStats);
+router.get('/stats', authenticateToken, requireAdmin, validateStatsQuery, getWhatsAppStats);
 
 /**
  * @swagger
@@ -398,7 +398,7 @@ router.get('/admin/stats', authenticateToken, requireAdmin, validateStatsQuery, 
  *       403:
  *         description: Acceso denegado
  */
-router.get('/admin/messages', authenticateToken, requireAdmin, validateMessagesQuery, getWhatsAppMessages);
+router.get('/messages', authenticateToken, requireAdmin, validateMessagesQuery, getWhatsAppMessages);
 
 /**
  * @swagger
@@ -426,7 +426,7 @@ router.get('/admin/messages', authenticateToken, requireAdmin, validateMessagesQ
  *       403:
  *         description: Acceso denegado
  */
-router.post('/admin/retry/:logId', 
+router.post('/retry/:logId', 
     authenticateToken, 
     requireAdmin, 
     param('logId').isUUID().withMessage('ID de log inválido'), 

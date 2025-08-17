@@ -31,8 +31,20 @@
       "Bash(cd:*)",
       "Bash(cd:*)",
       "Bash(node:*)",
-      "Bash(/dev/null)"
+      "Bash(/dev/null)",
+      "Bash(cp:*)",
+      "Bash(git checkout:*)",
+      "Bash(cd:*)",
+      "Bash(cd:*)",
+      "Bash(cd:*)",
+      "WebFetch(domain:localhost)",
+      "Bash(open:*)",
+      "Bash(PGPASSWORD=password123 psql -h localhost -U postgres -d vetplus -c \"\\d clinical.calendario_citas\")",
+      "Bash(PGPASSWORD=password123 psql -h localhost -U postgres -d vetplus -f src/database/migrations/add_webhook_fields.sql)",
+      "Bash(PGPASSWORD=password123 psql -h localhost -U postgres -d vetplus -c \"\\d clinical.mascotas\")",
+      "Bash(PGPASSWORD=password123 psql:*)"
     ],
-    "deny": []
+    "deny": [],
+    "defaultMode": "acceptEdits"
   }
 }

@@ -1,7 +1,7 @@
 import { Routes } from '@angular/router';
-import { AuthGuard } from './core/guards/auth.guard';
-import { NoAuthGuard } from './core/guards/no-auth.guard';
-import { RoleGuard } from './core/guards/role.guard';
+import { AuthGuard } from './utils/guards/auth.guard';
+import { NoAuthGuard } from './utils/guards/no-auth.guard';
+import { RoleGuard } from './utils/guards/role.guard';
 
 export const routes: Routes = [
   // Ruta raíz - redirigir al dashboard si está autenticado, sino al login
@@ -19,7 +19,7 @@ export const routes: Routes = [
     children: [
       {
         path: 'login',
-        loadComponent: () => import('./features/auth/login.component').then(m => m.LoginComponent)
+        loadComponent: () => import('./components/auth/login.component').then(m => m.LoginComponent)
       }
     ]
   },
@@ -32,7 +32,7 @@ export const routes: Routes = [
     children: [
       {
         path: '',
-        loadComponent: () => import('./features/auth/change-password.component').then(m => m.ChangePasswordComponent)
+        loadComponent: () => import('./components/auth/change-password.component').then(m => m.ChangePasswordComponent)
       }
     ]
   },
@@ -46,15 +46,71 @@ export const routes: Routes = [
       // Dashboard - Accesible para todos los usuarios autenticados
       {
         path: 'dashboard',
-        loadComponent: () => import('./features/dashboard/dashboard.component').then(m => m.DashboardComponent)
+        loadComponent: () => import('./components/dashboard/dashboard.component').then(m => m.DashboardComponent)
       },
 
       // Pacientes - Accesible para admin, vet, aux
       {
         path: 'pacientes',
-        loadChildren: () => import('./features/pacientes/pacientes.routes').then(m => m.PACIENTES_ROUTES),
+        loadChildren: () => import('./components/pacientes/pacientes.routes').then(m => m.PACIENTES_ROUTES),
         canActivate: [RoleGuard],
         data: { roles: ['admin', 'vet', 'aux'] }
+      },
+
+      // Citas - Accesible para admin, vet, aux
+      {
+        path: 'citas',
+        loadChildren: () => import('./components/citas/citas.routes').then(m => m.CITAS_ROUTES),
+        canActivate: [RoleGuard],
+        data: { roles: ['admin', 'vet', 'aux'] }
+      },
+
+      // Historia Clínica - Accesible para admin, vet
+      {
+        path: 'historia-clinica',
+        loadChildren: () => import('./components/historia-clinica/historia-clinica.routes').then(m => m.historiaClinicaRoutes),
+        canActivate: [RoleGuard],
+        data: { roles: ['admin', 'vet'] }
+      },
+
+      // Inventario - Accesible para admin, vet
+      {
+        path: 'inventario',
+        loadChildren: () => import('./components/inventario/inventario.routes').then(m => m.inventarioRoutes),
+        canActivate: [RoleGuard],
+        data: { roles: ['admin', 'vet'] }
+      },
+
+      // Facturación - Accesible para admin, vet, aux
+      {
+        path: 'facturacion',
+        loadChildren: () => import('./components/facturacion/facturacion.routes').then(m => m.FACTURACION_ROUTES),
+        canActivate: [RoleGuard],
+        data: { roles: ['admin', 'vet', 'aux'] }
+      },
+
+      // Reportes - Accesible para admin, vet
+      {
+        path: 'reportes',
+        loadChildren: () => import('./components/reportes/reportes.routes').then(m => m.REPORTES_ROUTES),
+        canActivate: [RoleGuard],
+        data: { roles: ['admin', 'vet'] }
+      },
+
+      // Usuarios - Solo admin
+      {
+        path: 'usuarios',
+        loadChildren: () => import('./components/usuarios/usuarios.routes').then(m => m.USUARIOS_ROUTES),
+        canActivate: [RoleGuard],
+        data: { roles: ['admin'] }
+      },
+
+      // Configuración - Solo admin
+      {
+        path: 'configuracion',
+        loadChildren: () => import('./components/configuracion/configuracion.routes').then(m => m.CONFIGURACION_ROUTES),
+        canActivate: [RoleGuard],
+        data: { roles: ['admin'] }
       },
 
       // Perfil temporal - placeholder

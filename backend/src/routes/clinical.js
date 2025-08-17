@@ -30,17 +30,39 @@ router.use('/pets', petRoutes);
 // Montar las rutas de pacientes (combinadas)
 router.use('/pacientes', pacientesRoutes);
 
-// Rutas de especies directas
-router.get('/especies', 
-  authenticateToken,
-  authorize(['admin', 'vet', 'aux']),
-  getEspecies
-);
+// Las rutas de especies están ahora en /pacientes/especies
 
-router.get('/especies/:especie/razas',
-  authenticateToken, 
-  authorize(['admin', 'vet', 'aux']),
-  getRazasByEspecie
+// Ruta directa para obtener veterinarios
+router.get('/veterinarians',
+  authenticateToken,
+  authorize(['admin', 'vet']),
+  async (req, res) => {
+    try {
+      const { query } = await import('../config/database.js');
+      const result = await query(`
+        SELECT 
+          id_usuario as id,
+          nombre,
+          email,
+          'Medicina Veterinaria' as especialidad
+        FROM auth.usuarios 
+        WHERE rol = 'vet' 
+        AND activo = true
+        ORDER BY nombre ASC
+      `);
+      
+      res.json({
+        success: true,
+        data: result.rows
+      });
+    } catch (error) {
+      console.error('Error obteniendo veterinarios:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor'
+      });
+    }
+  }
 );
 
 // Montar las rutas de consultas clínicas

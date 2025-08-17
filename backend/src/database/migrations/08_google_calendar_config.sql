@@ -21,6 +21,11 @@ CREATE TABLE IF NOT EXISTS auth.google_calendar_config (
     email_reminder_hours INTEGER DEFAULT 24,
     is_active BOOLEAN DEFAULT false,
     configured_by UUID REFERENCES auth.usuarios(id_usuario),
+    -- Campos para webhook
+    webhook_channel_id VARCHAR(100),
+    webhook_url TEXT,
+    webhook_expiration TIMESTAMPTZ,
+    webhook_resource_id VARCHAR(100),
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
@@ -28,6 +33,7 @@ CREATE TABLE IF NOT EXISTS auth.google_calendar_config (
 -- Crear índices
 CREATE INDEX IF NOT EXISTS idx_google_calendar_config_active ON auth.google_calendar_config(is_active);
 CREATE INDEX IF NOT EXISTS idx_google_calendar_config_configured_by ON auth.google_calendar_config(configured_by);
+CREATE INDEX IF NOT EXISTS idx_google_calendar_webhook_channel ON auth.google_calendar_config(webhook_channel_id) WHERE webhook_channel_id IS NOT NULL;
 
 -- Trigger para updated_at
 CREATE OR REPLACE FUNCTION update_google_calendar_config_updated_at()
@@ -60,6 +66,10 @@ COMMENT ON COLUMN auth.google_calendar_config.client_id IS 'Client ID de la apli
 COMMENT ON COLUMN auth.google_calendar_config.client_secret IS 'Client Secret de la aplicación Google Calendar';
 COMMENT ON COLUMN auth.google_calendar_config.refresh_token IS 'Token de actualización para renovar el acceso';
 COMMENT ON COLUMN auth.google_calendar_config.is_active IS 'Indica si la integración está activa';
+COMMENT ON COLUMN auth.google_calendar_config.webhook_channel_id IS 'ID del canal de webhook de Google Calendar';
+COMMENT ON COLUMN auth.google_calendar_config.webhook_url IS 'URL del webhook configurado';
+COMMENT ON COLUMN auth.google_calendar_config.webhook_expiration IS 'Fecha de expiración del webhook';
+COMMENT ON COLUMN auth.google_calendar_config.webhook_resource_id IS 'Resource ID del webhook de Google Calendar';
 COMMENT ON COLUMN clinical.calendario_citas.google_event_id IS 'ID del evento en Google Calendar';
 COMMENT ON COLUMN clinical.calendario_citas.google_sync_status IS 'Estado de sincronización con Google Calendar';
 

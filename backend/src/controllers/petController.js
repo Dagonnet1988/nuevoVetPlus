@@ -39,8 +39,6 @@ export const createPet = async (req, res) => {
             });
         }
 
-        console.log('Creando mascota con UUID:', id_mascota);
-        console.log('Datos de edad calculados:', edadData);
 
         // Insertar nueva mascota con UUID generado en JS
         const insertSQL = `
@@ -60,8 +58,6 @@ export const createPet = async (req, res) => {
             sexo, peso, color, fecha_nacimiento, esterilizado, microchip
         ];
 
-        console.log('SQL:', insertSQL);
-        console.log('Values:', values);
 
         const result = await query(insertSQL, values);
         const nuevaMascota = result.rows[0];
@@ -156,9 +152,6 @@ export const getPets = async (req, res) => {
 
         const result = await query(selectSQL, values);
         
-        console.log('Query SQL:', selectSQL);
-        console.log('Values:', values);
-        console.log('Result rows:', result.rows.length);
 
         // Contar total de mascotas
         let countSQL = 'SELECT COUNT(*) FROM clinical.mascotas WHERE activo = true';
@@ -224,7 +217,7 @@ export const getPetById = async (req, res) => {
             FROM clinical.mascotas m
             LEFT JOIN clinical.clientes c ON m.id_cliente = c.id_cliente
             LEFT JOIN clinical.consultas_clinicas con ON m.id_mascota = con.id_mascota
-            WHERE m.id_mascota = $1 AND m.activo = true
+            WHERE m.id_mascota = $1
             GROUP BY m.id_mascota, c.id_cliente
         `;
 
@@ -305,12 +298,13 @@ export const updatePet = async (req, res) => {
             color,
             fecha_nacimiento,
             esterilizado,
-            microchip
+            microchip,
+            activo
         } = req.body;
 
         // Verificar que la mascota existe
         const mascotaExiste = await query(
-            'SELECT id_mascota FROM clinical.mascotas WHERE id_mascota = $1 AND activo = true',
+            'SELECT id_mascota FROM clinical.mascotas WHERE id_mascota = $1',
             [id]
         );
 
@@ -349,32 +343,42 @@ export const updatePet = async (req, res) => {
 
         const values = [
             nombre, especie, raza, edad, sexo, peso, color,
-            fecha_nacimiento, esterilizado, microchip, req.body.activo, id
+            fecha_nacimiento, esterilizado, microchip, activo, id
         ];
 
-        console.log('=== UPDATE PET DEBUG ===');
-        console.log('ID:', id);
-        console.log('Body completo:', req.body);
-        console.log('Campo activo recibido:', req.body.activo);
-        console.log('Valores SQL:', values);
-        console.log('========================');
-
         const result = await query(updateSQL, values);
-        const mascotaActualizada = result.rows[0];
+        
+        if (result.rows.length > 0) {
+            const mascotaActualizada = result.rows[0];
+            
+            // Agregar datos de edad completos a la respuesta
+            const edadCompleta = calculatePetAge(mascotaActualizada.fecha_nacimiento);
 
-        // Agregar datos de edad completos a la respuesta
-        const edadCompleta = calculatePetAge(mascotaActualizada.fecha_nacimiento);
-
-        res.json({
-            success: true,
-            message: 'Mascota actualizada exitosamente',
-            data: {
-                ...mascotaActualizada,
-                edadCompleta
-            }
-        });
+            const responseData = {
+                success: true,
+                message: 'Mascota actualizada exitosamente',
+                data: {
+                    ...mascotaActualizada,
+                    edadCompleta
+                }
+            };
+            
+            res.json(responseData);
+        } else {
+            res.status(404).json({
+                success: false,
+                message: 'No se pudo actualizar la mascota'
+            });
+        }
     } catch (error) {
-        console.error('Error al actualizar mascota:', error);
+        console.error('❌ === ERROR EN BACKEND ===');
+        console.error('🚨 Error completo:', error);
+        console.error('📝 Mensaje:', error.message);
+        console.error('📋 Stack:', error.stack);
+        console.error('🆔 ID de mascota:', id);
+        console.error('📥 Body recibido:', JSON.stringify(req.body, null, 2));
+        console.error('========================');
+        
         res.status(500).json({
             success: false,
             message: 'Error interno del servidor',
@@ -390,7 +394,7 @@ export const deletePet = async (req, res) => {
 
         // Verificar que la mascota existe
         const mascotaExiste = await query(
-            'SELECT id_mascota FROM clinical.mascotas WHERE id_mascota = $1 AND activo = true',
+            'SELECT id_mascota FROM clinical.mascotas WHERE id_mascota = $1',
             [id]
         );
 

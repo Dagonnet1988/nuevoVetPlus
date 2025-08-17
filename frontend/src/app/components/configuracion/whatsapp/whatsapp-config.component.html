@@ -1,0 +1,387 @@
+<div class="whatsapp-container">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <div class="title-section">
+        <button mat-icon-button (click)="goBack()" class="back-button">
+          <mat-icon>arrow_back</mat-icon>
+        </button>
+        <div>
+          <h1 class="page-title">
+            <mat-icon class="page-icon" style="color: #25d366;">chat</mat-icon>
+            WhatsApp Business
+          </h1>
+          <p class="page-subtitle">Configuración de mensajería automática con Baileys</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        @if (status().conectado) {
+          <mat-chip class="status-chip connected">
+            <mat-icon>check_circle</mat-icon>
+            Conectado
+          </mat-chip>
+        } @else {
+          <mat-chip class="status-chip disconnected">
+            <mat-icon>error</mat-icon>
+            Desconectado
+          </mat-chip>
+        }
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <mat-card class="config-card">
+    <mat-tab-group>
+      <!-- Tab 1: Conexión -->
+      <mat-tab label="Conexión">
+        <div class="tab-content">
+          @if (loading()) {
+            <div class="loading-container">
+              <mat-spinner></mat-spinner>
+              <p>Cargando configuración...</p>
+            </div>
+          } @else {
+            <div class="connection-section">
+              <h3>Estado de la Conexión</h3>
+
+              @if (!status().conectado) {
+                <div class="qr-section">
+                  <div class="qr-info">
+                    <mat-icon class="qr-icon">qr_code</mat-icon>
+                    <div>
+                      <h4>Escanea el código QR</h4>
+                      <p>Usa tu teléfono con WhatsApp para escanear el código QR y conectar tu cuenta</p>
+                    </div>
+                  </div>
+
+                  @if (qrCode()) {
+                    <div class="qr-container">
+                      <img [src]="'data:image/png;base64,' + qrCode()" alt="Código QR" class="qr-image">
+                      <button mat-button color="primary" (click)="refreshQR()">
+                        <mat-icon>refresh</mat-icon>
+                        Actualizar QR
+                      </button>
+                    </div>
+                  } @else {
+                    <div class="qr-placeholder">
+                      <button mat-raised-button color="primary" (click)="generateQR()" [disabled]="qrLoading()">
+                        @if (qrLoading()) {
+                          <mat-spinner diameter="20"></mat-spinner>
+                        } @else {
+                          <mat-icon>qr_code</mat-icon>
+                        }
+                        Generar Código QR
+                      </button>
+                    </div>
+                  }
+                </div>
+              } @else {
+                <div class="connected-info">
+                  <div class="connection-status">
+                    <mat-icon class="status-icon connected">check_circle</mat-icon>
+                    <div class="status-details">
+                      <h4>WhatsApp Conectado</h4>
+                      <p>Número: {{ status().numero_vinculado }}</p>
+                      <p>Estado: {{ getStatusText(status().estado_conexion) }}</p>
+                      <p>Última actividad: {{ status().ultimo_heartbeat | date:'dd/MM/yyyy HH:mm' }}</p>
+                    </div>
+                  </div>
+
+                  @if (status().info_dispositivo) {
+                    <div class="device-info">
+                      <h4>Información del Dispositivo</h4>
+                      <p><strong>Nombre:</strong> {{ status().info_dispositivo?.nombre }}</p>
+                      <p><strong>Navegador:</strong> {{ status().info_dispositivo?.navegador }}</p>
+                      <p><strong>Plataforma:</strong> {{ status().info_dispositivo?.plataforma }}</p>
+                    </div>
+                  }
+                </div>
+              }
+
+              <div class="connection-actions">
+                @if (status().conectado) {
+                  <button mat-button color="warn" (click)="logout()" [disabled]="actionLoading()">
+                    @if (actionLoading()) {
+                      <mat-spinner diameter="20"></mat-spinner>
+                    } @else {
+                      <mat-icon>logout</mat-icon>
+                    }
+                    Desconectar
+                  </button>
+                }
+
+                <button mat-button color="accent" (click)="restart()" [disabled]="actionLoading()">
+                  @if (actionLoading()) {
+                    <mat-spinner diameter="20"></mat-spinner>
+                  } @else {
+                    <mat-icon>restart_alt</mat-icon>
+                  }
+                  Reiniciar Servicio
+                </button>
+              </div>
+            </div>
+          }
+        </div>
+      </mat-tab>
+
+      <!-- Tab 2: Configuración -->
+      <mat-tab label="Configuración">
+        <div class="tab-content">
+          <form [formGroup]="configForm" class="config-form">
+            <!-- Configuración básica -->
+            <div class="section">
+              <h3>Configuración Básica</h3>
+              <div class="toggle-section">
+                <mat-slide-toggle formControlName="activo" color="primary">
+                  Habilitar WhatsApp Business
+                </mat-slide-toggle>
+                <p class="help-text">Permite el envío automático de mensajes por WhatsApp usando Baileys</p>
+              </div>
+
+              @if (configForm.value.activo) {
+                <div class="form-row">
+                  <mat-form-field appearance="outline" class="form-field">
+                    <mat-label>Número de Teléfono</mat-label>
+                    <input matInput formControlName="numero_telefono" placeholder="+57 300 123 4567">
+                    <mat-icon matSuffix>phone</mat-icon>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline" class="form-field">
+                    <mat-label>Nombre de la Empresa</mat-label>
+                    <input matInput formControlName="nombre_empresa" placeholder="Clínica Veterinaria">
+                    <mat-icon matSuffix>business</mat-icon>
+                  </mat-form-field>
+                </div>
+              }
+            </div>
+
+            @if (configForm.value.activo) {
+              <mat-divider></mat-divider>
+
+              <!-- Templates de mensajes -->
+              <div class="section">
+                <h3>Templates de Mensajes</h3>
+                <div class="templates-grid">
+                  <mat-form-field appearance="outline" class="template-field">
+                    <mat-label>Confirmación de Cita</mat-label>
+                    <textarea matInput formControlName="template_confirmacion" rows="3"
+                              placeholder="Hola {cliente}, tu cita para {mascota} el {fecha} a las {hora} ha sido confirmada."></textarea>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline" class="template-field">
+                    <mat-label>Recordatorio de Cita</mat-label>
+                    <textarea matInput formControlName="template_recordatorio" rows="3"
+                              placeholder="Recordatorio: Tu cita para {mascota} es mañana {fecha} a las {hora}."></textarea>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline" class="template-field">
+                    <mat-label>Cancelación de Cita</mat-label>
+                    <textarea matInput formControlName="template_cancelacion" rows="3"
+                              placeholder="Tu cita para {mascota} el {fecha} ha sido cancelada."></textarea>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline" class="template-field">
+                    <mat-label>Factura Enviada</mat-label>
+                    <textarea matInput formControlName="template_factura" rows="3"
+                              placeholder="Tu factura #{numero} por {monto} ha sido generada."></textarea>
+                  </mat-form-field>
+                </div>
+              </div>
+
+              <mat-divider></mat-divider>
+
+              <!-- Configuración de envíos -->
+              <div class="section">
+                <h3>Configuración de Envíos</h3>
+                <div class="checkbox-group">
+                  <mat-checkbox formControlName="enviar_confirmaciones">
+                    Enviar confirmaciones de citas
+                  </mat-checkbox>
+                  <mat-checkbox formControlName="enviar_recordatorios">
+                    Enviar recordatorios de citas
+                  </mat-checkbox>
+                  <mat-checkbox formControlName="enviar_facturas">
+                    Enviar notificaciones de facturas
+                  </mat-checkbox>
+                </div>
+
+                @if (configForm.value.enviar_recordatorios) {
+                  <mat-form-field appearance="outline" class="form-field">
+                    <mat-label>Tiempo de recordatorio (horas antes)</mat-label>
+                    <mat-select formControlName="tiempo_recordatorio">
+                      <mat-option value="1">1 hora</mat-option>
+                      <mat-option value="2">2 horas</mat-option>
+                      <mat-option value="4">4 horas</mat-option>
+                      <mat-option value="12">12 horas</mat-option>
+                      <mat-option value="24">24 horas</mat-option>
+                    </mat-select>
+                  </mat-form-field>
+                }
+              </div>
+
+              <mat-divider></mat-divider>
+
+              <!-- Horarios de envío -->
+              <div class="section">
+                <h3>Horarios de Envío</h3>
+                <div class="form-row">
+                  <mat-form-field appearance="outline" class="form-field">
+                    <mat-label>Hora de Inicio</mat-label>
+                    <input matInput type="time" formControlName="hora_inicio_envios">
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline" class="form-field">
+                    <mat-label>Hora de Fin</mat-label>
+                    <input matInput type="time" formControlName="hora_fin_envios">
+                  </mat-form-field>
+                </div>
+
+                <div class="days-section">
+                  <h4>Días activos</h4>
+                  <div class="days-grid">
+                    @for (dia of diasSemana; track dia.value) {
+                      <mat-checkbox
+                        [checked]="isDayActive(dia.value)"
+                        (change)="toggleDay(dia.value, $event.checked)">
+                        {{ dia.label }}
+                      </mat-checkbox>
+                    }
+                  </div>
+                </div>
+              </div>
+
+              <mat-divider></mat-divider>
+
+              <!-- Notificaciones Automáticas -->
+              <div class="section">
+                <h3>Notificaciones Automáticas</h3>
+                <div class="toggle-section">
+                  <mat-slide-toggle formControlName="notificaciones_automaticas" color="primary">
+                    Habilitar Notificaciones Automáticas
+                  </mat-slide-toggle>
+                  <p class="help-text">
+                    <mat-icon style="color: #ff9800; font-size: 16px;">warning</mat-icon>
+                    Estas notificaciones se envían automáticamente según los eventos del sistema.
+                    Úsalas con precaución para evitar saturar a los clientes.
+                  </p>
+                </div>
+
+                @if (configForm.value.notificaciones_automaticas) {
+                  <div class="notification-config">
+                    <div class="checkbox-group">
+                      <mat-checkbox formControlName="auto_cita_confirmada">
+                        Confirmar cita automáticamente al agendar
+                      </mat-checkbox>
+                      <mat-checkbox formControlName="auto_cita_recordatorio">
+                        Recordatorio automático antes de la cita
+                      </mat-checkbox>
+                      <mat-checkbox formControlName="auto_consulta_completada">
+                        Notificar cuando se complete la consulta
+                      </mat-checkbox>
+                      <mat-checkbox formControlName="auto_factura_generada">
+                        Enviar factura automáticamente al generarla
+                      </mat-checkbox>
+                    </div>
+
+                    <div class="warning-section">
+                      <mat-icon style="color: #f44336;">info</mat-icon>
+                      <div class="warning-content">
+                        <h4>Importante sobre Baileys</h4>
+                        <p>WhatsApp puede detectar envío masivo de mensajes y bloquear la cuenta.
+                        Se recomienda activar solo las notificaciones esenciales.</p>
+                      </div>
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+
+            <!-- Botones de acción -->
+            <div class="form-actions">
+              <button mat-raised-button color="primary" (click)="saveConfiguration()" [disabled]="loading() || configForm.invalid">
+                @if (loading()) {
+                  <mat-spinner diameter="20"></mat-spinner>
+                } @else {
+                  <mat-icon>save</mat-icon>
+                }
+                Guardar Configuración
+              </button>
+
+              @if (status().conectado) {
+                <button mat-button color="accent" (click)="sendTestMessage()" [disabled]="testLoading()">
+                  @if (testLoading()) {
+                    <mat-spinner diameter="20"></mat-spinner>
+                  } @else {
+                    <mat-icon>send</mat-icon>
+                  }
+                  Enviar Mensaje de Prueba
+                </button>
+              }
+            </div>
+          </form>
+        </div>
+      </mat-tab>
+
+      <!-- Tab 3: Estadísticas -->
+      <mat-tab label="Estadísticas">
+        <div class="tab-content">
+          @if (stats()) {
+            <div class="stats-section">
+              <h3>Estadísticas de Mensajería</h3>
+
+              <!-- Stats principales -->
+              <div class="stats-grid">
+                <div class="stat-card">
+                  <span class="stat-number">{{ stats()?.mensajes_enviados_hoy || 0 }}</span>
+                  <span class="stat-label">Mensajes Hoy</span>
+                </div>
+                <div class="stat-card">
+                  <span class="stat-number">{{ stats()?.mensajes_enviados_mes || 0 }}</span>
+                  <span class="stat-label">Mensajes Este Mes</span>
+                </div>
+                <div class="stat-card">
+                  <span class="stat-number">{{ stats()?.mensajes_fallidos_hoy || 0 }}</span>
+                  <span class="stat-label">Fallidos Hoy</span>
+                </div>
+                <div class="stat-card">
+                  <span class="stat-number">{{ stats()?.mensajes_pendientes || 0 }}</span>
+                  <span class="stat-label">Pendientes</span>
+                </div>
+              </div>
+
+              <!-- Desglose por tipo -->
+              <mat-divider></mat-divider>
+              <h3>Mensajes por Tipo</h3>
+              <div class="type-stats">
+                <div class="type-item">
+                  <span>Confirmaciones:</span>
+                  <span>{{ stats()?.tipos_mensajes?.confirmaciones || 0 }}</span>
+                </div>
+                <div class="type-item">
+                  <span>Recordatorios:</span>
+                  <span>{{ stats()?.tipos_mensajes?.recordatorios || 0 }}</span>
+                </div>
+                <div class="type-item">
+                  <span>Facturas:</span>
+                  <span>{{ stats()?.tipos_mensajes?.facturas || 0 }}</span>
+                </div>
+                <div class="type-item">
+                  <span>Otros:</span>
+                  <span>{{ stats()?.tipos_mensajes?.otros || 0 }}</span>
+                </div>
+              </div>
+            </div>
+          } @else {
+            <div class="no-stats">
+              <mat-icon class="no-stats-icon">bar_chart</mat-icon>
+              <h3>Sin Estadísticas</h3>
+              <p>Las estadísticas aparecerán cuando se configure y active WhatsApp</p>
+            </div>
+          }
+        </div>
+      </mat-tab>
+    </mat-tab-group>
+  </mat-card>
+</div>

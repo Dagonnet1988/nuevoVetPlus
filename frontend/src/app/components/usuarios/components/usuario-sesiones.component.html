@@ -1,0 +1,310 @@
+<div class="sesiones-container">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <div class="title-section">
+        <h1 class="page-title">
+          <mat-icon class="page-icon">devices</mat-icon>
+          Sesiones de Usuario
+        </h1>
+        @if (usuario()) {
+          <p class="page-subtitle">
+            Gestión de sesiones para {{ usuario()!.nombre }} {{ usuario()!.apellido }}
+          </p>
+        }
+      </div>
+      <div class="actions-section">
+        <button mat-stroked-button 
+                (click)="volverAlPerfil()"
+                class="back-button">
+          <mat-icon>arrow_back</mat-icon>
+          Volver al Perfil
+        </button>
+        @if (sesionesActivasCount() > 0) {
+          <button mat-raised-button 
+                  color="warn"
+                  (click)="cerrarTodasLasSesiones()"
+                  class="close-all-button">
+            <mat-icon>logout</mat-icon>
+            Cerrar Todas ({{ sesionesActivasCount() }})
+          </button>
+        }
+      </div>
+    </div>
+  </div>
+
+  <!-- Estadísticas de Sesiones -->
+  <div class="stats-row">
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <div class="stat-content">
+          <mat-icon class="stat-icon primary-color">history</mat-icon>
+          <div class="stat-info">
+            <span class="stat-number">{{ estadisticasSesiones().total_sesiones }}</span>
+            <span class="stat-label">Total Sesiones</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <div class="stat-content">
+          <mat-icon class="stat-icon success-color">check_circle</mat-icon>
+          <div class="stat-info">
+            <span class="stat-number">{{ estadisticasSesiones().sesiones_activas }}</span>
+            <span class="stat-label">Activas</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <div class="stat-content">
+          <mat-icon class="stat-icon info-color">devices</mat-icon>
+          <div class="stat-info">
+            <span class="stat-number">{{ estadisticasSesiones().dispositivos_unicos }}</span>
+            <span class="stat-label">Dispositivos</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <div class="stat-content">
+          <mat-icon class="stat-icon accent-color">access_time</mat-icon>
+          <div class="stat-info">
+            <span class="stat-number">{{ estadisticasSesiones().sesion_mas_larga }}</span>
+            <span class="stat-label">Sesión Más Larga</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <!-- Tabla de Sesiones -->
+  <mat-card class="table-card">
+    <mat-card-header>
+      <mat-card-title>
+        <mat-icon>devices</mat-icon>
+        Historial de Sesiones ({{ totalSesiones }})
+      </mat-card-title>
+      <mat-card-subtitle>
+        Registro detallado de todas las sesiones del usuario
+      </mat-card-subtitle>
+    </mat-card-header>
+
+    <mat-card-content>
+      @if (loading()) {
+        <div class="loading-container">
+          <mat-spinner diameter="50"></mat-spinner>
+          <p>Cargando sesiones...</p>
+        </div>
+      } @else {
+        <div class="table-container">
+          <table mat-table [dataSource]="sesiones()" matSort class="sesiones-table">
+            
+            <!-- Columna Dispositivo -->
+            <ng-container matColumnDef="dispositivo">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Dispositivo</th>
+              <td mat-cell *matCellDef="let sesion">
+                <div class="device-info">
+                  <mat-icon class="device-icon" [style.color]="getDeviceIcon(sesion.dispositivo) === 'smartphone' ? '#38a169' : '#3182ce'">
+                    {{ getDeviceIcon(sesion.dispositivo) }}
+                  </mat-icon>
+                  <div class="device-details">
+                    <span class="device-name">{{ sesion.dispositivo }}</span>
+                    <span class="device-type">{{ getDeviceType(sesion.dispositivo) }}</span>
+                  </div>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Columna Navegador -->
+            <ng-container matColumnDef="navegador">
+              <th mat-header-cell *matHeaderCellDef>Navegador</th>
+              <td mat-cell *matCellDef="let sesion">
+                <div class="browser-info">
+                  <mat-icon class="browser-icon">{{ getBrowserIcon(sesion.navegador) }}</mat-icon>
+                  <span class="browser-name">{{ sesion.navegador }}</span>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Columna Ubicación -->
+            <ng-container matColumnDef="ubicacion">
+              <th mat-header-cell *matHeaderCellDef>Ubicación</th>
+              <td mat-cell *matCellDef="let sesion">
+                <div class="location-info">
+                  <span class="location-flag">{{ getLocationFlag(sesion.ubicacion || '') }}</span>
+                  <span class="location-name">{{ sesion.ubicacion || 'Desconocida' }}</span>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Columna IP -->
+            <ng-container matColumnDef="ip_address">
+              <th mat-header-cell *matHeaderCellDef>Dirección IP</th>
+              <td mat-cell *matCellDef="let sesion">
+                <div class="ip-info">
+                  <mat-icon class="ip-icon">router</mat-icon>
+                  <span class="ip-address">{{ sesion.ip_address }}</span>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Columna Fecha Inicio -->
+            <ng-container matColumnDef="fecha_inicio">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Inicio</th>
+              <td mat-cell *matCellDef="let sesion">
+                <div class="date-info">
+                  <span class="date-absolute">{{ formatearFecha(sesion.fecha_inicio) }}</span>
+                  <span class="date-relative">{{ formatearFechaRelativa(sesion.fecha_inicio) }}</span>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Columna Última Actividad -->
+            <ng-container matColumnDef="ultima_actividad">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Última Actividad</th>
+              <td mat-cell *matCellDef="let sesion">
+                <div class="date-info">
+                  <span class="date-absolute">{{ formatearFecha(sesion.ultima_actividad) }}</span>
+                  <span class="date-relative">{{ formatearFechaRelativa(sesion.ultima_actividad) }}</span>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Columna Estado -->
+            <ng-container matColumnDef="estado">
+              <th mat-header-cell *matHeaderCellDef>Estado</th>
+              <td mat-cell *matCellDef="let sesion">
+                <div class="status-info">
+                  <mat-chip [class]="'status-' + (sesion.activa ? 'active' : 'inactive')">
+                    <mat-icon>{{ sesion.activa ? 'check_circle' : 'cancel' }}</mat-icon>
+                    {{ sesion.activa ? 'Activa' : 'Cerrada' }}
+                  </mat-chip>
+                  <div class="duration">
+                    <mat-icon class="duration-icon">timer</mat-icon>
+                    <span>{{ calcularDuracionSesion(sesion.fecha_inicio, sesion.ultima_actividad) }}</span>
+                  </div>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Columna Acciones -->
+            <ng-container matColumnDef="acciones">
+              <th mat-header-cell *matHeaderCellDef>Acciones</th>
+              <td mat-cell *matCellDef="let sesion">
+                @if (sesion.activa) {
+                  <button mat-icon-button 
+                          color="warn"
+                          (click)="cerrarSesion(sesion)"
+                          matTooltip="Cerrar sesión"
+                          class="close-session-btn">
+                    <mat-icon>logout</mat-icon>
+                  </button>
+                } @else {
+                  <button mat-icon-button 
+                          disabled
+                          matTooltip="Sesión ya cerrada"
+                          class="closed-session-btn">
+                    <mat-icon>history</mat-icon>
+                  </button>
+                }
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumns;" 
+                [class]="'session-row ' + (row.activa ? 'active-session' : 'inactive-session')"></tr>
+          </table>
+
+          @if (sesiones().length === 0) {
+            <div class="no-data">
+              <mat-icon>devices_off</mat-icon>
+              <h3>Sin sesiones registradas</h3>
+              <p>No se han encontrado sesiones para este usuario</p>
+            </div>
+          }
+        </div>
+
+        <mat-paginator 
+          [length]="totalSesiones"
+          [pageSize]="pageSize"
+          [pageSizeOptions]="[10, 25, 50, 100]"
+          (page)="onPageChange($event)"
+          showFirstLastButtons>
+        </mat-paginator>
+      }
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Información Adicional -->
+  <div class="info-cards">
+    <mat-card class="info-card">
+      <mat-card-header>
+        <mat-card-title>
+          <mat-icon>info</mat-icon>
+          Información de Seguridad
+        </mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="security-tips">
+          <div class="tip-item">
+            <mat-icon class="tip-icon success">check_circle</mat-icon>
+            <div class="tip-content">
+              <h4>Sesiones Seguras</h4>
+              <p>Todas las sesiones están protegidas con cifrado SSL/TLS</p>
+            </div>
+          </div>
+          <div class="tip-item">
+            <mat-icon class="tip-icon warning">warning</mat-icon>
+            <div class="tip-content">
+              <h4>Actividad Sospechosa</h4>
+              <p>Revisa regularmente las ubicaciones y dispositivos de acceso</p>
+            </div>
+          </div>
+          <div class="tip-item">
+            <mat-icon class="tip-icon info">info</mat-icon>
+            <div class="tip-content">
+              <h4>Gestión de Sesiones</h4>
+              <p>Puedes cerrar sesiones remotamente si detectas acceso no autorizado</p>
+            </div>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="info-card">
+      <mat-card-header>
+        <mat-card-title>
+          <mat-icon>analytics</mat-icon>
+          Resumen de Actividad
+        </mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="activity-summary">
+          <div class="summary-item">
+            <label>Navegadores Utilizados</label>
+            <span>{{ estadisticasSesiones().navegadores_unicos }}</span>
+          </div>
+          <div class="summary-item">
+            <label>Ubicaciones Diferentes</label>
+            <span>{{ estadisticasSesiones().ubicaciones_unicas }}</span>
+          </div>
+          <div class="summary-item">
+            <label>Tipos de Dispositivo</label>
+            <span>{{ estadisticasSesiones().dispositivos_unicos }}</span>
+          </div>
+          <div class="summary-item">
+            <label>Promedio Diario</label>
+            <span>{{ (estadisticasSesiones().total_sesiones / 30).toFixed(1) }} sesiones</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+</div>

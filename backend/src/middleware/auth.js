@@ -61,10 +61,12 @@ const decodeToken = (token) => {
  */
 const authenticateToken = async (req, res, next) => {
   try {
+    
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
     if (!token) {
+      console.log('❌ Token no encontrado en headers');
       return res.status(401).json({
         success: false,
         message: 'Token de acceso requerido',
@@ -115,6 +117,7 @@ const authenticateToken = async (req, res, next) => {
     // Agregar información actualizada del usuario al request
     req.user = {
       id: user.id_usuario,
+      id_usuario: user.id_usuario,
       email: user.email,
       nombre: user.nombre,
       rol: user.rol

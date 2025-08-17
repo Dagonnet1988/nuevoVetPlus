@@ -423,7 +423,7 @@ export const getWhatsAppMessages = async (req, res) => {
                 wl.*,
                 CASE 
                     WHEN wl.id_factura IS NOT NULL THEN 
-                        (SELECT fv.numero_factura FROM financial.facturas_venta fv WHERE fv.id_factura = wl.id_factura)
+                        (SELECT fv.codigo_factura FROM financial.facturas_venta fv WHERE fv.id_factura = wl.id_factura)
                     WHEN wl.id_consulta IS NOT NULL THEN
                         'Consulta: ' || (SELECT cc.fecha::date FROM clinical.consultas_clinicas cc WHERE cc.id_consulta = wl.id_consulta)
                     ELSE 'N/A'

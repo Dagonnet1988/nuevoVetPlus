@@ -7,7 +7,8 @@ import {
     getConsultationById,
     getConsultationsByPet,
     updateConsultation,
-    getConsultationStats
+    getConsultationStats,
+    completeConsultationWithInvoice
 } from '../controllers/consultationController.js';
 import {
     validateCreateConsultation,
@@ -65,6 +66,24 @@ router.get('/pet/:id',
     getConsultationsByPet
 );
 
+// ✅ OBTENER HISTORIAL CLÍNICO COMPLETO DE UNA MASCOTA
+// GET /api/clinical/consultations/pet/:id/history
+router.get('/pet/:id/history',
+    authorize(['admin', 'vet', 'aux']),
+    validatePetId,
+    validateRequest,
+    getConsultationsByPet // Usa la misma función que el endpoint anterior
+);
+
+// ✅ ALIAS PARA COMPATIBILIDAD - HISTORIAL CLÍNICO POR PACIENTE
+// GET /api/clinical/consultations/paciente/:id/history
+router.get('/paciente/:id/history',
+    authorize(['admin', 'vet', 'aux']),
+    validatePetId,
+    validateRequest,
+    getConsultationsByPet // Usa la misma función que el endpoint anterior
+);
+
 // ✅ ACTUALIZAR CONSULTA CLÍNICA
 // PUT /api/clinical/consultations/:id
 router.put('/:id',
@@ -72,6 +91,15 @@ router.put('/:id',
     validateUpdateConsultation,
     validateRequest,
     updateConsultation
+);
+
+// 🔥 COMPLETAR CONSULTA CON FACTURACIÓN AUTOMÁTICA
+// POST /api/clinical/consultations/:id/complete-with-invoice
+router.post('/:id/complete-with-invoice',
+    authorize(['admin', 'vet']), // Solo admin y veterinarios
+    validateConsultationId,
+    validateRequest,
+    completeConsultationWithInvoice
 );
 
 export default router;

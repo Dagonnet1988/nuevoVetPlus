@@ -1,0 +1,326 @@
+<div class="usuarios-container">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <div class="title-section">
+        <h1 class="page-title">
+          <mat-icon class="page-icon">people</mat-icon>
+          Gestión de Usuarios
+        </h1>
+        <p class="page-subtitle">Administración de usuarios del sistema</p>
+      </div>
+      <div class="actions-section">
+        <button mat-stroked-button 
+                (click)="exportarUsuarios()"
+                class="export-button">
+          <mat-icon>download</mat-icon>
+          Exportar
+        </button>
+        <button mat-raised-button 
+                color="primary"
+                (click)="nuevoUsuario()"
+                class="create-button">
+          <mat-icon>person_add</mat-icon>
+          Nuevo Usuario
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Estadísticas rápidas -->
+  <div class="stats-row">
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <div class="stat-content">
+          <mat-icon class="stat-icon primary-color">people</mat-icon>
+          <div class="stat-info">
+            <span class="stat-number">{{ resumen().total_usuarios }}</span>
+            <span class="stat-label">Total Usuarios</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <div class="stat-content">
+          <mat-icon class="stat-icon success-color">check_circle</mat-icon>
+          <div class="stat-info">
+            <span class="stat-number">{{ resumen().usuarios_activos }}</span>
+            <span class="stat-label">Usuarios Activos</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <div class="stat-content">
+          <mat-icon class="stat-icon warn-color">schedule</mat-icon>
+          <div class="stat-info">
+            <span class="stat-number">{{ resumen().usuarios_primer_acceso }}</span>
+            <span class="stat-label">Primer Acceso</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <div class="stat-content">
+          <mat-icon class="stat-icon accent-color">login</mat-icon>
+          <div class="stat-info">
+            <span class="stat-number">{{ resumen().sesiones_activas }}</span>
+            <span class="stat-label">Sesiones Activas</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <!-- Selector de vista -->
+  <mat-card class="view-selector-card">
+    <mat-card-content>
+      <mat-button-toggle-group 
+        [value]="currentView()" 
+        (change)="changeView($event.value)"
+        class="view-toggle">
+        <mat-button-toggle value="todos">
+          <mat-icon>people</mat-icon>
+          Todos los Usuarios
+        </mat-button-toggle>
+        <mat-button-toggle value="activos">
+          <mat-icon>check_circle</mat-icon>
+          Activos
+        </mat-button-toggle>
+        <mat-button-toggle value="inactivos">
+          <mat-icon>cancel</mat-icon>
+          Inactivos
+        </mat-button-toggle>
+        <mat-button-toggle value="primer_acceso">
+          <mat-icon>schedule</mat-icon>
+          Primer Acceso
+        </mat-button-toggle>
+      </mat-button-toggle-group>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Filtros -->
+  <mat-card class="filters-card">
+    <mat-card-content>
+      <form [formGroup]="filterForm" class="filters-form">
+        <div class="filter-row">
+          <mat-form-field appearance="outline" class="search-field">
+            <mat-label>Buscar usuario</mat-label>
+            <input matInput formControlName="search" placeholder="Nombre, email, documento...">
+            <mat-icon matSuffix>search</mat-icon>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="rol-field">
+            <mat-label>Rol</mat-label>
+            <mat-select formControlName="rol">
+              <mat-option value="">Todos los roles</mat-option>
+              <mat-option value="admin">Administrador</mat-option>
+              <mat-option value="veterinario">Veterinario</mat-option>
+              <mat-option value="auxiliar">Auxiliar</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="especialidad-field">
+            <mat-label>Especialidad</mat-label>
+            <mat-select formControlName="especialidad">
+              <mat-option value="">Todas las especialidades</mat-option>
+              @for (especialidad of especialidades; track especialidad) {
+                <mat-option [value]="especialidad">{{ especialidad }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+
+          <button mat-stroked-button 
+                  type="button"
+                  (click)="clearFilters()"
+                  class="clear-filters-btn">
+            <mat-icon>clear</mat-icon>
+            Limpiar
+          </button>
+        </div>
+      </form>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Tabla de usuarios -->
+  <mat-card class="table-card">
+    <mat-card-header>
+      <mat-card-title>
+        <mat-icon>people</mat-icon>
+        Lista de Usuarios ({{ usuarios().length }})
+      </mat-card-title>
+    </mat-card-header>
+
+    <mat-card-content>
+      @if (loading()) {
+        <div class="loading-container">
+          <mat-spinner diameter="50"></mat-spinner>
+          <p>Cargando usuarios...</p>
+        </div>
+      } @else {
+        <div class="table-container">
+          <table mat-table [dataSource]="usuarios()" matSort class="usuarios-table">
+            
+            <!-- Columna Avatar y Nombre -->
+            <ng-container matColumnDef="usuario">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Usuario</th>
+              <td mat-cell *matCellDef="let usuario">
+                <div class="user-info">
+                  <div class="user-avatar">
+                    @if (usuario.avatar_url) {
+                      <img [src]="usuario.avatar_url" [alt]="usuario.nombre">
+                    } @else {
+                      <mat-icon>person</mat-icon>
+                    }
+                  </div>
+                  <div class="user-details">
+                    <span class="user-name">{{ usuario.nombre }} {{ usuario.apellido }}</span>
+                    <span class="user-email">{{ usuario.email }}</span>
+                  </div>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Columna Documento -->
+            <ng-container matColumnDef="documento">
+              <th mat-header-cell *matHeaderCellDef>Documento</th>
+              <td mat-cell *matCellDef="let usuario">
+                <div class="documento-info">
+                  <span class="documento-numero">{{ usuario.documento }}</span>
+                  <span class="documento-tipo">{{ formatearTipoDocumento(usuario.tipo_documento) }}</span>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Columna Rol -->
+            <ng-container matColumnDef="rol">
+              <th mat-header-cell *matHeaderCellDef>Rol</th>
+              <td mat-cell *matCellDef="let usuario">
+                <mat-chip [style.background-color]="getColorRol(usuario.rol)"
+                          [style.color]="'white'">
+                  <mat-icon>{{ getIconoRol(usuario.rol) }}</mat-icon>
+                  {{ formatearRol(usuario.rol) }}
+                </mat-chip>
+              </td>
+            </ng-container>
+
+            <!-- Columna Especialidad -->
+            <ng-container matColumnDef="especialidad">
+              <th mat-header-cell *matHeaderCellDef>Especialidad</th>
+              <td mat-cell *matCellDef="let usuario">
+                @if (usuario.especialidad) {
+                  <span class="especialidad">{{ usuario.especialidad }}</span>
+                } @else {
+                  <span class="no-especialidad">-</span>
+                }
+              </td>
+            </ng-container>
+
+            <!-- Columna Estado -->
+            <ng-container matColumnDef="estado">
+              <th mat-header-cell *matHeaderCellDef>Estado</th>
+              <td mat-cell *matCellDef="let usuario">
+                <div class="estado-container">
+                  <mat-chip [class]="'status-' + (usuario.activo ? 'active' : 'inactive')">
+                    <mat-icon>{{ usuario.activo ? 'check_circle' : 'cancel' }}</mat-icon>
+                    {{ usuario.activo ? 'Activo' : 'Inactivo' }}
+                  </mat-chip>
+                  @if (usuario.primer_acceso) {
+                    <mat-chip class="primer-acceso-chip">
+                      <mat-icon>schedule</mat-icon>
+                      Primer acceso
+                    </mat-chip>
+                  }
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Columna Último Acceso -->
+            <ng-container matColumnDef="ultimo_acceso">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Último Acceso</th>
+              <td mat-cell *matCellDef="let usuario">
+                @if (usuario.ultimo_acceso) {
+                  <span class="ultimo-acceso">{{ formatearFecha(usuario.ultimo_acceso) }}</span>
+                } @else {
+                  <span class="nunca-acceso">Nunca</span>
+                }
+              </td>
+            </ng-container>
+
+            <!-- Columna Acciones -->
+            <ng-container matColumnDef="acciones">
+              <th mat-header-cell *matHeaderCellDef>Acciones</th>
+              <td mat-cell *matCellDef="let usuario">
+                <button mat-icon-button [matMenuTriggerFor]="userMenu" (click)="$event.stopPropagation()">
+                  <mat-icon>more_vert</mat-icon>
+                </button>
+                <mat-menu #userMenu="matMenu">
+                  <button mat-menu-item (click)="$event.stopPropagation(); verUsuario(usuario)">
+                    <mat-icon>visibility</mat-icon>
+                    Ver Perfil
+                  </button>
+                  <button mat-menu-item (click)="$event.stopPropagation(); editarUsuario(usuario)">
+                    <mat-icon>edit</mat-icon>
+                    Editar
+                  </button>
+                  <button mat-menu-item (click)="$event.stopPropagation(); gestionarSesiones(usuario)">
+                    <mat-icon>devices</mat-icon>
+                    Sesiones Activas
+                    @if (usuario.estadisticas?.sesiones_activas > 0) {
+                      <mat-icon matBadge="{{ usuario.estadisticas.sesiones_activas }}" matBadgeColor="warn">devices</mat-icon>
+                    }
+                  </button>
+                  <mat-divider></mat-divider>
+                  <button mat-menu-item (click)="$event.stopPropagation(); resetearPassword(usuario)">
+                    <mat-icon>lock_reset</mat-icon>
+                    Resetear Contraseña
+                  </button>
+                  @if (usuario.primer_acceso) {
+                    <button mat-menu-item (click)="$event.stopPropagation(); enviarCredenciales(usuario)">
+                      <mat-icon>email</mat-icon>
+                      Enviar Credenciales
+                    </button>
+                  }
+                  <mat-divider></mat-divider>
+                  <button mat-menu-item 
+                          (click)="$event.stopPropagation(); toggleEstadoUsuario(usuario)"
+                          [class]="usuario.activo ? 'danger-item' : 'success-item'">
+                    <mat-icon>{{ usuario.activo ? 'block' : 'check_circle' }}</mat-icon>
+                    {{ usuario.activo ? 'Desactivar' : 'Activar' }}
+                  </button>
+                </mat-menu>
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumns;" 
+                (click)="verUsuario(row)" 
+                class="clickable-row"></tr>
+          </table>
+
+          @if (usuarios().length === 0) {
+            <div class="no-data">
+              <mat-icon>people_outline</mat-icon>
+              <h3>No hay usuarios</h3>
+              <p>No se encontraron usuarios con los filtros aplicados</p>
+            </div>
+          }
+        </div>
+
+        <mat-paginator 
+          [length]="totalUsuarios"
+          [pageSize]="pageSize"
+          [pageSizeOptions]="[10, 25, 50, 100]"
+          (page)="onPageChange($event)"
+          showFirstLastButtons>
+        </mat-paginator>
+      }
+    </mat-card-content>
+  </mat-card>
+</div>

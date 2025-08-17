@@ -70,8 +70,11 @@ export const getGoogleCalendarConfig = async (req, res) => {
  */
 export const configureGoogleCalendar = async (req, res) => {
     try {
+        console.log('🔧 Iniciando configuración de Google Calendar para usuario:', req.user?.id_usuario);
+        
         // Solo administradores pueden configurar
         if (req.user.rol !== 'admin') {
+            console.log('❌ Usuario no es admin:', req.user.rol);
             return res.status(403).json({
                 success: false,
                 message: 'Solo los administradores pueden configurar Google Calendar'
@@ -90,8 +93,16 @@ export const configureGoogleCalendar = async (req, res) => {
             email_reminder_hours = 24
         } = req.body;
 
+        console.log('📋 Datos recibidos:', {
+            client_id: client_id ? `${client_id.substring(0, 10)}...` : 'NO',
+            client_secret: client_secret ? 'SÍ' : 'NO',
+            redirect_uri,
+            calendar_id
+        });
+
         // Validaciones básicas
         if (!client_id || !client_secret || !redirect_uri) {
+            console.log('❌ Faltan campos obligatorios');
             return res.status(400).json({
                 success: false,
                 message: 'Client ID, Client Secret y Redirect URI son obligatorios'
@@ -99,11 +110,13 @@ export const configureGoogleCalendar = async (req, res) => {
         }
 
         const id_config = uuidv4();
-        const configured_by = req.user.id;
+        const configured_by = req.user.id_usuario;
 
+        console.log('🗃️ Desactivando configuración anterior...');
         // Desactivar configuración anterior si existe
         await query('UPDATE auth.google_calendar_config SET is_active = false');
 
+        console.log('💾 Guardando nueva configuración...');
         // Crear nueva configuración
         const insertResult = await query(`
             INSERT INTO auth.google_calendar_config (
@@ -118,12 +131,15 @@ export const configureGoogleCalendar = async (req, res) => {
             default_reminder_minutes, email_reminder_hours, configured_by
         ]);
 
+        console.log('🔄 Reinicializando servicio de Google Calendar...');
         // Reinicializar el servicio de Google Calendar con las nuevas credenciales
         await googleCalendarService.reinitializeWithConfig(insertResult.rows[0]);
 
+        console.log('🔗 Generando URL de autorización...');
         // Generar URL de autorización
         const authUrl = googleCalendarService.getAuthUrl();
 
+        console.log('✅ Configuración guardada exitosamente');
         res.status(201).json({
             success: true,
             message: 'Configuración de Google Calendar guardada exitosamente',
@@ -135,7 +151,7 @@ export const configureGoogleCalendar = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error configurando Google Calendar:', error);
+        console.error('❌ Error configurando Google Calendar:', error);
         res.status(500).json({
             success: false,
             message: 'Error interno del servidor',
@@ -654,6 +670,209 @@ export const resolveManualMatch = async (req, res) => {
 
     } catch (error) {
         console.error('Error resolviendo matching manual:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+/**
+ * Obtener URL de autorización de Google Calendar
+ */
+export const getGoogleCalendarAuthUrl = async (req, res) => {
+    try {
+        console.log('🔍 Iniciando getGoogleCalendarAuthUrl para usuario:', req.user?.id_usuario);
+        
+        // Solo administradores pueden obtener URL de autorización
+        if (req.user.rol !== 'admin') {
+            console.log('❌ Usuario no es admin:', req.user.rol);
+            return res.status(403).json({
+                success: false,
+                message: 'Solo los administradores pueden obtener la URL de autorización'
+            });
+        }
+
+        // Verificar que el servicio esté configurado
+        const isConfigured = await googleCalendarService.isConfigured();
+        console.log('📋 Servicio configurado:', isConfigured);
+        
+        if (!isConfigured) {
+            console.log('❌ Google Calendar no está configurado');
+            return res.status(400).json({
+                success: false,
+                message: 'Google Calendar no está configurado. Configura primero las credenciales.'
+            });
+        }
+
+        // Generar URL de autorización
+        const authUrl = googleCalendarService.getAuthUrl();
+        console.log('🔗 URL de autorización generada:', authUrl ? 'Sí' : 'No');
+
+        if (!authUrl) {
+            console.log('❌ Error generando URL de autorización');
+            return res.status(500).json({
+                success: false,
+                message: 'Error generando URL de autorización'
+            });
+        }
+
+        console.log('✅ URL de autorización enviada exitosamente');
+        res.json({
+            success: true,
+            authUrl: authUrl,
+            message: 'URL de autorización generada exitosamente'
+        });
+
+    } catch (error) {
+        console.error('❌ Error en getGoogleCalendarAuthUrl:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+/**
+ * Configurar webhook de Google Calendar
+ */
+export const setupWebhook = async (req, res) => {
+    try {
+        // Solo administradores pueden configurar webhook
+        if (req.user.rol !== 'admin') {
+            return res.status(403).json({
+                success: false,
+                message: 'Solo los administradores pueden configurar webhook'
+            });
+        }
+
+        const setupResult = await googleCalendarService.setupWebhook();
+
+        if (setupResult.success) {
+            res.json({
+                success: true,
+                message: 'Webhook configurado exitosamente',
+                data: setupResult
+            });
+        } else {
+            res.status(500).json({
+                success: false,
+                message: 'Error configurando webhook',
+                error: setupResult.error
+            });
+        }
+
+    } catch (error) {
+        console.error('Error configurando webhook:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+/**
+ * Detener webhook de Google Calendar
+ */
+export const stopWebhook = async (req, res) => {
+    try {
+        // Solo administradores pueden detener webhook
+        if (req.user.rol !== 'admin') {
+            return res.status(403).json({
+                success: false,
+                message: 'Solo los administradores pueden detener webhook'
+            });
+        }
+
+        const stopResult = await googleCalendarService.stopWebhook();
+
+        if (stopResult.success) {
+            res.json({
+                success: true,
+                message: stopResult.message
+            });
+        } else {
+            res.status(500).json({
+                success: false,
+                message: 'Error deteniendo webhook',
+                error: stopResult.error
+            });
+        }
+
+    } catch (error) {
+        console.error('Error deteniendo webhook:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+/**
+ * Obtener estado del webhook
+ */
+export const getWebhookStatus = async (req, res) => {
+    try {
+        // Solo administradores y veterinarios pueden ver el estado
+        if (!['admin', 'vet'].includes(req.user.rol)) {
+            return res.status(403).json({
+                success: false,
+                message: 'No tienes permisos para ver el estado del webhook'
+            });
+        }
+
+        const statusResult = await googleCalendarService.getWebhookStatus();
+
+        res.json({
+            success: true,
+            data: statusResult
+        });
+
+    } catch (error) {
+        console.error('Error obteniendo estado del webhook:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+/**
+ * Renovar webhook de Google Calendar
+ */
+export const renewWebhook = async (req, res) => {
+    try {
+        // Solo administradores pueden renovar webhook
+        if (req.user.rol !== 'admin') {
+            return res.status(403).json({
+                success: false,
+                message: 'Solo los administradores pueden renovar webhook'
+            });
+        }
+
+        const renewResult = await googleCalendarService.renewWebhook();
+
+        if (renewResult.success) {
+            res.json({
+                success: true,
+                message: 'Webhook renovado exitosamente',
+                data: renewResult
+            });
+        } else {
+            res.status(500).json({
+                success: false,
+                message: 'Error renovando webhook',
+                error: renewResult.error
+            });
+        }
+
+    } catch (error) {
+        console.error('Error renovando webhook:', error);
         res.status(500).json({
             success: false,
             message: 'Error interno del servidor',

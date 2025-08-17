@@ -1,0 +1,34 @@
+<mat-card class="stats-card" [class]="'stats-' + stat.color">
+  <mat-card-content class="stats-content">
+    <div class="stats-info">
+      <div class="stats-header">
+        <h3 class="stats-title">{{ stat.title }}</h3>
+        <div class="stats-icon" [style.background-color]="getIconBgColor()">
+          <mat-icon [style.color]="getIconColor()">{{ stat.icon }}</mat-icon>
+        </div>
+      </div>
+      
+      <div class="stats-value">
+        <span class="value">{{ formatValue(stat.value) }}</span>
+        @if (stat.trend) {
+          <div class="trend" [class.positive]="stat.trend.isPositive" [class.negative]="!stat.trend.isPositive">
+            <mat-icon>{{ stat.trend.isPositive ? 'trending_up' : 'trending_down' }}</mat-icon>
+            <span>{{ stat.trend.value }}%</span>
+          </div>
+        }
+      </div>
+      
+      @if (stat.subtitle) {
+        <p class="stats-subtitle">{{ stat.subtitle }}</p>
+      }
+    </div>
+    
+    @if (stat.route) {
+      <div class="stats-action">
+        <button mat-button [routerLink]="stat.route" class="view-more-btn">
+          <mat-icon>arrow_forward</mat-icon>
+        </button>
+      </div>
+    }
+  </mat-card-content>
+</mat-card>

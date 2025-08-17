@@ -53,8 +53,8 @@ INSERT INTO system.whatsapp_templates (nombre, tipo, plantilla, variables, descr
 (
     'factura_default',
     'factura',
-    'Hola {cliente_nombre}! 👋\n\nTe enviamos tu factura #{numero_factura} de {empresa} por un valor de ${total}.\n\nFecha: {fecha}\n\n¡Gracias por confiar en nosotros para el cuidado de tu mascota! 🐾',
-    '["cliente_nombre", "numero_factura", "empresa", "total", "fecha"]',
+    'Hola {cliente_nombre}! 👋\n\nTe enviamos tu factura #{codigo_factura} de {empresa} por un valor de ${total}.\n\nFecha: {fecha}\n\n¡Gracias por confiar en nosotros para el cuidado de tu mascota! 🐾',
+    '["cliente_nombre", "codigo_factura", "empresa", "total", "fecha"]',
     'Template por defecto para envío de facturas'
 ),
 (
@@ -211,7 +211,7 @@ SELECT
     wl.error_message,
     CASE 
         WHEN wl.id_factura IS NOT NULL THEN 
-            (SELECT fv.numero_factura FROM financial.facturas_venta fv WHERE fv.id_factura = wl.id_factura)
+            (SELECT fv.codigo_factura FROM financial.facturas_venta fv WHERE fv.id_factura = wl.id_factura)
         WHEN wl.id_consulta IS NOT NULL THEN
             (SELECT 'Consulta: ' || cc.fecha FROM clinical.consultas_clinicas cc WHERE cc.id_consulta = wl.id_consulta)
         ELSE 'N/A'

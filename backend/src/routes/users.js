@@ -1,7 +1,7 @@
 import express from 'express';
-import rateLimit from 'express-rate-limit';
 import { authenticateToken, authorize } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validateRequest.js';
+import { query } from '../config/database.js';
 import { 
     validateCreateUser,
     validateUpdateUser
@@ -19,24 +19,8 @@ import {
 
 const router = express.Router();
 
-// Rate limiting para operaciones de usuario (más restrictivo)
-const userManagementRateLimit = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutos
-    max: 50, // máximo 50 operaciones por 15 minutos
-    message: {
-        success: false,
-        message: 'Demasiadas operaciones de gestión de usuarios. Intenta de nuevo más tarde.',
-        error: 'RATE_LIMIT_EXCEEDED'
-    },
-    standardHeaders: true,
-    legacyHeaders: false,
-});
-
 // Aplicar autenticación a todas las rutas
 router.use(authenticateToken);
-
-// Aplicar rate limiting
-router.use(userManagementRateLimit);
 
 /**
  * @route   POST /api/auth/users
@@ -124,6 +108,73 @@ router.put('/:id/role',
 router.delete('/:id',
     authorize(['admin']),
     deactivateUser
+);
+
+/**
+ * @route   PATCH /api/auth/users/:id/estado
+ * @desc    Cambiar estado del usuario (activar/desactivar)
+ * @access  Private (solo admin)
+ */
+router.patch('/:id/estado',
+    authorize(['admin']),
+    async (req, res) => {
+        try {
+            const { id } = req.params;
+            const { activo } = req.body;
+
+            if (typeof activo !== 'boolean') {
+                return res.status(400).json({
+                    success: false,
+                    message: 'El campo activo debe ser un valor booleano'
+                });
+            }
+
+            // Verificar que el usuario existe
+            const existingUser = await query(
+                'SELECT id_usuario, email, activo FROM auth.usuarios WHERE id_usuario = $1',
+                [id]
+            );
+
+            if (existingUser.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Usuario no encontrado'
+                });
+            }
+
+            const user = existingUser.rows[0];
+
+            // Prevenir auto-desactivación
+            if (user.id_usuario === req.user.id && !activo) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'No puedes desactivar tu propia cuenta'
+                });
+            }
+
+            // Actualizar estado
+            await query(
+                'UPDATE auth.usuarios SET activo = $1, updated_at = CURRENT_TIMESTAMP WHERE id_usuario = $2',
+                [activo, id]
+            );
+
+            const action = activo ? 'activado' : 'desactivado';
+            console.log(`⚠️ Usuario ${action}: ${user.email} por ${req.user.email || req.user.documento}`);
+
+            res.json({
+                success: true,
+                message: `Usuario ${action} exitosamente`
+            });
+
+        } catch (error) {
+            console.error('Error cambiando estado de usuario:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor',
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
+        }
+    }
 );
 
 /**

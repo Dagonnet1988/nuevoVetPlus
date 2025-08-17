@@ -1,6 +1,7 @@
 export const environment = {
   production: true,
   apiUrl: 'https://api.vetplus.com/api', // URL de producción
+  backendUrl: 'https://api.vetplus.com',
   appName: 'VetPlus',
   version: '1.0.0',
   defaultTheme: 'light',

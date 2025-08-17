@@ -14,6 +14,7 @@ export const createUser = async (req, res) => {
     try {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
+            console.log('❌ Errores de validación:', errors.array());
             return res.status(400).json({
                 success: false,
                 message: 'Datos de usuario inválidos',
@@ -21,43 +22,102 @@ export const createUser = async (req, res) => {
             });
         }
 
-        const { nombre, email, password, rol } = req.body;
+        const { 
+            nombre, 
+            apellido,
+            email, 
+            documento,
+            tipo_documento = 'CC',
+            telefono,
+            direccion,
+            password_temporal, 
+            rol,
+            especialidad,
+            numero_licencia,
+            activo = true,
+            enviar_credenciales = true,
+            forzar_cambio_password = true
+        } = req.body;
+
+        console.log('📝 Creando usuario con datos:', {
+            nombre,
+            apellido,
+            email,
+            documento,
+            tipo_documento,
+            rol,
+            activo
+        });
 
         // Verificar si el email ya existe
-        const existingUser = await query(
+        const existingEmail = await query(
             'SELECT id_usuario FROM auth.usuarios WHERE email = $1',
             [email.toLowerCase()]
         );
 
-        if (existingUser.rows.length > 0) {
+        if (existingEmail.rows.length > 0) {
             return res.status(409).json({
                 success: false,
                 message: 'Ya existe un usuario con ese email'
             });
         }
 
-        // Generar UUID y hashear contraseña
+        // Verificar si el documento ya existe
+        const existingDocument = await query(
+            'SELECT id_usuario FROM auth.usuarios WHERE documento = $1',
+            [documento]
+        );
+
+        if (existingDocument.rows.length > 0) {
+            return res.status(409).json({
+                success: false,
+                message: 'Ya existe un usuario con ese documento'
+            });
+        }
+
+        // Generar UUID y password si no se proporcionó
         const id_usuario = uuidv4();
+        const finalPassword = password_temporal || `VetPlus${Math.random().toString(36).slice(-8)}`;
         const saltRounds = 12;
-        const passwordHash = await bcrypt.hash(password, saltRounds);
+        const passwordHash = await bcrypt.hash(finalPassword, saltRounds);
 
         // Crear usuario
         const result = await query(`
             INSERT INTO auth.usuarios (
-                id_usuario, nombre, email, password_hash, rol, activo, 
-                created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            RETURNING id_usuario, nombre, email, rol, activo, created_at
-        `, [id_usuario, nombre, email.toLowerCase(), passwordHash, rol]);
+                id_usuario, nombre, apellido, email, documento, tipo_documento,
+                telefono, direccion, password_hash, rol, especialidad, numero_licencia,
+                activo, password_temporal, debe_cambiar_password, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            RETURNING id_usuario, nombre, apellido, email, documento, rol, activo, created_at
+        `, [
+            id_usuario, 
+            nombre, 
+            apellido,
+            email.toLowerCase(), 
+            documento,
+            tipo_documento,
+            telefono || null,
+            direccion || null,
+            passwordHash, 
+            rol,
+            especialidad || null,
+            numero_licencia || null,
+            activo,
+            true, // password_temporal es booleano
+            forzar_cambio_password
+        ]);
 
         const newUser = result.rows[0];
 
-        console.log(`✅ Usuario creado: ${newUser.email} con rol ${newUser.rol} por ${req.user.email}`);
+        console.log(`✅ Usuario creado: ${newUser.email} (${newUser.documento}) con rol ${newUser.rol} por ${req.user.email || req.user.documento}`);
 
         res.status(201).json({
             success: true,
             message: 'Usuario creado exitosamente',
-            data: newUser
+            data: {
+                ...newUser,
+                password_temporal: enviar_credenciales ? finalPassword : undefined
+            }
         });
 
     } catch (error) {
@@ -197,14 +257,21 @@ export const getUserById = async (req, res) => {
             SELECT 
                 id_usuario,
                 nombre,
+                apellido,
                 email,
+                telefono,
+                direccion,
+                documento,
+                tipo_documento,
                 rol,
+                especialidad,
+                numero_licencia,
                 activo,
                 ultimo_login,
-                intentos_login,
-                bloqueado_hasta,
                 created_at,
-                updated_at
+                updated_at,
+                password_temporal,
+                debe_cambiar_password
             FROM auth.usuarios 
             WHERE id_usuario = $1
         `, [id]);

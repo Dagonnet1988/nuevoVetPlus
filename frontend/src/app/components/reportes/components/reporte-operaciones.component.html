@@ -1,0 +1,416 @@
+<div class="reporte-operaciones-container">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <div class="title-section">
+        <h1 class="page-title">
+          <mat-icon class="page-icon">assessment</mat-icon>
+          Reportes Operacionales
+        </h1>
+        <p class="page-subtitle">Análisis de citas, consultas y eficiencia operativa</p>
+      </div>
+      <div class="actions-section">
+        <button mat-stroked-button 
+                (click)="volverAReportes()"
+                class="back-button">
+          <mat-icon>arrow_back</mat-icon>
+          Volver
+        </button>
+        <!-- Funcionalidad de exportación removida -->
+        <mat-chip>Exportación no disponible</mat-chip>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <mat-card class="filters-card">
+    <mat-card-content>
+      <form [formGroup]="filtrosForm" class="filters-form">
+        <div class="filter-row">
+          <mat-form-field appearance="outline" class="date-field">
+            <mat-label>Fecha Inicio</mat-label>
+            <input matInput [matDatepicker]="fechaInicioPicker" formControlName="fecha_inicio">
+            <mat-datepicker-toggle matSuffix [for]="fechaInicioPicker"></mat-datepicker-toggle>
+            <mat-datepicker #fechaInicioPicker></mat-datepicker>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="date-field">
+            <mat-label>Fecha Fin</mat-label>
+            <input matInput [matDatepicker]="fechaFinPicker" formControlName="fecha_fin">
+            <mat-datepicker-toggle matSuffix [for]="fechaFinPicker"></mat-datepicker-toggle>
+            <mat-datepicker #fechaFinPicker></mat-datepicker>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="filter-field">
+            <mat-label>Veterinario</mat-label>
+            <mat-select formControlName="veterinario_id">
+              <mat-option value="">Todos los veterinarios</mat-option>
+              <mat-option value="1">Dr. Carlos Rodríguez</mat-option>
+              <mat-option value="2">Dra. Ana García</mat-option>
+              <mat-option value="3">Dr. Luis Martínez</mat-option>
+              <mat-option value="4">Dra. María López</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="filter-field">
+            <mat-label>Tipo de Consulta</mat-label>
+            <mat-select formControlName="tipo_consulta">
+              <mat-option value="">Todos los tipos</mat-option>
+              <mat-option value="general">Consulta General</mat-option>
+              <mat-option value="vacunacion">Vacunación</mat-option>
+              <mat-option value="preventivo">Control Preventivo</mat-option>
+              <mat-option value="urgencia">Urgencias</mat-option>
+              <mat-option value="cirugia">Cirugía Menor</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <div class="filter-options">
+          <mat-checkbox formControlName="incluir_canceladas">
+            Incluir citas canceladas en el análisis
+          </mat-checkbox>
+        </div>
+      </form>
+    </mat-card-content>
+  </mat-card>
+
+  @if (loading()) {
+    <div class="loading-container">
+      <mat-spinner diameter="50"></mat-spinner>
+      <p>Analizando operaciones...</p>
+    </div>
+  } @else if (resumenOperacional()) {
+    <!-- Resumen Operacional -->
+    <div class="summary-row">
+      <mat-card class="summary-card">
+        <mat-card-content>
+          <div class="summary-content">
+            <mat-icon class="summary-icon total-color">event</mat-icon>
+            <div class="summary-info">
+              <span class="summary-number">{{ formatearNumero(resumenOperacional()!.total_citas) }}</span>
+              <span class="summary-label">Total Citas</span>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="summary-card">
+        <mat-card-content>
+          <div class="summary-content">
+            <mat-icon class="summary-icon completed-color">check_circle</mat-icon>
+            <div class="summary-info">
+              <span class="summary-number">{{ formatearNumero(resumenOperacional()!.citas_completadas) }}</span>
+              <span class="summary-label">Citas Completadas</span>
+            </div>
+            <div class="summary-change positive">
+              <mat-icon>trending_up</mat-icon>
+              <span>{{ formatearPorcentaje(resumenOperacional()!.tasa_cumplimiento) }}</span>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="summary-card">
+        <mat-card-content>
+          <div class="summary-content">
+            <mat-icon class="summary-icon cancelled-color">cancel</mat-icon>
+            <div class="summary-info">
+              <span class="summary-number">{{ formatearNumero(resumenOperacional()!.citas_canceladas) }}</span>
+              <span class="summary-label">Citas Canceladas</span>
+            </div>
+            <div class="summary-change negative">
+              <mat-icon>trending_down</mat-icon>
+              <span>{{ formatearPorcentaje(resumenOperacional()!.tasa_cancelacion) }}</span>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+
+    <!-- Métricas Operacionales -->
+    <mat-card class="metrics-card">
+      <mat-card-header>
+        <mat-card-title>
+          <mat-icon>speed</mat-icon>
+          Métricas Operacionales Clave
+        </mat-card-title>
+        <mat-card-subtitle>Indicadores de rendimiento y eficiencia operativa</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="metrics-grid">
+          @for (metrica of metricasOperacionales(); track metrica.nombre) {
+            <div class="metric-item">
+              <div class="metric-header">
+                <div class="metric-icon-value">
+                  <mat-icon [style.color]="metrica.color">{{ metrica.icono }}</mat-icon>
+                  <span class="metric-value">
+                    {{ metrica.nombre.includes('Tiempo') ? formatearNumero(metrica.valor_actual) + ' min' : formatearPorcentaje(metrica.valor_actual) }}
+                  </span>
+                </div>
+                <div class="metric-trend">
+                  <mat-icon [style.color]="getTendenciaColor(metrica.tendencia)">
+                    {{ getTendenciaIcon(metrica.tendencia) }}
+                  </mat-icon>
+                </div>
+              </div>
+              
+              <div class="metric-name">{{ metrica.nombre }}</div>
+              
+              <div class="metric-progress">
+                <mat-progress-bar 
+                  mode="determinate" 
+                  [value]="getMinValue(metrica.porcentaje_cumplimiento, 100)"
+                  [color]="metrica.porcentaje_cumplimiento >= 100 ? 'primary' : metrica.porcentaje_cumplimiento >= 75 ? 'accent' : 'warn'">
+                </mat-progress-bar>
+                <div class="progress-labels">
+                  <span class="current">{{ formatearNumero(metrica.valor_actual) }}</span>
+                  <span class="target">Meta: {{ formatearNumero(metrica.objetivo) }}</span>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Gráficos Principales -->
+    <div class="main-charts-section">
+      <!-- Evolución de Citas -->
+      <mat-card class="chart-card full-width">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>timeline</mat-icon>
+            Evolución Diaria de Citas
+          </mat-card-title>
+          <mat-card-subtitle>Tendencia de citas programadas, completadas y canceladas</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="chart-container">
+            <canvas #citasChart></canvas>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+
+    <!-- Análisis de Horarios y Tipos -->
+    <div class="secondary-charts-section">
+      <mat-card class="chart-card">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>schedule</mat-icon>
+            Horarios Más Populares
+          </mat-card-title>
+          <mat-card-subtitle>Distribución de citas por franja horaria</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="chart-container">
+            <canvas #horariosChart></canvas>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="chart-card">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>pie_chart</mat-icon>
+            Tipos de Consulta
+          </mat-card-title>
+          <mat-card-subtitle>Distribución por tipo de consulta realizada</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="chart-container">
+            <canvas #tiposConsultaChart></canvas>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+
+    <!-- Rendimiento Operacional -->
+    <mat-card class="chart-card full-width">
+      <mat-card-header>
+        <mat-card-title>
+          <mat-icon>analytics</mat-icon>
+          Rendimiento Operacional Diario
+        </mat-card-title>
+        <mat-card-subtitle>Tiempo promedio de consulta vs ingresos diarios</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="chart-container">
+          <canvas #rendimientoChart></canvas>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Rendimiento por Veterinario -->
+    <mat-card class="veterinarians-card">
+      <mat-card-header>
+        <mat-card-title>
+          <mat-icon>medical_services</mat-icon>
+          Rendimiento por Veterinario
+        </mat-card-title>
+        <mat-card-subtitle>Análisis comparativo del desempeño del equipo veterinario</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="table-container">
+          <table mat-table [dataSource]="reporteData()?.citas_por_veterinario || []" class="veterinarians-table">
+            <ng-container matColumnDef="veterinario">
+              <th mat-header-cell *matHeaderCellDef>Veterinario</th>
+              <td mat-cell *matCellDef="let element">
+                <div class="veterinarian-info">
+                  <mat-icon class="vet-icon">person</mat-icon>
+                  <span class="vet-name">{{ element.veterinario_nombre }}</span>
+                </div>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="citas">
+              <th mat-header-cell *matHeaderCellDef>Total Citas</th>
+              <td mat-cell *matCellDef="let element">
+                <strong>{{ formatearNumero(element.total_citas) }}</strong>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="completadas">
+              <th mat-header-cell *matHeaderCellDef>Completadas</th>
+              <td mat-cell *matCellDef="let element">
+                <span class="completed-number">{{ formatearNumero(element.completadas) }}</span>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="canceladas">
+              <th mat-header-cell *matHeaderCellDef>Canceladas</th>
+              <td mat-cell *matCellDef="let element">
+                <span class="cancelled-number">{{ formatearNumero(element.canceladas) }}</span>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="duracion">
+              <th mat-header-cell *matHeaderCellDef>Duración Promedio</th>
+              <td mat-cell *matCellDef="let element">
+                <span class="duration-value">{{ element.duracion_promedio }} min</span>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="eficiencia">
+              <th mat-header-cell *matHeaderCellDef>Eficiencia</th>
+              <td mat-cell *matCellDef="let element">
+                <div class="efficiency-cell">
+                  <span class="efficiency-percentage" 
+                        [style.color]="getEficienciaColor((element.completadas / element.total_citas) * 100)">
+                    {{ formatearPorcentaje((element.completadas / element.total_citas) * 100) }}
+                  </span>
+                  <mat-progress-bar 
+                    mode="determinate"
+                    [value]="(element.completadas / element.total_citas) * 100"
+                    class="efficiency-bar">
+                  </mat-progress-bar>
+                </div>
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="displayedColumnsVeterinarios"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumnsVeterinarios;" 
+                class="veterinarian-row"></tr>
+          </table>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Análisis de Tipos de Consulta -->
+    <mat-card class="consultation-types-card">
+      <mat-card-header>
+        <mat-card-title>
+          <mat-icon>healing</mat-icon>
+          Análisis Detallado por Tipo de Consulta
+        </mat-card-title>
+        <mat-card-subtitle>Frecuencia, duración y rendimiento por tipo de consulta</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="consultation-types-grid">
+          @for (tipo of reporteData()?.tipos_consulta; track tipo.tipo) {
+            <div class="consultation-type-item">
+              <div class="type-header">
+                <h4 class="type-name">{{ tipo.tipo }}</h4>
+                <mat-chip class="type-percentage">{{ formatearPorcentaje(tipo.porcentaje) }}</mat-chip>
+              </div>
+              
+              <div class="type-stats">
+                <div class="stat-item">
+                  <mat-icon class="stat-icon">event</mat-icon>
+                  <div class="stat-content">
+                    <span class="stat-value">{{ formatearNumero(tipo.cantidad) }}</span>
+                    <span class="stat-label">Consultas</span>
+                  </div>
+                </div>
+                
+                <div class="stat-item">
+                  <mat-icon class="stat-icon">schedule</mat-icon>
+                  <div class="stat-content">
+                    <span class="stat-value">{{ tipo.duracion_promedio }}</span>
+                    <span class="stat-label">min promedio</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="type-progress">
+                <mat-progress-bar 
+                  mode="determinate" 
+                  [value]="tipo.porcentaje"
+                  class="type-bar">
+                </mat-progress-bar>
+              </div>
+            </div>
+          }
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Insights y Recomendaciones -->
+    <mat-card class="insights-card">
+      <mat-card-header>
+        <mat-card-title>
+          <mat-icon>lightbulb</mat-icon>
+          Insights y Recomendaciones Operacionales
+        </mat-card-title>
+        <mat-card-subtitle>Análisis automático y sugerencias de mejora</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="insights-grid">
+          <div class="insight-item">
+            <mat-icon class="insight-icon positive">schedule</mat-icon>
+            <div class="insight-content">
+              <h4>Horarios de Mayor Demanda</h4>
+              <p>Los horarios de 15:00 a 17:00 concentran el 27.8% de las citas. Considera ajustar la disponibilidad de personal durante estas horas pico.</p>
+            </div>
+          </div>
+          
+          <mat-divider></mat-divider>
+          
+          <div class="insight-item">
+            <mat-icon class="insight-icon info">check_circle</mat-icon>
+            <div class="insight-content">
+              <h4>Tasa de Cumplimiento</h4>
+              <p>La tasa de cumplimiento actual del {{ formatearPorcentaje(resumenOperacional()!.tasa_cumplimiento) }} está cerca del objetivo. Implementar recordatorios automáticos podría mejorarla.</p>
+            </div>
+          </div>
+          
+          <mat-divider></mat-divider>
+          
+          <div class="insight-item">
+            <mat-icon class="insight-icon warning">trending_up</mat-icon>
+            <div class="insight-content">
+              <h4>Optimización de Consultas</h4>
+              <p>Las consultas generales representan el 34% del total. Estandarizar procesos podría reducir el tiempo promedio y aumentar la eficiencia.</p>
+            </div>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  } @else {
+    <div class="no-data">
+      <mat-icon>assessment</mat-icon>
+      <h3>No hay datos disponibles</h3>
+      <p>No se encontraron datos operacionales para el período seleccionado</p>
+    </div>
+  }
+</div>
