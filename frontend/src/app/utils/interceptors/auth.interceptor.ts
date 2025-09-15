@@ -71,7 +71,12 @@ export class AuthInterceptor implements HttpInterceptor {
         if (error.status === 403) {
           // Sin permisos
           console.warn('Acceso denegado - Sin permisos suficientes');
-          this.router.navigate(['/dashboard']);
+          
+          // No redirigir automáticamente si es una request de sincronización
+          if (!req.url.includes('sync-google') && !req.url.includes('sync-all')) {
+            this.router.navigate(['/dashboard']);
+          }
+          
           return throwError(() => error);
         }
 

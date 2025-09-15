@@ -90,7 +90,7 @@ router.get('/callback', async (req, res) => {
             // Actualizar configuración con los tokens
             const { query } = await import('../config/database.js');
             const updateResult = await query(`
-                UPDATE auth.google_calendar_config 
+                UPDATE vetplus_auth.google_calendar_config 
                 SET 
                     refresh_token = $1,
                     access_token = $2,

@@ -283,7 +283,7 @@ class ProductController {
           p.*,
           u.nombre as created_by_name
         FROM financial.productos p
-        LEFT JOIN auth.usuarios u ON p.created_by = u.id_usuario
+        LEFT JOIN vetplus_auth.usuarios u ON p.created_by = u.id_usuario
         WHERE p.id_producto = $1
       `, [id]);
 

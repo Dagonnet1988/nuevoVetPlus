@@ -25,6 +25,7 @@ import { Router } from '@angular/router';
 
 import { ConsultasService, ConsultaClinica, ConsultaFilter } from '../../services/consultas.service';
 import { PacientesService } from '../../services/pacientes.service';
+import { CitasService } from '../../services/citas.service';
 
 @Component({
   selector: 'app-historia-clinica',
@@ -75,7 +76,7 @@ export class HistoriaClinicaComponent implements OnInit {
   // Configuración de tabla
   displayedColumns = [
     'fecha_consulta',
-    'codigo_consulta', 
+    'codigo_consulta',
     'mascota',
     'veterinario',
     'motivo',
@@ -86,7 +87,8 @@ export class HistoriaClinicaComponent implements OnInit {
 
   // Estados disponibles
   estadosConsulta = [
-    { value: 'En progreso', label: 'En Progreso', color: '#ff9800' },
+    { value: 'Programada', label: 'Programada', color: '#2196f3' },
+    { value: 'En Curso', label: 'En Curso', color: '#ff9800' },
     { value: 'Completada', label: 'Completada', color: '#4caf50' },
     { value: 'Cancelada', label: 'Cancelada', color: '#f44336' }
   ];
@@ -95,6 +97,7 @@ export class HistoriaClinicaComponent implements OnInit {
     private fb: FormBuilder,
     private consultasService: ConsultasService,
     private pacientesService: PacientesService,
+    private citasService: CitasService,
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
     private router: Router
@@ -118,29 +121,36 @@ export class HistoriaClinicaComponent implements OnInit {
   }
 
   private loadInitialData(): void {
-    this.loadConsultas();
-    this.loadPacientes();
-    this.loadVeterinarios();
+    this.loadVeterinarios(); // Solo cargar veterinarios
+    this.loadConsultas(); // Los pacientes se extraerán de las consultas
   }
 
   private loadConsultas(): void {
     this.loading.set(true);
-    
+
     const filters: ConsultaFilter = {
       mascota: this.filterForm.value.mascota || undefined,
       veterinario: this.filterForm.value.veterinario || undefined,
       estado: this.filterForm.value.estado || undefined,
-      fecha_inicio: this.filterForm.value.fecha_inicio || undefined,
-      fecha_fin: this.filterForm.value.fecha_fin || undefined,
+      fecha_inicio: this.filterForm.value.fecha_inicio ?
+        new Date(this.filterForm.value.fecha_inicio).toISOString().split('T')[0] : undefined,
+      fecha_fin: this.filterForm.value.fecha_fin ?
+        new Date(this.filterForm.value.fecha_fin).toISOString().split('T')[0] : undefined,
       search: this.filterForm.value.search || undefined
     };
+
+    console.log('🔍 Filtros enviados al backend:', filters);
 
     this.consultasService.getConsultas(1, 50, filters).subscribe({
       next: (response) => {
         const data = response?.data;
         const consultasArray = Array.isArray(data) ? data : [];
         this.consultas.set(consultasArray);
-        this.totalConsultas.set(response?.total || 0);
+        this.totalConsultas.set(response?.pagination?.total || 0);
+
+        // Extraer pacientes únicos de las consultas
+        this.extractPacientesFromConsultas(consultasArray);
+
         this.loading.set(false);
       },
       error: (error) => {
@@ -152,12 +162,52 @@ export class HistoriaClinicaComponent implements OnInit {
     });
   }
 
+  private extractPacientesFromConsultas(consultas: any[]): void {
+    const pacientesMap = new Map();
+
+    consultas.forEach(consulta => {
+      if (consulta.mascota) {
+        const mascota = consulta.mascota;
+        if (!pacientesMap.has(mascota.id_mascota)) {
+          pacientesMap.set(mascota.id_mascota, {
+            id_mascota: mascota.id_mascota,
+            nombre: mascota.nombre,
+            especie: mascota.especie,
+            raza: mascota.raza,
+            cliente: consulta.cliente
+          });
+        }
+      }
+    });
+
+    const pacientesUnicos = Array.from(pacientesMap.values());
+    console.log('🐕 Pacientes extraídos de consultas:', pacientesUnicos);
+    this.pacientes.set(pacientesUnicos);
+  }
+
   private loadPacientes(): void {
     this.pacientesService.getClientes(1, 1000).subscribe({
       next: (response) => {
+        console.log('🐕 Respuesta de pacientes:', response);
         const data = response?.data;
         if (Array.isArray(data)) {
-          this.pacientes.set(data);
+          // Extraer todas las mascotas de todos los clientes
+          const mascotas: any[] = [];
+          data.forEach((cliente: any) => {
+            if (cliente.mascotas && Array.isArray(cliente.mascotas)) {
+              cliente.mascotas.forEach((mascota: any) => {
+                mascotas.push({
+                  ...mascota,
+                  cliente: {
+                    nombre: cliente.nombre,
+                    telefono: cliente.telefono
+                  }
+                });
+              });
+            }
+          });
+          console.log('🐕 Mascotas extraídas:', mascotas);
+          this.pacientes.set(mascotas);
         } else {
           this.pacientes.set([]);
         }
@@ -170,13 +220,18 @@ export class HistoriaClinicaComponent implements OnInit {
   }
 
   private loadVeterinarios(): void {
-    // Usando el servicio de citas que ya tiene el endpoint de veterinarios
-    this.consultasService.getConsultas(1, 1).subscribe({
-      next: () => {
-        // Los veterinarios se cargarán cuando tengamos el endpoint específico
-        this.veterinarios.set([]);
+    this.citasService.getVeterinarios().subscribe({
+      next: (response) => {
+        console.log('👩‍⚕️ Respuesta de veterinarios:', response);
+        const data = response?.data;
+        if (Array.isArray(data)) {
+          this.veterinarios.set(data);
+        } else {
+          this.veterinarios.set([]);
+        }
       },
-      error: () => {
+      error: (error) => {
+        console.error('Error cargando veterinarios:', error);
         this.veterinarios.set([]);
       }
     });
@@ -262,7 +317,12 @@ export class HistoriaClinicaComponent implements OnInit {
   }
 
   get consultasEnProgreso(): number {
-    return this.consultas().filter(c => c.estado === 'En progreso').length;
+    return this.consultas().filter(c => c.estado === 'En Curso').length;
+  }
+
+  get pacientesConHistoria(): number {
+    const mascotasIds = new Set(this.consultas().map(c => c.id_mascota));
+    return mascotasIds.size;
   }
 
   // Utilidades para la vista

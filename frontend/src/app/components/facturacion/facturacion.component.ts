@@ -20,11 +20,11 @@ import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatDividerModule } from '@angular/material/divider';
 import { Router } from '@angular/router';
 
-import { 
-  FacturacionService, 
-  Factura, 
-  Cotizacion, 
-  FacturaFilter, 
+import {
+  FacturacionService,
+  Factura,
+  Cotizacion,
+  FacturaFilter,
   ResumenFacturacion,
   Caja
 } from '../../services/facturacion.service';
@@ -66,14 +66,14 @@ import {
             <p class="page-subtitle">Gestión de facturas, cotizaciones y control de cajas</p>
           </div>
           <div class="actions-section">
-            <button mat-raised-button 
-                    color="primary" 
+            <button mat-raised-button
+                    color="primary"
                     (click)="nuevaFactura()"
                     class="create-button">
               <mat-icon>add</mat-icon>
               Nueva Factura
             </button>
-            <button mat-stroked-button 
+            <button mat-stroked-button
                     (click)="nuevaCotizacion()"
                     class="quote-button">
               <mat-icon>description</mat-icon>
@@ -137,8 +137,8 @@ import {
       <!-- Selector de vista -->
       <mat-card class="view-selector-card">
         <mat-card-content>
-          <mat-button-toggle-group 
-            [value]="currentView()" 
+          <mat-button-toggle-group
+            [value]="currentView()"
             (change)="changeView($event.value)"
             class="view-toggle">
             <mat-button-toggle value="facturas">
@@ -177,6 +177,7 @@ import {
                     <mat-option value="Tarjeta">Tarjeta</mat-option>
                     <mat-option value="Transferencia">Transferencia</mat-option>
                     <mat-option value="Cheque">Cheque</mat-option>
+                    <mat-option value="Crédito">Crédito</mat-option>
                   </mat-select>
                 </mat-form-field>
 
@@ -208,7 +209,7 @@ import {
                 </mat-select>
               </mat-form-field>
 
-              <button mat-stroked-button 
+              <button mat-stroked-button
                       type="button"
                       (click)="clearFilters()"
                       class="clear-filters-btn">
@@ -257,7 +258,7 @@ import {
               } @else {
                 <div class="table-container">
                   <table mat-table [dataSource]="facturas()" matSort class="facturas-table">
-                    
+
                     <!-- Columna Código -->
                     <ng-container matColumnDef="codigo">
                       <th mat-header-cell *matHeaderCellDef mat-sort-header>Código</th>
@@ -346,7 +347,7 @@ import {
                             Enviar por WhatsApp
                           </button>
                           <mat-divider></mat-divider>
-                          <button mat-menu-item (click)="$event.stopPropagation(); cancelarFactura(factura)" 
+                          <button mat-menu-item (click)="$event.stopPropagation(); cancelarFactura(factura)"
                                   [disabled]="factura.estado === 'Cancelada'"
                                   class="delete-item">
                             <mat-icon>cancel</mat-icon>
@@ -357,8 +358,8 @@ import {
                     </ng-container>
 
                     <tr mat-header-row *matHeaderRowDef="displayedColumnsFacturas"></tr>
-                    <tr mat-row *matRowDef="let row; columns: displayedColumnsFacturas;" 
-                        (click)="verFactura(row)" 
+                    <tr mat-row *matRowDef="let row; columns: displayedColumnsFacturas;"
+                        (click)="verFactura(row)"
                         class="clickable-row"></tr>
                   </table>
 
@@ -503,21 +504,21 @@ export class FacturacionComponent implements OnInit {
 
   private loadFacturas(): void {
     this.loading.set(true);
-    
+
     const filters: FacturaFilter = {};
-    
+
     if (this.filterForm.value.search) {
       filters.search = this.filterForm.value.search;
     }
-    
+
     if (this.filterForm.value.metodo_pago) {
       filters.metodo_pago = this.filterForm.value.metodo_pago;
     }
-    
+
     if (this.filterForm.value.estado) {
       filters.estado = this.filterForm.value.estado;
     }
-    
+
     if (this.filterForm.value.caja) {
       filters.caja = this.filterForm.value.caja;
     }
@@ -532,8 +533,8 @@ export class FacturacionComponent implements OnInit {
 
     this.facturacionService.getFacturas(1, 100, filters).subscribe({
       next: (response) => {
-        const data = response?.data;
-        const facturasArray = Array.isArray(data?.facturas) ? data.facturas : [];
+        // El servicio ya devuelve response.data directamente
+        const facturasArray = Array.isArray(response) ? response : [];
         this.facturas.set(facturasArray);
         this.loading.set(false);
       },

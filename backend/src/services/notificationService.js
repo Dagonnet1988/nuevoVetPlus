@@ -73,7 +73,7 @@ class NotificationService {
                 FROM clinical.calendario_citas c
                 JOIN clinical.mascotas m ON c.id_mascota = m.id_mascota
                 JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
-                JOIN auth.usuarios v ON c.id_veterinario = v.id_usuario
+                JOIN vetplus_auth.usuarios v ON c.id_veterinario = v.id_usuario
                 WHERE 
                     DATE(c.fecha_inicio) = CURRENT_DATE + INTERVAL '1 day'
                     AND c.estado IN ('pendiente', 'confirmada')
@@ -226,7 +226,7 @@ Por favor confirma tu asistencia respondiendo a este mensaje.
                 FROM clinical.consultas_clinicas cc
                 JOIN clinical.mascotas m ON cc.id_mascota = m.id_mascota
                 JOIN clinical.clientes c ON m.id_cliente = c.id_cliente
-                JOIN auth.usuarios v ON cc.id_veterinario = v.id_usuario
+                JOIN vetplus_auth.usuarios v ON cc.id_veterinario = v.id_usuario
                 WHERE 
                     cc.estado = 'completada'
                     AND cc.medicamentos IS NOT NULL

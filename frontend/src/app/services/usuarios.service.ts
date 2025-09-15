@@ -17,7 +17,7 @@ export interface Usuario {
   direccion?: string;
   documento: string;
   tipo_documento: 'CC' | 'CE' | 'TI' | 'PP';
-  rol: 'admin' | 'vet' | 'aux';
+  rol: 'admin' | 'vet' | 'aux_admin' | 'aux_vet';
   especialidad?: string;
   numero_licencia?: string;
   activo: boolean;
@@ -62,7 +62,7 @@ export interface CreateUsuarioRequest {
   direccion?: string;
   documento: string;
   tipo_documento: 'CC' | 'CE' | 'TI' | 'PP';
-  rol: 'admin' | 'vet' | 'aux';
+  rol: 'admin' | 'vet' | 'aux_admin' | 'aux_vet';
   especialidad?: string;
   numero_licencia?: string;
   password_temporal?: string;
@@ -77,7 +77,7 @@ export interface UpdateUsuarioRequest {
   direccion?: string;
   documento?: string;
   tipo_documento?: 'CC' | 'CE' | 'TI' | 'PP';
-  rol?: 'admin' | 'vet' | 'aux';
+  rol?: 'admin' | 'vet' | 'aux_admin' | 'aux_vet';
   especialidad?: string;
   numero_licencia?: string;
   activo?: boolean;
@@ -100,7 +100,7 @@ export interface ResetPasswordRequest {
 // ===============================
 
 export interface Rol {
-  codigo: 'admin' | 'vet' | 'aux';
+  codigo: 'admin' | 'vet' | 'aux_admin' | 'aux_vet';
   nombre: string;
   descripcion: string;
   permisos: Permiso[];
@@ -122,7 +122,7 @@ export interface AccionPermiso {
 
 export interface AsignarRolRequest {
   id_usuario: string;
-  rol: 'admin' | 'vet' | 'aux';
+  rol: 'admin' | 'vet' | 'aux_admin' | 'aux_vet';
   motivo?: string;
 }
 
@@ -469,7 +469,8 @@ export class UsuariosService {
             distribución_roles: [
               { rol: 'admin', cantidad: stats.administradores || 0, porcentaje: this.calcularPorcentaje(stats.administradores, stats.total_usuarios) },
               { rol: 'vet', cantidad: stats.veterinarios || 0, porcentaje: this.calcularPorcentaje(stats.veterinarios, stats.total_usuarios) },
-              { rol: 'aux', cantidad: stats.auxiliares || 0, porcentaje: this.calcularPorcentaje(stats.auxiliares, stats.total_usuarios) }
+              { rol: 'aux_admin', cantidad: stats.aux_admin || 0, porcentaje: this.calcularPorcentaje(stats.aux_admin, stats.total_usuarios) },
+              { rol: 'aux_vet', cantidad: stats.aux_vet || 0, porcentaje: this.calcularPorcentaje(stats.aux_vet, stats.total_usuarios) }
             ],
             nuevos_este_mes: 0, // No disponible en backend
             sesiones_activas: stats.usuarios_activos_semana || 0
@@ -554,7 +555,9 @@ export class UsuariosService {
     const roles = {
       admin: 'Administrador',
       vet: 'Veterinario',
-      aux: 'Auxiliar'
+      aux_admin: 'Auxiliar Administrativo',
+      aux_vet: 'Auxiliar Veterinario',
+      aux: 'Auxiliar' // For backward compatibility
     };
     return roles[rol as keyof typeof roles] || rol;
   }
@@ -572,7 +575,9 @@ export class UsuariosService {
     const colores = {
       admin: '#f44336',
       vet: '#2196f3',
-      aux: '#4caf50'
+      aux_admin: '#4caf50',
+      aux_vet: '#ff9800',
+      aux: '#4caf50' // For backward compatibility
     };
     return colores[rol as keyof typeof colores] || '#666';
   }
@@ -581,7 +586,9 @@ export class UsuariosService {
     const iconos = {
       admin: 'admin_panel_settings',
       vet: 'medical_services',
-      aux: 'support_agent'
+      aux_admin: 'support_agent',
+      aux_vet: 'health_and_safety',
+      aux: 'support_agent' // For backward compatibility
     };
     return iconos[rol as keyof typeof iconos] || 'person';
   }

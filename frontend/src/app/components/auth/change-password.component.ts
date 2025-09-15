@@ -60,9 +60,9 @@ export class ChangePasswordComponent {
   onChangePassword() {
     if (this.passwordForm.valid) {
       const passwordData: PasswordChangeRequest = {
-        current_password: this.passwordForm.value.currentPassword,
-        new_password: this.passwordForm.value.newPassword,
-        confirm_password: this.passwordForm.value.confirmPassword
+        currentPassword: this.passwordForm.value.currentPassword,
+        newPassword: this.passwordForm.value.newPassword,
+        confirmPassword: this.passwordForm.value.confirmPassword
       };
 
       this.authService.changePassword(passwordData).subscribe({

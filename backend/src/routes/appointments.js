@@ -14,7 +14,9 @@ import {
     syncAllPendingAppointments,
     getVeterinarianAvailability,
     suggestAvailableSlots,
-    getAppointmentStats
+    getAppointmentStats,
+    syncAppointmentWithCalendar,
+    getAppointmentConsultation
 } from '../controllers/appointmentController.js';
 
 import {
@@ -40,7 +42,7 @@ router.use(authenticateToken);
  */
 router.post(
     '/',
-    authorize(['admin', 'vet']),
+    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
     validateCreateAppointment,
     validateRequest,
     createAppointment
@@ -53,7 +55,7 @@ router.post(
  */
 router.get(
     '/',
-    authorize(['admin', 'vet', 'aux']),
+    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
     validateGetAppointments,
     validateRequest,
     getAppointments
@@ -66,7 +68,7 @@ router.get(
  */
 router.get(
     '/calendar',
-    authorize(['admin', 'vet', 'aux']),
+    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
     getCalendarView
 );
 
@@ -77,7 +79,7 @@ router.get(
  */
 router.get(
     '/stats',
-    authorize(['admin', 'vet', 'aux']),
+    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
     getAppointmentStats
 );
 
@@ -111,7 +113,7 @@ router.get(
  */
 router.get(
     '/pet/:id',
-    authorize(['admin', 'vet', 'aux']),
+    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
     validateUUIDParam,
     validateRequest,
     getAppointmentsByPet
@@ -124,7 +126,7 @@ router.get(
  */
 router.get(
     '/:id',
-    authorize(['admin', 'vet', 'aux']),
+    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
     validateUUIDParam,
     validateRequest,
     getAppointmentById
@@ -150,7 +152,7 @@ router.put(
  */
 router.patch(
     '/:id/status',
-    authorize(['admin', 'vet', 'aux']),
+    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
     validateUpdateAppointmentStatus,
     validateRequest,
     updateAppointmentStatus
@@ -189,7 +191,7 @@ router.post(
  */
 router.post(
     '/force-sync-google',
-    authorize(['admin']),
+    authorize(['admin', 'aux_admin', 'aux_vet']),
     syncAllPendingAppointments
 );
 
@@ -200,7 +202,7 @@ router.post(
  */
 router.post(
     '/sync-all-pending',
-    authorize(['admin']),
+    authorize(['admin', 'aux_admin', 'aux_vet']),
     syncAllPendingAppointments
 );
 
@@ -224,7 +226,7 @@ router.get(
  */
 router.get(
     '/vet/:id/suggest-slots',
-    authorize(['admin', 'vet', 'aux']),
+    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
     validateUUIDParam,
     validateRequest,
     suggestAvailableSlots
@@ -237,12 +239,12 @@ router.get(
  */
 router.get(
     '/veterinarians',
-    authorize(['admin', 'vet', 'aux']),
+    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
     async (req, res) => {
         try {
             const result = await query(`
                 SELECT 
-                    id_usuario as id,
+                    id_usuario,
                     CONCAT(nombre, ' ', apellido) as nombre,
                     email,
                     especialidad,
@@ -267,6 +269,32 @@ router.get(
             });
         }
     }
+);
+
+/**
+ * @route   POST /api/clinical/appointments/:id/sync-calendar
+ * @desc    Sincronizar manualmente el estado de una cita con Google Calendar
+ * @access  Veterinario, Admin, Auxiliar
+ */
+router.post(
+    '/:id/sync-calendar',
+    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    validateUUIDParam,
+    validateRequest,
+    syncAppointmentWithCalendar
+);
+
+/**
+ * @route   GET /api/clinical/appointments/:id/consultation
+ * @desc    Obtener la historia clínica vinculada a una cita
+ * @access  Veterinario, Admin, Auxiliar
+ */
+router.get(
+    '/:id/consultation',
+    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    validateUUIDParam,
+    validateRequest,
+    getAppointmentConsultation
 );
 
 export default router;

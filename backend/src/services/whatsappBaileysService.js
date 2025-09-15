@@ -370,7 +370,7 @@ class WhatsAppBaileysService {
                 FROM clinical.consultas_clinicas cc
                 JOIN clinical.mascotas m ON cc.id_mascota = m.id_mascota
                 JOIN clinical.clientes c ON m.id_cliente = c.id_cliente
-                JOIN auth.usuarios u ON cc.id_veterinario = u.id_usuario
+                JOIN vetplus_auth.usuarios u ON cc.id_veterinario = u.id_usuario
                 WHERE cc.id_consulta = $1
             `, [consultaId]);
 
@@ -531,7 +531,6 @@ class WhatsAppBaileysService {
 // Crear instancia singleton
 const whatsappBaileysService = new WhatsAppBaileysService();
 
-// Auto-conectar al inicializar
-whatsappBaileysService.connect().catch(console.error);
+// NO auto-conectar al inicializar - solo conectar cuando se solicite el QR
 
 export default whatsappBaileysService;

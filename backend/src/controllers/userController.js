@@ -12,15 +12,8 @@ import { v4 as uuidv4 } from 'uuid';
  */
 export const createUser = async (req, res) => {
     try {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            console.log('❌ Errores de validación:', errors.array());
-            return res.status(400).json({
-                success: false,
-                message: 'Datos de usuario inválidos',
-                errors: errors.array()
-            });
-        }
+        // Las validaciones ya fueron procesadas por validateRequest middleware
+        // No necesitamos validar aquí nuevamente
 
         const { 
             nombre, 
@@ -51,7 +44,7 @@ export const createUser = async (req, res) => {
 
         // Verificar si el email ya existe
         const existingEmail = await query(
-            'SELECT id_usuario FROM auth.usuarios WHERE email = $1',
+            'SELECT id_usuario FROM vetplus_auth.usuarios WHERE email = $1',
             [email.toLowerCase()]
         );
 
@@ -64,7 +57,7 @@ export const createUser = async (req, res) => {
 
         // Verificar si el documento ya existe
         const existingDocument = await query(
-            'SELECT id_usuario FROM auth.usuarios WHERE documento = $1',
+            'SELECT id_usuario FROM vetplus_auth.usuarios WHERE documento = $1',
             [documento]
         );
 
@@ -83,7 +76,7 @@ export const createUser = async (req, res) => {
 
         // Crear usuario
         const result = await query(`
-            INSERT INTO auth.usuarios (
+            INSERT INTO vetplus_auth.usuarios (
                 id_usuario, nombre, apellido, email, documento, tipo_documento,
                 telefono, direccion, password_hash, rol, especialidad, numero_licencia,
                 activo, password_temporal, debe_cambiar_password, created_at, updated_at
@@ -160,7 +153,7 @@ export const getUsers = async (req, res) => {
                 bloqueado_hasta,
                 created_at,
                 updated_at
-            FROM auth.usuarios
+            FROM vetplus_auth.usuarios
             WHERE 1=1
         `;
 
@@ -200,7 +193,7 @@ export const getUsers = async (req, res) => {
         const result = await query(selectSQL, values);
 
         // Contar total de registros
-        let countSQL = 'SELECT COUNT(*) FROM auth.usuarios WHERE 1=1';
+        let countSQL = 'SELECT COUNT(*) FROM vetplus_auth.usuarios WHERE 1=1';
         const countValues = [];
         let countParamCount = 0;
 
@@ -272,7 +265,7 @@ export const getUserById = async (req, res) => {
                 updated_at,
                 password_temporal,
                 debe_cambiar_password
-            FROM auth.usuarios 
+            FROM vetplus_auth.usuarios 
             WHERE id_usuario = $1
         `, [id]);
 
@@ -313,11 +306,11 @@ export const updateUser = async (req, res) => {
         }
 
         const { id } = req.params;
-        const { nombre, email, rol, activo } = req.body;
+        const { nombre, apellido, email, rol, especialidad, numero_licencia, activo, telefono, direccion, tipo_documento } = req.body;
 
         // Verificar que el usuario existe
         const existingUser = await query(
-            'SELECT id_usuario, email FROM auth.usuarios WHERE id_usuario = $1',
+            'SELECT id_usuario, email, rol FROM vetplus_auth.usuarios WHERE id_usuario = $1',
             [id]
         );
 
@@ -328,10 +321,30 @@ export const updateUser = async (req, res) => {
             });
         }
 
+        // Verificar permisos de actualización
+        const isAdmin = req.user.rol === 'admin';
+        const isSelfUpdate = req.user.id_usuario === id;
+
+        // Solo admin puede actualizar otros usuarios
+        if (!isAdmin && !isSelfUpdate) {
+            return res.status(403).json({
+                success: false,
+                message: 'No tienes permisos para actualizar este usuario'
+            });
+        }
+
+        // Solo admin puede cambiar roles y estado activo
+        if (!isAdmin && (rol !== undefined || activo !== undefined)) {
+            return res.status(403).json({
+                success: false,
+                message: 'Solo los administradores pueden cambiar roles o estado de usuarios'
+            });
+        }
+
         // Verificar si el email ya existe en otro usuario
         if (email && email.toLowerCase() !== existingUser.rows[0].email) {
             const emailExists = await query(
-                'SELECT id_usuario FROM auth.usuarios WHERE email = $1 AND id_usuario != $2',
+                'SELECT id_usuario FROM vetplus_auth.usuarios WHERE email = $1 AND id_usuario != $2',
                 [email.toLowerCase(), id]
             );
 
@@ -354,6 +367,12 @@ export const updateUser = async (req, res) => {
             updateValues.push(nombre);
         }
 
+        if (apellido) {
+            paramCount++;
+            updateFields.push(`apellido = $${paramCount}`);
+            updateValues.push(apellido);
+        }
+
         if (email) {
             paramCount++;
             updateFields.push(`email = $${paramCount}`);
@@ -366,10 +385,43 @@ export const updateUser = async (req, res) => {
             updateValues.push(rol);
         }
 
+        if (especialidad !== undefined) {
+            paramCount++;
+            updateFields.push(`especialidad = $${paramCount}`);
+            updateValues.push(especialidad);
+        }
+
+        if (numero_licencia !== undefined) {
+            paramCount++;
+            updateFields.push(`numero_licencia = $${paramCount}`);
+            updateValues.push(numero_licencia);
+        }
+
         if (activo !== undefined) {
             paramCount++;
             updateFields.push(`activo = $${paramCount}`);
             updateValues.push(activo);
+        }
+
+        // Campos adicionales que solo admin puede actualizar
+        if (isAdmin) {
+            if (telefono !== undefined) {
+                paramCount++;
+                updateFields.push(`telefono = $${paramCount}`);
+                updateValues.push(telefono);
+            }
+
+            if (direccion !== undefined) {
+                paramCount++;
+                updateFields.push(`direccion = $${paramCount}`);
+                updateValues.push(direccion);
+            }
+
+            if (tipo_documento !== undefined) {
+                paramCount++;
+                updateFields.push(`tipo_documento = $${paramCount}`);
+                updateValues.push(tipo_documento);
+            }
         }
 
         if (updateFields.length === 0) {
@@ -383,10 +435,10 @@ export const updateUser = async (req, res) => {
         updateValues.push(id);
 
         const updateQuery = `
-            UPDATE auth.usuarios 
+            UPDATE vetplus_auth.usuarios 
             SET ${updateFields.join(', ')}
             WHERE id_usuario = $${paramCount + 1}
-            RETURNING id_usuario, nombre, email, rol, activo, updated_at
+            RETURNING id_usuario, nombre, apellido, email, rol, especialidad, numero_licencia, activo, telefono, direccion, tipo_documento, updated_at
         `;
 
         const result = await query(updateQuery, updateValues);
@@ -419,7 +471,7 @@ export const deactivateUser = async (req, res) => {
 
         // Verificar que el usuario existe
         const existingUser = await query(
-            'SELECT id_usuario, email, activo FROM auth.usuarios WHERE id_usuario = $1',
+            'SELECT id_usuario, email, activo FROM vetplus_auth.usuarios WHERE id_usuario = $1',
             [id]
         );
 
@@ -449,7 +501,7 @@ export const deactivateUser = async (req, res) => {
 
         // Desactivar usuario
         await query(
-            'UPDATE auth.usuarios SET activo = false, updated_at = CURRENT_TIMESTAMP WHERE id_usuario = $1',
+            'UPDATE vetplus_auth.usuarios SET activo = false, updated_at = CURRENT_TIMESTAMP WHERE id_usuario = $1',
             [id]
         );
 
@@ -489,7 +541,7 @@ export const changeUserRole = async (req, res) => {
 
         // Verificar que el usuario existe
         const existingUser = await query(
-            'SELECT id_usuario, email, rol as rol_actual FROM auth.usuarios WHERE id_usuario = $1',
+            'SELECT id_usuario, email, rol as rol_actual FROM vetplus_auth.usuarios WHERE id_usuario = $1',
             [id]
         );
 
@@ -512,7 +564,7 @@ export const changeUserRole = async (req, res) => {
 
         // Actualizar rol
         const result = await query(`
-            UPDATE auth.usuarios 
+            UPDATE vetplus_auth.usuarios 
             SET rol = $1, updated_at = CURRENT_TIMESTAMP
             WHERE id_usuario = $2
             RETURNING id_usuario, email, rol
@@ -547,7 +599,7 @@ export const reactivateUser = async (req, res) => {
 
         // Verificar que el usuario existe
         const existingUser = await query(
-            'SELECT id_usuario, email, activo FROM auth.usuarios WHERE id_usuario = $1',
+            'SELECT id_usuario, email, activo FROM vetplus_auth.usuarios WHERE id_usuario = $1',
             [id]
         );
 
@@ -569,7 +621,7 @@ export const reactivateUser = async (req, res) => {
 
         // Reactivar usuario y limpiar bloqueos
         await query(`
-            UPDATE auth.usuarios 
+            UPDATE vetplus_auth.usuarios 
             SET activo = true, 
                 intentos_login = 0, 
                 bloqueado_hasta = NULL,
@@ -606,10 +658,12 @@ export const getUserStats = async (req, res) => {
                 COUNT(CASE WHEN activo = false THEN 1 END) as usuarios_inactivos,
                 COUNT(CASE WHEN rol = 'admin' THEN 1 END) as administradores,
                 COUNT(CASE WHEN rol = 'vet' THEN 1 END) as veterinarios,
-                COUNT(CASE WHEN rol = 'aux' THEN 1 END) as auxiliares,
+                COUNT(CASE WHEN rol IN ('aux_admin', 'aux_vet') THEN 1 END) as auxiliares,
+                COUNT(CASE WHEN rol = 'aux_admin' THEN 1 END) as aux_admin,
+                COUNT(CASE WHEN rol = 'aux_vet' THEN 1 END) as aux_vet,
                 COUNT(CASE WHEN ultimo_login >= CURRENT_DATE - INTERVAL '7 days' THEN 1 END) as usuarios_activos_semana,
                 COUNT(CASE WHEN bloqueado_hasta > CURRENT_TIMESTAMP THEN 1 END) as usuarios_bloqueados
-            FROM auth.usuarios
+            FROM vetplus_auth.usuarios
         `);
 
         const stats = result.rows[0];
@@ -624,6 +678,8 @@ export const getUserStats = async (req, res) => {
                 administradores: parseInt(stats.administradores),
                 veterinarios: parseInt(stats.veterinarios),
                 auxiliares: parseInt(stats.auxiliares),
+                aux_admin: parseInt(stats.aux_admin || 0),
+                aux_vet: parseInt(stats.aux_vet || 0),
                 usuarios_activos_semana: parseInt(stats.usuarios_activos_semana),
                 usuarios_bloqueados: parseInt(stats.usuarios_bloqueados)
             }

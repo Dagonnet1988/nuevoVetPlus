@@ -510,6 +510,32 @@ export class ConfiguracionService {
   }
 
   // ===============================
+  // ESTADO DEL SISTEMA
+  // ===============================
+
+  getSystemStatus(): Observable<any> {
+    return this.http.get<any>(`${this.API_URL}/system/status`).pipe(
+      map((response: any) => {
+        if (response.success && response.data) {
+          return response.data;
+        }
+        throw new Error('Error obteniendo estado del sistema');
+      })
+    );
+  }
+
+  getConfigSummary(): Observable<any> {
+    return this.http.get<any>(`${this.API_URL}/system/config-summary`).pipe(
+      map((response: any) => {
+        if (response.success && response.data) {
+          return response.data;
+        }
+        throw new Error('Error obteniendo resumen de configuraciones');
+      })
+    );
+  }
+
+  // ===============================
   // UTILIDADES
   // ===============================
 

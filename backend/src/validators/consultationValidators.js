@@ -86,10 +86,17 @@ export const validateCreateConsultation = [
         .withMessage('Las recomendaciones no pueden exceder 1000 caracteres'),
     
     body('proxima_cita')
-        .optional()
-        .isISO8601()
-        .toDate()
-        .custom((fecha) => {
+        .optional({ nullable: true, checkFalsy: true })
+        .custom((value) => {
+            // Si el valor es null, undefined, o vacío, permitirlo
+            if (value === null || value === undefined || value === '') {
+                return true;
+            }
+            // Si hay un valor, validar que sea una fecha ISO8601 válida y no en el pasado
+            const fecha = new Date(value);
+            if (isNaN(fecha.getTime())) {
+                throw new Error('La próxima cita debe ser una fecha válida');
+            }
             const hoy = new Date();
             hoy.setHours(0, 0, 0, 0);
             if (fecha < hoy) {
@@ -192,10 +199,17 @@ export const validateUpdateConsultation = [
         .withMessage('Las recomendaciones no pueden exceder 1000 caracteres'),
     
     body('proxima_cita')
-        .optional()
-        .isISO8601()
-        .toDate()
-        .custom((fecha) => {
+        .optional({ nullable: true, checkFalsy: true })
+        .custom((value) => {
+            // Si el valor es null, undefined, o vacío, permitirlo
+            if (value === null || value === undefined || value === '') {
+                return true;
+            }
+            // Si hay un valor, validar que sea una fecha ISO8601 válida y no en el pasado
+            const fecha = new Date(value);
+            if (isNaN(fecha.getTime())) {
+                throw new Error('La próxima cita debe ser una fecha válida');
+            }
             const hoy = new Date();
             hoy.setHours(0, 0, 0, 0);
             if (fecha < hoy) {

@@ -15,7 +15,7 @@ CREATE TABLE clinical.clientes (
     activo BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID REFERENCES auth.usuarios(id_usuario)
+    created_by UUID REFERENCES vetplus_auth.usuarios(id_usuario)
 );
 
 -- Trigger para updated_at
@@ -42,7 +42,7 @@ CREATE TABLE clinical.mascotas (
     activo BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID REFERENCES auth.usuarios(id_usuario)
+    created_by UUID REFERENCES vetplus_auth.usuarios(id_usuario)
 );
 
 -- Trigger para updated_at
@@ -55,7 +55,7 @@ CREATE TABLE clinical.consultas_clinicas (
     id_consulta UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     codigo_consulta VARCHAR(20) UNIQUE NOT NULL DEFAULT generate_unique_code('CON-'),
     id_mascota UUID NOT NULL REFERENCES clinical.mascotas(id_mascota),
-    id_veterinario UUID NOT NULL REFERENCES auth.usuarios(id_usuario),
+    id_veterinario UUID NOT NULL REFERENCES vetplus_auth.usuarios(id_usuario),
     fecha TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     motivo TEXT NOT NULL,
     anamnesis TEXT, -- Historia clínica
@@ -69,6 +69,9 @@ CREATE TABLE clinical.consultas_clinicas (
     proxima_cita DATE,
     estado VARCHAR(20) DEFAULT 'Completada' CHECK (estado IN ('Programada', 'En Curso', 'Completada', 'Cancelada')),
     costo DECIMAL(10,2),
+    formula_enviada_whatsapp BOOLEAN DEFAULT false,
+    fecha_envio_formula TIMESTAMP WITH TIME ZONE,
+    recordatorio_medicamentos_enviado BOOLEAN DEFAULT false,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -83,25 +86,30 @@ CREATE TABLE clinical.calendario_citas (
     id_cita UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     codigo_cita VARCHAR(20) UNIQUE NOT NULL DEFAULT generate_unique_code('CIT-'),
     id_mascota UUID NOT NULL REFERENCES clinical.mascotas(id_mascota),
-    id_veterinario UUID NOT NULL REFERENCES auth.usuarios(id_usuario),
+    id_veterinario UUID NOT NULL REFERENCES vetplus_auth.usuarios(id_usuario),
     fecha_inicio TIMESTAMP NOT NULL,
     fecha_fin TIMESTAMP NOT NULL,
     tipo VARCHAR(30) NOT NULL, -- Consulta, Terapia, Cirugía, Control, etc.
-    estado VARCHAR(20) DEFAULT 'Programada' CHECK (estado IN ('Programada', 'Confirmada', 'En Curso', 'Completada', 'Cancelada', 'No Asistió')),
+    estado VARCHAR(20) DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'confirmada', 'en_curso', 'completada', 'cancelada', 'no_asistio')),
     motivo TEXT,
     notas TEXT,
     recordatorio_enviado BOOLEAN DEFAULT false,
     id_consulta UUID REFERENCES clinical.consultas_clinicas(id_consulta),
-    google_event_id VARCHAR(100), -- ID del evento en Google Calendar
+    google_event_id VARCHAR(255),
+    google_sync_status VARCHAR(20) DEFAULT 'pending' CHECK (google_sync_status IN ('pending', 'synced', 'failed', 'disabled')),
+    google_sync_error TEXT,
+    last_google_sync TIMESTAMPTZ,
+    fecha_recordatorio TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID REFERENCES auth.usuarios(id_usuario)
+    created_by UUID REFERENCES vetplus_auth.usuarios(id_usuario)
 );
 
 -- Trigger para updated_at
 CREATE TRIGGER update_calendario_updated_at 
     BEFORE UPDATE ON clinical.calendario_citas 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 
 -- Tabla de vacunas y tratamientos preventivos
 CREATE TABLE clinical.vacunas_tratamientos (
@@ -115,7 +123,16 @@ CREATE TABLE clinical.vacunas_tratamientos (
     veterinario VARCHAR(100),
     notas TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID REFERENCES auth.usuarios(id_usuario)
+    created_by UUID REFERENCES vetplus_auth.usuarios(id_usuario)
+);
+
+-- Tabla de auditoría para Google Calendar
+CREATE TABLE clinical.google_calendar_audit_log (
+    id SERIAL PRIMARY KEY,
+    appointment_id UUID REFERENCES clinical.calendario_citas(id_cita),
+    action_type VARCHAR(50) NOT NULL, -- attendee_response, event_updated, event_created, event_deleted
+    details JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Comentarios en las tablas
@@ -124,6 +141,11 @@ COMMENT ON TABLE clinical.mascotas IS 'Mascotas registradas en la clínica';
 COMMENT ON TABLE clinical.consultas_clinicas IS 'Registro de consultas veterinarias';
 COMMENT ON TABLE clinical.calendario_citas IS 'Agenda de citas y terapias';
 COMMENT ON TABLE clinical.vacunas_tratamientos IS 'Historial de vacunas y tratamientos preventivos';
+COMMENT ON TABLE clinical.google_calendar_audit_log IS 'Auditoría de eventos y respuestas de Google Calendar';
+
+-- =====================================================
+-- ÍNDICES PARA OPTIMIZACIÓN
+-- =====================================================
 
 -- Índices para optimización
 CREATE INDEX idx_clientes_cedula ON clinical.clientes(cedula);
@@ -139,3 +161,6 @@ CREATE INDEX idx_citas_veterinario ON clinical.calendario_citas(id_veterinario);
 CREATE INDEX idx_citas_fecha ON clinical.calendario_citas(fecha_inicio);
 CREATE INDEX idx_citas_estado ON clinical.calendario_citas(estado);
 CREATE INDEX idx_vacunas_mascota ON clinical.vacunas_tratamientos(id_mascota);
+CREATE INDEX idx_google_audit_appointment ON clinical.google_calendar_audit_log(appointment_id);
+CREATE INDEX idx_google_audit_action ON clinical.google_calendar_audit_log(action_type);
+CREATE INDEX idx_google_audit_date ON clinical.google_calendar_audit_log(created_at);

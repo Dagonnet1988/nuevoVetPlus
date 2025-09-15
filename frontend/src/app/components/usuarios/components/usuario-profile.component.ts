@@ -195,7 +195,9 @@ export class UsuarioProfileComponent implements OnInit {
           console.log('Respuesta completa del servidor:', response);
 
           // Intentar obtener la contraseña de diferentes posibles estructuras
-          const tempPassword = response.password_temporal ||
+          const tempPassword = response.data?.tempPassword ||
+                              response.tempPassword ||
+                              response.password_temporal ||
                               response.data?.password_temporal ||
                               response.passwordTemporal ||
                               response.data?.passwordTemporal ||

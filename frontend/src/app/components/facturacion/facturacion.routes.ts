@@ -8,7 +8,7 @@ export const FACTURACION_ROUTES: Routes = [
     loadComponent: () => import('./facturacion.component').then(m => m.FacturacionComponent),
     canActivate: [AuthGuard, RoleGuard],
     data: { 
-      roles: ['admin', 'veterinario', 'auxiliar'],
+      roles: ['admin', 'vet', 'aux_admin'],
       title: 'Sistema de Facturación'
     }
   },
@@ -17,7 +17,7 @@ export const FACTURACION_ROUTES: Routes = [
     loadComponent: () => import('./components/factura-form.component').then(m => m.FacturaFormComponent),
     canActivate: [AuthGuard, RoleGuard],
     data: { 
-      roles: ['admin', 'veterinario', 'auxiliar'],
+      roles: ['admin', 'vet', 'aux_admin'],
       title: 'Nueva Factura'
     }
   },
@@ -26,7 +26,7 @@ export const FACTURACION_ROUTES: Routes = [
     loadComponent: () => import('./components/factura-form.component').then(m => m.FacturaFormComponent),
     canActivate: [AuthGuard, RoleGuard],
     data: { 
-      roles: ['admin', 'veterinario', 'auxiliar'],
+      roles: ['admin', 'vet', 'aux_admin'],
       title: 'Nueva Cotización',
       type: 'cotizacion'
     }
@@ -36,7 +36,7 @@ export const FACTURACION_ROUTES: Routes = [
     loadComponent: () => import('./components/factura-details.component').then(m => m.FacturaDetailsComponent),
     canActivate: [AuthGuard, RoleGuard],
     data: { 
-      roles: ['admin', 'veterinario', 'auxiliar'],
+      roles: ['admin', 'vet', 'aux_admin'],
       title: 'Detalles de Factura'
     }
   },
@@ -45,7 +45,7 @@ export const FACTURACION_ROUTES: Routes = [
     loadComponent: () => import('./components/factura-form.component').then(m => m.FacturaFormComponent),
     canActivate: [AuthGuard, RoleGuard],
     data: { 
-      roles: ['admin', 'veterinario', 'auxiliar'],
+      roles: ['admin', 'vet', 'aux_admin'],
       title: 'Editar Factura'
     }
   },
@@ -54,7 +54,7 @@ export const FACTURACION_ROUTES: Routes = [
     loadComponent: () => import('./components/movimientos-caja.component').then(m => m.MovimientosCajaComponent),
     canActivate: [AuthGuard, RoleGuard],
     data: { 
-      roles: ['admin', 'veterinario'],
+      roles: ['admin', 'vet'],
       title: 'Movimientos de Caja'
     }
   }

@@ -3,6 +3,14 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 
+export interface Medicamento {
+  nombre: string;
+  dosis: string;
+  frecuencia: string;
+  duracion: string;
+  indicaciones?: string;
+}
+
 export interface ConsultaClinica {
   id_consulta: string;
   codigo_consulta: string;
@@ -19,11 +27,11 @@ export interface ConsultaClinica {
   observaciones_examen?: string;
   diagnostico?: string;
   tratamiento?: string;
-  medicamentos?: string;
+  medicamentos?: string | Medicamento[]; // Puede ser string simple o array estructurado
   recomendaciones?: string;
   proxima_cita?: string;
   notas?: string;
-  estado: 'En progreso' | 'Completada' | 'Cancelada';
+  estado: 'Programada' | 'En Curso' | 'Completada' | 'Cancelada';
   costo?: number;
   enviar_recordatorio?: boolean;
   seguimiento_requerido?: boolean;
@@ -31,13 +39,16 @@ export interface ConsultaClinica {
   fecha_actualizacion?: string;
   created_at: string;
   updated_at: string;
-  
+
   // Relaciones
   mascota?: {
     id_mascota: string;
     nombre: string;
     especie: string;
     raza: string;
+    fecha_nacimiento?: string;
+    peso?: number;
+    foto?: string;
     cliente?: {
       nombre: string;
       email: string;
@@ -64,7 +75,7 @@ export interface ConsultaFormData {
   medicamentos?: string;
   recomendaciones?: string;
   proxima_cita?: string;
-  estado?: 'En progreso' | 'Completada' | 'Cancelada';
+  estado?: 'En Curso' | 'Completada' | 'Cancelada';
   costo?: number;
 }
 
@@ -106,15 +117,16 @@ export class ConsultasService {
   // ===============================
 
   getConsultas(page: number = 1, limit: number = 10, filters?: ConsultaFilter): Observable<any> {
+    const offset = (page - 1) * limit;
     let params = new HttpParams()
-      .set('page', page.toString())
+      .set('offset', offset.toString())
       .set('limit', limit.toString());
 
     if (filters) {
       if (filters.mascota) params = params.set('mascota', filters.mascota);
       if (filters.veterinario) params = params.set('veterinario', filters.veterinario);
-      if (filters.fecha_inicio) params = params.set('fecha_inicio', filters.fecha_inicio);
-      if (filters.fecha_fin) params = params.set('fecha_fin', filters.fecha_fin);
+      if (filters.fecha_inicio) params = params.set('fecha_desde', filters.fecha_inicio);
+      if (filters.fecha_fin) params = params.set('fecha_hasta', filters.fecha_fin);
       if (filters.estado) params = params.set('estado', filters.estado);
       if (filters.search) params = params.set('search', filters.search);
     }
@@ -143,6 +155,18 @@ export class ConsultasService {
   }
 
   // ===============================
+  // OPERACIONES CITA → CONSULTA
+  // ===============================
+
+  createConsultaFromCita(idCita: string): Observable<any> {
+    return this.http.post<any>(`${this.API_URL}/consultations/from-appointment/${idCita}`, {});
+  }
+
+  getConsultaByCitaId(idCita: string): Observable<any> {
+    return this.http.get<any>(`${this.API_URL}/consultations/by-appointment/${idCita}`);
+  }
+
+  // ===============================
   // CONSULTAS POR MASCOTA
   // ===============================
 
@@ -152,6 +176,14 @@ export class ConsultasService {
 
   getHistoriaClinicaMascota(idMascota: string): Observable<any> {
     return this.http.get<any>(`${this.API_URL}/consultations/pet/${idMascota}/history`);
+  }
+
+  // ===============================
+  // CONSULTAS POR CITA
+  // ===============================
+
+  getConsultaFromAppointment(citaId: string): Observable<any> {
+    return this.http.get<any>(`${this.API_URL}/appointments/${citaId}/consultation`);
   }
 
   // ===============================

@@ -46,7 +46,76 @@ export const getWhatsAppStatus = async (req, res) => {
 };
 
 /**
- * Obtener código QR para conectar WhatsApp
+ * Generar y obtener código QR para conectar WhatsApp
+ * @route POST /api/admin/whatsapp/generate-qr
+ */
+export const generateWhatsAppQR = async (req, res) => {
+    try {
+        if (req.user.rol !== 'admin') {
+            return res.status(403).json({
+                success: false,
+                message: 'Solo los administradores pueden generar el QR de WhatsApp'
+            });
+        }
+
+        // Verificar si ya está conectado
+        const status = whatsappService.getConnectionStatus();
+        if (status.isConnected) {
+            return res.status(400).json({
+                success: false,
+                message: 'WhatsApp ya está conectado. No es necesario generar un nuevo QR.'
+            });
+        }
+
+        // Si ya está conectando, no iniciar una nueva conexión
+        if (status.isConnecting) {
+            const qrDataURL = await whatsappService.getQRCode();
+            if (qrDataURL) {
+                return res.json({
+                    success: true,
+                    data: {
+                        qr_code: qrDataURL,
+                        message: 'Escanea este código QR con WhatsApp Web'
+                    }
+                });
+            }
+        }
+
+        // Iniciar conexión para generar QR
+        await whatsappService.connect();
+
+        // Esperar un momento para que se genere el QR
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        const qrDataURL = await whatsappService.getQRCode();
+        
+        if (!qrDataURL) {
+            return res.status(404).json({
+                success: false,
+                message: 'No se pudo generar el código QR. Intenta nuevamente.'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: {
+                qr_code: qrDataURL,
+                message: 'Escanea este código QR con WhatsApp Web'
+            }
+        });
+
+    } catch (error) {
+        console.error('Error generando QR de WhatsApp:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+/**
+ * Obtener código QR para conectar WhatsApp (sin generar nuevo)
  * @route GET /api/admin/whatsapp/qr
  */
 export const getWhatsAppQR = async (req, res) => {
@@ -63,7 +132,7 @@ export const getWhatsAppQR = async (req, res) => {
         if (!qrDataURL) {
             return res.status(404).json({
                 success: false,
-                message: 'No hay código QR disponible. WhatsApp podría estar ya conectado.'
+                message: 'No hay código QR disponible. Usa el endpoint /generate-qr para generar uno nuevo.'
             });
         }
 

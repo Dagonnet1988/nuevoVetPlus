@@ -115,8 +115,8 @@ export class DashboardComponent implements OnInit {
         },
         {
           title: 'Ingresos Hoy',
-          value: this.formatCurrency(850000),
-          subtitle: '12 facturas hoy',
+          value: this.formatCurrency(stats.ventas.dia),
+          subtitle: 'Ingresos de hoy',
           icon: 'payments',
           color: 'success',
           trend: { value: 8, isPositive: true },
@@ -133,9 +133,9 @@ export class DashboardComponent implements OnInit {
           category: 'finanzas'
         },
         {
-          title: 'Valor Inventario',
-          value: this.formatCurrency(15500000),
-          subtitle: `${stats.inventario.total_productos} productos`,
+          title: 'Total Productos',
+          value: stats.inventario.total_productos,
+          subtitle: `${stats.inventario.productos_bajo_stock} con stock bajo`,
           icon: 'inventory_2',
           color: 'primary',
           trend: { value: 3, isPositive: true },
@@ -145,7 +145,7 @@ export class DashboardComponent implements OnInit {
       ];
 
       // Filtrar widgets según rol
-      if (!this.authService.hasAnyRole(['admin', 'aux'])) {
+      if (!this.authService.hasAnyRole(['admin', 'aux_admin'])) {
         this.statsWidgets = this.statsWidgets.filter(widget =>
           !['Ventas del Mes', 'Stock Bajo'].includes(widget.title)
         );
@@ -160,53 +160,35 @@ export class DashboardComponent implements OnInit {
   }
 
   private loadTodayAppointments() {
-    // Mock data para citas de hoy
-    this.todayAppointments = [
-      {
-        id: '1',
-        paciente_nombre: 'Max',
-        cliente_nombre: 'Carlos Rodríguez',
-        hora: '09:00',
-        tipo: 'Consulta General',
-        estado: 'confirmada',
-        veterinario: 'Dr. García'
-      },
-      {
-        id: '2',
-        paciente_nombre: 'Luna',
-        cliente_nombre: 'María López',
-        hora: '10:30',
-        tipo: 'Vacunación',
-        estado: 'confirmada',
-        veterinario: 'Dr. Pérez'
-      },
-      {
-        id: '3',
-        paciente_nombre: 'Rocky',
-        cliente_nombre: 'Ana Martínez',
-        hora: '14:00',
-        tipo: 'Control Post-operatorio',
-        estado: 'pendiente',
-        veterinario: 'Dr. García'
-      },
-      {
-        id: '4',
-        paciente_nombre: 'Michi',
-        cliente_nombre: 'Pedro Silva',
-        hora: '15:30',
-        tipo: 'Consulta Dermatología',
-        estado: 'confirmada',
-        veterinario: 'Dr. Pérez'
-      }
-    ];
+    // Cargar próximas citas desde el backend
+    this.dashboardService.getProximasCitas(10).subscribe((citas) => {
+      this.todayAppointments = citas.map(cita => ({
+        id: cita.id,
+        paciente_nombre: cita.mascota_nombre || 'Mascota',
+        cliente_nombre: cita.cliente_nombre || 'Cliente',
+        hora: this.formatTime(cita.fecha_inicio),
+        tipo: cita.tipo_cita || 'Consulta',
+        estado: cita.estado || 'pendiente',
+        veterinario: cita.veterinario_nombre || 'Veterinario'
+      }));
+    });
+  }
+
+  private formatTime(dateTime: string): string {
+    if (!dateTime) return '--:--';
+    const date = new Date(dateTime);
+    return date.toLocaleTimeString('es-CO', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   }
 
   shouldShowChart(chartType: string): boolean {
     switch (chartType) {
       case 'ventas':
-        return this.authService.hasAnyRole(['admin', 'aux']);
+        return this.authService.hasAnyRole(['admin', 'aux_admin']);
       case 'citas':
-        return this.authService.hasAnyRole(['admin', 'vet', 'aux']);
+        return this.authService.hasAnyRole(['admin', 'vet', 'aux_admin', 'aux_vet']);
       case 'pacientes':
         return this.authService.hasAnyRole(['admin', 'vet']);
       default:

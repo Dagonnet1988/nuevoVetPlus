@@ -235,7 +235,7 @@ const options = {
                     type: 'object',
                     properties: {
                         id_factura: { type: 'string', format: 'uuid' },
-                        numero_factura: { type: 'string', example: 'F-2024-001' },
+                        codigo_factura: { type: 'string', example: 'F-2024-001' },
                         id_cliente: { type: 'string', format: 'uuid' },
                         subtotal: { type: 'number', format: 'float', example: 100000 },
                         impuestos: { type: 'number', format: 'float', example: 19000 },

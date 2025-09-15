@@ -14,8 +14,11 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatSelectModule } from '@angular/material/select';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import { ConfiguracionService, GoogleCalendarConfig, GoogleCalendarStatus, SyncStats } from '../../../services/configuracion.service';
+import { CitasService } from '../../../services/citas.service';
+import { SyncDialogComponent } from '../../citas/sync-dialog.component';
 
 @Component({
   selector: 'app-google-calendar-config',
@@ -35,7 +38,8 @@ import { ConfiguracionService, GoogleCalendarConfig, GoogleCalendarStatus, SyncS
     MatChipsModule,
     MatTooltipModule,
     MatTabsModule,
-    MatSelectModule
+    MatSelectModule,
+    MatDialogModule
   ],
   template: `
     <div class="google-calendar-container">
@@ -138,6 +142,38 @@ import { ConfiguracionService, GoogleCalendarConfig, GoogleCalendarStatus, SyncS
                     </div>
 
                     <mat-divider></mat-divider>
+
+                    <!-- Acciones de Sincronización -->
+                    @if (status().conectado || (configForm.value.cliente_id && configForm.value.cliente_secret)) {
+                      <div class="section">
+                        <h3>Acciones de Sincronización</h3>
+                        <div class="sync-actions">
+                          <button mat-raised-button color="accent" (click)="syncNow()" [disabled]="syncing()" class="sync-button">
+                            @if (syncing()) {
+                              <mat-spinner diameter="20"></mat-spinner>
+                            } @else {
+                              <mat-icon>sync</mat-icon>
+                            }
+                            Sincronizar Ahora
+                          </button>
+
+                          <button mat-raised-button color="primary" (click)="openAdvancedSyncDialog()" [disabled]="syncing()" class="sync-button">
+                            @if (syncing()) {
+                              <mat-spinner diameter="20"></mat-spinner>
+                            } @else {
+                              <mat-icon>sync_alt</mat-icon>
+                            }
+                            Sincronización Completa
+                          </button>
+                        </div>
+                        <p class="help-text">
+                          <strong>Sincronizar Ahora:</strong> Sincroniza cambios recientes<br>
+                          <strong>Sincronización Completa:</strong> Sincronización bidireccional con opciones avanzadas
+                        </p>
+                      </div>
+
+                      <mat-divider></mat-divider>
+                    }
 
                     <!-- Configuración de sincronización -->
                     <div class="section">
@@ -246,17 +282,6 @@ import { ConfiguracionService, GoogleCalendarConfig, GoogleCalendarStatus, SyncS
                       }
                       Guardar Configuración
                     </button>
-
-                    @if (status().conectado) {
-                      <button mat-button color="accent" (click)="syncNow()" [disabled]="syncing()">
-                        @if (syncing()) {
-                          <mat-spinner diameter="20"></mat-spinner>
-                        } @else {
-                          <mat-icon>sync</mat-icon>
-                        }
-                        Sincronizar Ahora
-                      </button>
-                    }
                   </div>
                 </form>
               }
@@ -463,6 +488,19 @@ import { ConfiguracionService, GoogleCalendarConfig, GoogleCalendarStatus, SyncS
       margin: 0;
     }
 
+    .sync-actions {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin: 16px 0;
+    }
+
+    .sync-button {
+      min-width: 200px;
+      height: 48px;
+      font-weight: 500;
+    }
+
     .oauth-actions {
       display: flex;
       flex-direction: column;
@@ -632,7 +670,9 @@ export class GoogleCalendarConfigComponent implements OnInit {
     private fb: FormBuilder,
     private configuracionService: ConfiguracionService,
     private snackBar: MatSnackBar,
-    private router: Router
+    private router: Router,
+    private dialog: MatDialog,
+    private citasService: CitasService
   ) {
     this.configForm = this.createForm();
   }
@@ -681,8 +721,10 @@ export class GoogleCalendarConfigComponent implements OnInit {
   }
 
   private loadStatus(): void {
+    console.log('Cargando estado de Google Calendar...');
     this.configuracionService.getGoogleCalendarStatus().subscribe({
       next: (status) => {
+        console.log('Estado cargado:', status);
         this.status.set(status);
       },
       error: (error) => {
@@ -977,6 +1019,148 @@ export class GoogleCalendarConfigComponent implements OnInit {
     this.saveConfiguration().catch(error => {
       // Error ya manejado en saveConfiguration
     });
+  }
+
+  // ===============================
+  // SINCRONIZACIÓN BIDIRECCIONAL COMPLETA
+  // ===============================
+
+  openAdvancedSyncDialog(): void {
+    const dialogRef = this.dialog.open(SyncDialogComponent, {
+      width: '500px',
+      data: {}
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        this.executeBidirectionalSync(result);
+      }
+    });
+  }
+
+  private executeBidirectionalSync(options: any): void {
+    this.syncing.set(true);
+    let completedSteps = 0;
+    const totalSteps = this.getTotalSteps(options);
+
+    console.log('🚀 Iniciando sincronización bidireccional completa:', options);
+
+    // Paso 1: Sincronizar cambios locales hacia Google (si está habilitado)
+    if (options.syncToGoogle) {
+      this.citasService.forceSyncAllPending().subscribe({
+        next: () => {
+          completedSteps++;
+          console.log(`✅ Paso 1/${totalSteps}: Cambios locales sincronizados hacia Google`);
+          this.executeNextStep(options, completedSteps, totalSteps);
+        },
+        error: (error) => {
+          this.handleSyncError('Error sincronizando cambios locales', error);
+        }
+      });
+    } else {
+      this.executeNextStep(options, completedSteps, totalSteps);
+    }
+  }
+
+  private executeNextStep(options: any, completedSteps: number, totalSteps: number): void {
+    // Paso 2: Importar desde Google (si está habilitado)
+    if (options.importFromGoogle && completedSteps === (options.syncToGoogle ? 1 : 0)) {
+      this.importFromGoogle(options, completedSteps, totalSteps);
+      return;
+    }
+
+    // Paso 3: Sincronizar cambios existentes (si está habilitado)
+    if (options.syncChanges && completedSteps === totalSteps - 1) {
+      this.syncChangesFromGoogle(completedSteps, totalSteps);
+      return;
+    }
+
+    // Si no hay más pasos, completar
+    this.completeSyncProcess(completedSteps, totalSteps);
+  }
+
+  private getTotalSteps(options: any): number {
+    let steps = 0;
+    if (options.syncToGoogle) steps++;
+    if (options.importFromGoogle) steps++;
+    if (options.syncChanges) steps++;
+    return steps;
+  }
+
+  private importFromGoogle(options: any, completedSteps: number, totalSteps: number): void {
+    const fechaInicio = options.fechaInicio || this.getStartOfMonth();
+    const fechaFin = options.fechaFin || this.getEndOfMonth();
+
+    this.citasService.importFromGoogleCalendar(fechaInicio, fechaFin, {
+      autoMatch: options.autoMatch,
+      createMissingData: options.createMissingData,
+      dryRun: options.dryRun
+    }).subscribe({
+      next: (result) => {
+        completedSteps++;
+        console.log(`✅ Paso ${completedSteps}/${totalSteps}: Importación desde Google completada:`, result);
+        this.executeNextStep(options, completedSteps, totalSteps);
+      },
+      error: (error) => {
+        this.handleSyncError('Error importando desde Google Calendar', error);
+      }
+    });
+  }
+
+  private syncChangesFromGoogle(completedSteps: number, totalSteps: number): void {
+    this.citasService.syncChangesFromGoogle().subscribe({
+      next: (result) => {
+        completedSteps++;
+        console.log(`✅ Paso ${completedSteps}/${totalSteps}: Sincronización de cambios completada:`, result);
+        this.completeSyncProcess(completedSteps, totalSteps, result);
+      },
+      error: (error) => {
+        this.handleSyncError('Error sincronizando cambios desde Google', error);
+      }
+    });
+  }
+
+  private completeSyncProcess(completedSteps: number, totalSteps: number, lastResult?: any): void {
+    this.syncing.set(false);
+
+    const processedChanges = lastResult?.data?.processed || 0;
+    const message = totalSteps > 1
+      ? `Sincronización completa: ${completedSteps}/${totalSteps} pasos ejecutados`
+      : `Sincronización completada: ${processedChanges} cambios procesados`;
+
+    this.snackBar.open(message, 'Cerrar', { duration: 4000 });
+
+    // Recargar estado y estadísticas
+    this.loadStatus();
+    this.loadStats();
+  }
+
+  private handleSyncError(message: string, error: any): void {
+    this.syncing.set(false);
+    console.error(message + ':', error);
+
+    let userMessage = message;
+    if (error.status === 404) {
+      userMessage = 'Servicio de sincronización no disponible';
+    } else if (error.status === 401) {
+      userMessage = 'No tienes permisos para sincronizar';
+    } else if (error.status === 500) {
+      userMessage = 'Error interno del servidor de sincronización';
+    } else if (error.status === 0) {
+      userMessage = 'No se puede conectar con el servidor';
+    }
+
+    this.snackBar.open(userMessage, 'Cerrar', { duration: 5000 });
+  }
+
+  private getStartOfMonth(): string {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  }
+
+  private getEndOfMonth(): string {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
   }
 
   goBack(): void {

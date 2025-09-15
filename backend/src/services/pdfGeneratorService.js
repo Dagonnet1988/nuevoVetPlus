@@ -61,11 +61,11 @@ class PDFGeneratorService {
                     c.email as cliente_email,
                     c.telefono as cliente_telefono,
                     c.direccion as cliente_direccion,
-                    c.identificacion as cliente_identificacion,
+                    c.cedula as cliente_identificacion,
                     u.nombre as vendedor_nombre
                 FROM financial.facturas_venta fv
-                JOIN clinical.clientes c ON fv.id_cliente = c.id_cliente
-                LEFT JOIN auth.usuarios u ON fv.created_by = u.id_usuario
+                LEFT JOIN clinical.clientes c ON fv.id_cliente = c.id_cliente
+                LEFT JOIN vetplus_auth.usuarios u ON fv.created_by = u.id_usuario
                 WHERE fv.id_factura = $1
             `, [facturaId]);
 
@@ -92,7 +92,7 @@ class PDFGeneratorService {
             const empresaConfig = await this.getEmpresaConfig();
 
             // Generar PDF
-            const filename = `factura-${factura.numero_factura}.pdf`;
+            const filename = `factura-${factura.codigo_factura}.pdf`;
             const filepath = path.join(this.outputDir, filename);
 
             const doc = new PDFDocument({ margin: 50 });
@@ -116,7 +116,7 @@ class PDFGeneratorService {
 
             // Columna derecha - Datos de la factura
             doc.text('DATOS DE LA FACTURA:', 350, startY, { underline: true });
-            doc.text(`Número: ${factura.numero_factura}`, 350, startY + 20);
+            doc.text(`Número: ${factura.codigo_factura}`, 350, startY + 20);
             doc.text(`Fecha: ${new Date(factura.fecha).toLocaleDateString('es-CO')}`, 350, startY + 35);
             doc.text(`Vendedor: ${factura.vendedor_nombre || 'N/A'}`, 350, startY + 50);
             doc.text(`Estado: ${factura.estado.toUpperCase()}`, 350, startY + 65);
@@ -171,7 +171,7 @@ class PDFGeneratorService {
                 FROM clinical.consultas_clinicas cc
                 JOIN clinical.mascotas m ON cc.id_mascota = m.id_mascota
                 JOIN clinical.clientes c ON m.id_cliente = c.id_cliente
-                JOIN auth.usuarios u ON cc.id_veterinario = u.id_usuario
+                JOIN vetplus_auth.usuarios u ON cc.id_veterinario = u.id_usuario
                 WHERE cc.id_consulta = $1
             `, [consultaId]);
 

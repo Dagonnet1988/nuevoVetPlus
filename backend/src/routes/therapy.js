@@ -75,4 +75,52 @@ router.get('/sessions',
   therapyController.getTherapySessions
 );
 
+/**
+ * @route   GET /api/financial/therapies/packages/:petId
+ * @desc    Verificar paquetes activos de una mascota
+ * @access  Private (admin, vet, assistant)
+ */
+router.get('/packages/:petId',
+  authenticateToken,
+  authorize(['admin', 'vet', 'assistant']),
+  therapyValidators.validatePetId,
+  therapyController.getActivePackagesByPet
+);
+
+/**
+ * @route   POST /api/financial/therapies/use
+ * @desc    Registrar uso de sesiones de terapia
+ * @access  Private (admin, vet, assistant)
+ */
+router.post('/use',
+  authenticateToken,
+  authorize(['admin', 'vet', 'assistant']),
+  therapyValidators.validateUseTherapy,
+  therapyController.useTherapySessions
+);
+
+/**
+ * @route   POST /api/financial/therapies/package
+ * @desc    Crear un nuevo paquete de terapia (comprado y activado)
+ * @access  Private (admin, vet, assistant)
+ */
+router.post('/package',
+  authenticateToken,
+  authorize(['admin', 'vet', 'assistant']),
+  therapyValidators.validateCreateTherapyPackage,
+  therapyController.activateTherapyPackage
+);
+
+/**
+ * @route   POST /api/financial/therapies/activate
+ * @desc    Activar un paquete de terapia comprado para una mascota específica
+ * @access  Private (admin, vet, assistant)
+ */
+router.post('/activate',
+  authenticateToken,
+  authorize(['admin', 'vet', 'assistant']),
+  therapyValidators.validateActivateTherapyPackage,
+  therapyController.activateTherapyPackage
+);
+
 export default router;

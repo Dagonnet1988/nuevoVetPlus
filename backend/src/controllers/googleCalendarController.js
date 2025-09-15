@@ -36,7 +36,7 @@ export const getGoogleCalendarConfig = async (req, res) => {
                     WHEN refresh_token IS NOT NULL THEN true 
                     ELSE false 
                 END as has_refresh_token
-            FROM auth.google_calendar_config 
+            FROM vetplus_auth.google_calendar_config 
             WHERE is_active = true
             ORDER BY created_at DESC 
             LIMIT 1
@@ -114,12 +114,12 @@ export const configureGoogleCalendar = async (req, res) => {
 
         console.log('🗃️ Desactivando configuración anterior...');
         // Desactivar configuración anterior si existe
-        await query('UPDATE auth.google_calendar_config SET is_active = false');
+        await query('UPDATE vetplus_auth.google_calendar_config SET is_active = false');
 
         console.log('💾 Guardando nueva configuración...');
         // Crear nueva configuración
         const insertResult = await query(`
-            INSERT INTO auth.google_calendar_config (
+            INSERT INTO vetplus_auth.google_calendar_config (
                 id_config, client_id, client_secret, redirect_uri, 
                 calendar_id, timezone, notification_email, notification_popup,
                 default_reminder_minutes, email_reminder_hours, configured_by, is_active
@@ -194,7 +194,7 @@ export const completeGoogleAuth = async (req, res) => {
 
         // Actualizar configuración con los tokens
         const updateResult = await query(`
-            UPDATE auth.google_calendar_config 
+            UPDATE vetplus_auth.google_calendar_config 
             SET 
                 refresh_token = $1,
                 access_token = $2,
@@ -284,7 +284,7 @@ export const disableGoogleCalendar = async (req, res) => {
             });
         }
 
-        await query('UPDATE auth.google_calendar_config SET is_active = false');
+        await query('UPDATE vetplus_auth.google_calendar_config SET is_active = false');
 
         res.json({
             success: true,
@@ -588,7 +588,7 @@ export const getPendingMatches = async (req, res) => {
             FROM clinical.calendario_citas c
             LEFT JOIN clinical.mascotas m ON c.id_mascota = m.id_mascota
             LEFT JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
-            LEFT JOIN auth.usuarios v ON c.id_veterinario = v.id_usuario
+            LEFT JOIN vetplus_auth.usuarios v ON c.id_veterinario = v.id_usuario
             WHERE c.google_event_id IS NOT NULL
             AND c.google_sync_status IN ('pending', 'failed')
             AND c.notas LIKE '%Importado desde Google Calendar%'

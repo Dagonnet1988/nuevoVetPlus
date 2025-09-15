@@ -80,15 +80,22 @@ export class CitasService {
       .set('vista', vista.vista)
       .set('fecha', vista.fecha);
 
+    console.log('🔍 [CALENDAR SERVICE] Vista:', vista, 'Filtros:', filters);
+
     // Agregar filtros si se proporcionan
     if (filters) {
-      if (filters.id_veterinario) params = params.set('id_veterinario', filters.id_veterinario);
+      if (filters.id_veterinario) {
+        console.log('🔍 [CALENDAR SERVICE] Agregando filtro veterinario:', filters.id_veterinario);
+        params = params.set('id_veterinario', filters.id_veterinario);
+      }
       if (filters.estado) params = params.set('estado', filters.estado);
       if (filters.tipo) params = params.set('tipo', filters.tipo);
       if (filters.fecha_inicio) params = params.set('fecha_inicio', filters.fecha_inicio);
       if (filters.fecha_fin) params = params.set('fecha_fin', filters.fecha_fin);
       if (filters.search) params = params.set('search', filters.search);
     }
+
+    console.log('🔍 [CALENDAR SERVICE] URL final:', `${this.API_URL}/appointments/calendar?${params.toString()}`);
 
     return this.http.get<any>(`${this.API_URL}/appointments/calendar`, { params });
   }
@@ -148,6 +155,32 @@ export class CitasService {
   }
 
   // ===============================
+  // SINCRONIZACIÓN BIDIRECCIONAL
+  // ===============================
+
+  importFromGoogleCalendar(fechaInicio: string, fechaFin: string, options: {
+    autoMatch?: boolean;
+    createMissingData?: boolean;
+    dryRun?: boolean;
+  } = {}): Observable<any> {
+    return this.http.post<any>(`${environment.apiUrl}/google-calendar/import`, {
+      fecha_inicio: fechaInicio,
+      fecha_fin: fechaFin,
+      auto_match: options.autoMatch ?? true,
+      create_missing_data: options.createMissingData ?? false,
+      dry_run: options.dryRun ?? false
+    });
+  }
+
+  syncChangesFromGoogle(): Observable<any> {
+    return this.http.post<any>(`${environment.apiUrl}/google-calendar/sync-changes`, {});
+  }
+
+  getSyncStatus(): Observable<any> {
+    return this.http.get<any>(`${environment.apiUrl}/google-calendar/sync-status`);
+  }
+
+  // ===============================
   // ESTADÍSTICAS
   // ===============================
 
@@ -169,16 +202,13 @@ export class CitasService {
   getVeterinarios(): Observable<any> {
     return this.http.get<any>(`${this.API_URL}/veterinarians`).pipe(
       map((response: any) => {
-        console.log('Respuesta veterinarios:', response);
         if (response && response.success && response.data) {
           return response;
         }
-        // Si no tiene la estructura esperada, devolver un objeto con data vacía
         return { success: false, data: [], message: 'No se pudieron cargar los veterinarios' };
       }),
-      // Capturar errores HTTP y devolverlos en formato esperado
       catchError((error) => {
-        console.error('Error HTTP obteniendo veterinarios:', error);
+        console.error('Error obteniendo veterinarios:', error);
         return of({ success: false, data: [], message: 'Error conectando con el servidor' });
       })
     );
@@ -188,7 +218,7 @@ export class CitasService {
   formatearFechaParaBackend(fecha: Date): string {
     // NUEVA ESTRATEGIA: Enviar fechas como hora local de Colombia (sin zona horaria)
     // El backend las interpretará directamente como Colombia
-    
+
     const year = fecha.getFullYear();
     const month = String(fecha.getMonth() + 1).padStart(2, '0');
     const day = String(fecha.getDate()).padStart(2, '0');
@@ -236,7 +266,7 @@ export class CitasService {
     const colores: { [key: string]: string } = {
       'pendiente': '#ff9800',
       'confirmada': '#2196f3',
-      'en_progreso': '#9c27b0',
+      'en_curso': '#9c27b0',
       'completada': '#4caf50',
       'cancelada': '#607d8b',
       'no_asistio': '#f44336'
@@ -343,7 +373,7 @@ export class CitasService {
 
   private convertirAISO8601(fecha: string): string {
     // NUEVA ESTRATEGIA: No agregar zona horaria, mantener como Colombia local
-    
+
     // Si ya está en formato ISO, remover zona horaria para mantener como local
     if (fecha.includes('T') && (fecha.includes('Z') || fecha.includes('+') || fecha.includes('-'))) {
       return fecha.split('T')[0] + 'T' + fecha.split('T')[1].split(/[Z\+\-]/)[0];

@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
@@ -29,6 +29,7 @@ import esLocale from '@fullcalendar/core/locales/es';
 
 import { CitasService } from '../../services/citas.service';
 import { ExportService, ExportOptions } from '../../services/export.service';
+import { AuthService } from '../../services/auth.service';
 import { ExportDialogComponent } from './export-dialog.component';
 import {
   Cita,
@@ -66,7 +67,10 @@ import {
   templateUrl: './citas.component.html',
   styleUrl: './citas.component.css'
 })
-export class CitasComponent implements OnInit {
+export class CitasComponent implements OnInit, OnDestroy {
+  // ViewChild para acceder al calendario
+  @ViewChild('calendar') calendarComponent: any;
+
   // Signals para estado reactivo
   loading = signal(false);
   syncing = signal(false);
@@ -75,7 +79,14 @@ export class CitasComponent implements OnInit {
   veterinarios = signal<any[]>([]);
   currentView = signal<string>('timeGridWeek');
 
-  // Formulario de filtros
+  // Signal para controlar si mostrar el botón de sincronización manual
+  showManualSyncButton = signal(false);
+
+  // Signal para controlar el modo de vista del calendario
+  calendarViewMode = signal<'compact' | 'expanded'>('expanded');
+
+  // Timestamp de cuando se carga la vista
+  private viewLoadTime: number = 0;  // Formulario de filtros
   filterForm: FormGroup;
 
   // Constantes
@@ -92,38 +103,57 @@ export class CitasComponent implements OnInit {
       center: 'title',
       right: 'dayGridMonth,timeGridWeek,timeGridDay'
     },
-    height: 'auto',
+    height: 'auto', // Cambiar a auto para que se ajuste automáticamente
+    contentHeight: 'auto',
+    aspectRatio: 1.35, // Ratio más amplio para mejor visualización
     editable: true,
     selectable: true,
     selectMirror: true,
-    dayMaxEvents: true,
+    dayMaxEvents: false, // Mostrar todos los eventos sin scroll
     weekends: true,
     businessHours: {
       daysOfWeek: [1, 2, 3, 4, 5, 6], // Lunes a Sábado
       startTime: '08:00',
       endTime: '18:00'
     },
-    slotMinTime: '07:00',
-    slotMaxTime: '20:00',
+    slotMinTime: '06:00', // Mostrar desde las 6 AM (día completo)
+    slotMaxTime: '22:00', // Hasta las 10 PM (día completo)
     slotDuration: '00:30:00',
-    nowIndicator: true, // Mostrar línea de "ahora"
-    now: new Date(), // Fecha/hora actual para la línea
+    slotLabelInterval: '01:00:00', // Mostrar etiquetas cada hora
+    slotLabelFormat: {
+      hour: '2-digit',
+      minute: '2-digit',
+      omitZeroMinute: false,
+      meridiem: false
+    },
+    nowIndicator: true,
+    now: new Date(),
+    scrollTime: '08:00:00', // Scroll automático a las 8 AM al cargar
+    allDaySlot: false, // Ocultar slot de "todo el día" para ahorrar espacio
+    expandRows: true, // Expandir filas para usar todo el espacio
+    stickyHeaderDates: true, // Mantener fechas fijas al hacer scroll
     validRange: {
-      start: '2020-01-01', // Permitir navegar desde 2020
-      end: '2030-12-31'   // hasta 2030
+      start: '2020-01-01',
+      end: '2030-12-31'
     },
     select: this.handleDateSelect.bind(this),
     eventClick: this.handleEventClick.bind(this),
     eventDrop: this.handleEventDrop.bind(this),
     eventResize: this.handleEventResize.bind(this),
     events: [],
-    eventContent: this.renderEventContent.bind(this)
+    eventContent: this.renderEventContent.bind(this),
+    // Configuraciones específicas para timeGrid
+    dayHeaderFormat: { weekday: 'short', day: 'numeric' },
+    slotEventOverlap: false, // Evitar solapamiento de eventos
+    eventMinHeight: 25, // Altura mínima de eventos para mejor legibilidad
+    eventShortHeight: 20
   };
 
   constructor(
     private fb: FormBuilder,
     private citasService: CitasService,
     private exportService: ExportService,
+    private authService: AuthService,
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
     private router: Router
@@ -136,6 +166,9 @@ export class CitasComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    console.log('🚪 Entrando a la vista de citas');
+    this.viewLoadTime = Date.now();
+
     // Defer initial load to next tick to avoid ExpressionChangedAfterItHasBeenCheckedError
     setTimeout(() => {
       this.loadInitialData();
@@ -145,12 +178,89 @@ export class CitasComponent implements OnInit {
 
       // Check if we need to refresh due to query param
       this.checkForRefreshParam();
+
+      // Verificar si necesitamos sincronizar automáticamente
+      this.checkAutoSync();
     });
 
     // Listen for browser navigation events to refresh calendar
     window.addEventListener('focus', () => {
       // Refresh calendar when window regains focus (user comes back from details)
       this.refreshCalendar();
+    });
+  }
+
+  private checkAutoSync(): void {
+    const SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutos en milliseconds
+    const lastSync = localStorage.getItem('citas_last_sync');
+    const lastSyncTime = lastSync ? parseInt(lastSync) : 0;
+    const now = Date.now();
+
+    // Verificar si ha pasado suficiente tiempo desde la última sincronización
+    const shouldAutoSync = (now - lastSyncTime) > SYNC_INTERVAL;
+
+    // SIEMPRE sincronizar al cargar la página por primera vez
+    this.performAutoSync();
+  }
+
+  private performAutoSync(): void {
+    this.syncing.set(true);
+
+    // Paso 1: Sincronizar cambios locales pendientes hacia Google
+    this.citasService.forceSyncAllPending().subscribe({
+      next: (result) => {
+        const processedChanges = result?.data?.processed || 0;
+
+        // Paso 2: Escuchar cambios desde Google Calendar
+        this.autoSyncFromGoogle();
+      },
+      error: (error) => {
+        console.error('Error en sincronización automática:', error);
+        this.syncing.set(false);
+        // Mostrar botón manual si falla la auto sync
+        this.showManualSyncButton.set(true);
+      }
+    });
+  }
+
+  private autoSyncFromGoogle(): void {
+    this.citasService.syncChangesFromGoogle().subscribe({
+      next: (result) => {
+        this.syncing.set(false);
+        const changesDetected = result?.data?.processed || 0;
+
+        console.log(`✅ Sincronización automática completada: ${changesDetected} cambios detectados desde Google`);
+
+        // Actualizar timestamp de última sincronización
+        localStorage.setItem('citas_last_sync', Date.now().toString());
+
+        if (changesDetected > 0) {
+          // Recargar calendario y estadísticas para mostrar cambios
+          this.loadCalendarEvents();
+          this.loadStats();
+
+          // Mostrar notificación discreta
+          this.snackBar.open(
+            `${changesDetected} cambios detectados desde Google Calendar`,
+            'Cerrar',
+            { duration: 3000 }
+          );
+        } else {
+          // Aún si no hay cambios detectados, recargar para asegurar sincronización
+          this.loadCalendarEvents();
+        }
+
+        // Mostrar botón de sincronización manual después de unos segundos
+        setTimeout(() => {
+          this.showManualSyncButton.set(true);
+        }, 2000);
+      },
+      error: (error) => {
+        console.error('Error en sincronización automática desde Google:', error);
+        this.syncing.set(false);
+        // Mostrar botón manual si falla
+        this.showManualSyncButton.set(true);
+      }
     });
   }
 
@@ -173,17 +283,18 @@ export class CitasComponent implements OnInit {
     this.citasService.getVeterinarios().subscribe({
       next: (response) => {
         const data = response?.data;
-        // Verificar que data sea un array antes de asignarlo
         if (Array.isArray(data)) {
           this.veterinarios.set(data);
+          // Configurar filtros DESPUÉS de cargar veterinarios
+          this.setupFiltersAfterDataLoad();
         } else {
-          console.warn('Respuesta de veterinarios no es un array:', data);
+          console.warn('Error cargando veterinarios:', response?.message || 'Formato de respuesta inválido');
           this.veterinarios.set([]);
         }
       },
       error: (error) => {
         console.error('Error cargando veterinarios:', error);
-        this.veterinarios.set([]); // Asegurar que siempre sea un array
+        this.veterinarios.set([]);
       }
     });
   }
@@ -204,52 +315,36 @@ export class CitasComponent implements OnInit {
       fecha_fin: endDate.toISOString().split('T')[0]
     };
 
-    console.log('📅 Cargando citas para rango amplio:', {
-      inicio: filters.fecha_inicio,
-      fin: filters.fecha_fin,
-      filtros: filters
-    });
-    
-    console.log('🔍 Parámetros exactos de la petición:', {
-      page: 1,
-      limit: 500,
-      ...filters
-    });
-
     this.citasService.getCitas(1, 500, filters).subscribe({
       next: (response) => {
-        console.log('📅 Respuesta del calendario:', response);
         const data = response?.data;
         const citasArray = Array.isArray(data) ? data : [];
-        console.log('📋 Citas recibidas:', citasArray.length);
-        
+
         const events = this.transformCitasToEvents(citasArray);
-        
-        // Actualizar eventos 
+
+        // Actualizar eventos
         this.calendarOptions = {
           ...this.calendarOptions,
           events: events
         };
-        
+
         this.citas.set(citasArray);
         this.loading.set(false);
       },
       error: (error) => {
         console.error('Error cargando eventos del calendario:', error);
-        console.error('Status:', error.status);
-        console.error('Error details:', error.error);
-        
+
         // Si es error 401, mostrar mensaje específico
         if (error.status === 401) {
-          this.snackBar.open('Por favor inicia sesión para ver las citas', 'Ir a Login', { 
-            duration: 5000 
+          this.snackBar.open('Por favor inicia sesión para ver las citas', 'Ir a Login', {
+            duration: 5000
           }).onAction().subscribe(() => {
             this.router.navigate(['/login']);
           });
         } else {
           this.snackBar.open('Error cargando calendario', 'Cerrar', { duration: 3000 });
         }
-        
+
         this.citas.set([]);
         this.loading.set(false);
       }
@@ -282,27 +377,32 @@ export class CitasComponent implements OnInit {
   }
 
   private setupFilters(): void {
+    // Escuchar cambios en los filtros
     this.filterForm.valueChanges.subscribe(() => {
       this.loadCalendarEvents();
     });
   }
 
-  private transformCitasToEvents(citas: Cita[]): EventInput[] {
+  private setupFiltersAfterDataLoad(): void {
+    // Configurar filtro automático para veterinarios DESPUÉS de cargar los datos
+    const currentUser = this.authService.currentUser();
+    if (currentUser && currentUser.rol === 'vet') {
+      // Buscar veterinario por id (que corresponde al id_usuario del currentUser)
+      const veterinarioEncontrado = this.veterinarios().find(v => v.id === currentUser.id_usuario);
+
+      if (veterinarioEncontrado) {
+        this.filterForm.patchValue({
+          id_veterinario: currentUser.id_usuario
+        });
+      }
+    }
+  }  private transformCitasToEvents(citas: Cita[]): EventInput[] {
     return citas.map(cita => {
       // Manejar tanto la estructura antigua (objetos anidados) como la nueva (campos planos)
       const mascotaNombre = cita.mascota?.nombre || cita.mascota_nombre || 'Sin nombre';
       const clienteNombre = cita.mascota?.cliente?.nombre || cita.cliente_nombre || '';
       const veterinarioNombre = cita.veterinario?.nombre || cita.veterinario_nombre || '';
 
-      // console.log('🏷️ Transformando cita:', {
-      //   id: cita.id_cita,
-      //   mascotaNombre,
-      //   clienteNombre,
-      //   veterinarioNombre,
-      //   tipo: cita.tipo,
-      //   fecha_inicio: cita.fecha_inicio,
-      //   fecha_fin: cita.fecha_fin
-      // });
 
       return {
         id: cita.id_cita,
@@ -328,25 +428,8 @@ export class CitasComponent implements OnInit {
   }
 
   private parseLocalDate(fechaStr: string): Date {
-    // USAR LA MISMA LÓGICA QUE EL FORM: conversión automática del navegador
-    // UTC 14:00Z -> 9:00 AM Colombia (automático del navegador)
-    // Para consistencia con el formulario de edición
 
-    // console.log('📅 Calendar parseLocalDate INPUT:', {
-    //   fechaStr,
-    //   includes_Z: fechaStr.includes('Z')
-    // });
-
-    // Simplemente usar la conversión automática del navegador (igual que en el form)
     const fecha = new Date(fechaStr);
-
-    // console.log('📅 Calendar parseLocalDate OUTPUT:', {
-    //   original: fechaStr,
-    //   converted: fecha,
-    //   hours: fecha.getHours(),
-    //   minutes: fecha.getMinutes(),
-    //   conversion: `${fechaStr} -> ${fecha.getHours()}:${fecha.getMinutes().toString().padStart(2, '0')}`
-    // });
 
     return fecha;
   }
@@ -444,7 +527,7 @@ export class CitasComponent implements OnInit {
     // Obtener información simplificada
     const indicadorEstado = this.obtenerIndicadorEstado(estado);
     const nombreMascota = cita.mascota_nombre || 'Mascota';
-    
+
     // Extraer solo la hora de inicio del timeText
     const horaInicio = this.extraerHoraInicio(eventInfo.timeText);
 
@@ -513,30 +596,86 @@ export class CitasComponent implements OnInit {
 
   onFilterChange(): void {
     this.loadCalendarEvents();
-  }
-
-  clearFilters(): void {
+  }  clearFilters(): void {
     this.filterForm.reset();
     this.loadCalendarEvents();
   }
 
   syncWithGoogle(): void {
     this.syncing.set(true);
+
+    console.log('🔄 Iniciando sincronización manual...');
+
+    // Paso 1: Sincronizar cambios locales pendientes hacia Google
     this.citasService.forceSyncAllPending().subscribe({
-      next: () => {
-        this.syncing.set(false);
-        this.snackBar.open('Sincronización con Google Calendar completada', 'Cerrar', { duration: 3000 });
-        this.loadCalendarEvents(); // Recargar eventos
+      next: (result) => {
+        const processedChanges = result?.data?.processed || 0;
+        console.log(`✅ Sincronización manual - Paso 1: ${processedChanges} cambios locales enviados a Google`);
+
+        // Paso 2: Escuchar cambios desde Google Calendar (listener manual)
+        this.checkGoogleCalendarChanges();
       },
       error: (error) => {
-        this.syncing.set(false);
-        console.error('Error sincronizando:', error);
-        this.snackBar.open('Error en la sincronización', 'Cerrar', { duration: 3000 });
+        this.handleSyncError('Error sincronizando cambios locales', error);
       }
     });
   }
 
-  openExportDialog(): void {
+  private checkGoogleCalendarChanges(): void {
+    console.log('👂 Escuchando cambios desde Google Calendar...');
+
+    // Detectar cambios en los últimos 10 minutos
+    this.citasService.syncChangesFromGoogle().subscribe({
+      next: (result) => {
+        this.syncing.set(false);
+        const changesDetected = result?.data?.processed || 0;
+
+        console.log(`✅ Sincronización manual completada: ${changesDetected} cambios detectados desde Google`);
+
+        // Actualizar timestamp de última sincronización
+        localStorage.setItem('citas_last_sync', Date.now().toString());
+
+        if (changesDetected > 0) {
+          this.snackBar.open(
+            `Sincronización completada: ${changesDetected} cambios detectados desde Google Calendar`,
+            'Cerrar',
+            { duration: 5000 }
+          );
+        } else {
+          this.snackBar.open(
+            'Sincronización completada: No hay cambios nuevos desde Google Calendar',
+            'Cerrar',
+            { duration: 3000 }
+          );
+        }
+
+        // Siempre recargar calendario y estadísticas después de sincronizar
+        this.loadCalendarEvents();
+        this.loadStats();
+      },
+      error: (error) => {
+        this.handleSyncError('Error detectando cambios desde Google Calendar', error);
+      }
+    });
+  }
+
+  private handleSyncError(message: string, error: any): void {
+    this.syncing.set(false);
+    console.error(message + ':', error);
+
+    let userMessage = message;
+    if (error.status === 404) {
+      userMessage = 'Servicio de sincronización no disponible';
+    } else if (error.status === 401) {
+      userMessage = 'No tienes permisos para sincronizar';
+    } else if (error.status === 500) {
+      userMessage = 'Error interno del servidor';
+    } else if (error.status === 0) {
+      userMessage = 'No se puede conectar con el servidor';
+    }
+
+    this.snackBar.open(userMessage, 'Cerrar', { duration: 5000 });
+  }  openExportDialog(): void {
     const dialogRef = this.dialog.open(ExportDialogComponent, {
       width: '600px',
       data: {
@@ -563,19 +702,56 @@ export class CitasComponent implements OnInit {
         loadingSnackBar.dismiss();
         const filename = this.exportService.generateFilename(options);
         this.exportService.downloadFile(blob, filename);
-        
+
         const tipoTexto = options.formato === 'individual' ? 'individual' : 'consolidada';
-        this.snackBar.open(`Agenda ${tipoTexto} exportada exitosamente`, 'Cerrar', { 
-          duration: 3000 
+        this.snackBar.open(`Agenda ${tipoTexto} exportada exitosamente`, 'Cerrar', {
+          duration: 3000
         });
       },
       error: (error) => {
         loadingSnackBar.dismiss();
         console.error('Error exportando agenda:', error);
-        this.snackBar.open('Error al exportar la agenda', 'Cerrar', { 
-          duration: 5000 
+        this.snackBar.open('Error al exportar la agenda', 'Cerrar', {
+          duration: 5000
         });
       }
     });
+  }
+
+  toggleCalendarViewMode(): void {
+    const currentMode = this.calendarViewMode();
+    const newMode = currentMode === 'compact' ? 'expanded' : 'compact';
+    this.calendarViewMode.set(newMode);
+
+    console.log(`📱 Modo de calendario cambiado a: ${newMode}`);
+
+    // Actualizar configuraciones del calendario según el modo
+    if (this.calendarComponent && this.calendarComponent.getApi) {
+      const calendarApi = this.calendarComponent.getApi();
+
+      if (newMode === 'compact') {
+        // Modo compacto: horario laboral (8AM-7PM)
+        calendarApi.setOption('slotMinTime', '08:00');
+        calendarApi.setOption('slotMaxTime', '19:00');
+        calendarApi.setOption('height', 'auto'); // Cambiar a auto para que se ajuste
+        calendarApi.setOption('scrollTime', '08:00');
+        this.snackBar.open('Vista compacta: horario laboral (8AM-7PM)', 'Cerrar', { duration: 3000 });
+      } else {
+        // Modo expandido: día completo (6AM-10PM)
+        calendarApi.setOption('slotMinTime', '06:00');
+        calendarApi.setOption('slotMaxTime', '22:00');
+        calendarApi.setOption('height', 'auto'); // Cambiar a auto para que se ajuste
+        calendarApi.setOption('scrollTime', '08:00');
+        this.snackBar.open('Vista expandida: día completo (6AM-10PM)', 'Cerrar', { duration: 3000 });
+      }
+
+      // Recargar eventos para ajustar layout
+      calendarApi.refetchEvents();
+    } else {
+      console.warn('🚫 No se pudo acceder al API del calendario');
+    }
+  }  ngOnDestroy(): void {
+    // Cleanup si es necesario
+    console.log('🚪 Saliendo de la vista de citas');
   }
 }

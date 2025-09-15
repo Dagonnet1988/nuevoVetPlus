@@ -17,7 +17,7 @@ export const validateRecordSession = [
 ];
 
 export const validatePetId = [
-  param('id_mascota')
+  param('petId')
     .isUUID()
     .withMessage('ID de mascota debe ser un UUID válido')
 ];
@@ -85,4 +85,55 @@ export const validateTherapyControlQuery = [
     .optional()
     .isIn(['true', 'false'])
     .withMessage('Activo debe ser true o false')
+];
+
+export const validateUseTherapy = [
+  body('id_control')
+    .isUUID()
+    .withMessage('ID de control debe ser un UUID válido'),
+
+  body('sesiones_usadas')
+    .isInt({ min: 1 })
+    .withMessage('Sesiones usadas debe ser un número entero positivo')
+];
+
+export const validateCreateTherapyPackage = [
+  body('id_mascota')
+    .isUUID()
+    .withMessage('ID de mascota debe ser un UUID válido'),
+
+  body('id_factura')
+    .optional()
+    .isString()
+    .withMessage('ID de factura debe ser un string válido'),
+
+  body('id_producto')
+    .isUUID()
+    .withMessage('ID de producto debe ser un UUID válido'),
+
+  body('sesiones_total')
+    .optional()
+    .isInt({ min: 1, max: 100 })
+    .withMessage('Sesiones total debe ser un número entre 1 y 100'),
+
+  body('precio_pagado')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Precio pagado debe ser un número positivo')
+];
+
+export const validateActivateTherapyPackage = [
+  body('id_mascota')
+    .isUUID()
+    .withMessage('ID de mascota debe ser un UUID válido'),
+
+  body('id_factura')
+    .notEmpty()
+    .withMessage('ID de factura es requerido')
+    .isString()
+    .withMessage('ID de factura debe ser un string'),
+
+  body('id_producto')
+    .isUUID()
+    .withMessage('ID de producto debe ser un UUID válido')
 ];

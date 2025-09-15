@@ -31,7 +31,8 @@ import { AuthService } from '../../services/auth.service';
 export class ConfiguracionComponent implements OnInit {
   loading = signal(false);
   empresaConfig = signal<any>(null);
-  
+  systemStatus = signal<any>(null);
+
   constructor(
     public configuracionService: ConfiguracionService,
     public authService: AuthService,
@@ -46,7 +47,7 @@ export class ConfiguracionComponent implements OnInit {
       route: '/configuracion/empresa',
       color: '#1976d2',
       adminOnly: false,
-      status: 'active'
+      status: 'loading'
     },
     {
       title: 'Google Calendar',
@@ -55,7 +56,7 @@ export class ConfiguracionComponent implements OnInit {
       route: '/configuracion/google-calendar',
       color: '#4285f4',
       adminOnly: true,
-      status: 'pending'
+      status: 'loading'
     },
     {
       title: 'WhatsApp',
@@ -64,7 +65,7 @@ export class ConfiguracionComponent implements OnInit {
       route: '/configuracion/whatsapp',
       color: '#25d366',
       adminOnly: true,
-      status: 'pending'
+      status: 'loading'
     },
     {
       title: 'Sistema',
@@ -73,7 +74,7 @@ export class ConfiguracionComponent implements OnInit {
       route: '/configuracion/sistema',
       color: '#ff9800',
       adminOnly: true,
-      status: 'pending'
+      status: 'loading'
     },
     {
       title: 'Usuarios y Roles',
@@ -97,7 +98,7 @@ export class ConfiguracionComponent implements OnInit {
 
   // Filtrar secciones según permisos del usuario
   get availableSections() {
-    return this.configSections.filter(section => 
+    return this.configSections.filter(section =>
       !section.adminOnly || this.authService.isAdmin()
     );
   }
@@ -113,37 +114,60 @@ export class ConfiguracionComponent implements OnInit {
 
   ngOnInit(): void {
     this.empresaConfig.set(this.configuracionService.empresaConfig());
-    this.loadConfigurations();
-    this.loadQuickStats();
+    this.loadSystemStatus();
   }
 
-  private loadConfigurations(): void {
+  private loadSystemStatus(): void {
     this.loading.set(true);
-    
-    // Cargar configuración de empresa
-    this.configuracionService.getEmpresaConfig().subscribe({
-      next: (config) => {
+
+    this.configuracionService.getSystemStatus().subscribe({
+      next: (status) => {
+        this.systemStatus.set(status);
+        this.updateSectionStatuses(status);
+        this.updateQuickStats(status);
         this.loading.set(false);
-        this.updateSectionStatus('Empresa', config ? 'active' : 'pending');
       },
       error: (error) => {
-        console.error('Error cargando configuración de empresa:', error);
+        console.error('Error cargando estado del sistema:', error);
         this.loading.set(false);
-        this.updateSectionStatus('Empresa', 'error');
+        this.snackBar.open('Error cargando estado del sistema', 'Cerrar', { duration: 3000 });
       }
     });
   }
 
-  private loadQuickStats(): void {
-    // Cargar estadísticas rápidas
-    const stats = this.quickStats();
-    
-    // Verificar si empresa está configurada
-    if (this.empresaConfig()) {
-      stats.empresa_configurada = true;
-      stats.total_configuraciones++;
-    }
-    
+  private updateSectionStatuses(status: any): void {
+    // Mapear estados del backend a estados de UI
+    const getUIStatus = (backendStatus: string): 'active' | 'pending' | 'error' => {
+      switch (backendStatus) {
+        case 'configurado':
+        case 'conectado':
+        case 'operativo':
+          return 'active';
+        case 'error':
+          return 'error';
+        default:
+          return 'pending';
+      }
+    };
+
+    // Actualizar estado de cada sección
+    this.updateSectionStatus('Empresa', getUIStatus(status.empresa?.status || 'pending'));
+    this.updateSectionStatus('Google Calendar', getUIStatus(status.google_calendar?.status || 'pending'));
+    this.updateSectionStatus('WhatsApp', getUIStatus(status.whatsapp?.status || 'pending'));
+    this.updateSectionStatus('Sistema', getUIStatus(status.sistema?.status || 'pending'));
+  }
+
+  private updateQuickStats(status: any): void {
+    const stats = {
+      empresa_configurada: status.empresa?.configurado || false,
+      google_calendar_conectado: status.google_calendar?.conectado || false,
+      whatsapp_conectado: status.whatsapp?.conectado || false,
+      usuarios_activos: 0, // Se puede obtener de otra API
+      total_configuraciones: Object.values(status).filter(
+        (module: any) => module.status === 'configurado' || module.status === 'conectado' || module.status === 'operativo'
+      ).length
+    };
+
     this.quickStats.set(stats);
   }
 
@@ -162,8 +186,7 @@ export class ConfiguracionComponent implements OnInit {
   }
 
   refreshConfigurations(): void {
-    this.loadConfigurations();
-    this.loadQuickStats();
+    this.loadSystemStatus();
     this.snackBar.open('Configuraciones actualizadas', 'Cerrar', { duration: 2000 });
   }
 

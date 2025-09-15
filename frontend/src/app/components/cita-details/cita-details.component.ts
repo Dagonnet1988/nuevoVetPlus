@@ -14,6 +14,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatDialog } from '@angular/material/dialog';
 
 import { CitasService } from '../../services/citas.service';
+import { ConsultasService } from '../../services/consultas.service';
 import { Cita, TIPOS_CITA, ESTADOS_CITA } from '../../models/cita.interface';
 import { CitaFormComponent } from '../cita-form/cita-form.component';
 
@@ -40,6 +41,7 @@ export class CitaDetailsComponent implements OnInit {
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private citasService = inject(CitasService);
+  private consultasService = inject(ConsultasService);
   private snackBar = inject(MatSnackBar);
   private dialog = inject(MatDialog);
 
@@ -191,11 +193,139 @@ export class CitaDetailsComponent implements OnInit {
     }
   }
 
+  // ===============================
+  // NAVEGACIÓN CITA → CONSULTA
+  // ===============================
+
+  async onVerConsulta(): Promise<void> {
+    const cita = this.cita();
+    if (!cita) return;
+
+    try {
+      this.updating.set(true);
+
+      // Buscar la consulta asociada a esta cita
+      const response = await this.consultasService.getConsultaByCitaId(cita.id_cita).toPromise();
+
+      if (response?.success && response.data) {
+        // Navegar a la vista de consulta (solo lectura para auxiliares)
+        this.router.navigate(['/consultas', response.data.id_consulta]);
+      } else {
+        this.snackBar.open('No se encontró consulta asociada', 'Cerrar', { duration: 3000 });
+      }
+    } catch (error) {
+      console.error('Error cargando consulta:', error);
+      this.snackBar.open('Error al cargar la consulta', 'Cerrar', { duration: 3000 });
+    } finally {
+      this.updating.set(false);
+    }
+  }
+
   onViewPaciente(): void {
     const cita = this.cita();
     if (cita?.id_mascota) {
       this.router.navigate(['/pacientes', cita.id_mascota]);
     }
+  }
+
+  onGoToFacturacion(): void {
+    const cita = this.cita();
+    console.log('🎯 Cita completa:', cita);
+    console.log('🎯 Mascota cliente:', cita?.mascota?.cliente);
+    console.log('🎯 cliente_documento plano:', cita?.cliente_documento);
+
+    if (!cita || cita.estado !== 'completada') {
+      this.snackBar.open('Solo se puede facturar citas completadas', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    // Navegar a facturación con los datos precargados
+    const queryParams = {
+      citaId: cita.id_cita,
+      clienteNombre: cita.mascota?.cliente?.nombre || cita.cliente_nombre,
+      clienteDocumento: cita.mascota?.cliente?.documento || cita.cliente_documento,
+      clienteTelefono: cita.mascota?.cliente?.telefono || cita.cliente_telefono,
+      clienteEmail: cita.mascota?.cliente?.email || cita.cliente_email,
+      clienteDireccion: cita.mascota?.cliente?.direccion || cita.cliente_direccion,
+      mascotaNombre: cita.mascota?.nombre || cita.mascota_nombre,
+      mascotaId: cita.id_mascota
+    };
+
+    console.log('🎯 QueryParams a enviar:', queryParams);
+
+    this.router.navigate(['/facturacion/nueva'], {
+      queryParams
+    });
+  }
+
+  async onViewHistoriaClinica(): Promise<void> {
+    const cita = this.cita();
+    if (!cita) return;
+
+    try {
+      console.log('🔍 Buscando historia clínica para cita:', cita.id_cita);
+
+      const response = await this.consultasService.getConsultaFromAppointment(cita.id_cita).toPromise();
+
+      if (response?.success && response.data) {
+        console.log('✅ Historia clínica encontrada:', response.data);
+
+        // Comportamiento inteligente según el estado de la cita
+        if (cita.estado === 'en_curso') {
+          // Si está en curso, ir a EDITAR la historia clínica
+          this.router.navigate(['/historia-clinica', response.data.id_consulta, 'editar']);
+        } else {
+          // Si está completada u otro estado, ir a VER la historia clínica (solo lectura)
+          this.router.navigate(['/historia-clinica', response.data.id_consulta]);
+        }
+      } else {
+        console.log('⚠️ No se encontró historia clínica para esta cita');
+
+        if (cita.estado === 'en_curso' || cita.estado === 'completada') {
+          this.snackBar.open('No se encontró historia clínica para esta cita', 'Cerrar', {
+            duration: 4000
+          });
+        } else {
+          this.snackBar.open(
+            'La historia clínica se crea automáticamente cuando la cita pasa a "En Curso"',
+            'Cerrar',
+            { duration: 5000 }
+          );
+        }
+      }
+    } catch (error: any) {
+      console.error('❌ Error obteniendo historia clínica:', error);
+
+      if (error.status === 404) {
+        if (cita.estado === 'en_curso' || cita.estado === 'completada') {
+          this.snackBar.open('No se encontró historia clínica para esta cita', 'Cerrar', { duration: 4000 });
+        } else {
+          this.snackBar.open(
+            'La historia clínica se crea automáticamente cuando la cita pasa a "En Curso"',
+            'Cerrar',
+            { duration: 5000 }
+          );
+        }
+      } else {
+        this.snackBar.open('Error accediendo a la historia clínica', 'Cerrar', { duration: 3000 });
+      }
+    }
+  }
+
+  canViewHistoriaClinica(): boolean {
+    const cita = this.cita();
+    // Mostrar botón para estados que pueden tener historia clínica
+    return cita?.estado === 'en_curso' || cita?.estado === 'completada';
+  }
+
+  getHistoriaClinicaButtonText(): string {
+    const cita = this.cita();
+    if (cita?.estado === 'en_curso') {
+      return 'Editar Historia Clínica';
+    } else if (cita?.estado === 'completada') {
+      return 'Ver Historia Clínica';
+    }
+    return 'Historia Clínica';
   }
 
   onBack(): void {
@@ -239,13 +369,19 @@ export class CitaDetailsComponent implements OnInit {
 
   formatDate(dateString: string | null | undefined): string {
     if (!dateString) return 'Fecha no disponible';
-    const date = this.parseLocalDate(dateString);
-    return date.toLocaleDateString('es-ES', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
+
+    try {
+      const fecha = this.parseLocalDate(dateString);
+      return new Intl.DateTimeFormat('es-CO', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      }).format(fecha);
+    } catch (error) {
+      console.error('Error formateando fecha:', error);
+      return 'Fecha no válida';
+    }
   }
 
   calculateDuration(): string {
@@ -311,8 +447,8 @@ export class CitaDetailsComponent implements OnInit {
     // Definir transiciones permitidas
     const transitions: {[key: string]: string[]} = {
       'pendiente': ['confirmada', 'cancelada'],
-      'confirmada': ['en_progreso', 'cancelada', 'no_asistio'],
-      'en_progreso': ['completada', 'cancelada'],
+      'confirmada': ['en_curso', 'cancelada', 'no_asistio'],
+      'en_curso': ['completada', 'cancelada'],
       'completada': [], // No se puede cambiar desde completada
       'cancelada': [], // No se puede cambiar desde cancelada
       'no_asistio': ['pendiente'] // Se puede reprogramar
@@ -336,8 +472,8 @@ export class CitaDetailsComponent implements OnInit {
     switch (nuevoEstado) {
       case 'confirmada':
         return `¿Confirmar la cita de ${cita?.mascota?.nombre}?`;
-      case 'en_progreso':
-        return `¿Marcar como en progreso la cita de ${cita?.mascota?.nombre}?`;
+      case 'en_curso':
+        return `¿Marcar como en curso la cita de ${cita?.mascota?.nombre}?`;
       case 'completada':
         return `¿Marcar como completada la cita de ${cita?.mascota?.nombre}?`;
       case 'no_asistio':
@@ -372,7 +508,7 @@ export class CitaDetailsComponent implements OnInit {
     const icons: { [key: string]: string } = {
       'pendiente': 'schedule',
       'confirmada': 'check_circle',
-      'en_progreso': 'play_circle',
+      'en_curso': 'play_circle',
       'completada': 'task_alt',
       'cancelada': 'cancel',
       'no_asistio': 'event_busy'
@@ -380,8 +516,23 @@ export class CitaDetailsComponent implements OnInit {
     return icons[estado] || 'radio_button_unchecked';
   }
 
+  canShowFacturacion(): boolean {
+    const cita = this.cita();
+    return cita?.estado === 'completada';
+  }
+
+  // ===============================
+  // MÉTODOS AUXILIARES PARA CONSULTA
+  // ===============================
+
+  puedeVerConsulta(): boolean {
+    const cita = this.cita();
+    return cita?.estado === 'completada';
+  }
+
   private transformarCitaParaTemplate(citaData: any): Cita {
     console.log('🔄 Transformando cita para template:', citaData);
+    console.log('🔄 cliente_documento en citaData:', citaData.cliente_documento);
 
     // Crear estructura anidada a partir de campos planos
     const citaTransformada: Cita = {
@@ -393,8 +544,10 @@ export class CitaDetailsComponent implements OnInit {
         raza: citaData.raza || citaData.mascota_raza,
         cliente: {
           nombre: citaData.cliente_nombre || 'Sin nombre',
+          documento: citaData.cliente_documento,
           telefono: citaData.cliente_telefono,
-          email: citaData.cliente_email
+          email: citaData.cliente_email,
+          direccion: citaData.cliente_direccion
         }
       },
       // Estructura anidada para veterinario
@@ -408,7 +561,8 @@ export class CitaDetailsComponent implements OnInit {
     console.log('✅ Cita transformada:', {
       mascota_nombre: citaTransformada.mascota?.nombre,
       cliente_nombre: citaTransformada.mascota?.cliente?.nombre,
-      veterinario_nombre: citaTransformada.veterinario?.nombre
+      cliente_documento: citaTransformada.mascota?.cliente?.documento,
+      cliente_documento_plano: citaTransformada.cliente_documento
     });
 
     return citaTransformada;

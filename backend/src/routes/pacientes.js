@@ -25,7 +25,7 @@ const router = express.Router();
  */
 router.post('/',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux']),
+  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
   validateCreatePacienteCompleto,
   createPacienteCompleto
 );
@@ -37,7 +37,7 @@ router.post('/',
  */
 router.put('/:id',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux']),
+  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
   validateCreatePacienteCompleto,
   updatePacienteCompleto
 );
@@ -49,7 +49,7 @@ router.put('/:id',
  */
 router.get('/',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux']),
+  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
   validatePacienteSearch,
   getMascotasConCliente
 );
@@ -61,7 +61,7 @@ router.get('/',
  */
 router.get('/stats',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux']),
+  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
   getEstadisticasPacientes
 );
 
@@ -72,7 +72,7 @@ router.get('/stats',
  */
 router.get('/especies',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux']),
+  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
   getEspecies
 );
 
@@ -83,7 +83,7 @@ router.get('/especies',
  */
 router.get('/especies/:especie/razas',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux']),
+  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
   getRazasByEspecie
 );
 
@@ -94,7 +94,7 @@ router.get('/especies/:especie/razas',
  */
 router.get('/:id',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux']),
+  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
   getPacienteById
 );
 
@@ -105,7 +105,7 @@ router.get('/:id',
  */
 router.put('/mascota/:id',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux']),
+  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
   updateMascota
 );
 
@@ -116,7 +116,7 @@ router.put('/mascota/:id',
  */
 router.post('/:id/foto',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux']),
+  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
   uploadPacienteFoto,
   uploadFotoPaciente
 );
@@ -128,7 +128,7 @@ router.post('/:id/foto',
  */
 router.get('/:id/foto',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux']),
+  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
   getFotoPaciente
 );
 
@@ -139,7 +139,7 @@ router.get('/:id/foto',
  */
 router.delete('/:id/foto',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux']),
+  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
   eliminarFotoPaciente
 );
 

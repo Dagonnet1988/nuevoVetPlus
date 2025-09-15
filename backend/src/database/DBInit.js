@@ -4,6 +4,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import dotenv from 'dotenv';
+
+// Cargar variables de entorno
+dotenv.config();
 
 const { Client } = pkg;
 const execPromise = promisify(exec);
@@ -153,6 +157,11 @@ class DBInit {
     try {
       console.log(`📄 Ejecutando: ${description || path.basename(filePath)}`);
       
+      // Log específico para el módulo clínico
+      if (filePath.includes('03_clinical_tables.sql')) {
+        console.log(`🩺 [CLINICAL] Ejecutando módulo clínico completo...`);
+      }
+      
       // Verificar que el archivo existe
       await fs.access(filePath);
       
@@ -171,6 +180,11 @@ class DBInit {
       
       if (stderr && !stderr.includes('NOTICE:') && !stderr.includes('already exists')) {
         console.warn(`⚠️  Warnings: ${stderr}`);
+      }
+      
+      // Log específico después del módulo clínico
+      if (filePath.includes('03_clinical_tables.sql')) {
+        console.log(`🩺 [CLINICAL] Módulo clínico ejecutado correctamente`);
       }
       
       console.log(`✅ ${description || path.basename(filePath)} ejecutado`);
@@ -196,8 +210,27 @@ class DBInit {
       const client = new Client(this.config);
       await client.connect();
       
+      // Log específico para el módulo clínico
+      if (filePath.includes('03_clinical_tables.sql')) {
+        console.log(`🩺 [CLINICAL-NODE] Ejecutando módulo clínico con Node.js...`);
+        console.log(`📄 [CLINICAL-NODE] Contenido SQL: ${sqlContent.length} caracteres`);
+        
+        // Verificar si el SQL contiene staff_notifications
+        if (sqlContent.includes('staff_notifications')) {
+          console.log(`❌ [CLINICAL-NODE] ADVERTENCIA: SQL aún contiene staff_notifications (tabla eliminada)`);
+        } else {
+          console.log(`✅ [CLINICAL-NODE] SQL actualizado sin staff_notifications`);
+        }
+      }
+      
       // Ejecutar todo el contenido como un bloque
       await client.query(sqlContent);
+      
+      // Log específico después del módulo clínico
+      if (filePath.includes('03_clinical_tables.sql')) {
+        console.log(`🩺 [CLINICAL-NODE] Módulo clínico ejecutado correctamente`);
+      }
+      
       await client.end();
       
       console.log(`✅ ${description || path.basename(filePath)} ejecutado (Node.js)`);
@@ -219,7 +252,7 @@ class DBInit {
       const result = await client.query(`
         SELECT schemaname, tablename 
         FROM pg_tables 
-        WHERE schemaname IN ('public', 'auth', 'clinical', 'financial', 'system')
+        WHERE schemaname IN ('public', 'vetplus_auth', 'clinical', 'financial', 'system')
         ORDER BY schemaname, tablename
       `);
       
@@ -239,7 +272,7 @@ class DBInit {
     console.log('='.repeat(50));
     
     // Verificar esquemas
-    const schemas = ['auth', 'clinical', 'financial', 'system'];
+    const schemas = ['vetplus_auth', 'clinical', 'financial', 'system'];
     for (const schema of schemas) {
       const exists = await this.schemaExists(schema);
       console.log(`${exists ? '✅' : '❌'} Esquema ${schema}`);
@@ -247,12 +280,12 @@ class DBInit {
     
     // Verificar tablas principales
     const tables = [
-      { name: 'usuarios', schema: 'auth' },
+      { name: 'usuarios', schema: 'vetplus_auth' },
       { name: 'clientes', schema: 'clinical' },
       { name: 'mascotas', schema: 'clinical' },
       { name: 'cajas', schema: 'financial' },
       { name: 'productos', schema: 'financial' },
-      { name: 'migrations', schema: 'system' }
+      { name: 'log_auditoria', schema: 'system' }
     ];
     
     for (const table of tables) {
@@ -297,7 +330,9 @@ class DBInit {
         { file: '05_constraints_triggers.sql', desc: 'Constraints y triggers' },
         { file: '06_audit_expansion.sql', desc: 'Expansión sistema auditoría' },
         { file: '07_audit_tables.sql', desc: 'Tablas adicionales auditoría' },
-        { file: '08_empresa_config.sql', desc: 'Configuración de empresa' }
+        { file: '08_empresa_config.sql', desc: 'Configuración de empresa' },
+        { file: '09_whatsapp_integration.sql', desc: 'Integración WhatsApp Business' },
+        { file: '10_workflow_integration.sql', desc: 'Integraciones de workflow y notificaciones' }
       ];
       
       for (const { file, desc } of schemaFiles) {
@@ -311,11 +346,11 @@ class DBInit {
       }
       
       // 4. Verificar si necesita datos iniciales
-      const hasUsers = await this.tableExists('usuarios', 'auth');
+      const hasUsers = await this.tableExists('usuarios', 'vetplus_auth');
       if (hasUsers) {
         const client = new Client(this.config);
         await client.connect();
-        const result = await client.query('SELECT COUNT(*) FROM auth.usuarios');
+        const result = await client.query('SELECT COUNT(*) FROM vetplus_auth.usuarios');
         await client.end();
         
         if (result.rows[0].count === '0') {
@@ -356,12 +391,12 @@ class DBInit {
     
     const pgOk = await this.checkPostgreSQL();
     const dbExists = await this.checkDatabase();
-    const authSchema = await this.schemaExists('auth');
-    const usersTable = await this.tableExists('usuarios', 'auth');
+    const authSchema = await this.schemaExists('vetplus_auth');
+    const usersTable = await this.tableExists('usuarios', 'vetplus_auth');
     
     console.log(`PostgreSQL: ${pgOk ? '✅' : '❌'}`);
     console.log(`Base de datos: ${dbExists ? '✅' : '❌'}`);
-    console.log(`Esquema auth: ${authSchema ? '✅' : '❌'}`);
+    console.log(`Esquema vetplus_auth: ${authSchema ? '✅' : '❌'}`);
     console.log(`Tabla usuarios: ${usersTable ? '✅' : '❌'}`);
     
     if (pgOk && dbExists && authSchema && usersTable) {

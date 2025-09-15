@@ -209,7 +209,7 @@ class WhatsAppService {
             // Obtener datos de la factura
             const facturaResult = await query(`
                 SELECT 
-                    fv.numero_factura,
+                    fv.codigo_factura,
                     fv.fecha,
                     fv.total,
                     c.nombre as cliente_nombre,
@@ -228,7 +228,7 @@ class WhatsAppService {
             // Generar mensaje personalizado
             const mensaje = this.config.mensaje_whatsapp_factura
                 .replace('{cliente_nombre}', clienteNombre || factura.cliente_nombre)
-                .replace('{numero_factura}', factura.numero_factura)
+                .replace('{numero_factura}', factura.codigo_factura)
                 .replace('{fecha}', factura.fecha)
                 .replace('{total}', factura.total)
                 .replace('{empresa}', this.config.nombre_empresa);
@@ -277,7 +277,7 @@ class WhatsAppService {
                 FROM clinical.consultas_clinicas cc
                 JOIN clinical.mascotas m ON cc.id_mascota = m.id_mascota
                 JOIN clinical.clientes c ON m.id_cliente = c.id_cliente
-                JOIN auth.usuarios u ON cc.id_veterinario = u.id_usuario
+                JOIN vetplus_auth.usuarios u ON cc.id_veterinario = u.id_usuario
                 WHERE cc.id_consulta = $1
             `, [consultaId]);
 

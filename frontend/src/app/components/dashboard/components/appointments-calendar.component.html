@@ -1,8 +1,8 @@
 <mat-card class="appointments-card">
   <mat-card-header>
     <mat-card-title>
-      <mat-icon>today</mat-icon>
-      Citas de Hoy
+      <mat-icon>schedule</mat-icon>
+      Próximas Citas
     </mat-card-title>
     <div class="header-actions">
       @if (appointments.length > 0) {
@@ -36,7 +36,7 @@
       </div>
 
       <mat-list class="appointments-list">
-        @for (appointment of appointments.slice(0, 5); track appointment.id) {
+        @for (appointment of appointments.slice(0, 5); track $index) {
           <mat-list-item class="appointment-item">
             <div class="appointment-time">
               <span class="time">{{ appointment.hora }}</span>

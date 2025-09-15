@@ -8,6 +8,7 @@ export const createConsultation = async (req, res) => {
         const {
             id_mascota,
             id_veterinario,
+            id_cita,
             motivo,
             anamnesis,
             examen_fisico,
@@ -44,7 +45,7 @@ export const createConsultation = async (req, res) => {
 
         // Verificar que el veterinario existe
         const veterinarioExiste = await query(
-            'SELECT id_usuario FROM auth.usuarios WHERE id_usuario = $1 AND activo = true AND rol IN ($2, $3)',
+            'SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_usuario = $1 AND activo = true AND rol IN ($2, $3)',
             [id_veterinario, 'admin', 'vet']
         );
 
@@ -61,18 +62,18 @@ export const createConsultation = async (req, res) => {
         // Insertar nueva consulta
         const insertSQL = `
             INSERT INTO clinical.consultas_clinicas (
-                id_consulta, codigo_consulta, id_mascota, id_veterinario, motivo, anamnesis,
+                id_consulta, codigo_consulta, id_cita, id_mascota, id_veterinario, motivo, anamnesis,
                 examen_fisico, temperatura, peso, diagnostico, tratamiento,
                 medicamentos, recomendaciones, proxima_cita, estado, costo,
                 created_at, updated_at
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING *
         `;
 
         const values = [
-            id_consulta, codigo_consulta, id_mascota, id_veterinario, motivo, anamnesis,
+            id_consulta, codigo_consulta, id_cita || null, id_mascota, id_veterinario, motivo, anamnesis,
             examen_fisico, temperatura, peso, diagnostico, tratamiento,
             medicamentos ? JSON.stringify(medicamentos) : null,
             recomendaciones, proxima_cita, estado, costo
@@ -97,6 +98,197 @@ export const createConsultation = async (req, res) => {
     }
 };
 
+// ✅ CREAR CONSULTA CLÍNICA DESDE UNA CITA
+export const createConsultationFromAppointment = async (req, res) => {
+    try {
+        const { id_cita } = req.params;
+        
+        // Verificar que la cita existe y obtener sus datos
+        const citaSQL = `
+            SELECT 
+                c.*,
+                m.nombre as nombre_mascota,
+                cl.nombre as nombre_cliente
+            FROM clinical.calendario_citas c
+            LEFT JOIN clinical.mascotas m ON c.id_mascota = m.id_mascota
+            LEFT JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
+            WHERE c.id_cita = $1
+        `;
+        
+        const citaResult = await query(citaSQL, [id_cita]);
+        
+        if (citaResult.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Cita no encontrada'
+            });
+        }
+        
+        const cita = citaResult.rows[0];
+        
+        // Verificar si ya existe una consulta para esta cita
+        const consultaExistente = await query(
+            'SELECT id_consulta FROM clinical.consultas_clinicas WHERE id_cita = $1',
+            [id_cita]
+        );
+        
+        if (consultaExistente.rows.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Ya existe una consulta clínica para esta cita',
+                data: { id_consulta: consultaExistente.rows[0].id_consulta }
+            });
+        }
+        
+        // Generar UUID e ID único para consulta
+        const id_consulta = uuidv4();
+        const codigo_consulta = `CON-${Date.now().toString().slice(-8)}`;
+        
+        // Crear consulta con datos básicos de la cita
+        const insertSQL = `
+            INSERT INTO clinical.consultas_clinicas (
+                id_consulta, codigo_consulta, id_cita, id_mascota, id_veterinario, 
+                motivo, estado, created_at, updated_at
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            ) RETURNING *
+        `;
+        
+        const values = [
+            id_consulta, 
+            codigo_consulta, 
+            id_cita, 
+            cita.id_mascota, 
+            cita.id_veterinario,
+            cita.motivo || 'Consulta programada',
+            'En Curso'
+        ];
+        
+        const result = await query(insertSQL, values);
+        const nuevaConsulta = result.rows[0];
+        
+        // Actualizar estado de la cita a 'en_curso'
+        await db.query(
+            'UPDATE calendario_citas SET estado = ? WHERE id_cita = ?',
+            ['en_curso', id_cita]
+        );
+        
+        console.log('✅ Consulta creada exitosamente:', nuevaConsulta.id_consulta);
+        
+        res.status(201).json({
+            success: true,
+            message: 'Consulta clínica creada desde cita exitosamente',
+            data: {
+                id_consulta: nuevaConsulta.id_consulta,
+                codigo_consulta: nuevaConsulta.codigo_consulta,
+                estado: nuevaConsulta.estado
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ Error en createConsultationFromAppointment:', error);
+        const errorInfo = handleDatabaseError(error, 'crear consulta desde cita');
+        res.status(errorInfo.status).json({
+            success: false,
+            message: errorInfo.message,
+            code: errorInfo.code
+        });
+    }
+};
+
+// ✅ OBTENER CONSULTA CLÍNICA POR ID DE CITA
+export const getConsultationByAppointmentId = async (req, res) => {
+    try {
+        const { id_cita } = req.params;
+        
+        const selectSQL = `
+            SELECT 
+                c.*,
+                c.fecha as fecha_consulta,
+                m.nombre as nombre_mascota,
+                m.especie,
+                m.raza,
+                m.edad,
+                cl.nombre as nombre_cliente,
+                cl.telefono,
+                cl.email,
+                u.nombre as nombre_veterinario,
+                u.email as email_veterinario
+            FROM clinical.consultas_clinicas c
+            LEFT JOIN clinical.mascotas m ON c.id_mascota = m.id_mascota
+            LEFT JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
+            LEFT JOIN vetplus_auth.usuarios u ON c.id_veterinario = u.id_usuario
+            WHERE c.id_cita = $1
+        `;
+        
+        const result = await query(selectSQL, [id_cita]);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'No se encontró consulta clínica para esta cita'
+            });
+        }
+        
+        const consulta = result.rows[0];
+        
+        // Estructurar respuesta con relaciones
+        const consultaStructured = {
+            id_consulta: consulta.id_consulta,
+            codigo_consulta: consulta.codigo_consulta,
+            id_cita: consulta.id_cita,
+            id_mascota: consulta.id_mascota,
+            id_veterinario: consulta.id_veterinario,
+            fecha_consulta: consulta.fecha_consulta,
+            motivo: consulta.motivo,
+            anamnesis: consulta.anamnesis,
+            examen_fisico: consulta.examen_fisico,
+            temperatura: consulta.temperatura,
+            peso: consulta.peso,
+            diagnostico: consulta.diagnostico,
+            tratamiento: consulta.tratamiento,
+            medicamentos: consulta.medicamentos,
+            recomendaciones: consulta.recomendaciones,
+            proxima_cita: consulta.proxima_cita,
+            estado: consulta.estado,
+            costo: consulta.costo,
+            created_at: consulta.created_at,
+            updated_at: consulta.updated_at,
+            // Relaciones estructuradas
+            mascota: {
+                id_mascota: consulta.id_mascota,
+                nombre: consulta.nombre_mascota,
+                especie: consulta.especie,
+                raza: consulta.raza,
+                edad: consulta.edad
+            },
+            veterinario: {
+                id_usuario: consulta.id_veterinario,
+                nombre: consulta.nombre_veterinario,
+                email: consulta.email_veterinario
+            },
+            cliente: {
+                nombre: consulta.nombre_cliente,
+                telefono: consulta.telefono,
+                email: consulta.email
+            }
+        };
+        
+        res.json({
+            success: true,
+            data: consultaStructured
+        });
+        
+    } catch (error) {
+        const errorInfo = handleDatabaseError(error, 'obtener consulta por cita');
+        res.status(errorInfo.status).json({
+            success: false,
+            message: errorInfo.message,
+            code: errorInfo.code
+        });
+    }
+};
+
 // ✅ LISTAR CONSULTAS CLÍNICAS CON PAGINACIÓN Y FILTROS
 export const getConsultations = async (req, res) => {
     try {
@@ -107,7 +299,8 @@ export const getConsultations = async (req, res) => {
             veterinario,
             mascota,
             fecha_desde,
-            fecha_hasta 
+            fecha_hasta,
+            search
         } = req.query;
 
         // Validar límites de paginación
@@ -118,6 +311,7 @@ export const getConsultations = async (req, res) => {
         let selectSQL = `
             SELECT 
                 c.*,
+                c.fecha as fecha_consulta,
                 m.nombre as nombre_mascota,
                 m.especie,
                 m.raza,
@@ -127,7 +321,7 @@ export const getConsultations = async (req, res) => {
             FROM clinical.consultas_clinicas c
             LEFT JOIN clinical.mascotas m ON c.id_mascota = m.id_mascota
             LEFT JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
-            LEFT JOIN auth.usuarios u ON c.id_veterinario = u.id_usuario
+            LEFT JOIN vetplus_auth.usuarios u ON c.id_veterinario = u.id_usuario
             WHERE 1=1
         `;
         
@@ -163,6 +357,19 @@ export const getConsultations = async (req, res) => {
             paramCount++;
             selectSQL += ` AND c.fecha <= $${paramCount}`;
             values.push(fecha_hasta);
+        }
+
+        // Filtro de búsqueda de texto
+        if (search) {
+            paramCount++;
+            selectSQL += ` AND (
+                LOWER(c.motivo) LIKE LOWER($${paramCount}) OR 
+                LOWER(c.diagnostico) LIKE LOWER($${paramCount}) OR 
+                LOWER(m.nombre) LIKE LOWER($${paramCount}) OR 
+                LOWER(cl.nombre) LIKE LOWER($${paramCount}) OR
+                LOWER(c.tratamiento) LIKE LOWER($${paramCount})
+            )`;
+            values.push(`%${search}%`);
         }
 
         selectSQL += ` ORDER BY c.fecha DESC`;
@@ -213,12 +420,108 @@ export const getConsultations = async (req, res) => {
             countValues.push(fecha_hasta);
         }
 
+        // Filtro de búsqueda para el conteo (necesita JOIN para buscar en nombres)
+        if (search) {
+            countSQL = `
+                SELECT COUNT(*) FROM clinical.consultas_clinicas c
+                LEFT JOIN clinical.mascotas m ON c.id_mascota = m.id_mascota
+                LEFT JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
+                WHERE 1=1
+            `;
+            
+            // Re-aplicar todos los filtros para el conteo con búsqueda
+            const newCountValues = [];
+            let newCountParamCount = 0;
+            
+            if (estado) {
+                newCountParamCount++;
+                countSQL += ` AND c.estado = $${newCountParamCount}`;
+                newCountValues.push(estado);
+            }
+            
+            if (veterinario) {
+                newCountParamCount++;
+                countSQL += ` AND c.id_veterinario = $${newCountParamCount}`;
+                newCountValues.push(veterinario);
+            }
+            
+            if (mascota) {
+                newCountParamCount++;
+                countSQL += ` AND c.id_mascota = $${newCountParamCount}`;
+                newCountValues.push(mascota);
+            }
+            
+            if (fecha_desde) {
+                newCountParamCount++;
+                countSQL += ` AND c.fecha >= $${newCountParamCount}`;
+                newCountValues.push(fecha_desde);
+            }
+            
+            if (fecha_hasta) {
+                newCountParamCount++;
+                countSQL += ` AND c.fecha <= $${newCountParamCount}`;
+                newCountValues.push(fecha_hasta);
+            }
+            
+            newCountParamCount++;
+            countSQL += ` AND (
+                LOWER(c.motivo) LIKE LOWER($${newCountParamCount}) OR 
+                LOWER(c.diagnostico) LIKE LOWER($${newCountParamCount}) OR 
+                LOWER(m.nombre) LIKE LOWER($${newCountParamCount}) OR 
+                LOWER(cl.nombre) LIKE LOWER($${newCountParamCount}) OR
+                LOWER(c.tratamiento) LIKE LOWER($${newCountParamCount})
+            )`;
+            newCountValues.push(`%${search}%`);
+            
+            // Usar los nuevos valores para el conteo
+            countValues.length = 0;
+            countValues.push(...newCountValues);
+        }
+
         const countResult = await query(countSQL, countValues);
         const total = parseInt(countResult.rows[0].count);
 
+        // Estructurar cada consulta de la lista
+        const consultasStructured = result.rows.map(consulta => ({
+            id_consulta: consulta.id_consulta,
+            codigo_consulta: consulta.codigo_consulta,
+            id_mascota: consulta.id_mascota,
+            id_veterinario: consulta.id_veterinario,
+            fecha_consulta: consulta.fecha_consulta,
+            motivo: consulta.motivo,
+            anamnesis: consulta.anamnesis,
+            examen_fisico: consulta.examen_fisico,
+            temperatura: consulta.temperatura,
+            peso: consulta.peso,
+            diagnostico: consulta.diagnostico,
+            tratamiento: consulta.tratamiento,
+            medicamentos: consulta.medicamentos,
+            recomendaciones: consulta.recomendaciones,
+            proxima_cita: consulta.proxima_cita,
+            estado: consulta.estado,
+            costo: consulta.costo,
+            created_at: consulta.created_at,
+            updated_at: consulta.updated_at,
+            // Relaciones estructuradas para la lista
+            mascota: {
+                id_mascota: consulta.id_mascota,
+                nombre: consulta.nombre_mascota,
+                especie: consulta.especie,
+                raza: consulta.raza
+            },
+            veterinario: {
+                id_usuario: consulta.id_veterinario,
+                nombre: consulta.nombre_veterinario
+            },
+            cliente: {
+                nombre: consulta.nombre_cliente,
+                telefono: consulta.telefono
+            }
+        }));
+
         res.json({
             success: true,
-            data: result.rows,
+            data: consultasStructured,
             pagination: {
                 total,
                 limit: validLimit,
@@ -245,6 +548,7 @@ export const getConsultationById = async (req, res) => {
         const selectSQL = `
             SELECT 
                 c.*,
+                c.fecha as fecha_consulta,
                 m.nombre as nombre_mascota,
                 m.especie,
                 m.raza,
@@ -257,7 +561,7 @@ export const getConsultationById = async (req, res) => {
             FROM clinical.consultas_clinicas c
             LEFT JOIN clinical.mascotas m ON c.id_mascota = m.id_mascota
             LEFT JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
-            LEFT JOIN auth.usuarios u ON c.id_veterinario = u.id_usuario
+            LEFT JOIN vetplus_auth.usuarios u ON c.id_veterinario = u.id_usuario
             WHERE c.id_consulta = $1
         `;
 
@@ -270,9 +574,56 @@ export const getConsultationById = async (req, res) => {
             });
         }
 
+        const consulta = result.rows[0];
+        
+        // Estructurar la respuesta para que coincida con la interfaz del frontend
+        const consultaStructured = {
+            id_consulta: consulta.id_consulta,
+            codigo_consulta: consulta.codigo_consulta,
+            id_mascota: consulta.id_mascota,
+            id_veterinario: consulta.id_veterinario,
+            fecha_consulta: consulta.fecha_consulta,
+            motivo: consulta.motivo,
+            anamnesis: consulta.anamnesis,
+            examen_fisico: consulta.examen_fisico,
+            temperatura: consulta.temperatura,
+            peso: consulta.peso,
+            diagnostico: consulta.diagnostico,
+            tratamiento: consulta.tratamiento,
+            medicamentos: consulta.medicamentos,
+            recomendaciones: consulta.recomendaciones,
+            proxima_cita: consulta.proxima_cita,
+            estado: consulta.estado,
+            costo: consulta.costo,
+            created_at: consulta.created_at,
+            updated_at: consulta.updated_at,
+            // Campos adicionales de la BD
+            formula_enviada_whatsapp: consulta.formula_enviada_whatsapp,
+            fecha_envio_formula: consulta.fecha_envio_formula,
+            recordatorio_medicamentos_enviado: consulta.recordatorio_medicamentos_enviado,
+            // Relaciones estructuradas
+            mascota: {
+                id_mascota: consulta.id_mascota,
+                nombre: consulta.nombre_mascota,
+                especie: consulta.especie,
+                raza: consulta.raza,
+                edad: consulta.edad
+            },
+            veterinario: {
+                id_usuario: consulta.id_veterinario,
+                nombre: consulta.nombre_veterinario,
+                email: consulta.email_veterinario
+            },
+            cliente: {
+                nombre: consulta.nombre_cliente,
+                telefono: consulta.telefono,
+                email: consulta.email
+            }
+        };
+
         res.json({
             success: true,
-            data: result.rows[0]
+            data: consultaStructured
         });
     } catch (error) {
         const errorInfo = handleDatabaseError(error, 'obtener consulta clínica');
@@ -298,7 +649,7 @@ export const getConsultationsByPet = async (req, res) => {
                 c.*,
                 u.nombre as nombre_veterinario
             FROM clinical.consultas_clinicas c
-            LEFT JOIN auth.usuarios u ON c.id_veterinario = u.id_usuario
+            LEFT JOIN vetplus_auth.usuarios u ON c.id_veterinario = u.id_usuario
             WHERE c.id_mascota = $1
             ORDER BY c.fecha DESC
             LIMIT $2 OFFSET $3
@@ -487,7 +838,7 @@ export const completeConsultationWithInvoice = async (req, res) => {
                 FROM clinical.consultas_clinicas cc
                 JOIN clinical.mascotas m ON cc.id_mascota = m.id_mascota
                 JOIN clinical.clientes c ON m.id_cliente = c.id_cliente
-                JOIN auth.usuarios u ON cc.id_veterinario = u.id_usuario
+                JOIN vetplus_auth.usuarios u ON cc.id_veterinario = u.id_usuario
                 WHERE cc.id_consulta = $1
             `, [id]);
 
@@ -600,8 +951,22 @@ export const completeConsultationWithInvoice = async (req, res) => {
                         const total = precioUnitario * cantidad;
 
                         // Verificar stock si es inventariable
-                        if (producto?.inventariable && producto.stock_actual < cantidad) {
-                            throw new Error(`Stock insuficiente para ${producto.nombre}. Stock disponible: ${producto.stock_actual}`);
+                        if (producto?.inventariable) {
+                            console.log(`📦 Verificando stock para ${producto.nombre}: solicitado=${cantidad}, disponible=${producto.stock_actual}`);
+
+                            if (producto.stock_actual < cantidad) {
+                                throw new Error(`Stock insuficiente para "${producto.nombre}". Cantidad solicitada: ${cantidad}, Stock disponible: ${producto.stock_actual}`);
+                            }
+
+                            if (producto.stock_actual - cantidad < 0) {
+                                throw new Error(`Operación resultaría en stock negativo para "${producto.nombre}". Stock actual: ${producto.stock_actual}, Cantidad solicitada: ${cantidad}`);
+                            }
+
+                            console.log(`✅ Stock verificado correctamente para ${producto.nombre}`);
+                        } else if (producto) {
+                            console.log(`📦 Producto "${producto.nombre}" no es inventariable, omitiendo validación de stock`);
+                        } else {
+                            console.log(`📝 Producto manual "${descripcion}", omitiendo validación de stock`);
                         }
 
                         // Insertar detalle de factura
@@ -619,10 +984,24 @@ export const completeConsultationWithInvoice = async (req, res) => {
 
                         // Actualizar stock si es inventariable
                         if (producto?.inventariable) {
-                            await query(
-                                'UPDATE financial.productos SET stock_actual = stock_actual - $1 WHERE id_producto = $2',
+                            console.log(`📦 Actualizando stock para ${producto.nombre}: ${producto.stock_actual} - ${cantidad} = ${producto.stock_actual - cantidad}`);
+
+                            const updateResult = await query(
+                                'UPDATE financial.productos SET stock_actual = stock_actual - $1 WHERE id_producto = $2 RETURNING stock_actual',
                                 [cantidad, producto.id_producto]
                             );
+
+                            if (updateResult.rows.length === 0) {
+                                throw new Error(`Error al actualizar stock: producto ${producto.nombre} no encontrado`);
+                            }
+
+                            const nuevoStock = updateResult.rows[0].stock_actual;
+                            console.log(`✅ Stock actualizado para ${producto.nombre}: nuevo stock = ${nuevoStock}`);
+
+                            // Verificación adicional: asegurar que no haya stock negativo
+                            if (nuevoStock < 0) {
+                                throw new Error(`Error crítico: stock negativo detectado para "${producto.nombre}" después de actualización. Stock: ${nuevoStock}`);
+                            }
                         }
 
                         subtotal += total;
@@ -649,7 +1028,7 @@ export const completeConsultationWithInvoice = async (req, res) => {
                             u.nombre as creado_por
                         FROM financial.facturas_venta f
                         LEFT JOIN clinical.clientes c ON f.id_cliente = c.id_cliente
-                        LEFT JOIN auth.usuarios u ON f.created_by = u.id_usuario
+                        LEFT JOIN vetplus_auth.usuarios u ON f.created_by = u.id_usuario
                         WHERE f.id_factura = $1
                     `, [factura.id_factura]);
 

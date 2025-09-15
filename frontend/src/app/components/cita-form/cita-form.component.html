@@ -31,7 +31,7 @@
                 <mat-label>Paciente</mat-label>
                 <mat-select formControlName="id_mascota" required>
                   <mat-option value="">Seleccionar paciente</mat-option>
-                  @for (paciente of pacientes(); track paciente.id_mascota) {
+                  @for (paciente of pacientes(); track $index) {
                     <mat-option [value]="paciente.id_mascota">
                       <div class="paciente-option">
                         <span class="paciente-nombre">{{ paciente.nombre }}</span>

@@ -16,6 +16,7 @@ import {
     reactivateUser,
     getUserStats
 } from '../controllers/userController.js';
+import passwordResetController from '../controllers/passwordResetController.js';
 
 const router = express.Router();
 
@@ -28,9 +29,26 @@ router.use(authenticateToken);
  * @access  Private (solo admin)
  */
 router.post('/',
+    (req, res, next) => {
+        console.log('🔍 POST /api/auth/users - Iniciando creación de usuario');
+        console.log('📝 Datos recibidos:', JSON.stringify(req.body, null, 2));
+        next();
+    },
     authorize(['admin']),
+    (req, res, next) => {
+        console.log('✅ Autorización pasada');
+        next();
+    },
     validateCreateUser,
+    (req, res, next) => {
+        console.log('✅ Validaciones de esquema pasadas');
+        next();
+    },
     validateRequest,
+    (req, res, next) => {
+        console.log('✅ ValidateRequest middleware pasado');
+        next();
+    },
     createUser
 );
 
@@ -86,12 +104,12 @@ router.put('/:id/role',
     (req, res, next) => {
         // Validación específica para cambio de rol
         const { rol } = req.body;
-        const validRoles = ['admin', 'vet', 'aux'];
+        const validRoles = ['admin', 'vet', 'aux_admin', 'aux_vet'];
         
         if (!rol || !validRoles.includes(rol)) {
             return res.status(400).json({
                 success: false,
-                message: 'Rol inválido. Debe ser admin, vet o aux'
+                message: 'Rol inválido. Debe ser admin, vet, aux_admin o aux_vet'
             });
         }
         
@@ -131,7 +149,7 @@ router.patch('/:id/estado',
 
             // Verificar que el usuario existe
             const existingUser = await query(
-                'SELECT id_usuario, email, activo FROM auth.usuarios WHERE id_usuario = $1',
+                'SELECT id_usuario, email, activo FROM vetplus_auth.usuarios WHERE id_usuario = $1',
                 [id]
             );
 
@@ -154,7 +172,7 @@ router.patch('/:id/estado',
 
             // Actualizar estado
             await query(
-                'UPDATE auth.usuarios SET activo = $1, updated_at = CURRENT_TIMESTAMP WHERE id_usuario = $2',
+                'UPDATE vetplus_auth.usuarios SET activo = $1, updated_at = CURRENT_TIMESTAMP WHERE id_usuario = $2',
                 [activo, id]
             );
 
@@ -185,6 +203,42 @@ router.patch('/:id/estado',
 router.put('/:id/reactivate',
     authorize(['admin']),
     reactivateUser
+);
+
+/**
+ * @route   POST /api/auth/users/:id/reset-password
+ * @desc    Generar contraseña temporal para un usuario
+ * @access  Private (solo admin)
+ */
+router.post('/:id/reset-password',
+    authorize(['admin']),
+    (req, res) => {
+        req.body.userId = req.params.id;
+        passwordResetController.generateTempPassword(req, res);
+    }
+);
+
+/**
+ * @route   POST /api/auth/users/:id/set-password
+ * @desc    Establecer nueva contraseña para un usuario
+ * @access  Private (solo admin)
+ */
+router.post('/:id/set-password',
+    authorize(['admin']),
+    (req, res) => {
+        req.body.userId = req.params.id;
+        passwordResetController.adminResetPassword(req, res);
+    }
+);
+
+/**
+ * @route   POST /api/auth/users/:id/force-password-change
+ * @desc    Forzar cambio de contraseña en próximo login
+ * @access  Private (solo admin)
+ */
+router.post('/:id/force-password-change',
+    authorize(['admin']),
+    passwordResetController.forcePasswordChange
 );
 
 export default router;

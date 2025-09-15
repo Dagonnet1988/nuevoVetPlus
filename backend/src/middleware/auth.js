@@ -76,7 +76,7 @@ const authenticateToken = async (req, res, next) => {
 
     // Verificar si el token está en la blacklist
     const blacklistedToken = await query(
-      'SELECT token FROM auth.blacklisted_tokens WHERE token = $1',
+      'SELECT token FROM vetplus_auth.blacklisted_tokens WHERE token = $1',
       [token]
     );
 
@@ -92,7 +92,7 @@ const authenticateToken = async (req, res, next) => {
     
     // Verificar que el usuario existe y está activo
     const userResult = await query(
-      'SELECT id_usuario, email, nombre, rol, activo FROM auth.usuarios WHERE id_usuario = $1',
+      'SELECT id_usuario, email, nombre, rol, activo FROM vetplus_auth.usuarios WHERE id_usuario = $1',
       [decoded.id]
     );
 
@@ -122,6 +122,11 @@ const authenticateToken = async (req, res, next) => {
       nombre: user.nombre,
       rol: user.rol
     };
+
+    // Debug logging temporal
+    if (user.email === 'diego@correo.com') {
+      console.log(`🔍 DEBUG: Usuario Diego autenticado con rol: ${user.rol}`);
+    }
 
     next();
   } catch (error) {
@@ -158,6 +163,11 @@ const authorize = (allowedRoles) => {
     }
 
     if (!allowedRoles.includes(req.user.rol)) {
+      // Debug logging temporal
+      if (req.user.email === 'diego@correo.com') {
+        console.log(`🔍 DEBUG: Acceso denegado para Diego. Rol actual: ${req.user.rol}, Roles permitidos: ${allowedRoles.join(', ')}`);
+      }
+      
       return res.status(403).json({
         success: false,
         message: 'No tienes permisos para acceder a este recurso',
@@ -186,7 +196,7 @@ const optionalAuth = async (req, res, next) => {
         
         // Verificar que el usuario existe y está activo
         const userResult = await query(
-          'SELECT id_usuario, email, nombre, rol, activo FROM auth.usuarios WHERE id_usuario = $1',
+          'SELECT id_usuario, email, nombre, rol, activo FROM vetplus_auth.usuarios WHERE id_usuario = $1',
           [decoded.id]
         );
 

@@ -12,7 +12,7 @@ export interface QuickAction {
   icon: string;
   route: string;
   color: string;
-  roles: ('admin' | 'vet' | 'aux')[];
+  roles: ('admin' | 'vet' | 'aux_admin' | 'aux_vet')[];
   description?: string;
 }
 
@@ -39,7 +39,7 @@ export class QuickActionsComponent {
       icon: 'event_available',
       route: '/citas/nueva',
       color: 'primary',
-      roles: ['admin', 'vet', 'aux'],
+      roles: ['admin', 'vet', 'aux_admin', 'aux_vet'],
       description: 'Agendar cita'
     },
     {
@@ -47,7 +47,7 @@ export class QuickActionsComponent {
       icon: 'pets',
       route: '/pacientes/nuevo',
       color: 'success',
-      roles: ['admin', 'vet', 'aux'],
+      roles: ['admin', 'vet', 'aux_admin', 'aux_vet'],
       description: 'Registrar mascota'
     },
     {
@@ -55,7 +55,7 @@ export class QuickActionsComponent {
       icon: 'receipt_long',
       route: '/facturacion/nueva',
       color: 'warning',
-      roles: ['admin', 'aux'],
+      roles: ['admin', 'aux_admin'],
       description: 'Generar factura'
     },
     {
@@ -71,7 +71,7 @@ export class QuickActionsComponent {
       icon: 'inventory_2',
       route: '/inventario',
       color: 'primary',
-      roles: ['admin', 'aux'],
+      roles: ['admin', 'aux_admin'],
       description: 'Gestionar stock'
     },
     {

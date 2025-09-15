@@ -10,14 +10,14 @@
         <p class="page-subtitle">Gestión completa de consultas y expedientes médicos</p>
       </div>
       <div class="actions-section">
-        <button mat-raised-button 
-                color="primary" 
+        <button mat-raised-button
+                color="primary"
                 (click)="openCreateDialog()"
                 class="create-button">
           <mat-icon>add</mat-icon>
           Nueva Consulta
         </button>
-        <button mat-stroked-button 
+        <button mat-stroked-button
                 (click)="exportarHistoria()"
                 [disabled]="!selectedPaciente()"
                 class="export-button">
@@ -47,7 +47,7 @@
         <div class="stat-content">
           <mat-icon class="stat-icon accent-color">pets</mat-icon>
           <div class="stat-info">
-            <span class="stat-number">{{ pacientes().length }}</span>
+            <span class="stat-number">{{ pacientesConHistoria }}</span>
             <span class="stat-label">Pacientes con Historia</span>
           </div>
         </div>
@@ -72,7 +72,7 @@
           <mat-icon class="stat-icon warn-color">schedule</mat-icon>
           <div class="stat-info">
             <span class="stat-number">{{ consultasEnProgreso }}</span>
-            <span class="stat-label">En Progreso</span>
+            <span class="stat-label">En Curso</span>
           </div>
         </div>
       </mat-card-content>
@@ -82,8 +82,8 @@
   <!-- Selector de vista -->
   <mat-card class="view-selector-card">
     <mat-card-content>
-      <mat-button-toggle-group 
-        [value]="currentView()" 
+      <mat-button-toggle-group
+        [value]="currentView()"
         (change)="changeView($event.value)"
         class="view-toggle">
         <mat-button-toggle value="lista">
@@ -141,11 +141,11 @@
 
           <mat-form-field appearance="outline" class="search-field">
             <mat-label>Buscar</mat-label>
-            <input matInput formControlName="search" placeholder="Motivo, diagnóstico...">
+            <input matInput formControlName="search" placeholder="Buscar en motivo, diagnóstico, paciente, cliente...">
             <mat-icon matSuffix>search</mat-icon>
           </mat-form-field>
 
-          <button mat-stroked-button 
+          <button mat-stroked-button
                   type="button"
                   (click)="clearFilters()"
                   class="clear-filters-btn">
@@ -215,7 +215,7 @@
           } @else {
             <div class="table-container">
               <table mat-table [dataSource]="consultas()" matSort class="consultas-table">
-                
+
                 <!-- Columna Fecha -->
                 <ng-container matColumnDef="fecha_consulta">
                   <th mat-header-cell *matHeaderCellDef mat-sort-header>Fecha</th>
@@ -308,8 +308,8 @@
                 </ng-container>
 
                 <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-                <tr mat-row *matRowDef="let row; columns: displayedColumns;" 
-                    (click)="viewConsulta(row)" 
+                <tr mat-row *matRowDef="let row; columns: displayedColumns;"
+                    (click)="viewConsulta(row)"
                     class="clickable-row"></tr>
               </table>
 

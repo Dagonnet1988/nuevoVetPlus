@@ -4,18 +4,17 @@ import { NoAuthGuard } from './utils/guards/no-auth.guard';
 import { RoleGuard } from './utils/guards/role.guard';
 
 export const routes: Routes = [
-  // Ruta raíz - redirigir al dashboard si está autenticado, sino al login
+  // Ruta raíz - redirigir al login temporalmente
   {
     path: '',
-    redirectTo: '/dashboard',
+    redirectTo: '/login',
     pathMatch: 'full'
   },
 
-  // Rutas de autenticación (sin autenticación requerida)
+  // Rutas de autenticación (sin guards temporalmente)
   {
     path: '',
     loadComponent: () => import('./layouts/auth-layout/auth-layout.component').then(m => m.AuthLayoutComponent),
-    canActivate: [NoAuthGuard],
     children: [
       {
         path: 'login',
@@ -28,7 +27,7 @@ export const routes: Routes = [
   {
     path: 'change-password',
     loadComponent: () => import('./layouts/auth-layout/auth-layout.component').then(m => m.AuthLayoutComponent),
-    canActivate: [AuthGuard],
+    // canActivate: [AuthGuard], // TEMPORALMENTE DESACTIVADO
     children: [
       {
         path: '',
@@ -37,11 +36,11 @@ export const routes: Routes = [
     ]
   },
 
-  // Rutas principales del sistema (requieren autenticación)
+  // Rutas principales del sistema (temporalmente sin guards)
   {
     path: '',
     loadComponent: () => import('./layouts/main-layout/main-layout.component').then(m => m.MainLayoutComponent),
-    canActivate: [AuthGuard],
+    // canActivate: [AuthGuard], // TEMPORALMENTE DESACTIVADO
     children: [
       // Dashboard - Accesible para todos los usuarios autenticados
       {
@@ -49,20 +48,20 @@ export const routes: Routes = [
         loadComponent: () => import('./components/dashboard/dashboard.component').then(m => m.DashboardComponent)
       },
 
-      // Pacientes - Accesible para admin, vet, aux
+      // Pacientes - Accesible para admin, vet, aux_admin, aux_vet
       {
         path: 'pacientes',
         loadChildren: () => import('./components/pacientes/pacientes.routes').then(m => m.PACIENTES_ROUTES),
         canActivate: [RoleGuard],
-        data: { roles: ['admin', 'vet', 'aux'] }
+        data: { roles: ['admin', 'vet', 'aux_admin', 'aux_vet'] }
       },
 
-      // Citas - Accesible para admin, vet, aux
+      // Citas - Accesible para admin, vet, aux_admin, aux_vet
       {
         path: 'citas',
         loadChildren: () => import('./components/citas/citas.routes').then(m => m.CITAS_ROUTES),
         canActivate: [RoleGuard],
-        data: { roles: ['admin', 'vet', 'aux'] }
+        data: { roles: ['admin', 'vet', 'aux_admin', 'aux_vet'] }
       },
 
       // Historia Clínica - Accesible para admin, vet
@@ -81,12 +80,12 @@ export const routes: Routes = [
         data: { roles: ['admin', 'vet'] }
       },
 
-      // Facturación - Accesible para admin, vet, aux
+      // Facturación - Accesible para admin, vet, aux_admin
       {
         path: 'facturacion',
         loadChildren: () => import('./components/facturacion/facturacion.routes').then(m => m.FACTURACION_ROUTES),
         canActivate: [RoleGuard],
-        data: { roles: ['admin', 'vet', 'aux'] }
+        data: { roles: ['admin', 'vet', 'aux_admin'] }
       },
 
       // Reportes - Accesible para admin, vet

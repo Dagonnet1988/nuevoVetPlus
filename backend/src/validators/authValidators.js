@@ -62,37 +62,50 @@ export const validateCreateUser = [
     .withMessage('Documento debe tener entre 5 y 20 caracteres'),
 
   body('tipo_documento')
-    .isIn(['CC', 'CE', 'TI', 'PP'])
-    .withMessage('Tipo de documento debe ser CC, CE, TI o PP'),
+    .optional()
+    .isIn(['CC', 'CE', 'Pasaporte'])
+    .withMessage('Tipo de documento debe ser CC, CE o Pasaporte'),
     
   body('password_temporal')
-    .optional()
+    .optional({ values: 'falsy' })
     .isLength({ min: 8 })
     .withMessage('Contraseña temporal debe tener al menos 8 caracteres'),
     
   body('rol')
-    .isIn(['admin', 'vet', 'aux'])
-    .withMessage('Rol debe ser admin, vet o aux'),
+    .isIn(['admin', 'vet', 'aux_admin', 'aux_vet'])
+    .withMessage('Rol debe ser admin, vet, aux_admin o aux_vet'),
 
   body('telefono')
-    .optional()
-    .matches(/^[\+]?[0-9\s\-\(\)]{10,15}$/)
-    .withMessage('Teléfono debe tener un formato válido'),
+    .optional({ values: 'falsy' })
+    .custom((value) => {
+      if (!value || value.trim() === '') {
+        return true; // Permitir valores vacíos
+      }
+      if (!/^[\+]?[0-9\s\-\(\)]{10,15}$/.test(value)) {
+        throw new Error('Teléfono debe tener un formato válido');
+      }
+      return true;
+    }),
 
   body('direccion')
-    .optional()
+    .optional({ values: 'falsy' })
     .isLength({ max: 200 })
     .withMessage('Dirección no puede exceder 200 caracteres'),
 
+  // Validaciones condicionales para veterinarios
   body('especialidad')
-    .optional()
-    .isLength({ max: 100 })
-    .withMessage('Especialidad no puede exceder 100 caracteres'),
+    .if(body('rol').equals('vet'))
+    .notEmpty()
+    .withMessage('Especialidad es requerida para veterinarios')
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Especialidad debe tener entre 2 y 100 caracteres'),
 
   body('numero_licencia')
-    .optional()
-    .isLength({ max: 50 })
-    .withMessage('Número de licencia no puede exceder 50 caracteres'),
+    .if(body('rol').equals('vet'))
+    .notEmpty()
+    .withMessage('Número de licencia es requerido para veterinarios')
+    .isLength({ min: 3, max: 50 })
+    .withMessage('Número de licencia debe tener entre 3 y 50 caracteres'),
 
   body('activo')
     .optional()
@@ -127,8 +140,8 @@ export const validateUpdateUser = [
     
   body('rol')
     .optional()
-    .isIn(['admin', 'vet', 'aux'])
-    .withMessage('Rol debe ser admin, vet o aux'),
+    .isIn(['admin', 'vet', 'aux_admin', 'aux_vet'])
+    .withMessage('Rol debe ser admin, vet, aux_admin o aux_vet'),
     
   body('activo')
     .optional()

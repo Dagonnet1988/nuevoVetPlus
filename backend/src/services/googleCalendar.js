@@ -49,7 +49,7 @@ class GoogleCalendarService {
     async loadConfig() {
         try {
             const result = await query(`
-                SELECT * FROM auth.google_calendar_config 
+                SELECT * FROM vetplus_auth.google_calendar_config 
                 WHERE is_active = true 
                 ORDER BY created_at DESC 
                 LIMIT 1
@@ -158,17 +158,29 @@ class GoogleCalendarService {
                 location
             } = eventData;
 
+            // Determinar zona horaria (usar siempre Colombia como predeterminado)
+            const timeZone = this.config?.timezone || 'America/Bogota';
+
+            console.log('📅 Creando evento en Google Calendar:', {
+                summary,
+                startDateTime,
+                endDateTime,
+                timeZone,
+                config_timezone: this.config?.timezone,
+                env_timezone: process.env.TZ
+            });
+
             const event = {
                 summary,
                 description,
                 location: location || process.env.CLINIC_ADDRESS || 'VetPlus Clínica',
                 start: {
                     dateTime: startDateTime,
-                    timeZone: this.config.timezone
+                    timeZone: timeZone
                 },
                 end: {
                     dateTime: endDateTime,
-                    timeZone: this.config.timezone
+                    timeZone: timeZone
                 },
                 attendees: [],
                 reminders: {
@@ -287,6 +299,100 @@ class GoogleCalendarService {
     }
 
     /**
+     * Actualizar estado de asistente específico en evento
+     */
+    async updateAttendeeStatus(eventId, attendeeEmail, responseStatus) {
+        try {
+            if (!this.isConfigured()) {
+                throw new Error('Google Calendar no está configurado');
+            }
+
+            // Primero obtener el evento actual
+            const getResponse = await this.calendar.events.get({
+                calendarId: 'primary',
+                eventId: eventId
+            });
+
+            const event = getResponse.data;
+            
+            // Actualizar el estado del asistente específico
+            if (event.attendees) {
+                const attendeeIndex = event.attendees.findIndex(att => att.email === attendeeEmail);
+                if (attendeeIndex !== -1) {
+                    event.attendees[attendeeIndex].responseStatus = responseStatus;
+                }
+            }
+
+            // Actualizar el evento
+            const response = await this.calendar.events.update({
+                calendarId: 'primary',
+                eventId: eventId,
+                resource: event,
+                sendUpdates: 'all'
+            });
+
+            return {
+                success: true,
+                message: `Estado de asistente actualizado a ${responseStatus}`,
+                data: response.data
+            };
+
+        } catch (error) {
+            console.error('Error actualizando estado de asistente:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    /**
+     * Agregar comentario explicativo al evento
+     */
+    async addCommentToEvent(eventId, comment) {
+        try {
+            if (!this.isConfigured()) {
+                throw new Error('Google Calendar no está configurado');
+            }
+
+            // Obtener el evento actual
+            const getResponse = await this.calendar.events.get({
+                calendarId: 'primary',
+                eventId: eventId
+            });
+
+            const event = getResponse.data;
+            
+            // Agregar comentario a la descripción
+            const currentDescription = event.description || '';
+            const newDescription = currentDescription + '\n\n⚠️ ' + comment;
+            
+            event.description = newDescription;
+
+            // Actualizar el evento
+            const response = await this.calendar.events.update({
+                calendarId: 'primary',
+                eventId: eventId,
+                resource: event,
+                sendUpdates: 'all'
+            });
+
+            return {
+                success: true,
+                message: 'Comentario agregado exitosamente',
+                data: response.data
+            };
+
+        } catch (error) {
+            console.error('Error agregando comentario al evento:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    /**
      * Eliminar evento de Google Calendar
      */
     async deleteEvent(eventId) {
@@ -344,6 +450,42 @@ class GoogleCalendarService {
     }
 
     /**
+     * Verificar y refrescar token si es necesario antes de operaciones
+     */
+    async ensureValidToken() {
+        try {
+            if (!this.auth || !this.config) {
+                throw new Error('No hay configuración de autenticación');
+            }
+
+            // Verificar si tenemos tokens
+            const credentials = await this.auth.getAccessToken();
+            if (!credentials || !credentials.token) {
+                throw new Error('No hay token de acceso válido');
+            }
+
+            console.log('🔑 Verificando validez del token...');
+            
+            // Probar el token haciendo una llamada simple
+            try {
+                await this.calendar.calendarList.list({ maxResults: 1 });
+                console.log('✅ Token válido');
+                return true;
+            } catch (error) {
+                if (error.status === 401) {
+                    console.log('🔄 Token expirado, refrescando...');
+                    await this.refreshAccessToken();
+                    return true;
+                }
+                throw error;
+            }
+        } catch (error) {
+            console.error('❌ Error verificando token:', error);
+            throw error;
+        }
+    }
+
+    /**
      * Listar eventos en un rango de fechas
      */
     async listEvents(startDateTime, endDateTime) {
@@ -352,13 +494,46 @@ class GoogleCalendarService {
                 throw new Error('Google Calendar no está configurado');
             }
 
+            // Verificar y refrescar token si es necesario
+            await this.ensureValidToken();
+
+            // Validar y formatear fechas para Google Calendar API
+            let formattedStartDate, formattedEndDate;
+            
+            try {
+                // Si las fechas son solo en formato YYYY-MM-DD, agregar tiempo
+                if (startDateTime && !startDateTime.includes('T')) {
+                    formattedStartDate = startDateTime + 'T00:00:00Z';
+                } else {
+                    formattedStartDate = new Date(startDateTime).toISOString();
+                }
+                
+                if (endDateTime && !endDateTime.includes('T')) {
+                    formattedEndDate = endDateTime + 'T23:59:59Z';
+                } else {
+                    formattedEndDate = new Date(endDateTime).toISOString();
+                }
+            } catch (dateError) {
+                throw new Error(`Formato de fecha inválido: ${dateError.message}`);
+            }
+
+            console.log('📅 Listando eventos de Google Calendar:', {
+                originalStart: startDateTime,
+                originalEnd: endDateTime,
+                formattedStart: formattedStartDate,
+                formattedEnd: formattedEndDate,
+                calendarId: 'primary'
+            });
+
             const response = await this.calendar.events.list({
                 calendarId: 'primary',
-                timeMin: startDateTime,
-                timeMax: endDateTime,
+                timeMin: formattedStartDate,
+                timeMax: formattedEndDate,
                 singleEvents: true,
                 orderBy: 'startTime'
             });
+
+            console.log('✅ Eventos obtenidos:', response.data.items?.length || 0);
 
             return {
                 success: true,
@@ -367,9 +542,61 @@ class GoogleCalendarService {
 
         } catch (error) {
             console.error('Error listando eventos de Google Calendar:', error);
+            console.error('Error details:', {
+                status: error.status,
+                code: error.code,
+                message: error.message,
+                cause: error.cause,
+                responseData: error.response?.data,
+                errors: error.cause?.errors,
+                config: error.config ? {
+                    url: error.config.url,
+                    method: error.config.method,
+                    params: error.config.params
+                } : null
+            });
+            
+            // Log completo del error de Google API
+            if (error.cause?.errors) {
+                console.error('🔍 Errores específicos de Google API:');
+                error.cause.errors.forEach((err, index) => {
+                    console.error(`Error ${index + 1}:`, JSON.stringify(err, null, 2));
+                });
+            }
+            
+            // Si es error de autenticación, intentar refrescar token
+            if (error.status === 401 || error.code === 401) {
+                console.log('🔄 Token expirado, intentando refrescar...');
+                try {
+                    await this.refreshAccessToken();
+                    console.log('✅ Token refrescado, reintentando...');
+                    
+                    // Reintentar la operación
+                    const response = await this.calendar.events.list({
+                        calendarId: 'primary',
+                        timeMin: startDateTime,
+                        timeMax: endDateTime,
+                        singleEvents: true,
+                        orderBy: 'startTime'
+                    });
+                    
+                    return {
+                        success: true,
+                        events: response.data.items || []
+                    };
+                } catch (refreshError) {
+                    console.error('❌ Error al refrescar token:', refreshError);
+                    return {
+                        success: false,
+                        error: 'Token expirado y no se pudo refrescar: ' + refreshError.message
+                    };
+                }
+            }
+            
             return {
                 success: false,
-                error: error.message
+                error: error.message,
+                details: error.cause || error.response?.data
             };
         }
     }
@@ -473,6 +700,38 @@ class GoogleCalendarService {
     }
 
     /**
+     * Mapear estado de Google Calendar a estado de VetPlus
+     */
+    mapGoogleStatusToVetPlus(googleStatus, fechaInicio) {
+        const ahora = new Date();
+        const fechaCita = new Date(fechaInicio);
+        
+        // Mapeo de estados
+        switch (googleStatus) {
+            case 'confirmed':
+                // Si la fecha ya pasó, considerarla completada
+                if (fechaCita < ahora) {
+                    return 'completada';
+                }
+                // Si es muy próxima (menos de 1 hora), está en curso
+                const diferencia = fechaCita.getTime() - ahora.getTime();
+                if (diferencia <= 60 * 60 * 1000 && diferencia > -30 * 60 * 1000) { // 1 hora antes a 30 min después
+                    return 'en_curso';
+                }
+                return 'confirmada';
+                
+            case 'tentative':
+                return 'pendiente';
+                
+            case 'cancelled':
+                return 'cancelada';
+                
+            default:
+                return 'pendiente';
+        }
+    }
+
+    /**
      * Parsear evento de Google a formato VetPlus
      */
     parseGoogleEventToVetPlus(googleEvent) {
@@ -523,6 +782,7 @@ class GoogleCalendarService {
                 tipo: tipo,
                 motivo: motivo,
                 estado_google: status || 'confirmed',
+                estado_vetplus: this.mapGoogleStatusToVetPlus(status, start.dateTime || start.date),
                 ultima_modificacion: updated,
                 mascota_nombre: mascotaNombre,
                 cliente_nombre: clienteNombre,
@@ -547,6 +807,8 @@ class GoogleCalendarService {
                 };
             }
 
+            console.log('🔍 Detectando cambios desde:', lastSyncTime);
+
             // Obtener eventos modificados desde la última sincronización
             const response = await this.calendar.events.list({
                 calendarId: this.config.calendar_id || 'primary',
@@ -557,6 +819,7 @@ class GoogleCalendarService {
             });
 
             if (!response.data.items) {
+                console.log('📅 No hay eventos para procesar');
                 return {
                     success: true,
                     changes: [],
@@ -564,6 +827,7 @@ class GoogleCalendarService {
                 };
             }
 
+            console.log(`📅 Procesando ${response.data.items.length} eventos actualizados`);
             const changes = [];
             
             for (const event of response.data.items) {
@@ -573,15 +837,28 @@ class GoogleCalendarService {
                     const parsedEvent = this.parseGoogleEventToVetPlus(event);
                     
                     if (parsedEvent) {
+                        // Detectar cambios específicos en respuestas de asistentes
+                        const attendeeChanges = this.detectAttendeeChanges(event);
+                        
                         changes.push({
                             change_type: changeType,
                             google_event: event,
-                            parsed_data: parsedEvent
+                            parsed_data: parsedEvent,
+                            attendee_changes: attendeeChanges,
+                            event_status: event.status,
+                            updated_at: event.updated
                         });
+
+                        console.log(`📝 Cambio detectado: ${changeType} - ${event.summary}`);
+                        if (attendeeChanges.length > 0) {
+                            console.log(`👥 Respuestas de asistentes:`, attendeeChanges);
+                        }
                     }
                 }
             }
 
+            console.log(`✅ Total de cambios detectados: ${changes.length}`);
+            
             return {
                 success: true,
                 changes: changes,
@@ -599,6 +876,29 @@ class GoogleCalendarService {
     }
 
     /**
+     * Detectar cambios específicos en respuestas de asistentes
+     */
+    detectAttendeeChanges(event) {
+        const attendeeChanges = [];
+        
+        if (event.attendees && Array.isArray(event.attendees)) {
+            for (const attendee of event.attendees) {
+                if (attendee.responseStatus) {
+                    attendeeChanges.push({
+                        email: attendee.email,
+                        response_status: attendee.responseStatus,
+                        display_name: attendee.displayName || attendee.email,
+                        is_organizer: attendee.organizer || false,
+                        is_resource: attendee.resource || false
+                    });
+                }
+            }
+        }
+        
+        return attendeeChanges;
+    }
+
+    /**
      * Verificar si un evento es de VetPlus
      */
     isVetPlusEvent(event) {
@@ -613,7 +913,7 @@ class GoogleCalendarService {
     }
 
     /**
-     * Determinar el tipo de cambio (created, updated, deleted)
+     * Determinar el tipo de cambio (created, updated, deleted, attendee_response)
      */
     determineChangeType(event) {
         if (event.status === 'cancelled') {
@@ -621,6 +921,15 @@ class GoogleCalendarService {
         } else if (event.created === event.updated) {
             return 'created';
         } else {
+            // Verificar si hay cambios en asistentes
+            const hasAttendeeChanges = event.attendees && event.attendees.some(attendee => 
+                attendee.responseStatus && attendee.responseStatus !== 'needsAction'
+            );
+            
+            if (hasAttendeeChanges) {
+                return 'attendee_response';
+            }
+            
             return 'updated';
         }
     }
@@ -713,7 +1022,7 @@ class GoogleCalendarService {
 
             // Guardar información del webhook en la configuración
             await query(`
-                UPDATE auth.google_calendar_config 
+                UPDATE vetplus_auth.google_calendar_config 
                 SET 
                     webhook_channel_id = $1,
                     webhook_url = $2,
@@ -754,7 +1063,7 @@ class GoogleCalendarService {
             // Obtener información del webhook actual
             const configResult = await query(`
                 SELECT webhook_channel_id, webhook_resource_id 
-                FROM auth.google_calendar_config 
+                FROM vetplus_auth.google_calendar_config 
                 WHERE is_active = true 
                 AND webhook_channel_id IS NOT NULL
             `);
@@ -778,7 +1087,7 @@ class GoogleCalendarService {
 
             // Limpiar información del webhook en la configuración
             await query(`
-                UPDATE auth.google_calendar_config 
+                UPDATE vetplus_auth.google_calendar_config 
                 SET 
                     webhook_channel_id = NULL,
                     webhook_url = NULL,
@@ -815,7 +1124,7 @@ class GoogleCalendarService {
                     webhook_url,
                     webhook_expiration,
                     webhook_resource_id
-                FROM auth.google_calendar_config 
+                FROM vetplus_auth.google_calendar_config 
                 WHERE is_active = true
             `);
 
@@ -893,6 +1202,101 @@ class GoogleCalendarService {
 
         } catch (error) {
             console.error('❌ Error renovando webhook:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    /**
+     * Verificar manualmente las respuestas de asistentes en un evento específico
+     */
+    async checkEventAttendeeResponses(eventId) {
+        try {
+            if (!this.calendar) {
+                await this.initializeAuth();
+            }
+
+            if (!this.calendar) {
+                throw new Error('Google Calendar no está configurado');
+            }
+
+            console.log(`🔍 Verificando respuestas de asistentes para evento: ${eventId}`);
+
+            // Obtener el evento de Google Calendar
+            const response = await this.calendar.events.get({
+                calendarId: this.config.calendar_id,
+                eventId: eventId
+            });
+
+            const event = response.data;
+            console.log('📅 Evento obtenido:', {
+                id: event.id,
+                summary: event.summary,
+                status: event.status,
+                attendees: event.attendees?.length || 0
+            });
+
+            if (!event.attendees || event.attendees.length === 0) {
+                return {
+                    success: true,
+                    status: 'no_attendees',
+                    message: 'El evento no tiene asistentes'
+                };
+            }
+
+            // Analizar respuestas de asistentes
+            const attendeeResponses = event.attendees.map(attendee => ({
+                email: attendee.email,
+                responseStatus: attendee.responseStatus, // needsAction, accepted, declined, tentative
+                optional: attendee.optional || false
+            }));
+
+            console.log('👥 Respuestas de asistentes:', attendeeResponses);
+
+            // Determinar el estado general basado en las respuestas
+            const requiredAttendees = attendeeResponses.filter(a => !a.optional);
+            const acceptedCount = requiredAttendees.filter(a => a.responseStatus === 'accepted').length;
+            const declinedCount = requiredAttendees.filter(a => a.responseStatus === 'declined').length;
+            const tentativeCount = requiredAttendees.filter(a => a.responseStatus === 'tentative').length;
+            const noResponseCount = requiredAttendees.filter(a => a.responseStatus === 'needsAction').length;
+
+            let suggestedStatus = 'pendiente';
+            let statusReason = '';
+
+            if (acceptedCount > 0 && declinedCount === 0) {
+                suggestedStatus = 'confirmada';
+                statusReason = `${acceptedCount} asistente(s) aceptaron`;
+            } else if (declinedCount > 0) {
+                suggestedStatus = 'cancelada';
+                statusReason = `${declinedCount} asistente(s) rechazaron`;
+            } else if (tentativeCount > 0 && acceptedCount === 0) {
+                suggestedStatus = 'pendiente';
+                statusReason = `${tentativeCount} asistente(s) están indecisos`;
+            } else {
+                suggestedStatus = 'pendiente';
+                statusReason = `${noResponseCount} asistente(s) no han respondido`;
+            }
+
+            return {
+                success: true,
+                eventId: eventId,
+                attendeeResponses: attendeeResponses,
+                summary: {
+                    total: requiredAttendees.length,
+                    accepted: acceptedCount,
+                    declined: declinedCount,
+                    tentative: tentativeCount,
+                    noResponse: noResponseCount
+                },
+                suggestedStatus: suggestedStatus,
+                statusReason: statusReason,
+                lastChecked: new Date().toISOString()
+            };
+
+        } catch (error) {
+            console.error('❌ Error verificando respuestas de asistentes:', error);
             return {
                 success: false,
                 error: error.message

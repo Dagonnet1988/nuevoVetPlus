@@ -18,7 +18,7 @@
 
     <!-- Stats específicos de citas y pacientes -->
     <div class="section-stats">
-      @for (stat of getStatsByCategory('citas-pacientes'); track stat.title) {
+      @for (stat of getStatsByCategory('citas-pacientes'); track $index) {
         <app-stats-widget [stat]="stat"></app-stats-widget>
       }
     </div>
@@ -27,7 +27,7 @@
     <div class="section-content">
       <div class="content-row">
         <!-- Calendario de citas -->
-        @if (authService.hasAnyRole(['admin', 'vet', 'aux'])) {
+        @if (authService.hasAnyRole(['admin', 'vet', 'aux_admin', 'aux_vet'])) {
           <div class="content-item">
             <app-appointments-calendar [appointments]="todayAppointments"></app-appointments-calendar>
           </div>
@@ -76,7 +76,7 @@
 
     <!-- Stats específicos de finanzas -->
     <div class="section-stats">
-      @for (stat of getStatsByCategory('finanzas'); track stat.title) {
+      @for (stat of getStatsByCategory('finanzas'); track $index) {
         <app-stats-widget [stat]="stat"></app-stats-widget>
       }
     </div>

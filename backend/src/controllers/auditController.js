@@ -24,7 +24,7 @@ class AuditController {
           u.email as usuario_email,
           u.rol as usuario_rol
         FROM system.log_auditoria a
-        LEFT JOIN auth.usuarios u ON a.id_usuario = u.id_usuario
+        LEFT JOIN vetplus_auth.usuarios u ON a.id_usuario = u.id_usuario
       `;
 
       const conditions = [];
@@ -367,7 +367,7 @@ class AuditController {
           COUNT(*) as total_actividades,
           COUNT(CASE WHEN al.status_code >= 400 THEN 1 END) as actividades_fallidas
         FROM system.activity_log al
-        JOIN auth.usuarios u ON al.id_usuario = u.id_usuario
+        JOIN vetplus_auth.usuarios u ON al.id_usuario = u.id_usuario
         WHERE al.timestamp BETWEEN $1 AND $2
         GROUP BY u.email, u.rol
         ORDER BY COUNT(*) DESC
@@ -487,7 +487,7 @@ class AuditController {
           u.rol,
           a.ip_address
         FROM system.log_auditoria a
-        LEFT JOIN auth.usuarios u ON a.id_usuario = u.id_usuario
+        LEFT JOIN vetplus_auth.usuarios u ON a.id_usuario = u.id_usuario
         WHERE a.timestamp BETWEEN $1 AND $2
         ORDER BY a.timestamp DESC
       `, [start_date, end_date]);
@@ -500,7 +500,7 @@ class AuditController {
           u.email as usuario,
           s.ip_address
         FROM system.session_audit s
-        LEFT JOIN auth.usuarios u ON s.id_usuario = u.id_usuario
+        LEFT JOIN vetplus_auth.usuarios u ON s.id_usuario = u.id_usuario
         WHERE s.timestamp BETWEEN $1 AND $2
         ORDER BY s.timestamp DESC
       `, [start_date, end_date]);

@@ -16,7 +16,7 @@ class GoogleCalendarSimpleController {
           redirect_uri,
           created_at,
           updated_at
-        FROM auth.google_calendar_config 
+        FROM vetplus_auth.google_calendar_config 
         WHERE is_active = true
         ORDER BY created_at DESC 
         LIMIT 1
@@ -66,11 +66,11 @@ class GoogleCalendarSimpleController {
       const redirect_uri = `${process.env.BACKEND_URL || 'http://localhost:3000'}/api/google-calendar/callback`;
 
       // Desactivar configuración anterior
-      await query(`UPDATE auth.google_calendar_config SET is_active = false WHERE is_active = true`);
+      await query(`UPDATE vetplus_auth.google_calendar_config SET is_active = false WHERE is_active = true`);
 
       // Insertar nueva configuración (adaptando a las columnas existentes)
       const result = await query(`
-        INSERT INTO auth.google_calendar_config (
+        INSERT INTO vetplus_auth.google_calendar_config (
           client_id, client_secret, calendar_id, 
           timezone, notification_email, redirect_uri, is_active, configured_by
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -116,7 +116,7 @@ class GoogleCalendarSimpleController {
     try {
       const configResult = await query(`
         SELECT client_id, redirect_uri 
-        FROM auth.google_calendar_config 
+        FROM vetplus_auth.google_calendar_config 
         WHERE is_active = true 
         ORDER BY created_at DESC 
         LIMIT 1
@@ -209,7 +209,7 @@ class GoogleCalendarSimpleController {
 
       // Obtener configuración
       const configResult = await query(`
-        SELECT * FROM auth.google_calendar_config 
+        SELECT * FROM vetplus_auth.google_calendar_config 
         WHERE is_active = true 
         ORDER BY created_at DESC 
         LIMIT 1
@@ -244,7 +244,7 @@ class GoogleCalendarSimpleController {
 
       // Guardar tokens en la configuración
       await query(`
-        UPDATE auth.google_calendar_config 
+        UPDATE vetplus_auth.google_calendar_config 
         SET 
           access_token = $1,
           refresh_token = $2,
@@ -329,7 +329,7 @@ class GoogleCalendarSimpleController {
           token_expiry,
           calendar_id,
           updated_at
-        FROM auth.google_calendar_config 
+        FROM vetplus_auth.google_calendar_config 
         WHERE is_active = true 
         ORDER BY created_at DESC 
         LIMIT 1
@@ -383,7 +383,7 @@ class GoogleCalendarSimpleController {
   async testConnection(req, res) {
     try {
       const configResult = await query(`
-        SELECT * FROM auth.google_calendar_config 
+        SELECT * FROM vetplus_auth.google_calendar_config 
         WHERE is_active = true 
         ORDER BY created_at DESC 
         LIMIT 1
@@ -445,7 +445,7 @@ class GoogleCalendarSimpleController {
   async disconnect(req, res) {
     try {
       await query(`
-        UPDATE auth.google_calendar_config 
+        UPDATE vetplus_auth.google_calendar_config 
         SET 
           is_active = false,
           access_token = NULL,

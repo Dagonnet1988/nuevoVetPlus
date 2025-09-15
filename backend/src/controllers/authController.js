@@ -29,7 +29,7 @@ class AuthController {
 
       // Buscar usuario por documento
       const userResult = await query(
-        'SELECT id_usuario, nombre, apellido, email, documento, password_hash, rol, activo, intentos_login, bloqueado_hasta, password_temporal, debe_cambiar_password FROM auth.usuarios WHERE documento = $1',
+        'SELECT id_usuario, nombre, apellido, email, documento, password_hash, rol, activo, intentos_login, bloqueado_hasta, password_temporal, debe_cambiar_password FROM vetplus_auth.usuarios WHERE documento = $1',
         [documento]
       );
 
@@ -75,7 +75,7 @@ class AuthController {
           : null;
 
         await query(
-          'UPDATE auth.usuarios SET intentos_login = $1, bloqueado_hasta = $2 WHERE id_usuario = $3',
+          'UPDATE vetplus_auth.usuarios SET intentos_login = $1, bloqueado_hasta = $2 WHERE id_usuario = $3',
           [nuevosIntentos, bloqueadoHasta, user.id_usuario]
         );
 
@@ -92,7 +92,7 @@ class AuthController {
 
       // Login exitoso - resetear intentos
       await query(
-        'UPDATE auth.usuarios SET intentos_login = 0, bloqueado_hasta = NULL, ultimo_login = CURRENT_TIMESTAMP WHERE id_usuario = $1',
+        'UPDATE vetplus_auth.usuarios SET intentos_login = 0, bloqueado_hasta = NULL, ultimo_login = CURRENT_TIMESTAMP WHERE id_usuario = $1',
         [user.id_usuario]
       );
 
@@ -150,7 +150,7 @@ class AuthController {
       if (token) {
         // Agregar token a blacklist
         await query(
-          'INSERT INTO auth.blacklisted_tokens (token, id_usuario, razon) VALUES ($1, $2, $3)',
+          'INSERT INTO vetplus_auth.blacklisted_tokens (token, id_usuario, razon) VALUES ($1, $2, $3)',
           [token, req.user?.id_usuario, 'logout']
         );
 
@@ -190,8 +190,8 @@ class AuthController {
 
       // Obtener información actualizada del usuario
       const userResult = await query(
-        'SELECT id_usuario, nombre, email, rol, activo, ultimo_login, created_at FROM auth.usuarios WHERE id_usuario = $1',
-        [req.user.id]
+        'SELECT id_usuario, nombre, email, rol, activo, ultimo_login, created_at FROM vetplus_auth.usuarios WHERE id_usuario = $1',
+        [req.user.id_usuario]
       );
 
       if (userResult.rows.length === 0) {
@@ -245,8 +245,8 @@ class AuthController {
 
       // Obtener información del usuario incluyendo flags de password temporal
       const userResult = await query(
-        'SELECT password_hash, password_temporal, debe_cambiar_password FROM auth.usuarios WHERE id_usuario = $1',
-        [req.user.id]
+        'SELECT password_hash, password_temporal, debe_cambiar_password FROM vetplus_auth.usuarios WHERE id_usuario = $1',
+        [req.user.id_usuario]
       );
 
       if (userResult.rows.length === 0) {
@@ -276,7 +276,7 @@ class AuthController {
 
       // Actualizar contraseña y limpiar flags de password temporal
       await query(
-        `UPDATE auth.usuarios 
+        `UPDATE vetplus_auth.usuarios 
          SET password_hash = $1, 
              password_temporal = false, 
              debe_cambiar_password = false,
@@ -284,16 +284,16 @@ class AuthController {
              password_reset_by = NULL,
              updated_at = CURRENT_TIMESTAMP 
          WHERE id_usuario = $2`,
-        [newPasswordHash, req.user.id]
+        [newPasswordHash, req.user.id_usuario]
       );
 
       // Registrar el cambio en el historial si era una contraseña temporal
       if (user.password_temporal || user.debe_cambiar_password) {
         await query(
-          `INSERT INTO auth.password_resets 
+          `INSERT INTO vetplus_auth.password_resets 
            (id_usuario, tipo_reset, realizado_por, motivo, completado, completed_at) 
            VALUES ($1, 'user_change', $1, 'Cambio de contraseña temporal', true, CURRENT_TIMESTAMP)`,
-          [req.user.id]
+          [req.user.id_usuario]
         );
       }
 

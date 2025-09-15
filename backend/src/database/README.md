@@ -2,11 +2,11 @@
 
 ## Arquitectura de Base de Datos
 
-VetPlus utiliza **PostgreSQL** con un sistema de migraciones profesional que garantiza:
-- ✅ **Versionado de cambios**
-- ✅ **Transacciones seguras**
-- ✅ **Rollback automático en errores**
-- ✅ **Tracking completo de cambios**
+VetPlus utiliza **PostgreSQL** con un sistema de schemas consolidado que garantiza:
+- ✅ **Estructura completa desde instalación**
+- ✅ **Fácil configuración en nuevos entornos**
+- ✅ **Sin dependencias de migraciones**
+- ✅ **Organización modular por funcionalidad**
 
 ## Estructura de Esquemas
 
@@ -23,13 +23,13 @@ vetplus/
 ### 🔍 Verificación
 ```bash
 npm run db:test      # Probar conexión a PostgreSQL
-npm run db:status    # Ver estado de migraciones
+npm run db:check     # Verificación rápida del sistema
 ```
 
-### 🚀 Creación y Migración
+### 🚀 Inicialización
 ```bash
-npm run db:create    # Crear base de datos completa
-npm run db:migrate   # Ejecutar migraciones pendientes
+npm run db:init      # Inicializar sistema completo (recomendado)
+npm run db:create    # Solo crear base de datos
 npm run db:seed      # Insertar datos iniciales
 ```
 

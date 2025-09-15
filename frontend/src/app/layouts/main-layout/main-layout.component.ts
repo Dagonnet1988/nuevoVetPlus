@@ -17,7 +17,7 @@ interface MenuItem {
   label: string;
   icon: string;
   route: string;
-  roles: ('admin' | 'vet' | 'aux')[];
+  roles: ('admin' | 'vet' | 'aux_admin' | 'aux_vet')[];
   badge?: number;
 }
 
@@ -363,19 +363,19 @@ export class MainLayoutComponent {
       label: 'Dashboard',
       icon: 'dashboard',
       route: '/dashboard',
-      roles: ['admin', 'vet', 'aux']
+      roles: ['admin', 'vet', 'aux_admin', 'aux_vet']
     },
     {
       label: 'Pacientes',
       icon: 'pets',
       route: '/pacientes',
-      roles: ['admin', 'vet', 'aux']
+      roles: ['admin', 'vet', 'aux_admin', 'aux_vet']
     },
     {
       label: 'Citas',
       icon: 'event',
       route: '/citas',
-      roles: ['admin', 'vet', 'aux'],
+      roles: ['admin', 'vet', 'aux_admin', 'aux_vet'],
       badge: 5
     },
     {
@@ -394,7 +394,7 @@ export class MainLayoutComponent {
       label: 'Facturación',
       icon: 'receipt',
       route: '/facturacion',
-      roles: ['admin', 'vet', 'aux']
+      roles: ['admin', 'vet', 'aux_admin', 'aux_vet']
     },
     {
       label: 'Reportes',

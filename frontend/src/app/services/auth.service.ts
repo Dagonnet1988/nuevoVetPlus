@@ -16,7 +16,7 @@ export class AuthService {
 
   // Signals para Angular 20 - Estado reactivo
   public currentUser = signal<User | null>(null);
-  public isAuthenticated = signal<boolean>(false);
+  public authStatus = signal<boolean>(false);
   public currentTheme = signal<string>('light');
   public loading = signal<boolean>(false);
 
@@ -96,7 +96,7 @@ export class AuthService {
     localStorage.removeItem(this.TOKEN_KEY);
     localStorage.removeItem(this.USER_KEY);
     this.currentUser.set(null);
-    this.isAuthenticated.set(false);
+    this.authStatus.set(false);
     this.router.navigate(['/login']);
   }
 
@@ -141,7 +141,7 @@ export class AuthService {
     localStorage.setItem(this.TOKEN_KEY, token);
     localStorage.setItem(this.USER_KEY, JSON.stringify(user));
     this.currentUser.set(user);
-    this.isAuthenticated.set(true);
+    this.authStatus.set(true);
   }
 
   private loadUserFromStorage(): void {
@@ -152,9 +152,9 @@ export class AuthService {
       if (token && userJson) {
         const user = JSON.parse(userJson);
         this.currentUser.set(user);
-        this.isAuthenticated.set(true);
+        this.authStatus.set(true);
       } else {
-        this.isAuthenticated.set(false);
+        this.authStatus.set(false);
       }
     } catch (error) {
       console.error('Error loading user from storage:', error);
@@ -185,10 +185,19 @@ export class AuthService {
   }
 
   // ===============================
+  // VERIFICACIÓN DE AUTENTICACIÓN
+  // ===============================
+
+  // Función para compatibilidad con guards (retorna el valor del signal)
+  isAuthenticated(): boolean {
+    return this.authStatus();
+  }
+
+  // ===============================
   // VERIFICACIÓN DE ROLES
   // ===============================
 
-  hasRole(role: 'admin' | 'vet' | 'aux'): boolean {
+  hasRole(role: 'admin' | 'vet' | 'aux_admin' | 'aux_vet'): boolean {
     const user = this.currentUser();
     return user?.rol === role;
   }
@@ -201,12 +210,20 @@ export class AuthService {
     return this.hasRole('vet');
   }
 
+  isAuxAdmin(): boolean {
+    return this.hasRole('aux_admin');
+  }
+
+  isAuxVet(): boolean {
+    return this.hasRole('aux_vet');
+  }
+
   isAux(): boolean {
-    return this.hasRole('aux');
+    return this.hasRole('aux_admin') || this.hasRole('aux_vet');
   }
 
   // Verificar múltiples roles
-  hasAnyRole(roles: ('admin' | 'vet' | 'aux')[]): boolean {
+  hasAnyRole(roles: ('admin' | 'vet' | 'aux_admin' | 'aux_vet')[]): boolean {
     const user = this.currentUser();
     return roles.includes(user?.rol as any);
   }
@@ -223,7 +240,7 @@ export class AuthService {
 
   // Verificar si puede acceder a funciones financieras
   canAccessFinancial(): boolean {
-    return this.hasAnyRole(['admin', 'aux']);
+    return this.hasAnyRole(['admin', 'aux_admin']);
   }
 
   // ===============================
@@ -271,7 +288,9 @@ export class AuthService {
     switch (role) {
       case 'admin': return 'Administrador';
       case 'vet': return 'Veterinario';
-      case 'aux': return 'Auxiliar';
+      case 'aux_admin': return 'Auxiliar Administrativo';
+      case 'aux_vet': return 'Auxiliar Veterinario';
+      case 'aux': return 'Auxiliar'; // For backward compatibility
       default: return 'Usuario';
     }
   }

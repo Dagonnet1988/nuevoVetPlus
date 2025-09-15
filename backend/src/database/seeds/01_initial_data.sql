@@ -3,7 +3,7 @@
 -- ===========================================
 
 -- Usuario administrador por defecto
-INSERT INTO auth.usuarios (
+INSERT INTO vetplus_auth.usuarios (
     id_usuario,
     nombre, 
     apellido,
@@ -22,11 +22,11 @@ INSERT INTO auth.usuarios (
     'ascobidi@hotmail.com',
     '12345678',
     'CC',
-    '$2b$12$LQv3c1yqBwEHbVy4Xz2nS.KmG9aJcYQBOhW8VQ8t9wKtW8s9dZhW2', -- password: admin123
+    '$2b$12$CxEe.Lmjxiysh0u0uwf3DeZXp3tXFYcDVN5bEq.mB2Lk0hn.e.LaW', -- password: admin123
     'admin',
     true,
-    true,
-    true
+    false,
+    false
 ) ON CONFLICT (email) DO NOTHING;
 
 -- Log de inicialización

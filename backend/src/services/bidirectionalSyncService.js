@@ -171,6 +171,12 @@ class BidirectionalSyncService {
                             else results.errors.push(updateResult.error);
                             break;
 
+                        case 'attendee_response':
+                            const attendeeResult = await this.handleAttendeeResponse(change);
+                            if (attendeeResult.success) results.updated++;
+                            else results.errors.push(attendeeResult.error);
+                            break;
+
                         case 'deleted':
                             const deleteResult = await this.handleGoogleEventDeleted(change);
                             if (deleteResult.success) results.deleted++;
@@ -254,7 +260,7 @@ class BidirectionalSyncService {
             // Asignar veterinario por defecto (el primero disponible)
             const veterinarioResult = await query(`
                 SELECT id_usuario 
-                FROM auth.usuarios 
+                FROM vetplus_auth.usuarios 
                 WHERE rol IN ('vet', 'admin') 
                 AND activo = true 
                 ORDER BY rol DESC, nombre
@@ -316,9 +322,9 @@ class BidirectionalSyncService {
             const insertQuery = `
                 INSERT INTO clinical.calendario_citas (
                     id_cita, codigo_cita, id_mascota, id_veterinario,
-                    fecha_inicio, fecha_fin, tipo, motivo, notas,
+                    fecha_inicio, fecha_fin, tipo, estado, motivo, notas,
                     google_event_id, google_sync_status, created_by
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'synced', $11)
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'synced', $12)
                 RETURNING *
             `;
 
@@ -330,6 +336,7 @@ class BidirectionalSyncService {
                 eventData.fecha_inicio,
                 eventData.fecha_fin,
                 eventData.tipo,
+                eventData.estado_vetplus || 'pendiente', // Usar el estado mapeado o pendiente por defecto
                 eventData.motivo,
                 `Importado desde Google Calendar. ${eventData.descripcion || ''}`,
                 eventData.google_event_id,
@@ -382,8 +389,14 @@ class BidirectionalSyncService {
         try {
             // Buscar la cita existente
             const existingResult = await query(`
-                SELECT id_cita FROM clinical.calendario_citas 
-                WHERE google_event_id = $1
+                SELECT 
+                    cc.id_cita, 
+                    cc.estado, 
+                    cl.email as cliente_email 
+                FROM clinical.calendario_citas cc
+                JOIN clinical.mascotas m ON cc.id_mascota = m.id_mascota
+                JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
+                WHERE cc.google_event_id = $1
             `, [change.parsed_data.google_event_id]);
 
             if (existingResult.rows.length === 0) {
@@ -391,19 +404,232 @@ class BidirectionalSyncService {
                 return await this.handleGoogleEventCreated(change);
             }
 
-            // Actualizar cita existente
+            const appointment = existingResult.rows[0];
+            
+            // Si hay cambios en asistentes, procesarlos primero
+            if (change.attendee_changes && change.attendee_changes.length > 0) {
+                await this.processAttendeeResponses(appointment.id_cita, change.attendee_changes, appointment.cliente_email);
+            }
+
+            // Actualizar cita existente con datos del evento
             const result = await this.updateAppointmentFromGoogle(
-                existingResult.rows[0].id_cita, 
+                appointment.id_cita, 
                 change.parsed_data
             );
 
-            return { success: true, data: result };
+            return { 
+                success: true, 
+                data: result,
+                change_type: change.change_type,
+                attendee_changes_processed: change.attendee_changes?.length || 0
+            };
 
         } catch (error) {
+            console.error('Error manejando evento actualizado:', error);
             return {
                 success: false,
                 error: error.message
             };
+        }
+    }
+
+    /**
+     * Manejar respuesta de asistente en Google
+     */
+    async handleAttendeeResponse(change) {
+        try {
+            console.log(`👥 Manejando respuesta de asistente para evento: ${change.parsed_data.google_event_id}`);
+            
+            // Buscar la cita existente
+            const existingResult = await query(`
+                SELECT 
+                    cc.id_cita, 
+                    cc.estado, 
+                    cl.email as cliente_email 
+                FROM clinical.calendario_citas cc
+                JOIN clinical.mascotas m ON cc.id_mascota = m.id_mascota
+                JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
+                WHERE cc.google_event_id = $1
+            `, [change.parsed_data.google_event_id]);
+
+            if (existingResult.rows.length === 0) {
+                console.log(`⚠️ No se encontró cita con google_event_id: ${change.parsed_data.google_event_id}`);
+                return { success: false, error: 'Cita no encontrada' };
+            }
+
+            const appointment = existingResult.rows[0];
+            console.log(`📋 Cita encontrada: ${appointment.id_cita}, cliente: ${appointment.cliente_email}`);
+            
+            // Procesar las respuestas de asistentes
+            if (change.attendee_changes && change.attendee_changes.length > 0) {
+                await this.processAttendeeResponses(appointment.id_cita, change.attendee_changes, appointment.cliente_email);
+            }
+
+            return { 
+                success: true, 
+                data: appointment,
+                change_type: change.change_type,
+                attendee_changes_processed: change.attendee_changes?.length || 0
+            };
+
+        } catch (error) {
+            console.error('Error manejando respuesta de asistente:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    /**
+     * Procesar respuestas de asistentes para actualizar estado de cita
+     */
+    async processAttendeeResponses(id_cita, attendeeChanges, clienteEmail) {
+        try {
+            console.log(`👥 Procesando respuestas de asistentes para cita ${id_cita}`);
+            console.log(`📧 Email del cliente: ${clienteEmail}`);
+            console.log(`👥 Cambios de asistentes recibidos:`, JSON.stringify(attendeeChanges, null, 2));
+            
+            // Obtener datos actuales de la cita
+            const appointmentResult = await query(`
+                SELECT estado FROM clinical.calendario_citas WHERE id_cita = $1
+            `, [id_cita]);
+
+            if (appointmentResult.rows.length === 0) {
+                console.log(`❌ No se encontró la cita ${id_cita}`);
+                return;
+            }
+
+            const appointment = appointmentResult.rows[0];
+            console.log(`📋 Estado actual de la cita: ${appointment.estado}`);
+            
+            // Buscar respuesta del cliente (si corresponde)
+            const clienteResponse = attendeeChanges.find(attendee => 
+                attendee.email === clienteEmail && !attendee.is_organizer
+            );
+
+            if (clienteResponse) {
+                console.log(`📧 Respuesta del cliente ${clienteEmail}: ${clienteResponse.response_status}`);
+                
+                // Mapear respuesta a estado de VetPlus
+                let nuevoEstado = null;
+                let notas = '';
+                
+                switch (clienteResponse.response_status) {
+                    case 'accepted':
+                        // Lógica simplificada: Una vez cancelada, debe contactar para reactivar
+                        if (appointment.estado === 'cancelada') {
+                            console.log(`🚫 Cita ${id_cita} cancelada - cliente debe contactar para reactivar`);
+                            notas = 'Cliente intentó reactivar cita cancelada desde Google Calendar. Debe contactar directamente para reagendar.';
+                            
+                            // 🎯 NOTIFICAR AL CLIENTE - Forzar declined + agregar comentario
+                            await this.notifyClientAboutReactivationDenied(
+                                change.parsed_data.google_event_id, 
+                                clienteEmail
+                            );
+                            
+                            // No cambiamos el estado - sigue cancelada
+                        } else {
+                            nuevoEstado = 'confirmada';
+                            notas = 'Cliente confirmó asistencia desde Google Calendar';
+                        }
+                        break;
+                    case 'declined':
+                        nuevoEstado = 'cancelada';
+                        notas = 'Cliente canceló desde Google Calendar';
+                        break;
+                    case 'tentative':
+                        // Cliente marcó como tentativo - siempre pendiente
+                        nuevoEstado = 'pendiente';
+                        notas = 'Cliente marcó como tentativo desde Google Calendar';
+                        break;
+                }
+
+                if (nuevoEstado) {
+                    console.log(`🔄 Actualizando estado de cita ${id_cita} a: ${nuevoEstado}`);
+                    
+                    // Verificar si la nota ya existe para evitar duplicados
+                    const currentNotesResult = await query(`
+                        SELECT notas FROM clinical.calendario_citas WHERE id_cita = $1
+                    `, [id_cita]);
+                    
+                    const currentNotes = currentNotesResult.rows[0]?.notas || '';
+                    const shouldAddNote = !currentNotes.includes(notas);
+                    
+                    let updateQuery;
+                    let updateParams;
+                    
+                    if (shouldAddNote && currentNotes.trim()) {
+                        // Agregar nota solo si no existe y hay notas previas
+                        updateQuery = `
+                            UPDATE clinical.calendario_citas 
+                            SET 
+                                estado = $1,
+                                notas = $2 || ' | ' || $3,
+                                google_sync_status = 'synced',
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE id_cita = $4
+                            RETURNING id_cita, estado, notas
+                        `;
+                        updateParams = [nuevoEstado, currentNotes, notas, id_cita];
+                    } else if (shouldAddNote) {
+                        // Primera nota o reemplazar nota vacía
+                        updateQuery = `
+                            UPDATE clinical.calendario_citas 
+                            SET 
+                                estado = $1,
+                                notas = $2,
+                                google_sync_status = 'synced',
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE id_cita = $3
+                            RETURNING id_cita, estado, notas
+                        `;
+                        updateParams = [nuevoEstado, notas, id_cita];
+                    } else {
+                        // Solo actualizar estado sin cambiar notas
+                        updateQuery = `
+                            UPDATE clinical.calendario_citas 
+                            SET 
+                                estado = $1,
+                                google_sync_status = 'synced',
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE id_cita = $2
+                            RETURNING id_cita, estado, notas
+                        `;
+                        updateParams = [nuevoEstado, id_cita];
+                    }
+                    
+                    const updateResult = await query(updateQuery, updateParams);
+                    console.log(`✅ Estado actualizado exitosamente:`, updateResult.rows[0]);
+                } else {
+                    console.log(`⚠️ Estado no reconocido: ${clienteResponse.response_status}`);
+                }
+            } else {
+                console.log(`⚠️ No se encontró respuesta del cliente ${clienteEmail} en los cambios de asistentes`);
+                console.log(`👥 Asistentes disponibles:`, attendeeChanges.map(a => `${a.email} (organizer: ${a.is_organizer})`));
+            }
+
+            // Log de todas las respuestas para auditoría
+            for (const attendee of attendeeChanges) {
+                await query(`
+                    INSERT INTO clinical.google_calendar_audit_log 
+                    (appointment_id, action_type, details, created_at)
+                    VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+                `, [
+                    id_cita,
+                    'attendee_response',
+                    JSON.stringify({
+                        email: attendee.email,
+                        response: attendee.response_status,
+                        display_name: attendee.display_name,
+                        is_organizer: attendee.is_organizer
+                    })
+                ]);
+            }
+
+        } catch (error) {
+            console.error('Error procesando respuestas de asistentes:', error);
+            throw error;
         }
     }
 
@@ -415,7 +641,7 @@ class BidirectionalSyncService {
             const result = await query(`
                 UPDATE clinical.calendario_citas 
                 SET 
-                    estado = 'Cancelada',
+                    estado = 'cancelada',
                     google_sync_status = 'synced',
                     notas = COALESCE(notas, '') || ' | Cancelada desde Google Calendar',
                     updated_at = CURRENT_TIMESTAMP
@@ -492,10 +718,75 @@ class BidirectionalSyncService {
      */
     async updateLastSyncTime(syncType) {
         await query(`
-            UPDATE auth.google_calendar_config 
+            UPDATE vetplus_auth.google_calendar_config 
             SET updated_at = CURRENT_TIMESTAMP 
             WHERE is_active = true
         `);
+    }
+
+    /**
+     * Notificar al cliente que no puede reactivar una cita cancelada
+     */
+    async notifyClientAboutReactivationDenied(googleEventId, clienteEmail) {
+        try {
+            console.log(`📞 Notificando al cliente ${clienteEmail} que no puede reactivar la cita`);
+            
+            // Obtener información de contacto de la clínica
+            const clinicInfo = await query(`
+                SELECT telefono, direccion, nombre_empresa 
+                FROM system.configuracion_empresa 
+                WHERE activa = true 
+                LIMIT 1
+            `);
+            
+            const telefono = clinicInfo.rows[0]?.telefono || 'contacte la clínica';
+            const nombreClinica = clinicInfo.rows[0]?.nombre_empresa || 'VetPlus';
+            
+            // Mensaje para agregar al evento
+            const mensaje = `CITA CANCELADA PREVIAMENTE\n\n` +
+                          `Esta cita fue cancelada y no puede reactivarse automáticamente.\n\n` +
+                          `Para reagendar, contacte directamente:\n` +
+                          `📞 ${telefono}\n` +
+                          `🏥 ${nombreClinica}\n\n` +
+                          `Gracias por su comprensión.`;
+
+            // 1. Forzar estado "declined" para el cliente
+            const statusResult = await googleCalendarService.updateAttendeeStatus(
+                googleEventId, 
+                clienteEmail, 
+                'declined'
+            );
+
+            if (statusResult.success) {
+                console.log(`✅ Estado de asistente forzado a 'declined' para ${clienteEmail}`);
+            } else {
+                console.log(`⚠️ No se pudo actualizar estado de asistente: ${statusResult.error}`);
+            }
+
+            // 2. Agregar comentario explicativo al evento
+            const commentResult = await googleCalendarService.addCommentToEvent(
+                googleEventId,
+                mensaje
+            );
+
+            if (commentResult.success) {
+                console.log(`✅ Comentario explicativo agregado al evento ${googleEventId}`);
+            } else {
+                console.log(`⚠️ No se pudo agregar comentario: ${commentResult.error}`);
+            }
+
+            return {
+                success: true,
+                message: 'Cliente notificado sobre restricción de reactivación'
+            };
+
+        } catch (error) {
+            console.error('Error notificando al cliente sobre reactivación denegada:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
     }
 }
 

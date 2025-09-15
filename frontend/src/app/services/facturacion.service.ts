@@ -21,7 +21,7 @@ export interface Factura {
   impuestos: number;
   descuento: number;
   total: number;
-  metodo_pago: 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Cheque';
+  metodo_pago: 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Cheque' | 'Crédito';
   estado: 'Pendiente' | 'Pagada' | 'Cancelada';
   id_caja: string;
   notas?: string;
@@ -158,28 +158,39 @@ export class FacturacionService {
   // ===============================
 
   getFacturas(page: number = 1, limit: number = 50, filters?: FacturaFilter): Observable<any> {
-    let params = new HttpParams()
+    const params = new HttpParams()
       .set('page', page.toString())
       .set('limit', limit.toString());
 
     if (filters) {
-      if (filters.cliente) params = params.set('cliente', filters.cliente);
-      if (filters.metodo_pago) params = params.set('metodo_pago', filters.metodo_pago);
-      if (filters.estado) params = params.set('estado', filters.estado);
-      if (filters.fecha_inicio) params = params.set('fecha_inicio', filters.fecha_inicio);
-      if (filters.fecha_fin) params = params.set('fecha_fin', filters.fecha_fin);
-      if (filters.search) params = params.set('search', filters.search);
-      if (filters.caja) params = params.set('caja', filters.caja);
+      Object.keys(filters).forEach(key => {
+        if (filters[key as keyof FacturaFilter] !== undefined && filters[key as keyof FacturaFilter] !== null) {
+          params.set(key, filters[key as keyof FacturaFilter]!.toString());
+        }
+      });
     }
 
-    return this.http.get<any>(`${this.API_URL}/facturas`, { params });
-  }
-
-  getFactura(id: string): Observable<Factura> {
-    return this.http.get<any>(`${this.API_URL}/facturas/${id}`).pipe(
+    return this.http.get<any>(`${this.API_URL}/invoices`, { params }).pipe(
       map((response: any) => {
         if (response.success && response.data) {
           return response.data;
+        }
+        return response;
+      })
+    );
+  }
+
+  getFactura(id: string): Observable<Factura> {
+    return this.http.get<any>(`${this.API_URL}/invoices/${id}`).pipe(
+      map((response: any) => {
+        if (response.success && response.data) {
+          // Mapear 'detalles' del backend a 'lineas' del frontend
+          const factura = response.data;
+          if (factura.detalles) {
+            factura.lineas = factura.detalles;
+            delete factura.detalles;
+          }
+          return factura;
         }
         throw new Error('Factura no encontrada');
       })
@@ -187,7 +198,7 @@ export class FacturacionService {
   }
 
   createFactura(factura: Omit<Factura, 'id_factura' | 'codigo_factura' | 'created_at' | 'created_by'>): Observable<Factura> {
-    return this.http.post<any>(`${this.API_URL}/facturas`, factura).pipe(
+    return this.http.post<any>(`${this.API_URL}/invoices`, factura).pipe(
       map((response: any) => {
         if (response.success && response.data) {
           return response.data;
@@ -198,7 +209,7 @@ export class FacturacionService {
   }
 
   updateFactura(id: string, factura: Partial<Factura>): Observable<Factura> {
-    return this.http.put<any>(`${this.API_URL}/facturas/${id}`, factura).pipe(
+    return this.http.put<any>(`${this.API_URL}/invoices/${id}`, factura).pipe(
       map((response: any) => {
         if (response.success && response.data) {
           return response.data;
@@ -209,7 +220,7 @@ export class FacturacionService {
   }
 
   cancelarFactura(id: string): Observable<any> {
-    return this.http.patch<any>(`${this.API_URL}/facturas/${id}/cancelar`, {});
+    return this.http.patch<any>(`${this.API_URL}/invoices/${id}/status`, { estado: 'Cancelada' });
   }
 
   // ===============================
@@ -257,7 +268,12 @@ export class FacturacionService {
     return this.http.get<any>(`${this.API_URL}/cajas`).pipe(
       map((response: any) => {
         if (response.success && response.data) {
-          return response.data;
+          // Convertir valores string a números para evitar NaN
+          return response.data.map((caja: any) => ({
+            ...caja,
+            saldo_inicial: parseFloat(caja.saldo_inicial) || 0,
+            saldo_actual: parseFloat(caja.saldo_actual) || 0
+          }));
         }
         return [];
       })
@@ -308,7 +324,14 @@ export class FacturacionService {
     return this.http.get<any>(`${this.API_URL}/reports/facturacion`).pipe(
       map((response: any) => {
         if (response.success && response.data) {
-          return response.data;
+          // Convertir valores numéricos de strings a números
+          return {
+            ...response.data,
+            total_facturas: parseInt(response.data.total_facturas) || 0,
+            total_ventas_dia: parseFloat(response.data.total_ventas_dia) || 0,
+            total_ventas_mes: parseFloat(response.data.total_ventas_mes) || 0,
+            facturas_pendientes: parseInt(response.data.facturas_pendientes) || 0
+          };
         }
         return {
           total_facturas: 0,
@@ -324,14 +347,14 @@ export class FacturacionService {
   }
 
   exportarFactura(id: string, formato: 'pdf' | 'whatsapp' = 'pdf'): Observable<Blob> {
-    return this.http.get(`${this.API_URL}/facturas/${id}/export`, {
+    return this.http.get(`${this.API_URL}/invoices/${id}/export`, {
       params: { formato },
       responseType: 'blob'
     });
   }
 
   enviarFacturaPorWhatsApp(id: string, telefono: string): Observable<any> {
-    return this.http.post<any>(`${this.API_URL}/facturas/${id}/whatsapp`, { telefono });
+    return this.http.post<any>(`${this.API_URL}/invoices/${id}/whatsapp`, { telefono });
   }
 
   // ===============================
@@ -365,7 +388,7 @@ export class FacturacionService {
         linea.descuento,
         linea.producto?.iva_aplicable || 0
       );
-      
+
       subtotal += totales.subtotal;
       descuentoTotal += totales.descuento;
       ivaTotal += totales.iva;
@@ -381,7 +404,41 @@ export class FacturacionService {
     };
   }
 
-  formatearMoneda(valor: number): string {
+  // ===============================
+  // PAQUETES DE TERAPIAS
+  // ===============================
+
+  verificarPaquetesActivos(idMascota: string): Observable<any[]> {
+    return this.http.get<any>(`${this.API_URL}/therapies/packages/${idMascota}`).pipe(
+      map((response: any) => {
+        if (response.success && response.data) {
+          return response.data;
+        }
+        return [];
+      })
+    );
+  }
+
+  registrarUsoTerapia(idControl: string, sesionesUsadas: number): Observable<any> {
+    return this.http.post<any>(`${this.API_URL}/therapies/use`, {
+      id_control: idControl,
+      sesiones_usadas: sesionesUsadas
+    });
+  }
+
+  crearPaqueteTerapia(data: {
+    id_mascota: string;
+    id_producto: string;
+    sesiones_total: number;
+    precio_pagado: number;
+  }): Observable<any> {
+    return this.http.post<any>(`${this.API_URL}/therapies/package`, data);
+  }
+
+  formatearMoneda(valor: number | null | undefined): string {
+    if (valor === null || valor === undefined || isNaN(valor)) {
+      return '$0';
+    }
     return new Intl.NumberFormat('es-CO', {
       style: 'currency',
       currency: 'COP',
@@ -396,7 +453,7 @@ export class FacturacionService {
     const dia = ahora.getDate().toString().padStart(2, '0');
     const hora = ahora.getHours().toString().padStart(2, '0');
     const minuto = ahora.getMinutes().toString().padStart(2, '0');
-    
+
     return `FAC-${año}${mes}${dia}-${hora}${minuto}`;
   }
 }

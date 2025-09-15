@@ -7,36 +7,36 @@ export const historiaClinicaRoutes: Routes = [
     path: '',
     loadComponent: () => import('./historia-clinica.component').then(c => c.HistoriaClinicaComponent),
     canActivate: [AuthGuard, RoleGuard],
-    data: { 
+    data: {
       roles: ['admin', 'vet'],
       title: 'Historia Clínica'
     }
   },
   {
     path: 'nueva',
-    loadComponent: () => import('./components/consulta-form.component').then(c => c.ConsultaFormComponent),
+    loadComponent: () => import('./components/historia-clinica-form.component').then(c => c.HistoriaClinicaFormComponent),
     canActivate: [AuthGuard, RoleGuard],
-    data: { 
+    data: {
       roles: ['admin', 'vet'],
-      title: 'Nueva Consulta'
+      title: 'Nueva Historia Clínica'
     }
   },
   {
     path: ':id',
-    loadComponent: () => import('./components/consulta-details.component').then(c => c.ConsultaDetailsComponent),
+    loadComponent: () => import('./components/historia-clinica-details.component').then(c => c.HistoriaClinicaDetailsComponent),
     canActivate: [AuthGuard, RoleGuard],
-    data: { 
+    data: {
       roles: ['admin', 'vet', 'assistant'],
-      title: 'Detalles de Consulta'
+      title: 'Detalles de Historia Clínica'
     }
   },
   {
     path: ':id/editar',
-    loadComponent: () => import('./components/consulta-form.component').then(c => c.ConsultaFormComponent),
+    loadComponent: () => import('./components/historia-clinica-form.component').then(c => c.HistoriaClinicaFormComponent),
     canActivate: [AuthGuard, RoleGuard],
-    data: { 
+    data: {
       roles: ['admin', 'vet'],
-      title: 'Editar Consulta'
+      title: 'Editar Historia Clínica'
     }
   }
 ];

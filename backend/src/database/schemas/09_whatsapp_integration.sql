@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS system.whatsapp_templates (
     descripcion TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID REFERENCES auth.usuarios(id_usuario)
+    created_by UUID REFERENCES vetplus_auth.usuarios(id_usuario)
 );
 
 -- Insertar templates por defecto

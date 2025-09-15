@@ -111,3 +111,86 @@ export const validateListInvoices = [
     .isLength({ min: 2, max: 100 })
     .withMessage('Filtro de cliente debe tener entre 2 y 100 caracteres')
 ];
+
+// Validación para actualizar factura
+export const updateInvoiceValidation = [
+  body('cliente_id')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('ID de cliente debe ser un número entero positivo'),
+
+  body('fecha_emision')
+    .optional()
+    .isISO8601()
+    .withMessage('Fecha de emisión debe estar en formato ISO 8601'),
+
+  body('fecha_vencimiento')
+    .optional()
+    .isISO8601()
+    .withMessage('Fecha de vencimiento debe estar en formato ISO 8601'),
+
+  body('subtotal')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Subtotal debe ser un número positivo'),
+
+  body('impuestos')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Impuestos deben ser un número positivo'),
+
+  body('descuento')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Descuento debe ser un número positivo'),
+
+  body('total')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Total debe ser un número positivo'),
+
+  body('estado')
+    .optional()
+    .isIn(['pendiente', 'pagada', 'cancelada', 'vencida'])
+    .withMessage('Estado debe ser uno de: pendiente, pagada, cancelada, vencida'),
+
+  body('notas')
+    .optional()
+    .isLength({ max: 500 })
+    .withMessage('Notas no pueden exceder 500 caracteres'),
+
+  body('lineas_factura')
+    .optional()
+    .isArray()
+    .withMessage('Líneas de factura deben ser un arreglo'),
+
+  body('lineas_factura.*.id')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('ID de línea de factura debe ser un número entero positivo'),
+
+  body('lineas_factura.*.producto_id')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('ID de producto debe ser un número entero positivo'),
+
+  body('lineas_factura.*.descripcion')
+    .optional()
+    .isLength({ min: 1, max: 200 })
+    .withMessage('Descripción de línea debe tener entre 1 y 200 caracteres'),
+
+  body('lineas_factura.*.cantidad')
+    .optional()
+    .isFloat({ min: 0.01 })
+    .withMessage('Cantidad debe ser mayor a 0'),
+
+  body('lineas_factura.*.precio_unitario')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Precio unitario debe ser un número positivo'),
+
+  body('lineas_factura.*.subtotal_linea')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Subtotal de línea debe ser un número positivo')
+];

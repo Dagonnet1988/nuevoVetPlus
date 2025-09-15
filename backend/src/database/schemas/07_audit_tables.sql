@@ -5,7 +5,7 @@
 -- Tabla para log de actividades de usuarios (más granular que log_auditoria)
 CREATE TABLE IF NOT EXISTS system.activity_log (
     id_log UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    id_usuario UUID REFERENCES auth.usuarios(id_usuario) ON DELETE SET NULL,
+    id_usuario UUID REFERENCES vetplus_auth.usuarios(id_usuario) ON DELETE SET NULL,
     tipo_actividad VARCHAR(50) NOT NULL, -- LOGIN, LOGOUT, CREATE, UPDATE, DELETE, READ, etc.
     descripcion TEXT NOT NULL,
     url VARCHAR(500) NOT NULL,
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS system.activity_log (
 -- Tabla específica para auditoría de sesiones
 CREATE TABLE IF NOT EXISTS system.session_audit (
     id_session UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    id_usuario UUID REFERENCES auth.usuarios(id_usuario) ON DELETE SET NULL,
+    id_usuario UUID REFERENCES vetplus_auth.usuarios(id_usuario) ON DELETE SET NULL,
     tipo_evento VARCHAR(20) NOT NULL, -- LOGIN, LOGOUT, SESSION_EXPIRED, FORCE_LOGOUT
     exito BOOLEAN NOT NULL DEFAULT false,
     ip_address INET,
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS system.session_audit (
 -- Tabla para rastrear accesos a datos sensibles
 CREATE TABLE IF NOT EXISTS system.sensitive_access_log (
     id_access UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    id_usuario UUID REFERENCES auth.usuarios(id_usuario) ON DELETE SET NULL,
+    id_usuario UUID REFERENCES vetplus_auth.usuarios(id_usuario) ON DELETE SET NULL,
     tipo_datos VARCHAR(50) NOT NULL, -- MEDICAL_RECORD, FINANCIAL_REPORT, CLIENT_DATA, etc.
     tabla_accedida VARCHAR(100),
     id_entidad_accedida VARCHAR(100),
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS system.sensitive_access_log (
 -- Tabla para configuration changes (cambios de configuración)
 CREATE TABLE IF NOT EXISTS system.config_changes_log (
     id_change UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    id_usuario UUID REFERENCES auth.usuarios(id_usuario) ON DELETE SET NULL,
+    id_usuario UUID REFERENCES vetplus_auth.usuarios(id_usuario) ON DELETE SET NULL,
     tipo_configuracion VARCHAR(100) NOT NULL, -- USER_ROLE, SYSTEM_SETTING, PERMISSIONS, etc.
     configuracion_anterior JSONB,
     configuracion_nueva JSONB,
@@ -95,7 +95,7 @@ SELECT
         ELSE 'UNKNOWN'
     END as resultado
 FROM system.activity_log al
-LEFT JOIN auth.usuarios u ON al.id_usuario = u.id_usuario
+LEFT JOIN vetplus_auth.usuarios u ON al.id_usuario = u.id_usuario
 ORDER BY al.timestamp DESC;
 
 -- Vista de actividades sospechosas
@@ -105,7 +105,7 @@ SELECT
     u.email as usuario_email,
     u.rol as usuario_rol
 FROM system.activity_log al
-LEFT JOIN auth.usuarios u ON al.id_usuario = u.id_usuario
+LEFT JOIN vetplus_auth.usuarios u ON al.id_usuario = u.id_usuario
 WHERE 
     al.status_code >= 400 -- Requests fallidas
     OR al.tipo_actividad IN ('PASSWORD_RESET', 'FORCE_LOGOUT')
@@ -131,7 +131,7 @@ SELECT
     u.rol as usuario_rol,
     u.activo as usuario_activo
 FROM system.session_audit sa
-LEFT JOIN auth.usuarios u ON sa.id_usuario = u.id_usuario
+LEFT JOIN vetplus_auth.usuarios u ON sa.id_usuario = u.id_usuario
 ORDER BY sa.timestamp DESC;
 
 -- Vista de accesos a datos médicos
@@ -148,7 +148,7 @@ SELECT
     u.email as usuario_email,
     u.rol as usuario_rol
 FROM system.sensitive_access_log sal
-LEFT JOIN auth.usuarios u ON sal.id_usuario = u.id_usuario
+LEFT JOIN vetplus_auth.usuarios u ON sal.id_usuario = u.id_usuario
 WHERE sal.tipo_datos IN ('MEDICAL_RECORD', 'CLINICAL_CONSULTATION', 'PET_HISTORY')
 ORDER BY sal.timestamp DESC;
 
@@ -229,7 +229,7 @@ BEGIN
          AND (user_id IS NULL OR al.id_usuario = user_id))::BIGINT,
         
         (SELECT u.email FROM system.activity_log al 
-         JOIN auth.usuarios u ON al.id_usuario = u.id_usuario
+         JOIN vetplus_auth.usuarios u ON al.id_usuario = u.id_usuario
          WHERE al.timestamp BETWEEN start_date AND end_date
          AND (user_id IS NULL OR al.id_usuario = user_id)
          GROUP BY u.email 
@@ -237,7 +237,7 @@ BEGIN
          LIMIT 1)::TEXT,
         
         (SELECT COUNT(*) FROM system.activity_log al 
-         JOIN auth.usuarios u ON al.id_usuario = u.id_usuario
+         JOIN vetplus_auth.usuarios u ON al.id_usuario = u.id_usuario
          WHERE al.timestamp BETWEEN start_date AND end_date
          AND (user_id IS NULL OR al.id_usuario = user_id)
          GROUP BY u.email 

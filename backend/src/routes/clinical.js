@@ -35,7 +35,7 @@ router.use('/pacientes', pacientesRoutes);
 // Ruta directa para obtener veterinarios
 router.get('/veterinarians',
   authenticateToken,
-  authorize(['admin', 'vet']),
+  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
   async (req, res) => {
     try {
       const { query } = await import('../config/database.js');

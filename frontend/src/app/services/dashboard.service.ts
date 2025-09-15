@@ -89,18 +89,38 @@ export class DashboardService {
     );
   }
 
-  // Datos para gráfico de citas por estado - usar estadísticas del dashboard
+  // Datos para gráfico de citas por estado - obtener estados reales
   getCitasPorEstado(): Observable<ChartData> {
-    return this.getDashboardStats().pipe(
-      map((stats: DashboardStats) => {
+    return this.http.get<any>(`${this.API_URL}/clinical/appointments/stats`).pipe(
+      map((response: any) => {
+        if (response.success && response.data && response.data.estados) {
+          const estados = response.data.estados;
+          return {
+            labels: estados.map((e: any) => this.formatEstadoCita(e.estado)),
+            datasets: [{
+              data: estados.map((e: any) => e.cantidad),
+              backgroundColor: estados.map((e: any) => this.getColorEstado(e.estado))
+            }]
+          };
+        }
         return {
-          labels: ['Hoy', 'Semana', 'Pendientes'],
+          labels: ['Sin datos'],
           datasets: [{
-            data: [stats.citas.hoy, stats.citas.semana, stats.citas.pendientes],
-            backgroundColor: ['#4CAF50', '#2196F3', '#FF9800']
+            data: [1],
+            backgroundColor: ['#e0e0e0']
           }]
         };
-      })
+      }),
+      catchError(() => new Observable<ChartData>(observer => {
+        observer.next({
+          labels: ['Sin datos'],
+          datasets: [{
+            data: [1],
+            backgroundColor: ['#e0e0e0']
+          }]
+        });
+        observer.complete();
+      }))
     );
   }
 
@@ -240,13 +260,33 @@ export class DashboardService {
   }
 
   private mapPacientesToChartData(pacientesData: any): ChartData {
+    if (pacientesData.distribucion_especies && pacientesData.distribucion_especies.length > 0) {
+      const especies = pacientesData.distribucion_especies;
+      return {
+        labels: especies.map((e: any) => e.especie || 'Sin especificar'),
+        datasets: [{
+          data: especies.map((e: any) => e.mascotas_atendidas || 0),
+          backgroundColor: this.generateSpeciesColors(especies.length)
+        }]
+      };
+    }
+    
     return {
-      labels: ['Perros', 'Gatos', 'Aves', 'Otros'],
+      labels: ['Sin datos'],
       datasets: [{
-        data: [60, 30, 5, 5], // Datos por defecto
-        backgroundColor: ['#2e7d32', '#4CAF50', '#8BC34A', '#C8E6C9']
+        data: [1],
+        backgroundColor: ['#e0e0e0']
       }]
     };
+  }
+
+  private generateSpeciesColors(count: number): string[] {
+    const baseColors = ['#2e7d32', '#4CAF50', '#8BC34A', '#C8E6C9', '#66BB6A', '#A5D6A7'];
+    const colors = [];
+    for (let i = 0; i < count; i++) {
+      colors.push(baseColors[i % baseColors.length]);
+    }
+    return colors;
   }
 
   private mapCitasToActivity(citasData: any[]): RecentActivity[] {
@@ -254,7 +294,7 @@ export class DashboardService {
       id: cita.id || index.toString(),
       tipo: 'cita' as const,
       descripcion: `Cita programada para ${cita.mascota_nombre || 'mascota'} - ${cita.tipo_cita || 'consulta'}`,
-      fecha: cita.fecha_hora || new Date().toISOString(),
+      fecha: cita.fecha_inicio || new Date().toISOString(),
       usuario: cita.veterinario_nombre || 'Veterinario',
       icono: 'event',
       color: '#2e7d32'
@@ -288,5 +328,40 @@ export class DashboardService {
       });
       observer.complete();
     });
+  }
+
+  private generateDefaultCitasChart(): Observable<ChartData> {
+    return new Observable(observer => {
+      observer.next({
+        labels: ['Sin datos'],
+        datasets: [{
+          data: [1],
+          backgroundColor: ['#e0e0e0']
+        }]
+      });
+      observer.complete();
+    });
+  }
+
+  private formatEstadoCita(estado: string): string {
+    const estados: { [key: string]: string } = {
+      'pendiente': 'Pendiente',
+      'confirmada': 'Confirmada',
+      'en_progreso': 'En Progreso',
+      'completada': 'Completada',
+      'cancelada': 'Cancelada'
+    };
+    return estados[estado] || estado;
+  }
+
+  private getColorEstado(estado: string): string {
+    const colores: { [key: string]: string } = {
+      'pendiente': '#FF9800',
+      'confirmada': '#2196F3',
+      'en_progreso': '#4CAF50',
+      'completada': '#8BC34A',
+      'cancelada': '#f44336'
+    };
+    return colores[estado] || '#9E9E9E';
   }
 }

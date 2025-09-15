@@ -23,11 +23,11 @@ class PasswordResetController {
       }
 
       const { userId, motivo } = req.body;
-      const adminId = req.user.id;
+      const adminId = req.user.id_usuario;
 
       // Verificar que el usuario objetivo existe
       const userResult = await query(
-        'SELECT id_usuario, nombre, email, rol, activo FROM auth.usuarios WHERE id_usuario = $1',
+        'SELECT id_usuario, nombre, email, rol, activo FROM vetplus_auth.usuarios WHERE id_usuario = $1',
         [userId]
       );
 
@@ -58,7 +58,7 @@ class PasswordResetController {
 
       // Actualizar contraseña y marcar como temporal
       await query(`
-        UPDATE auth.usuarios 
+        UPDATE vetplus_auth.usuarios 
         SET 
           password_hash = $1,
           password_temporal = true,
@@ -115,11 +115,11 @@ class PasswordResetController {
       }
 
       const { userId, newPassword, motivo, forceChange = true } = req.body;
-      const adminId = req.user.id;
+      const adminId = req.user.id_usuario;
 
       // Verificar que el usuario objetivo existe
       const userResult = await query(
-        'SELECT id_usuario, nombre, email, rol, activo FROM auth.usuarios WHERE id_usuario = $1',
+        'SELECT id_usuario, nombre, email, rol, activo FROM vetplus_auth.usuarios WHERE id_usuario = $1',
         [userId]
       );
 
@@ -147,7 +147,7 @@ class PasswordResetController {
 
       // Actualizar contraseña
       await query(`
-        UPDATE auth.usuarios 
+        UPDATE vetplus_auth.usuarios 
         SET 
           password_hash = $1,
           password_temporal = $2,
@@ -217,9 +217,9 @@ class PasswordResetController {
           pr.completado,
           pr.created_at,
           pr.completed_at
-        FROM auth.password_resets pr
-        LEFT JOIN auth.usuarios u ON pr.id_usuario = u.id_usuario
-        LEFT JOIN auth.usuarios admin_user ON pr.realizado_por = admin_user.id_usuario
+        FROM vetplus_auth.password_resets pr
+        LEFT JOIN vetplus_auth.usuarios u ON pr.id_usuario = u.id_usuario
+        LEFT JOIN vetplus_auth.usuarios admin_user ON pr.realizado_por = admin_user.id_usuario
         WHERE 1=1
       `;
 
@@ -263,7 +263,7 @@ class PasswordResetController {
       // Obtener conteo total para paginación
       let countQuery = `
         SELECT COUNT(*) as total
-        FROM auth.password_resets pr
+        FROM vetplus_auth.password_resets pr
         WHERE 1=1
       `;
       const countParams = [];
@@ -324,11 +324,11 @@ class PasswordResetController {
   async forcePasswordChange(req, res) {
     try {
       const { userId } = req.params;
-      const adminId = req.user.id;
+      const adminId = req.user.id_usuario;
 
       // Verificar que el usuario existe
       const userResult = await query(
-        'SELECT id_usuario, nombre, email FROM auth.usuarios WHERE id_usuario = $1 AND activo = true',
+        'SELECT id_usuario, nombre, email FROM vetplus_auth.usuarios WHERE id_usuario = $1 AND activo = true',
         [userId]
       );
 
@@ -344,7 +344,7 @@ class PasswordResetController {
 
       // Marcar contraseña como temporal (forzar cambio)
       await query(`
-        UPDATE auth.usuarios 
+        UPDATE vetplus_auth.usuarios 
         SET 
           password_temporal = true,
           updated_at = CURRENT_TIMESTAMP
@@ -397,10 +397,10 @@ function generateSecurePassword() {
 async function logPasswordReset(adminId, targetUserId, action, ipAddress) {
   try {
     await query(`
-      INSERT INTO auth.password_resets 
-      (admin_user_id, target_user_id, action, ip_address, created_at)
+      INSERT INTO vetplus_auth.password_resets 
+      (id_usuario, tipo_reset, realizado_por, motivo, created_at)
       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-    `, [adminId, targetUserId, action, ipAddress]);
+    `, [targetUserId, action, adminId, `Password reset from IP: ${ipAddress}`]);
   } catch (error) {
     console.error('Error logging password reset:', error);
   }

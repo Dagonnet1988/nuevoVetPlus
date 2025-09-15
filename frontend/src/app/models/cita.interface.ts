@@ -22,8 +22,10 @@ export interface Cita {
     raza?: string;
     cliente?: {
       nombre: string;
+      documento?: string;
       telefono?: string;
       email?: string;
+      direccion?: string;
     };
   };
   veterinario?: {
@@ -37,8 +39,10 @@ export interface Cita {
   mascota_especie?: string;
   mascota_raza?: string;
   cliente_nombre?: string;
+  cliente_documento?: string;
   cliente_telefono?: string;
   cliente_email?: string;
+  cliente_direccion?: string;
   veterinario_nombre?: string;
   veterinario_especialidad?: string;
   veterinario_email?: string;
@@ -58,7 +62,7 @@ export type TipoCita =
 export type EstadoCita =
   | 'pendiente'
   | 'confirmada'
-  | 'en_progreso'
+  | 'en_curso'
   | 'completada'
   | 'cancelada'
   | 'no_asistio';
@@ -149,7 +153,7 @@ export const TIPOS_CITA: { value: TipoCita; label: string; color: string }[] = [
 export const ESTADOS_CITA: { value: EstadoCita; label: string; color: string }[] = [
   { value: 'pendiente', label: 'Pendiente', color: '#ff9800' },
   { value: 'confirmada', label: 'Confirmada', color: '#2196f3' },
-  { value: 'en_progreso', label: 'En Progreso', color: '#9c27b0' },
+  { value: 'en_curso', label: 'En Curso', color: '#9c27b0' },
   { value: 'completada', label: 'Completada', color: '#4caf50' },
   { value: 'cancelada', label: 'Cancelada', color: '#607d8b' },
   { value: 'no_asistio', label: 'No Asistió', color: '#f44336' }

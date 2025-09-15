@@ -5,8 +5,8 @@ import { query } from '../config/database.js';
  */
 export const getDashboardStats = async (req, res) => {
     try {
-        // Solo admins y veterinarios pueden ver el dashboard completo
-        if (!['admin', 'vet'].includes(req.user.rol)) {
+        // Solo admins, veterinarios y auxiliares pueden ver el dashboard completo
+        if (!['admin', 'vet', 'aux_admin', 'aux_vet'].includes(req.user.rol)) {
             return res.status(403).json({
                 success: false,
                 message: 'No tienes permisos para ver las estadísticas del dashboard'
@@ -37,7 +37,7 @@ export const getDashboardStats = async (req, res) => {
                     COALESCE(AVG(total), 0) as promedio_venta
                 FROM financial.facturas_venta 
                 WHERE fecha >= $1 AND fecha <= $2
-                AND estado = 'pagada'
+                AND estado = 'Pagada'
             `, [fecha_inicio, fecha_fin]),
 
             // Citas del período
@@ -192,8 +192,8 @@ export const getDashboardStats = async (req, res) => {
  */
 export const getSalesReports = async (req, res) => {
     try {
-        // Solo admins y veterinarios pueden ver reportes de ventas
-        if (!['admin', 'vet'].includes(req.user.rol)) {
+        // Solo admins, veterinarios y auxiliares pueden ver reportes de ventas
+        if (!['admin', 'vet', 'aux_admin', 'aux_vet'].includes(req.user.rol)) {
             return res.status(403).json({
                 success: false,
                 message: 'No tienes permisos para ver reportes de ventas'
@@ -222,7 +222,7 @@ export const getSalesReports = async (req, res) => {
                 break;
         }
 
-        let whereConditions = ['f.fecha >= $1', 'f.fecha <= $2', "f.estado = 'pagada'"];
+        let whereConditions = ['f.fecha >= $1', 'f.fecha <= $2', "f.estado = 'Pagada'"];
         let queryParams = [fecha_inicio, fecha_fin];
         let paramCount = 2;
 
@@ -274,7 +274,7 @@ export const getSalesReports = async (req, res) => {
                 SUM(f.total) as total_ventas,
                 AVG(f.total) as promedio_venta
             FROM financial.facturas_venta f
-            INNER JOIN auth.usuarios u ON f.created_by = u.id_usuario
+            INNER JOIN vetplus_auth.usuarios u ON f.created_by = u.id_usuario
             WHERE ${whereConditions.join(' AND ')}
             AND u.rol IN ('vet', 'admin')
             GROUP BY u.id_usuario, u.nombre
@@ -584,8 +584,8 @@ export const getInventoryReports = async (req, res) => {
  */
 export const getPatientStats = async (req, res) => {
     try {
-        // Solo admins y veterinarios pueden ver estadísticas de pacientes
-        if (!['admin', 'vet'].includes(req.user.rol)) {
+        // Solo admins, veterinarios y auxiliares pueden ver estadísticas de pacientes
+        if (!['admin', 'vet', 'aux_admin', 'aux_vet'].includes(req.user.rol)) {
             return res.status(403).json({
                 success: false,
                 message: 'No tienes permisos para ver estadísticas de pacientes'
@@ -766,7 +766,7 @@ export const getProfitabilityAnalysis = async (req, res) => {
             FROM financial.productos p
             LEFT JOIN financial.lineas_factura lf ON p.id_producto = lf.id_producto
             LEFT JOIN financial.facturas_venta f ON lf.id_factura = f.id_factura 
-                AND f.fecha >= $1 AND f.fecha <= $2 AND f.estado = 'pagada'
+                AND f.fecha >= $1 AND f.fecha <= $2 AND f.estado = 'Pagada'
             WHERE p.precio_compra IS NOT NULL
             GROUP BY p.id_producto, p.nombre, p.codigo, p.precio_compra, p.precio_venta
             ORDER BY ganancia_total DESC
@@ -782,9 +782,9 @@ export const getProfitabilityAnalysis = async (req, res) => {
                 COALESCE(AVG(f.total), 0) as ticket_promedio,
                 COUNT(c.id_consulta) as total_consultas,
                 COALESCE(AVG(c.costo), 0) as costo_promedio_consulta
-            FROM auth.usuarios u
+            FROM vetplus_auth.usuarios u
             LEFT JOIN financial.facturas_venta f ON u.id_usuario = f.created_by 
-                AND f.fecha >= $1 AND f.fecha <= $2 AND f.estado = 'pagada'
+                AND f.fecha >= $1 AND f.fecha <= $2 AND f.estado = 'Pagada'
             LEFT JOIN clinical.consultas_clinicas c ON u.id_usuario = c.id_veterinario
                 AND c.fecha >= $1 AND c.fecha <= $2
             WHERE u.rol = 'vet' AND u.activo = true
@@ -812,7 +812,7 @@ export const getProfitabilityAnalysis = async (req, res) => {
             WITH ingresos AS (
                 SELECT COALESCE(SUM(total), 0) as total_ingresos
                 FROM financial.facturas_venta
-                WHERE fecha >= $1 AND fecha <= $2 AND estado = 'pagada'
+                WHERE fecha >= $1 AND fecha <= $2 AND estado = 'Pagada'
             ),
             egresos AS (
                 SELECT COALESCE(SUM(monto), 0) as total_egresos
@@ -867,8 +867,8 @@ export const getProfitabilityAnalysis = async (req, res) => {
  */
 export const getAlertsAndKPIs = async (req, res) => {
     try {
-        // Solo admins y veterinarios pueden ver alertas
-        if (!['admin', 'vet'].includes(req.user.rol)) {
+        // Solo admins, veterinarios y auxiliares pueden ver alertas
+        if (!['admin', 'vet', 'aux_admin', 'aux_vet'].includes(req.user.rol)) {
             return res.status(403).json({
                 success: false,
                 message: 'No tienes permisos para ver alertas y KPIs'
@@ -880,7 +880,7 @@ export const getAlertsAndKPIs = async (req, res) => {
                 SELECT 
                     -- Ingresos del mes
                     (SELECT COALESCE(SUM(total), 0) FROM financial.facturas_venta 
-                     WHERE fecha >= DATE_TRUNC('month', CURRENT_DATE) AND estado = 'pagada') as ingresos_mes,
+                     WHERE fecha >= DATE_TRUNC('month', CURRENT_DATE) AND estado = 'Pagada') as ingresos_mes,
                     
                     -- Consultas del mes
                     (SELECT COUNT(*) FROM clinical.consultas_clinicas 

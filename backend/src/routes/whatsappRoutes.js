@@ -10,6 +10,7 @@ import { authenticateToken, authorize } from '../middleware/auth.js';
 import {
     getWhatsAppStatus,
     getWhatsAppQR,
+    generateWhatsAppQR,
     restartWhatsApp,
     logoutWhatsApp,
     sendTestMessage,
@@ -154,9 +155,42 @@ router.get('/status', authenticateToken, requireAdmin, getWhatsAppStatus);
 
 /**
  * @swagger
+ * /api/whatsapp/generate-qr:
+ *   post:
+ *     summary: Generar código QR para conectar WhatsApp
+ *     tags: [WhatsApp]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Código QR generado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     qr_code:
+ *                       type: string
+ *                       description: Código QR en formato Data URL
+ *                     message:
+ *                       type: string
+ *       400:
+ *         description: WhatsApp ya está conectado
+ *       403:
+ *         description: Acceso denegado
+ */
+router.post('/generate-qr', authenticateToken, requireAdmin, generateWhatsAppQR);
+
+/**
+ * @swagger
  * /api/whatsapp/qr:
  *   get:
- *     summary: Obtener código QR para conectar WhatsApp
+ *     summary: Obtener código QR existente para conectar WhatsApp
  *     tags: [WhatsApp]
  *     security:
  *       - bearerAuth: []

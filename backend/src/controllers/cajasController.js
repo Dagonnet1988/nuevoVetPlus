@@ -601,6 +601,463 @@ class CajasController {
       });
     }
   }
+
+  // Actualizar caja
+  static async updateCaja(req, res) {
+    try {
+      const { caja_id } = req.params;
+      const { nombre, descripcion, tipo, saldo_inicial } = req.body;
+      const userId = req.user.id;
+
+      // Verificar que la caja existe
+      const cajaExistente = await query(
+        'SELECT * FROM financial.cajas WHERE id_caja = $1',
+        [caja_id]
+      );
+
+      if (cajaExistente.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Caja no encontrada'
+        });
+      }
+
+      // Verificar que no exista otra caja con el mismo nombre
+      if (nombre) {
+        const nombreDuplicado = await query(
+          'SELECT id_caja FROM financial.cajas WHERE nombre = $1 AND id_caja != $2',
+          [nombre, caja_id]
+        );
+
+        if (nombreDuplicado.rows.length > 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Ya existe una caja con ese nombre'
+          });
+        }
+      }
+
+      // Actualizar caja
+      const result = await query(`
+        UPDATE financial.cajas
+        SET nombre = COALESCE($1, nombre),
+            descripcion = COALESCE($2, descripcion),
+            tipo = COALESCE($3, tipo),
+            saldo_inicial = COALESCE($4, saldo_inicial),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id_caja = $5
+        RETURNING *
+      `, [nombre, descripcion, tipo, saldo_inicial, caja_id]);
+
+      res.json({
+        success: true,
+        message: 'Caja actualizada exitosamente',
+        data: result.rows[0]
+      });
+
+    } catch (error) {
+      console.error('Error al actualizar caja:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  }
+
+  // Eliminar/desactivar caja
+  static async deleteCaja(req, res) {
+    try {
+      const { caja_id } = req.params;
+      const userId = req.user.id;
+
+      // Verificar que la caja existe
+      const cajaExistente = await query(
+        'SELECT * FROM financial.cajas WHERE id_caja = $1',
+        [caja_id]
+      );
+
+      if (cajaExistente.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Caja no encontrada'
+        });
+      }
+
+      // Verificar que no sea la única caja activa
+      const cajasActivas = await query(
+        'SELECT COUNT(*) as total FROM financial.cajas WHERE activa = true AND id_caja != $1',
+        [caja_id]
+      );
+
+      if (cajasActivas.rows[0].total === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'No se puede desactivar la única caja activa del sistema'
+        });
+      }
+
+      // Verificar que no tenga saldo
+      if (cajaExistente.rows[0].saldo_actual !== 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'No se puede desactivar una caja con saldo. Transfiera el saldo primero.'
+        });
+      }
+
+      // Desactivar caja (no eliminar físicamente)
+      await query(`
+        UPDATE financial.cajas
+        SET activa = false,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id_caja = $1
+      `, [caja_id]);
+
+      res.json({
+        success: true,
+        message: 'Caja desactivada exitosamente'
+      });
+
+    } catch (error) {
+      console.error('Error al eliminar caja:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  }
+
+  /**
+   * TRANSFERENCIAS ENTRE CAJAS
+   */
+
+  // Realizar transferencia entre cajas
+  static async transferirEntreCajas(req, res) {
+    try {
+      const {
+        id_caja_origen,
+        id_caja_destino,
+        monto,
+        descripcion,
+        metodo_pago = 'Efectivo',
+        notas
+      } = req.body;
+      const userId = req.user.id;
+
+      // Validar que las cajas sean diferentes
+      if (id_caja_origen === id_caja_destino) {
+        return res.status(400).json({
+          success: false,
+          message: 'La caja origen y destino deben ser diferentes'
+        });
+      }
+
+      // Usar la función de PostgreSQL para procesar la transferencia
+      const result = await query(`
+        SELECT procesar_transferencia_cajas(
+          $1::UUID, $2::UUID, $3::DECIMAL, $4::TEXT, $5::VARCHAR, $6::UUID
+        ) as id_transferencia
+      `, [id_caja_origen, id_caja_destino, monto, descripcion, metodo_pago, userId]);
+
+      const idTransferencia = result.rows[0].id_transferencia;
+
+      // Obtener datos de la transferencia creada
+      const transferenciaResult = await query(`
+        SELECT
+          t.*,
+          co.nombre as caja_origen_nombre,
+          cd.nombre as caja_destino_nombre,
+          u.nombre as usuario_nombre
+        FROM financial.transferencias_cajas t
+        JOIN financial.cajas co ON t.id_caja_origen = co.id_caja
+        JOIN financial.cajas cd ON t.id_caja_destino = cd.id_caja
+        LEFT JOIN vetplus_auth.usuarios u ON t.created_by = u.id_usuario
+        WHERE t.id_transferencia = $1
+      `, [idTransferencia]);
+
+      res.status(201).json({
+        success: true,
+        message: 'Transferencia realizada exitosamente',
+        data: transferenciaResult.rows[0]
+      });
+
+    } catch (error) {
+      console.error('Error al transferir entre cajas:', error);
+
+      // Manejar errores específicos de PostgreSQL
+      if (error.code === 'P0001') { // RAISE EXCEPTION
+        return res.status(400).json({
+          success: false,
+          message: error.message
+        });
+      }
+
+      res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  }
+
+  // Obtener historial de transferencias
+  static async getTransferencias(req, res) {
+    try {
+      const {
+        fecha_inicio,
+        fecha_fin,
+        id_caja_origen,
+        id_caja_destino,
+        estado = 'Completada',
+        limit = 50,
+        offset = 0
+      } = req.query;
+
+      let sqlQuery = `
+        SELECT
+          t.*,
+          co.nombre as caja_origen_nombre,
+          cd.nombre as caja_destino_nombre,
+          u.nombre as usuario_nombre
+        FROM financial.transferencias_cajas t
+        JOIN financial.cajas co ON t.id_caja_origen = co.id_caja
+        JOIN financial.cajas cd ON t.id_caja_destino = cd.id_caja
+        LEFT JOIN vetplus_auth.usuarios u ON t.created_by = u.id_usuario
+        WHERE 1=1
+      `;
+
+      const params = [];
+      let paramCount = 0;
+
+      if (fecha_inicio) {
+        paramCount++;
+        sqlQuery += ` AND t.fecha::DATE >= $${paramCount}`;
+        params.push(fecha_inicio);
+      }
+
+      if (fecha_fin) {
+        paramCount++;
+        sqlQuery += ` AND t.fecha::DATE <= $${paramCount}`;
+        params.push(fecha_fin);
+      }
+
+      if (id_caja_origen) {
+        paramCount++;
+        sqlQuery += ` AND t.id_caja_origen = $${paramCount}`;
+        params.push(id_caja_origen);
+      }
+
+      if (id_caja_destino) {
+        paramCount++;
+        sqlQuery += ` AND t.id_caja_destino = $${paramCount}`;
+        params.push(id_caja_destino);
+      }
+
+      if (estado) {
+        paramCount++;
+        sqlQuery += ` AND t.estado = $${paramCount}`;
+        params.push(estado);
+      }
+
+      sqlQuery += ` ORDER BY t.fecha DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+      params.push(parseInt(limit), parseInt(offset));
+
+      const result = await query(sqlQuery, params);
+
+      // Obtener total para paginación
+      const countQuery = sqlQuery.replace('SELECT t.*', 'SELECT COUNT(*) as total').replace('ORDER BY t.fecha DESC LIMIT', 'ORDER BY').replace('OFFSET', '').split('ORDER BY')[0];
+      const countResult = await query(countQuery, params.slice(0, -2));
+      const total = parseInt(countResult.rows[0].total);
+
+      res.json({
+        success: true,
+        message: 'Transferencias obtenidas exitosamente',
+        data: result.rows,
+        pagination: {
+          total,
+          limit: parseInt(limit),
+          offset: parseInt(offset),
+          hasMore: offset + parseInt(limit) < total
+        }
+      });
+
+    } catch (error) {
+      console.error('Error al obtener transferencias:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  }
+
+  /**
+   * Obtener movimientos de una caja específica (ingresos + egresos)
+   */
+  static async getMovimientosCaja(req, res) {
+    try {
+      const { caja_id } = req.params;
+      const { 
+        fecha_inicio, 
+        fecha_fin,
+        limit = 25,
+        offset = 0,
+        tipo // 'ingreso', 'egreso', o undefined para ambos
+      } = req.query;
+
+      // Verificar que la caja existe
+      const cajaResult = await query(
+        'SELECT id_caja, nombre FROM financial.cajas WHERE id_caja = $1',
+        [caja_id]
+      );
+
+      if (cajaResult.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Caja no encontrada'
+        });
+      }
+
+      let sqlQuery = `
+        SELECT 
+          'ingreso' as tipo,
+          i.id_ingreso as id_movimiento,
+          i.descripcion,
+          i.monto,
+          i.fecha,
+          i.referencia,
+          i.metodo_pago,
+          i.created_at,
+          i.created_by,
+          ci.nombre as categoria,
+          coni.nombre as concepto
+        FROM financial.ingresos i
+        LEFT JOIN financial.conceptos_ingresos coni ON i.id_concepto_ingreso = coni.id_concepto
+        LEFT JOIN financial.categorias_ingresos ci ON coni.id_categoria = ci.id_categoria
+        WHERE i.id_caja = $1
+      `;
+
+      const params = [caja_id];
+      let paramCount = 1;
+
+      // Agregar egresos si no se especifica tipo o se pide ambos
+      if (!tipo || tipo === 'egreso') {
+        sqlQuery += `
+          UNION ALL
+          SELECT 
+            'egreso' as tipo,
+            e.id_egreso as id_movimiento,
+            e.descripcion,
+            -e.monto as monto, -- Monto negativo para egresos
+            e.fecha,
+            e.referencia,
+            e.metodo_pago,
+            e.created_at,
+            e.created_by,
+            ce.nombre as categoria,
+            cone.nombre as concepto
+          FROM financial.egresos e
+          LEFT JOIN financial.conceptos_egresos cone ON e.id_concepto_egreso = cone.id_concepto
+          LEFT JOIN financial.categorias_egresos ce ON cone.id_categoria = ce.id_categoria
+          WHERE e.id_caja = $1
+        `;
+      }
+
+      // Filtros de fecha
+      if (fecha_inicio) {
+        paramCount++;
+        if (!tipo || tipo === 'egreso') {
+          sqlQuery += ` AND (i.fecha >= $${paramCount} OR e.fecha >= $${paramCount})`;
+        } else {
+          sqlQuery += ` AND i.fecha >= $${paramCount}`;
+        }
+        params.push(fecha_inicio);
+      }
+
+      if (fecha_fin) {
+        paramCount++;
+        if (!tipo || tipo === 'egreso') {
+          sqlQuery += ` AND (i.fecha <= $${paramCount} OR e.fecha <= $${paramCount})`;
+        } else {
+          sqlQuery += ` AND i.fecha <= $${paramCount}`;
+        }
+        params.push(fecha_fin);
+      }
+
+      // Filtro por tipo si se especifica
+      // Nota: La lógica de filtrado por tipo se maneja en la construcción inicial de sqlQuery
+
+      sqlQuery += ' ORDER BY fecha DESC, created_at DESC';
+
+      // Agregar paginación
+      paramCount++;
+      sqlQuery += ` LIMIT $${paramCount}`;
+      params.push(limit);
+
+      paramCount++;
+      sqlQuery += ` OFFSET $${paramCount}`;
+      params.push(offset);
+
+      const result = await query(sqlQuery, params);
+
+      // Obtener total de registros para paginación
+      let countQuery = `
+        SELECT COUNT(*) as total 
+        FROM (
+          SELECT id_ingreso FROM financial.ingresos WHERE id_caja = $1
+      `;
+
+      const countParams = [caja_id];
+      let countParamCount = 1;
+
+      if (!tipo || tipo === 'egreso') {
+        countQuery += `
+          UNION ALL
+          SELECT id_egreso FROM financial.egresos WHERE id_caja = $1
+        `;
+      }
+
+      if (fecha_inicio) {
+        countParamCount++;
+        countQuery += ` AND fecha >= $${countParamCount}`;
+        countParams.push(fecha_inicio);
+      }
+
+      if (fecha_fin) {
+        countParamCount++;
+        countQuery += ` AND fecha <= $${countParamCount}`;
+        countParams.push(fecha_fin);
+      }
+
+      countQuery += ') as movimientos';
+
+      const countResult = await query(countQuery, countParams);
+
+      res.json({
+        success: true,
+        message: 'Movimientos obtenidos exitosamente',
+        data: {
+          caja: cajaResult.rows[0],
+          movimientos: result.rows,
+          pagination: {
+            total: parseInt(countResult.rows[0].total),
+            limit: parseInt(limit),
+            offset: parseInt(offset),
+            page: Math.floor(offset / limit) + 1,
+            totalPages: Math.ceil(countResult.rows[0].total / limit)
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error al obtener movimientos de caja:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  }
 }
 
 export default CajasController;

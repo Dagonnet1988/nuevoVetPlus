@@ -141,6 +141,16 @@ interface GoogleCalendarConfig {
                 {{ isTesting() ? 'Probando...' : 'Probar Conexión' }}
               </button>
 
+              <!-- Botones de Sincronización -->
+              <button mat-raised-button color="accent" type="button"
+                      (click)="syncNow()"
+                      [disabled]="!status()?.conectado || isSyncing()"
+                      *ngIf="status()?.conectado">
+                <mat-spinner diameter="20" *ngIf="isSyncing()"></mat-spinner>
+                <mat-icon *ngIf="!isSyncing()">sync</mat-icon>
+                {{ isSyncing() ? 'Sincronizando...' : 'Sincronizar Ahora' }}
+              </button>
+
               <button mat-stroked-button color="warn" type="button"
                       (click)="disconnect()"
                       [disabled]="!isAuthorized()">
@@ -261,6 +271,7 @@ export class GoogleCalendarSimpleComponent implements OnInit {
   isLoading = signal(false);
   isAuthorizing = signal(false);
   isTesting = signal(false);
+  isSyncing = signal(false);
 
   constructor(
     private fb: FormBuilder,
@@ -405,6 +416,27 @@ export class GoogleCalendarSimpleComponent implements OnInit {
         console.error('Error probando conexión:', error);
         this.snackBar.open('❌ Error al probar conexión', 'Cerrar', { duration: 3000 });
         this.isTesting.set(false);
+      }
+    });
+  }
+
+  syncNow(): void {
+    this.isSyncing.set(true);
+
+    this.configuracionService.syncGoogleCalendar().subscribe({
+      next: (result) => {
+        if (result.success) {
+          this.snackBar.open('✅ Sincronización completada exitosamente', 'Cerrar', { duration: 3000 });
+        } else {
+          this.snackBar.open(`⚠️ ${result.message}`, 'Cerrar', { duration: 5000 });
+        }
+        this.loadStatus();
+        this.isSyncing.set(false);
+      },
+      error: (error) => {
+        console.error('Error en sincronización:', error);
+        this.snackBar.open('❌ Error al sincronizar', 'Cerrar', { duration: 3000 });
+        this.isSyncing.set(false);
       }
     });
   }

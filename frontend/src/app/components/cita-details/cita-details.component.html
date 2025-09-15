@@ -11,7 +11,7 @@
         <button mat-icon-button (click)="onBack()" class="back-button">
           <mat-icon>arrow_back</mat-icon>
         </button>
-        
+
         <div class="title-section">
           <h1 class="page-title">
             <mat-icon>event</mat-icon>
@@ -27,12 +27,26 @@
               Editar
             </button>
           }
-          
+
+          @if (canViewHistoriaClinica()) {
+            <button mat-raised-button color="accent" (click)="onViewHistoriaClinica()" [disabled]="updating()">
+              <mat-icon>assignment</mat-icon>
+              {{ getHistoriaClinicaButtonText() }}
+            </button>
+          }
+
+          @if (canShowFacturacion()) {
+            <button mat-raised-button color="warn" (click)="onGoToFacturacion()" [disabled]="updating()">
+              <mat-icon>receipt</mat-icon>
+              Ir a Facturación
+            </button>
+          }
+
           <button mat-button [matMenuTriggerFor]="statusMenu" [disabled]="updating()">
             <mat-icon>more_vert</mat-icon>
             Más acciones
           </button>
-          
+
           <mat-menu #statusMenu="matMenu">
             @for (estado of getAvailableStatusTransitions(); track estado.value) {
               <button mat-menu-item (click)="onUpdateStatus(estado.value)">
@@ -40,14 +54,28 @@
                 <span>Marcar como {{ estado.label }}</span>
               </button>
             }
-            
+
             <mat-divider></mat-divider>
-            
+
             <button mat-menu-item (click)="onSyncWithGoogle()">
               <mat-icon>sync</mat-icon>
               <span>Sincronizar con Google</span>
             </button>
-            
+
+            @if (canViewHistoriaClinica()) {
+              <button mat-menu-item (click)="onViewHistoriaClinica()">
+                <mat-icon>assignment</mat-icon>
+                <span>Ver Historia Clínica</span>
+              </button>
+            }
+
+            @if (canShowFacturacion()) {
+              <button mat-menu-item (click)="onGoToFacturacion()">
+                <mat-icon>receipt</mat-icon>
+                <span>Ir a Facturación</span>
+              </button>
+            }
+
             @if (canCancelCita()) {
               <mat-divider></mat-divider>
               <button mat-menu-item (click)="onCancel()" class="cancel-action">
@@ -67,7 +95,7 @@
           <div class="quick-actions">
             <span class="quick-label">Cambiar estado:</span>
             @for (estado of getAvailableStatusTransitions(); track estado.value) {
-              <button mat-stroked-button 
+              <button mat-stroked-button
                       [style.border-color]="estado.color"
                       [style.color]="estado.color"
                       (click)="onUpdateStatus(estado.value)"
@@ -82,6 +110,7 @@
       </mat-card>
     }
 
+    <!-- Acciones de Consulta Clínica -->
     <!-- Información principal -->
     <div class="main-content">
       <!-- Card de información básica -->
@@ -92,22 +121,22 @@
             Información General
           </mat-card-title>
         </mat-card-header>
-        
+
         <mat-card-content>
           <div class="info-grid">
             <!-- Estado y tipo -->
             <div class="info-section">
               <div class="info-item">
                 <label>Estado:</label>
-                <mat-chip [style.background-color]="getEstadoInfo(cita()!.estado).color" 
+                <mat-chip [style.background-color]="getEstadoInfo(cita()!.estado).color"
                           class="status-chip">
                   {{ getEstadoInfo(cita()!.estado).label }}
                 </mat-chip>
               </div>
-              
+
               <div class="info-item">
                 <label>Tipo de cita:</label>
-                <mat-chip [style.background-color]="getTipoInfo(cita()!.tipo).color" 
+                <mat-chip [style.background-color]="getTipoInfo(cita()!.tipo).color"
                           class="type-chip">
                   {{ getTipoInfo(cita()!.tipo).label }}
                 </mat-chip>
@@ -123,7 +152,7 @@
                   <span>{{ formatDate(cita()!.fecha_inicio) }}</span>
                 </div>
               </div>
-              
+
               <div class="info-item">
                 <label>Horario:</label>
                 <div class="time-info">
@@ -174,7 +203,7 @@
                       Ver Perfil
                     </button>
                   </div>
-                  
+
                   @if (cita()!.mascota!.cliente) {
                     <mat-divider></mat-divider>
                     <div class="owner-info">

@@ -43,8 +43,8 @@ CREATE TABLE IF NOT EXISTS system.configuracion_empresa (
     activa BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID REFERENCES auth.usuarios(id_usuario),
-    updated_by UUID REFERENCES auth.usuarios(id_usuario)
+    created_by UUID REFERENCES vetplus_auth.usuarios(id_usuario),
+    updated_by UUID REFERENCES vetplus_auth.usuarios(id_usuario)
 );
 
 -- Solo puede haber una configuración activa

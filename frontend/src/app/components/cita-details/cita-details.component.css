@@ -134,6 +134,54 @@
   font-size: 18px;
 }
 
+/* Consulta actions card */
+.consulta-actions-card {
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%);
+}
+
+.consulta-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.consulta-label {
+  font-weight: 600;
+  color: #2e7d32;
+  font-size: 14px;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.consulta-label mat-icon {
+  font-size: 20px;
+}
+
+.consulta-btn {
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+}
+
+.consulta-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.15);
+}
+
+.consulta-btn mat-icon {
+  font-size: 20px;
+}
+
 /* Main content */
 .main-content {
   display: flex;

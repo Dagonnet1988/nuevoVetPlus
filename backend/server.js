@@ -18,12 +18,14 @@ import whatsappRoutes from './src/routes/whatsappRoutes.js';
 import notificationRoutes from './src/routes/notifications.js';
 import appointmentExportRoutes from './src/routes/appointmentExport.js';
 import googleCalendarWebhookRoutes from './src/routes/googleCalendarWebhook.js';
+import systemStatusRoutes from './src/routes/systemStatus.js';
+import testRoutes from './src/routes/test.js';
 
 // Importar middleware de auditoría
 import { setAuditContext, auditActivity, auditAuthActivity } from './src/middleware/auditMiddleware.js';
 
 // Importar servicio de notificaciones automáticas
-import autoNotificationService from './src/services/autoNotificationService.js';
+// import autoNotificationService from './src/services/autoNotificationService.js'; // TEMPORALMENTE DESACTIVADO
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -89,6 +91,8 @@ app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/admin/notifications', notificationRoutes);
 app.use('/api/appointments/export', appointmentExportRoutes);
 app.use('/api/google-calendar-webhook', googleCalendarWebhookRoutes);
+app.use('/api/system', systemStatusRoutes);
+app.use('/api/test', testRoutes);
 
 // Servir archivos estáticos de /uploads con CORS abierto
 app.use('/uploads', (req, res, next) => {
@@ -155,9 +159,9 @@ async function startServer() {
     }
 
     // Inicializar servicio de notificaciones automáticas
-    console.log('🔔 Inicializando servicio de notificaciones automáticas...');
-    await autoNotificationService.initialize();
-    console.log('✅ Servicio de notificaciones inicializado');
+    // console.log('🔔 Inicializando servicio de notificaciones automáticas...');
+    // await autoNotificationService.initialize(); // TEMPORALMENTE DESACTIVADO
+    // console.log('✅ Servicio de notificaciones inicializado');
 
     app.listen(PORT, () => {
       console.log(`🚀 VetPlus API iniciada en puerto ${PORT}`);

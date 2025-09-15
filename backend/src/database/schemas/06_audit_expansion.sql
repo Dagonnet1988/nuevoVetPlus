@@ -160,7 +160,7 @@ SELECT
         ELSE a.tipo_accion
     END as accion_descripcion
 FROM system.log_auditoria a
-LEFT JOIN auth.usuarios u ON a.id_usuario = u.id_usuario
+LEFT JOIN vetplus_auth.usuarios u ON a.id_usuario = u.id_usuario
 ORDER BY a.fecha DESC;
 
 -- Índices para optimizar consultas de auditoría

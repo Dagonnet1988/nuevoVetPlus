@@ -119,7 +119,7 @@ class AppointmentExportController {
             FROM clinical.calendario_citas c
             LEFT JOIN clinical.mascotas m ON c.id_mascota = m.id_mascota
             LEFT JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
-            LEFT JOIN auth.usuarios u ON c.id_veterinario = u.id_usuario
+            LEFT JOIN vetplus_auth.usuarios u ON c.id_veterinario = u.id_usuario
             WHERE c.id_veterinario = $1
             AND DATE(c.fecha_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Bogota') >= $2::date
             AND DATE(c.fecha_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Bogota') <= $3::date
@@ -194,7 +194,7 @@ class AppointmentExportController {
             FROM clinical.calendario_citas c
             LEFT JOIN clinical.mascotas m ON c.id_mascota = m.id_mascota
             LEFT JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
-            LEFT JOIN auth.usuarios u ON c.id_veterinario = u.id_usuario
+            LEFT JOIN vetplus_auth.usuarios u ON c.id_veterinario = u.id_usuario
             WHERE DATE(c.fecha_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Bogota') >= $1::date
             AND DATE(c.fecha_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Bogota') <= $2::date
             AND LOWER(c.estado) NOT IN ('cancelada', 'no_asistio')
@@ -452,7 +452,7 @@ class AppointmentExportController {
         const estados = {
             'pendiente': 'PENDIENTE',
             'confirmada': 'CONFIRMADA',
-            'en_progreso': 'EN PROGRESO',
+            'en_curso': 'EN CURSO',
             'completada': 'COMPLETADA',
             'cancelada': 'CANCELADA',
             'no_asistio': 'NO ASISTIO'
