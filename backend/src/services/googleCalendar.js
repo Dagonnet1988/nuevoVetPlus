@@ -6,7 +6,12 @@ class GoogleCalendarService {
         this.calendar = null;
         this.auth = null;
         this.config = null;
-        this.initializeAuth();
+        // Delay initialization until database is ready
+        // this.initializeAuth();
+    }
+
+    async initialize() {
+        await this.initializeAuth();
     }
 
     async initializeAuth() {
@@ -57,8 +62,14 @@ class GoogleCalendarService {
             
             this.config = result.rows.length > 0 ? result.rows[0] : null;
         } catch (error) {
-            console.error('Error cargando configuración de Google Calendar:', error);
-            this.config = null;
+            // Si la tabla no existe aún (primera inicialización), ignorar el error
+            if (error.code === '42P01') {
+                console.log('⚠️ Tabla google_calendar_config no existe aún, se creará en la inicialización');
+                this.config = null;
+            } else {
+                console.error('Error cargando configuración de Google Calendar:', error);
+                this.config = null;
+            }
         }
     }
 
@@ -190,18 +201,25 @@ class GoogleCalendarService {
             };
 
             // Configurar recordatorios basados en la configuración
-            if (this.config.notification_email) {
-                event.reminders.overrides.push({ 
-                    method: 'email', 
-                    minutes: this.config.email_reminder_hours * 60 
-                });
-            }
-            
-            if (this.config.notification_popup) {
-                event.reminders.overrides.push({ 
-                    method: 'popup', 
-                    minutes: this.config.default_reminder_minutes 
-                });
+            // Si el evento ya está completado, no configurar recordatorios
+            if (eventData.status !== 'completada' && eventData.status !== 'cancelada') {
+                if (this.config.notification_email) {
+                    event.reminders.overrides.push({
+                        method: 'email',
+                        minutes: this.config.email_reminder_hours * 60
+                    });
+                }
+
+                if (this.config.notification_popup) {
+                    event.reminders.overrides.push({
+                        method: 'popup',
+                        minutes: this.config.default_reminder_minutes
+                    });
+                }
+            } else {
+                // Para eventos completados o cancelados, deshabilitar recordatorios
+                event.reminders.useDefault = false;
+                event.reminders.overrides = [];
             }
 
             // Agregar asistente si se proporciona email
@@ -246,7 +264,8 @@ class GoogleCalendarService {
                 startDateTime,
                 endDateTime,
                 attendeeEmail,
-                location
+                location,
+                status // Agregar parámetro de estado
             } = eventData;
 
             const event = {
@@ -264,12 +283,30 @@ class GoogleCalendarService {
                 attendees: [],
                 reminders: {
                     useDefault: false,
-                    overrides: [
-                        { method: 'email', minutes: 24 * 60 },
-                        { method: 'popup', minutes: 30 }
-                    ]
+                    overrides: []
                 }
             };
+
+            // Configurar recordatorios basados en el estado
+            if (status !== 'completada' && status !== 'cancelada') {
+                if (this.config.notification_email) {
+                    event.reminders.overrides.push({
+                        method: 'email',
+                        minutes: this.config.email_reminder_hours * 60
+                    });
+                }
+
+                if (this.config.notification_popup) {
+                    event.reminders.overrides.push({
+                        method: 'popup',
+                        minutes: this.config.default_reminder_minutes
+                    });
+                }
+            } else {
+                // Para eventos completados o cancelados, deshabilitar recordatorios
+                event.reminders.useDefault = false;
+                event.reminders.overrides = [];
+            }
 
             if (attendeeEmail) {
                 event.attendees.push({ email: attendeeEmail });

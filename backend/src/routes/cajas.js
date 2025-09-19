@@ -1,188 +1,124 @@
 import express from 'express';
-import CajasController from '../controllers/cajasController.js';
+import cajasController from '../controllers/cajasController.js';
 import { authenticateToken, authorize } from '../middleware/auth.js';
-import {
-  validateCreateCaja,
-  validateCerrarCaja,
-  validateRegistrarIngreso,
-  validateRegistrarEgreso,
-  validateGetTransacciones,
-  validateGetReporte,
-  validateQueryCajas,
-  validateTransferencia,
-  validateGetTransferencias,
-  validateUpdateCaja,
-  validateDeleteCaja
-} from '../validators/cajasValidators.js';
 
 const router = express.Router();
 
-/**
- * RUTAS DEL SISTEMA DE CAJAS
- * Gestión completa de cajas, ingresos y egresos
- */
-
-// ================================
-// GESTIÓN DE CAJAS
-// ================================
+// Todas las rutas requieren autenticación
+router.use(authenticateToken);
 
 /**
  * @route   GET /api/financial/cajas
  * @desc    Obtener todas las cajas
- * @access  Private (Admin, Veterinario)
+ * @access  Private (admin, vet, aux_admin)
  */
-router.get('/cajas', 
-  authenticateToken, 
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']), 
-  validateQueryCajas,
-  CajasController.getCajas
-);
+router.get('/', authorize(['admin', 'vet', 'aux_admin']), cajasController.getCajas);
 
 /**
  * @route   POST /api/financial/cajas
  * @desc    Crear nueva caja
- * @access  Private (Admin)
+ * @access  Private (admin)
  */
-router.post('/cajas', 
-  authenticateToken, 
-  authorize(['admin']), 
-  validateCreateCaja,
-  CajasController.createCaja
-);
+router.post('/', authorize(['admin']), cajasController.createCaja);
+
+/**
+ * @route   GET /api/financial/cajas/resumen/activa
+ * @desc    Obtener resumen de caja activa
+ * @access  Private (admin, vet, aux_admin)
+ */
+router.get('/resumen/activa', authorize(['admin', 'vet', 'aux_admin']), cajasController.getResumenCajaActiva);
 
 /**
  * @route   PUT /api/financial/cajas/:caja_id
- * @desc    Actualizar caja existente
- * @access  Private (Admin)
+ * @desc    Actualizar caja
+ * @access  Private (admin)
  */
-router.put('/cajas/:caja_id', 
-  authenticateToken, 
-  authorize(['admin']), 
-  validateUpdateCaja,
-  CajasController.updateCaja
-);
+router.put('/:caja_id', authorize(['admin']), cajasController.updateCaja);
 
 /**
  * @route   DELETE /api/financial/cajas/:caja_id
- * @desc    Desactivar caja (no se elimina físicamente)
- * @access  Private (Admin)
+ * @desc    Eliminar/desactivar caja
+ * @access  Private (admin)
  */
-router.delete('/cajas/:caja_id', 
-  authenticateToken, 
-  authorize(['admin']), 
-  validateDeleteCaja,
-  CajasController.deleteCaja
-);
+router.delete('/:caja_id', authorize(['admin']), cajasController.deleteCaja);
+
+/**
+ * @route   PATCH /api/financial/cajas/:id/cerrar
+ * @desc    Cerrar caja activa
+ * @access  Private (admin)
+ */
+router.patch('/:id/cerrar', authorize(['admin']), cajasController.cerrarCaja);
 
 /**
  * @route   GET /api/financial/cajas/:caja_id/movimientos
  * @desc    Obtener movimientos de una caja específica
- * @access  Private (Admin, Veterinario)
+ * @access  Private (admin)
  */
-router.get('/cajas/:caja_id/movimientos', 
-  authenticateToken, 
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']), 
-  CajasController.getMovimientosCaja
-);
+router.get('/:caja_id/movimientos', authorize(['admin']), cajasController.getMovimientosCaja);
 
-// ================================
-// GESTIÓN DE INGRESOS
-// ================================
+/**
+ * INGRESOS
+ */
 
 /**
  * @route   POST /api/financial/ingresos
  * @desc    Registrar nuevo ingreso
- * @access  Private (Admin, Veterinario)
+ * @access  Private (admin)
  */
-router.post('/ingresos', 
-  authenticateToken, 
-  authorize(['admin', 'vet', 'aux_admin']), 
-  validateRegistrarIngreso,
-  CajasController.registrarIngreso
-);
+router.post('/ingresos', authorize(['admin']), cajasController.registrarIngreso);
 
 /**
  * @route   GET /api/financial/ingresos
  * @desc    Obtener ingresos con filtros
- * @access  Private (Admin, Veterinario)
+ * @access  Private (admin)
  */
-router.get('/ingresos', 
-  authenticateToken, 
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']), 
-  validateGetTransacciones,
-  CajasController.getIngresos
-);
+router.get('/ingresos', authorize(['admin']), cajasController.getIngresos);
 
-// ================================
-// GESTIÓN DE EGRESOS
-// ================================
+/**
+ * EGRESOS
+ */
 
 /**
  * @route   POST /api/financial/egresos
  * @desc    Registrar nuevo egreso
- * @access  Private (Admin)
+ * @access  Private (admin)
  */
-router.post('/egresos', 
-  authenticateToken, 
-  authorize(['admin']), 
-  validateRegistrarEgreso,
-  CajasController.registrarEgreso
-);
+router.post('/egresos', authorize(['admin']), cajasController.registrarEgreso);
 
 /**
  * @route   GET /api/financial/egresos
  * @desc    Obtener egresos con filtros
- * @access  Private (Admin, Veterinario)
+ * @access  Private (admin)
  */
-router.get('/egresos', 
-  authenticateToken, 
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']), 
-  validateGetTransacciones,
-  CajasController.getEgresos
-);
-
-// ================================
-// REPORTES FINANCIEROS
-// ================================
+router.get('/egresos', authorize(['admin']), cajasController.getEgresos);
 
 /**
- * @route   GET /api/financial/reportes/financiero
- * @desc    Generar reporte financiero con agrupaciones
- * @access  Private (Admin, Veterinario)
+ * TRANSFERENCIAS
  */
-router.get('/reportes/financiero', 
-  authenticateToken, 
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']), 
-  validateGetReporte,
-  CajasController.getReporteFinanciero
-);
-
-// ================================
-// TRANSFERENCIAS ENTRE CAJAS
-// ================================
 
 /**
  * @route   POST /api/financial/transferencias
  * @desc    Realizar transferencia entre cajas
- * @access  Private (Admin)
+ * @access  Private (admin)
  */
-router.post('/transferencias', 
-  authenticateToken, 
-  authorize(['admin']), 
-  validateTransferencia,
-  CajasController.transferirEntreCajas
-);
+router.post('/transferencias', authorize(['admin']), cajasController.transferirEntreCajas);
 
 /**
  * @route   GET /api/financial/transferencias
- * @desc    Obtener historial de transferencias
- * @access  Private (Admin, Veterinario)
+ * @desc    Obtener transferencias con filtros
+ * @access  Private (admin)
  */
-router.get('/transferencias', 
-  authenticateToken, 
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']), 
-  validateGetTransferencias,
-  CajasController.getTransferencias
-);
+router.get('/transferencias', authorize(['admin']), cajasController.getTransferencias);
+
+/**
+ * REPORTES
+ */
+
+/**
+ * @route   GET /api/financial/reportes/financiero
+ * @desc    Obtener reporte financiero
+ * @access  Private (admin)
+ */
+router.get('/reportes/financiero', authorize(['admin']), cajasController.getReporteFinanciero);
 
 export default router;

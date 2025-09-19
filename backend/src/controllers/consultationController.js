@@ -82,6 +82,21 @@ export const createConsultation = async (req, res) => {
         const result = await query(insertSQL, values);
         const nuevaConsulta = result.rows[0];
 
+        // 🔥 SINCRONIZAR PESO CON TABLA MASCOTAS
+        if (peso && !isNaN(parseFloat(peso))) {
+            try {
+                console.log(`⚖️ Actualizando peso de mascota ${id_mascota}: ${peso} kg`);
+                await query(
+                    'UPDATE clinical.mascotas SET peso = $1, updated_at = CURRENT_TIMESTAMP WHERE id_mascota = $2',
+                    [parseFloat(peso), id_mascota]
+                );
+                console.log('✅ Peso sincronizado con tabla mascotas');
+            } catch (pesoError) {
+                console.warn('⚠️ Error sincronizando peso con tabla mascotas:', pesoError.message);
+                // No fallar la creación de la consulta por este error
+            }
+        }
+
         res.status(201).json({
             success: true,
             message: 'Consulta clínica creada exitosamente',
@@ -231,7 +246,27 @@ export const getConsultationByAppointmentId = async (req, res) => {
         }
         
         const consulta = result.rows[0];
-        
+
+        // Obtener archivos adjuntos a la consulta
+        const archivosResult = await query(`
+            SELECT
+                id_archivo,
+                nombre_original,
+                nombre_archivo,
+                ruta_archivo,
+                tipo_mime,
+                tamaño_bytes,
+                descripcion,
+                categoria,
+                fecha_subida,
+                subido_por,
+                u.nombre as subido_por_nombre
+            FROM clinical.archivos_consulta ac
+            LEFT JOIN vetplus_auth.usuarios u ON ac.subido_por = u.id_usuario
+            WHERE ac.id_consulta = $1 AND ac.activo = true
+            ORDER BY ac.fecha_subida DESC
+        `, [id_cita]);
+
         // Estructurar respuesta con relaciones
         const consultaStructured = {
             id_consulta: consulta.id_consulta,
@@ -575,7 +610,27 @@ export const getConsultationById = async (req, res) => {
         }
 
         const consulta = result.rows[0];
-        
+
+        // Obtener archivos adjuntos a la consulta
+        const archivosResult = await query(`
+            SELECT
+                id_archivo,
+                nombre_original,
+                nombre_archivo,
+                ruta_archivo,
+                tipo_mime,
+                tamaño_bytes,
+                descripcion,
+                categoria,
+                fecha_subida,
+                subido_por,
+                u.nombre as subido_por_nombre
+            FROM clinical.archivos_consulta ac
+            LEFT JOIN vetplus_auth.usuarios u ON ac.subido_por = u.id_usuario
+            WHERE ac.id_consulta = $1 AND ac.activo = true
+            ORDER BY ac.fecha_subida DESC
+        `, [id]);
+
         // Estructurar la respuesta para que coincida con la interfaz del frontend
         const consultaStructured = {
             id_consulta: consulta.id_consulta,
@@ -601,6 +656,8 @@ export const getConsultationById = async (req, res) => {
             formula_enviada_whatsapp: consulta.formula_enviada_whatsapp,
             fecha_envio_formula: consulta.fecha_envio_formula,
             recordatorio_medicamentos_enviado: consulta.recordatorio_medicamentos_enviado,
+            // Archivos adjuntos
+            archivos: archivosResult.rows,
             // Relaciones estructuradas
             mascota: {
                 id_mascota: consulta.id_mascota,
@@ -746,6 +803,21 @@ export const updateConsultation = async (req, res) => {
         const result = await query(updateSQL, values);
         const consultaActualizada = result.rows[0];
 
+        // 🔥 SINCRONIZAR PESO CON TABLA MASCOTAS
+        if (peso && !isNaN(parseFloat(peso))) {
+            try {
+                console.log(`⚖️ Actualizando peso de mascota ${consultaActualizada.id_mascota}: ${peso} kg`);
+                await query(
+                    'UPDATE clinical.mascotas SET peso = $1, updated_at = CURRENT_TIMESTAMP WHERE id_mascota = $2',
+                    [parseFloat(peso), consultaActualizada.id_mascota]
+                );
+                console.log('✅ Peso sincronizado con tabla mascotas');
+            } catch (pesoError) {
+                console.warn('⚠️ Error sincronizando peso con tabla mascotas:', pesoError.message);
+                // No fallar la actualización de la consulta por este error
+            }
+        }
+
         res.json({
             success: true,
             message: 'Consulta clínica actualizada exitosamente',
@@ -888,6 +960,21 @@ export const completeConsultationWithInvoice = async (req, res) => {
             ]);
 
             console.log('✅ Consulta completada exitosamente');
+
+            // 🔥 SINCRONIZAR PESO CON TABLA MASCOTAS
+            if (peso && !isNaN(parseFloat(peso))) {
+                try {
+                    console.log(`⚖️ Actualizando peso de mascota ${consultaData.id_mascota}: ${peso} kg`);
+                    await query(
+                        'UPDATE clinical.mascotas SET peso = $1, updated_at = CURRENT_TIMESTAMP WHERE id_mascota = $2',
+                        [parseFloat(peso), consultaData.id_mascota]
+                    );
+                    console.log('✅ Peso sincronizado con tabla mascotas');
+                } catch (pesoError) {
+                    console.warn('⚠️ Error sincronizando peso con tabla mascotas:', pesoError.message);
+                    // No fallar la creación de la consulta por este error
+                }
+            }
 
             // 3. Crear factura automáticamente si hay productos/servicios
             let facturaCreada = null;

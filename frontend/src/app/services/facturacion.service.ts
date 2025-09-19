@@ -321,16 +321,19 @@ export class FacturacionService {
   // ===============================
 
   getResumenFacturacion(): Observable<ResumenFacturacion> {
-    return this.http.get<any>(`${this.API_URL}/reports/facturacion`).pipe(
+    // Usar el endpoint correcto del módulo de reportes
+    return this.http.get<any>(`${environment.apiUrl}/reports/dashboard`).pipe(
       map((response: any) => {
         if (response.success && response.data) {
-          // Convertir valores numéricos de strings a números
+          // Transformar datos del dashboard a formato de resumen de facturación
           return {
-            ...response.data,
-            total_facturas: parseInt(response.data.total_facturas) || 0,
-            total_ventas_dia: parseFloat(response.data.total_ventas_dia) || 0,
-            total_ventas_mes: parseFloat(response.data.total_ventas_mes) || 0,
-            facturas_pendientes: parseInt(response.data.facturas_pendientes) || 0
+            total_facturas: response.data.ventas?.total_facturas || 0,
+            total_ventas_dia: response.data.ventas?.total_ventas || 0, // Usar total del período como aproximación
+            total_ventas_mes: response.data.ventas?.total_ventas || 0,
+            facturas_pendientes: 0, // No disponible en dashboard básico
+            productos_mas_vendidos: [],
+            ventas_por_metodo_pago: [],
+            facturas_recientes: []
           };
         }
         return {

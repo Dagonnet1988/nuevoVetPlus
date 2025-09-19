@@ -248,6 +248,13 @@ class CajasController {
         RETURNING *
       `, [codigo_ingreso, id_caja, monto, descripcion, metodo_pago, referencia, id_concepto_ingreso, req.user.id]);
 
+      // Actualizar saldo de la caja
+      await query(`
+        UPDATE financial.cajas
+        SET saldo_actual = saldo_actual + $1, updated_at = CURRENT_TIMESTAMP
+        WHERE id_caja = $2
+      `, [monto, id_caja]);
+
       res.status(201).json({
         success: true,
         message: 'Ingreso registrado exitosamente',
@@ -403,6 +410,13 @@ class CajasController {
         ) VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6, $7, 'General', $8)
         RETURNING *
       `, [codigo_egreso, id_caja, monto, descripcion, metodo_pago, referencia, id_concepto_egreso, req.user.id]);
+
+      // Actualizar saldo de la caja
+      await query(`
+        UPDATE financial.cajas
+        SET saldo_actual = saldo_actual - $1, updated_at = CURRENT_TIMESTAMP
+        WHERE id_caja = $2
+      `, [monto, id_caja]);
 
       res.status(201).json({
         success: true,

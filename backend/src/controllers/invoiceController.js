@@ -414,7 +414,7 @@ export async function searchProductForInvoice(req, res) {
           WHEN inventariable = true AND stock_actual <= 0 THEN false
           ELSE true
         END as disponible
-      FROM financial.producto 
+      FROM financial.productos
       WHERE codigo = $1 AND activo = true
     `, [barcode]);    if (result.rows.length === 0) {
       return res.status(404).json({

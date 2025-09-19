@@ -1,0 +1,355 @@
+<div class="cajas-container">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <div class="title-section">
+        <h1 class="page-title">
+          <mat-icon class="page-icon">account_balance_wallet</mat-icon>
+          Gestión de Cajas
+        </h1>
+        <p class="page-subtitle">Control y administración de cajas del sistema</p>
+      </div>
+      <div class="actions-section">
+        <button mat-raised-button
+                color="primary"
+                (click)="abrirDialogoCaja()"
+                class="create-button">
+          <mat-icon>add</mat-icon>
+          Nueva Caja
+        </button>
+        <button mat-stroked-button
+                (click)="nuevaTransferencia()"
+                class="transfer-button">
+          <mat-icon>swap_horiz</mat-icon>
+          Transferir
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Diálogo para crear/editar caja -->
+  @if (mostrarDialogoCaja()) {
+    <div class="dialog-overlay" (click)="cerrarDialogoCaja()">
+      <div class="dialog-content" (click)="$event.stopPropagation()">
+        <div class="dialog-header">
+          <h2>{{ cajaEditando() ? 'Editar Caja' : 'Nueva Caja' }}</h2>
+          <button mat-icon-button (click)="cerrarDialogoCaja()">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+
+        <form [formGroup]="cajaForm" (ngSubmit)="guardarCaja()" class="dialog-body">
+          <div class="form-row">
+            <mat-form-field appearance="outline" class="form-field">
+              <mat-label>Nombre de la Caja</mat-label>
+              <input matInput formControlName="nombre" placeholder="Ej: Caja Principal" required>
+              <mat-error *ngIf="cajaForm.get('nombre')?.hasError('required')">
+                El nombre es obligatorio
+              </mat-error>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="form-field">
+              <mat-label>Tipo de Caja</mat-label>
+              <mat-select formControlName="tipo" required>
+                <mat-option value="Caja Menor">Caja Menor</mat-option>
+                <mat-option value="Cuenta Bancaria">Cuenta Bancaria</mat-option>
+                <mat-option value="Caja Fuerte">Caja Fuerte</mat-option>
+                <mat-option value="Personalizada">Personalizada</mat-option>
+              </mat-select>
+              <mat-error *ngIf="cajaForm.get('tipo')?.hasError('required')">
+                El tipo es obligatorio
+              </mat-error>
+            </mat-form-field>
+          </div>
+
+          <mat-form-field appearance="outline" class="form-field full-width">
+            <mat-label>Descripción</mat-label>
+            <textarea matInput formControlName="descripcion" rows="3"
+                      placeholder="Descripción opcional de la caja"></textarea>
+          </mat-form-field>
+
+          <div class="form-row">
+            <mat-form-field appearance="outline" class="form-field">
+              <mat-label>Saldo Inicial</mat-label>
+              <input matInput type="number" formControlName="saldo_inicial" min="0" step="0.01" required>
+              <span matSuffix>$</span>
+              <mat-error *ngIf="cajaForm.get('saldo_inicial')?.hasError('required')">
+                El saldo inicial es obligatorio
+              </mat-error>
+              <mat-error *ngIf="cajaForm.get('saldo_inicial')?.hasError('min')">
+                El saldo debe ser mayor o igual a 0
+              </mat-error>
+            </mat-form-field>
+
+            <div class="form-field checkbox-field">
+              <mat-checkbox formControlName="activa">
+                Caja activa
+              </mat-checkbox>
+            </div>
+          </div>
+
+          <div class="dialog-actions">
+            <button mat-button type="button" (click)="cerrarDialogoCaja()">
+              Cancelar
+            </button>
+            <button mat-raised-button color="primary" type="submit"
+                    [disabled]="cajaForm.invalid || guardandoCaja">
+              <mat-icon *ngIf="guardandoCaja">refresh</mat-icon>
+              {{ guardandoCaja() ? 'Guardando...' : (cajaEditando() ? 'Actualizar' : 'Crear') }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+  <!-- Resumen de caja activa -->
+  @if (resumenCajaActiva(); as resumen) {
+    <mat-card class="resumen-card">
+      <mat-card-header>
+        <mat-card-title>
+          <mat-icon>account_balance</mat-icon>
+          Caja Activa: {{ resumen.caja.nombre }}
+        </mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="resumen-grid">
+          <div class="resumen-item">
+            <span class="resumen-label">Saldo Inicial</span>
+            <span class="resumen-value">{{ formatearMoneda(resumen.totales.saldo_inicial) }}</span>
+          </div>
+          <div class="resumen-item">
+            <span class="resumen-label">Ingresos</span>
+            <span class="resumen-value ingresos">{{ formatearMoneda(resumen.totales.total_ingresos) }}</span>
+          </div>
+          <div class="resumen-item">
+            <span class="resumen-label">Egresos</span>
+            <span class="resumen-value egresos">{{ formatearMoneda(resumen.totales.total_egresos) }}</span>
+          </div>
+          <div class="resumen-item">
+            <span class="resumen-label">Saldo Actual</span>
+            <span class="resumen-value saldo">{{ formatearMoneda(resumen.totales.saldo_actual) }}</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  }
+
+  <!-- Tabs principales -->
+  <mat-card class="tabs-card">
+    <mat-card-content>
+      <mat-tab-group [selectedIndex]="selectedTab()" (selectedIndexChange)="changeTab($event)">
+        <mat-tab label="Cajas">
+          <!-- Vista de Cajas -->
+          <div class="tab-content">
+            @if (loading()) {
+              <div class="loading-container">
+                <mat-spinner diameter="50"></mat-spinner>
+                <p>Cargando cajas...</p>
+              </div>
+            } @else {
+              <div class="cajas-grid">
+                @for (caja of cajas(); track caja.id_caja) {
+                  <mat-card class="caja-card" [class.inactive]="!caja.activa">
+                    <mat-card-header>
+                      <mat-card-title>
+                        <mat-icon [style.color]="getTipoCajaColor(caja.tipo)">{{ getTipoCajaIcon(caja.tipo) }}</mat-icon>
+                        {{ caja.nombre }}
+                      </mat-card-title>
+                      <mat-card-subtitle>{{ caja.tipo }}</mat-card-subtitle>
+                    </mat-card-header>
+                    <mat-card-content>
+                      <div class="caja-info">
+                        <div class="caja-saldo">
+                          <span class="saldo-label">Saldo Actual:</span>
+                          <span class="saldo-valor">{{ formatearMoneda(caja.saldo_actual) }}</span>
+                        </div>
+                        <div class="caja-saldo">
+                          <span class="saldo-label">Saldo Inicial:</span>
+                          <span class="saldo-valor">{{ formatearMoneda(caja.saldo_inicial) }}</span>
+                        </div>
+                        @if (caja.descripcion) {
+                          <p class="caja-descripcion">{{ caja.descripcion }}</p>
+                        }
+                      </div>
+                    </mat-card-content>
+                    <mat-card-actions>
+                      <button mat-button color="primary" (click)="verMovimientos(caja)">
+                        <mat-icon>history</mat-icon>
+                        Movimientos
+                      </button>
+                      <button mat-button (click)="editarCaja(caja)">
+                        <mat-icon>edit</mat-icon>
+                        Editar
+                      </button>
+                      @if (caja.activa) {
+                        <button mat-button color="warn" (click)="cerrarCaja(caja)">
+                          <mat-icon>lock</mat-icon>
+                          Cerrar
+                        </button>
+                      }
+                    </mat-card-actions>
+                  </mat-card>
+                }
+              </div>
+
+              @if (cajas().length === 0) {
+                <div class="no-data">
+                  <mat-icon>account_balance_wallet</mat-icon>
+                  <h3>No hay cajas</h3>
+                  <p>No se encontraron cajas en el sistema</p>
+                </div>
+              }
+            }
+          </div>
+        </mat-tab>
+
+        <mat-tab label="Movimientos">
+          <!-- Vista de Movimientos -->
+          <div class="tab-content">
+            @if (loadingMovimientos()) {
+              <div class="loading-container">
+                <mat-spinner diameter="50"></mat-spinner>
+                <p>Cargando movimientos...</p>
+              </div>
+            } @else {
+              <div class="table-container">
+                <table mat-table [dataSource]="movimientos()" matSort class="movimientos-table">
+                  <ng-container matColumnDef="fecha">
+                    <th mat-header-cell *matHeaderCellDef mat-sort-header>Fecha</th>
+                    <td mat-cell *matCellDef="let movimiento">
+                      {{ formatearFecha(movimiento.fecha) }}
+                    </td>
+                  </ng-container>
+
+                  <ng-container matColumnDef="tipo">
+                    <th mat-header-cell *matHeaderCellDef>Tipo</th>
+                    <td mat-cell *matCellDef="let movimiento">
+                      <mat-chip [style.background-color]="movimiento.tipo === 'Ingreso' ? '#4caf50' : '#f44336'"
+                                [style.color]="'white'">
+                        {{ movimiento.tipo }}
+                      </mat-chip>
+                    </td>
+                  </ng-container>
+
+                  <ng-container matColumnDef="concepto">
+                    <th mat-header-cell *matHeaderCellDef>Concepto</th>
+                    <td mat-cell *matCellDef="let movimiento">
+                      {{ movimiento.concepto }}
+                    </td>
+                  </ng-container>
+
+                  <ng-container matColumnDef="monto">
+                    <th mat-header-cell *matHeaderCellDef mat-sort-header>Monto</th>
+                    <td mat-cell *matCellDef="let movimiento">
+                      <span [class]="movimiento.tipo === 'Ingreso' ? 'monto-ingreso' : 'monto-egreso'">
+                        {{ movimiento.tipo === 'Ingreso' ? '+' : '-' }}{{ formatearMoneda(getMontoAbsoluto(movimiento.monto)) }}
+                      </span>
+                    </td>
+                  </ng-container>
+
+                  <ng-container matColumnDef="metodo_pago">
+                    <th mat-header-cell *matHeaderCellDef>Método</th>
+                    <td mat-cell *matCellDef="let movimiento">
+                      {{ movimiento.metodo_pago }}
+                    </td>
+                  </ng-container>
+
+                  <ng-container matColumnDef="referencia">
+                    <th mat-header-cell *matHeaderCellDef>Referencia</th>
+                    <td mat-cell *matCellDef="let movimiento">
+                      {{ movimiento.referencia || '-' }}
+                    </td>
+                  </ng-container>
+
+                  <tr mat-header-row *matHeaderRowDef="displayedColumnsMovimientos"></tr>
+                  <tr mat-row *matRowDef="let row; columns: displayedColumnsMovimientos;"></tr>
+                </table>
+
+                @if (movimientos().length === 0) {
+                  <div class="no-data">
+                    <mat-icon>history</mat-icon>
+                    <h3>No hay movimientos</h3>
+                    <p>No se encontraron movimientos en la caja seleccionada</p>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        </mat-tab>
+
+        <mat-tab label="Transferencias">
+          <!-- Vista de Transferencias -->
+          <div class="tab-content">
+            @if (loadingTransferencias()) {
+              <div class="loading-container">
+                <mat-spinner diameter="50"></mat-spinner>
+                <p>Cargando transferencias...</p>
+              </div>
+            } @else {
+              <div class="table-container">
+                <table mat-table [dataSource]="transferencias()" matSort class="transferencias-table">
+                  <ng-container matColumnDef="codigo">
+                    <th mat-header-cell *matHeaderCellDef>Código</th>
+                    <td mat-cell *matCellDef="let transferencia">
+                      {{ transferencia.codigo_transferencia }}
+                    </td>
+                  </ng-container>
+
+                  <ng-container matColumnDef="fecha">
+                    <th mat-header-cell *matHeaderCellDef mat-sort-header>Fecha</th>
+                    <td mat-cell *matCellDef="let transferencia">
+                      {{ formatearFecha(transferencia.fecha) }}
+                    </td>
+                  </ng-container>
+
+                  <ng-container matColumnDef="origen">
+                    <th mat-header-cell *matHeaderCellDef>Origen</th>
+                    <td mat-cell *matCellDef="let transferencia">
+                      {{ transferencia.caja_origen?.nombre || 'N/A' }}
+                    </td>
+                  </ng-container>
+
+                  <ng-container matColumnDef="destino">
+                    <th mat-header-cell *matHeaderCellDef>Destino</th>
+                    <td mat-cell *matCellDef="let transferencia">
+                      {{ transferencia.caja_destino?.nombre || 'N/A' }}
+                    </td>
+                  </ng-container>
+
+                  <ng-container matColumnDef="monto">
+                    <th mat-header-cell *matHeaderCellDef mat-sort-header>Monto</th>
+                    <td mat-cell *matCellDef="let transferencia">
+                      {{ formatearMoneda(transferencia.monto) }}
+                    </td>
+                  </ng-container>
+
+                  <ng-container matColumnDef="estado">
+                    <th mat-header-cell *matHeaderCellDef>Estado</th>
+                    <td mat-cell *matCellDef="let transferencia">
+                      <mat-chip [style.background-color]="transferencia.estado === 'Completada' ? '#4caf50' : '#f44336'"
+                                [style.color]="'white'">
+                        {{ transferencia.estado }}
+                      </mat-chip>
+                    </td>
+                  </ng-container>
+
+                  <tr mat-header-row *matHeaderRowDef="displayedColumnsTransferencias"></tr>
+                  <tr mat-row *matRowDef="let row; columns: displayedColumnsTransferencias;"></tr>
+                </table>
+
+                @if (transferencias().length === 0) {
+                  <div class="no-data">
+                    <mat-icon>swap_horiz</mat-icon>
+                    <h3>No hay transferencias</h3>
+                    <p>No se encontraron transferencias en el sistema</p>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        </mat-tab>
+      </mat-tab-group>
+    </mat-card-content>
+  </mat-card>
+</div>

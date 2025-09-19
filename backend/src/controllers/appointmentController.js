@@ -759,155 +759,311 @@ export const updateAppointmentStatus = async (req, res) => {
     try {
         const { id } = req.params;
         const { estado, notas } = req.body;
-        
+
+        console.log(`📝 [INICIO] Actualizando estado de cita ${id}`);
         console.log(`📝 Datos recibidos: estado=${estado}, notas=${notas}`);
-        
+
         // Mapear estado del frontend al formato de la base de datos
         const estadoDb = mapFrontendToDb(estado);
         console.log(`🔄 Mapeando estado: ${estado} -> ${estadoDb}`);
         
+        // Verificar que la cita existe antes de iniciar la transacción
+        const citaExistente = await query(
+            'SELECT id_cita, estado FROM clinical.calendario_citas WHERE id_cita = $1',
+            [id]
+        );
+
+        if (citaExistente.rows.length === 0) {
+            console.log('❌ Cita no encontrada:', id);
+            return res.status(404).json({
+                success: false,
+                message: 'Cita no encontrada'
+            });
+        }
+
+        console.log('✅ Cita encontrada:', {
+            id_cita: citaExistente.rows[0].id_cita,
+            estado_actual: citaExistente.rows[0].estado
+        });
+
         // Iniciar transacción para operaciones múltiples
         await query('BEGIN');
-        
+        console.log('🔄 Transacción iniciada');
+
         try {
             const result = await query(`
-                UPDATE clinical.calendario_citas 
+                UPDATE clinical.calendario_citas
                 SET estado = $1, notas = COALESCE($2, notas), updated_at = CURRENT_TIMESTAMP
                 WHERE id_cita = $3
                 RETURNING *
             `, [estadoDb, notas, id]);
-            
+
             if (result.rows.length === 0) {
+                console.log('❌ Error: UPDATE no afectó ninguna fila');
                 await query('ROLLBACK');
                 return res.status(404).json({
                     success: false,
                     message: 'Cita no encontrada'
                 });
             }
+
+            console.log('✅ Estado de cita actualizado:', {
+                id_cita: result.rows[0].id_cita,
+                estado_anterior: citaExistente.rows[0].estado,
+                estado_nuevo: result.rows[0].estado
+            });
             
             // 🔥 AUTO-CREAR HISTORIA CLÍNICA AL INICIAR CITA (EN CURSO)
             if (estadoDb === 'en_curso') {
                 const citaData = result.rows[0];
-                
-                // Verificar si ya existe una consulta clínica para esta cita
-                const existingConsulta = await query(`
-                    SELECT id_consulta FROM clinical.consultas_clinicas 
-                    WHERE id_cita = $1
-                `, [id]);
-                
-                if (existingConsulta.rows.length === 0) {
-                    console.log('🏥 Auto-creando historia clínica para cita en curso...');
-                    
-                    // Generar código único para la consulta
-                    const codigoConsulta = `CON-${Date.now().toString().slice(-8)}`;
-                    
-                    // Crear registro de consulta clínica
-                    const consultaResult = await query(`
-                        INSERT INTO clinical.consultas_clinicas (
-                            id_consulta,
-                            codigo_consulta,
-                            id_mascota,
-                            id_veterinario,
-                            motivo,
-                            estado
-                        ) VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5)
-                        RETURNING id_consulta
-                    `, [
-                        codigoConsulta,
-                        citaData.id_mascota,
-                        citaData.id_veterinario,
-                        citaData.motivo || 'Consulta programada',
-                        'En Curso'
-                    ]);
-                    
-                    // Vincular la consulta con la cita
-                    await query(`
-                        UPDATE clinical.calendario_citas 
-                        SET id_consulta = $1 
-                        WHERE id_cita = $2
-                    `, [consultaResult.rows[0].id_consulta, id]);
-                    
-                    console.log('✅ Historia clínica creada automáticamente:', {
-                        id_consulta: consultaResult.rows[0].id_consulta,
-                        codigo_consulta: codigoConsulta,
-                        id_cita: id
-                    });
+                console.log('🏥 Verificando creación de historia clínica para cita en curso...');
+
+                try {
+                    // Verificar si ya existe una consulta clínica para esta cita
+                    const existingConsulta = await query(`
+                        SELECT id_consulta FROM clinical.consultas_clinicas
+                        WHERE id_cita = $1
+                    `, [id]);
+
+                    if (existingConsulta.rows.length === 0) {
+                        console.log('🏥 Auto-creando historia clínica para cita en curso...');
+
+                        // Generar código único para la consulta
+                        const codigoConsulta = `CON-${Date.now().toString().slice(-8)}`;
+
+                        // Crear registro de consulta clínica
+                        const consultaResult = await query(`
+                            INSERT INTO clinical.consultas_clinicas (
+                                id_consulta,
+                                codigo_consulta,
+                                id_mascota,
+                                id_veterinario,
+                                motivo,
+                                estado
+                            ) VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5)
+                            RETURNING id_consulta
+                        `, [
+                            codigoConsulta,
+                            citaData.id_mascota,
+                            citaData.id_veterinario,
+                            citaData.motivo || 'Consulta programada',
+                            'En Curso'
+                        ]);
+
+                        if (consultaResult.rows.length === 0) {
+                            throw new Error('No se pudo crear la consulta clínica');
+                        }
+
+                        // Vincular la consulta con la cita
+                        const updateResult = await query(`
+                            UPDATE clinical.calendario_citas
+                            SET id_consulta = $1
+                            WHERE id_cita = $2
+                        `, [consultaResult.rows[0].id_consulta, id]);
+
+                        console.log('✅ Historia clínica creada automáticamente:', {
+                            id_consulta: consultaResult.rows[0].id_consulta,
+                            codigo_consulta: codigoConsulta,
+                            id_cita: id,
+                            filas_actualizadas: updateResult.rowCount
+                        });
+                    } else {
+                        console.log('ℹ️ Ya existe una consulta clínica para esta cita:', existingConsulta.rows[0].id_consulta);
+                    }
+                } catch (consultaError) {
+                    console.error('❌ Error creando consulta clínica:', consultaError);
+                    // No lanzamos el error para no detener el proceso de cambio de estado
                 }
             }
             
             // 🔥 AUTO-CREAR HISTORIA CLÍNICA AL COMPLETAR CITA (por compatibilidad)
             if (estadoDb === 'completada') {
                 const citaData = result.rows[0];
-                
-                // Verificar si ya existe una consulta clínica para esta cita
-                const existingConsulta = await query(`
-                    SELECT id_consulta FROM clinical.consultas_clinicas 
-                    WHERE id_cita = $1
-                `, [id]);
-                
-                if (existingConsulta.rows.length === 0) {
-                    console.log('🏥 Auto-creando historia clínica para cita completada...');
-                    
-                    // Generar código único para la consulta
-                    const codigoConsulta = `CON-${Date.now().toString().slice(-8)}`;
-                    
-                    // Crear registro de consulta clínica
-                    const consultaResult = await query(`
-                        INSERT INTO clinical.consultas_clinicas (
-                            id_consulta,
-                            codigo_consulta,
-                            id_mascota,
-                            id_veterinario,
-                            motivo,
-                            estado
-                        ) VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5)
-                        RETURNING id_consulta
-                    `, [
-                        codigoConsulta,
-                        citaData.id_mascota,
-                        citaData.id_veterinario,
-                        citaData.motivo || 'Consulta programada',
-                        'Completada'
-                    ]);
-                    
-                    // Vincular la consulta con la cita
-                    await query(`
-                        UPDATE clinical.calendario_citas 
-                        SET id_consulta = $1 
-                        WHERE id_cita = $2
-                    `, [consultaResult.rows[0].id_consulta, id]);
-                    
-                    console.log('✅ Historia clínica creada automáticamente:', {
-                        id_consulta: consultaResult.rows[0].id_consulta,
-                        codigo_consulta: codigoConsulta,
-                        id_cita: id
-                    });
+                console.log('🏥 Verificando creación de historia clínica para cita completada...');
+
+                try {
+                    // Verificar si ya existe una consulta clínica para esta cita
+                    const existingConsulta = await query(`
+                        SELECT id_consulta FROM clinical.consultas_clinicas
+                        WHERE id_cita = $1
+                    `, [id]);
+
+                    if (existingConsulta.rows.length === 0) {
+                        console.log('🏥 Auto-creando historia clínica para cita completada...');
+
+                        // Generar código único para la consulta
+                        const codigoConsulta = `CON-${Date.now().toString().slice(-8)}`;
+
+                        // Crear registro de consulta clínica
+                        const consultaResult = await query(`
+                            INSERT INTO clinical.consultas_clinicas (
+                                id_consulta,
+                                codigo_consulta,
+                                id_mascota,
+                                id_veterinario,
+                                motivo,
+                                estado
+                            ) VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5)
+                            RETURNING id_consulta
+                        `, [
+                            codigoConsulta,
+                            citaData.id_mascota,
+                            citaData.id_veterinario,
+                            citaData.motivo || 'Consulta programada',
+                            'Completada'
+                        ]);
+
+                        if (consultaResult.rows.length === 0) {
+                            throw new Error('No se pudo crear la consulta clínica');
+                        }
+
+                        // Vincular la consulta con la cita
+                        const updateResult = await query(`
+                            UPDATE clinical.calendario_citas
+                            SET id_consulta = $1
+                            WHERE id_cita = $2
+                        `, [consultaResult.rows[0].id_consulta, id]);
+
+                        console.log('✅ Historia clínica creada automáticamente:', {
+                            id_consulta: consultaResult.rows[0].id_consulta,
+                            codigo_consulta: codigoConsulta,
+                            id_cita: id,
+                            filas_actualizadas: updateResult.rowCount
+                        });
+                    } else {
+                        console.log('ℹ️ Ya existe una consulta clínica para esta cita:', existingConsulta.rows[0].id_consulta);
+                    }
+                } catch (consultaError) {
+                    console.error('❌ Error creando consulta clínica:', consultaError);
+                    // No lanzamos el error para no detener el proceso de cambio de estado
                 }
             }
             
             await query('COMMIT');
-            
+            console.log('✅ Transacción completada exitosamente');
+
             // Obtener información completa de la cita actualizada
             const citaActualizada = await getAppointmentWithDetails(id);
-            
+            console.log('📋 Cita actualizada obtenida:', {
+                id_cita: citaActualizada?.id_cita,
+                estado: citaActualizada?.estado,
+                google_event_id: citaActualizada?.google_event_id
+            });
+
+            // 🔥 SINCRONIZAR CON GOOGLE CALENDAR SI HAY CAMBIO DE ESTADO
+            let syncResult = { success: true, message: 'No requiere sincronización' };
+
+            if (citaActualizada && citaActualizada.google_event_id) {
+                try {
+                    // Obtener estado anterior de la cita antes de la actualización
+                    const estadoAnterior = result.rows[0].estado; // Estado antes del cambio
+                    console.log(`🔄 Sincronizando cambio de estado con Google Calendar: ${estadoAnterior} → ${estadoDb}`);
+
+                    // Actualizar el evento en Google Calendar con el nuevo estado
+                    const eventUpdateData = {
+                        summary: citaActualizada.tipo ? `${citaActualizada.tipo} - ${citaActualizada.mascota_nombre} (${citaActualizada.cliente_nombre})` : `Cita - ${citaActualizada.mascota_nombre}`,
+                        description: `
+📅 Cita Veterinaria - VetPlus
+
+🐕 Mascota: ${citaActualizada.mascota_nombre}
+👤 Cliente: ${citaActualizada.cliente_nombre}
+👨‍⚕️ Veterinario: ${citaActualizada.veterinario_nombre}
+📋 Tipo: ${citaActualizada.tipo}
+📝 Motivo: ${citaActualizada.motivo || 'No especificado'}
+🔄 Estado: ${estadoDb.toUpperCase()}
+
+Código de cita: ${citaActualizada.codigo_cita}
+                        `.trim(),
+                        startDateTime: citaActualizada.fecha_inicio,
+                        endDateTime: citaActualizada.fecha_fin,
+                        attendeeEmail: citaActualizada.cliente_email,
+                        location: process.env.CLINIC_ADDRESS || 'VetPlus Clínica'
+                    };
+
+                    // Pasar el estado actual para configurar recordatorios correctamente
+                    const googleEventData = {
+                        summary: citaActualizada.tipo ? `${citaActualizada.tipo} - ${citaActualizada.mascota_nombre} (${citaActualizada.cliente_nombre})` : `Cita - ${citaActualizada.mascota_nombre}`,
+                        description: `
+📅 Cita Veterinaria - VetPlus
+
+🐕 Mascota: ${citaActualizada.mascota_nombre}
+👤 Cliente: ${citaActualizada.cliente_nombre}
+👨‍⚕️ Veterinario: ${citaActualizada.veterinario_nombre}
+📋 Tipo: ${citaActualizada.tipo}
+📝 Motivo: ${citaActualizada.motivo || 'No especificado'}
+🔄 Estado: ${estadoDb.toUpperCase()}
+
+Código de cita: ${citaActualizada.codigo_cita}
+                        `.trim(),
+                        startDateTime: citaActualizada.fecha_inicio,
+                        endDateTime: citaActualizada.fecha_fin,
+                        attendeeEmail: citaActualizada.cliente_email,
+                        location: process.env.CLINIC_ADDRESS || 'VetPlus Clínica',
+                        status: estadoDb // Agregar estado para controlar recordatorios
+                    };
+
+                    syncResult = await googleCalendarService.updateEvent(citaActualizada.google_event_id, googleEventData);
+
+                    if (syncResult.success) {
+                        console.log('✅ Estado sincronizado exitosamente con Google Calendar');
+                    } else {
+                        console.log('⚠️ Error sincronizando con Google Calendar:', syncResult.error);
+                    }
+                } catch (syncError) {
+                    console.error('❌ Error en sincronización con Google Calendar:', syncError);
+                    syncResult = {
+                        success: false,
+                        message: 'Error en sincronización',
+                        error: syncError.message
+                    };
+                    // No lanzamos el error para no detener el proceso principal
+                }
+            } else {
+                console.log('ℹ️ Cita no sincronizada con Google Calendar o cita no encontrada');
+            }
+
             // Transformar para el frontend
             const citaTransformada = transformAppointmentForFrontend(citaActualizada);
-            
+
             res.json({
                 success: true,
-                message: estadoDb === 'completada' ? 
-                    'Cita completada y historia clínica iniciada automáticamente' : 
+                message: estadoDb === 'completada' ?
+                    'Cita completada y historia clínica iniciada automáticamente' :
                     'Estado de cita actualizado exitosamente',
-                data: citaTransformada
+                data: citaTransformada,
+                google_sync: syncResult.success ? 'synced' : 'failed',
+                google_sync_message: syncResult.success ? 'Sincronizado con Google Calendar' : syncResult.error
             });
             
         } catch (error) {
+            console.error('❌ Error durante la transacción:', error);
+            console.error('❌ Detalles del error:', {
+                message: error.message,
+                stack: error.stack,
+                code: error.code
+            });
             await query('ROLLBACK');
             throw error;
         }
         
     } catch (error) {
-        console.error('Error actualizando estado de cita:', error);
+        console.error('❌ Error actualizando estado de cita:', error);
+        console.error('❌ Detalles del error principal:', {
+            message: error.message,
+            stack: error.stack,
+            code: error.code,
+            id_cita: id,
+            estado_solicitado: estado
+        });
+
+        // Intentar hacer rollback si hay una transacción pendiente
+        try {
+            await query('ROLLBACK');
+            console.log('✅ Rollback realizado en catch principal');
+        } catch (rollbackError) {
+            console.error('❌ Error en rollback:', rollbackError.message);
+        }
+
         res.status(500).json({
             success: false,
             message: 'Error interno del servidor',

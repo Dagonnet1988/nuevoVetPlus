@@ -5,13 +5,13 @@
 -- Usuario administrador por defecto
 INSERT INTO vetplus_auth.usuarios (
     id_usuario,
-    nombre, 
+    nombre,
     apellido,
-    email, 
+    email,
     documento,
     tipo_documento,
-    password_hash, 
-    rol, 
+    password_hash,
+    rol,
     activo,
     password_temporal,
     debe_cambiar_password
@@ -28,6 +28,27 @@ INSERT INTO vetplus_auth.usuarios (
     false,
     false
 ) ON CONFLICT (email) DO NOTHING;
+
+-- Crear caja principal para el sistema
+INSERT INTO financial.cajas (
+    id_caja,
+    nombre,
+    tipo,
+    descripcion,
+    saldo_inicial,
+    saldo_actual,
+    activa,
+    created_by
+) VALUES (
+    uuid_generate_v4(),
+    'Caja Principal VetPlus',
+    'Caja Menor',
+    'Caja principal del sistema veterinario VetPlus',
+    0.00,
+    0.00,
+    true,
+    (SELECT id_usuario FROM vetplus_auth.usuarios WHERE email = 'ascobidi@hotmail.com' LIMIT 1)
+) ON CONFLICT (nombre) DO NOTHING;
 
 -- Log de inicialización
 INSERT INTO system.log_auditoria (

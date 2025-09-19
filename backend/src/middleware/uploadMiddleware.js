@@ -95,12 +95,59 @@ export const eliminarFotoAnterior = (fotoUrl) => {
   }
 };
 
+// Configuración de almacenamiento para archivos de historia clínica
+const historiaClinicaStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = path.join(__dirname, '../../uploads/historia-clinica');
+
+    // Crear directorio si no existe
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    // Generar nombre único: consulta-{id_consulta}-{timestamp}-{original}.{ext}
+    const ext = path.extname(file.originalname);
+    const name = `consulta-${req.params.id || 'new'}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}${ext}`;
+    cb(null, name);
+  }
+});
+
+// Filtro de archivos para historia clínica - múltiples tipos
+const historiaClinicaFilter = (req, file, cb) => {
+  const allowedTypes = /jpeg|jpg|png|gif|webp|pdf|doc|docx|txt/;
+  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+  const mimetype = allowedTypes.test(file.mimetype) ||
+                   file.mimetype === 'application/pdf' ||
+                   file.mimetype === 'application/msword' ||
+                   file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+                   file.mimetype === 'text/plain';
+
+  if (mimetype && extname) {
+    return cb(null, true);
+  } else {
+    cb(new Error('Tipo de archivo no permitido. Solo se permiten: imágenes (JPEG, PNG, GIF, WebP), PDF, DOC, DOCX, TXT'), false);
+  }
+};
+
+// Middleware para upload de archivos de historia clínica (múltiples archivos)
+export const uploadHistoriaClinicaArchivos = multer({
+  storage: historiaClinicaStorage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB máximo por archivo
+    files: 5 // Máximo 5 archivos
+  },
+  fileFilter: historiaClinicaFilter
+}).array('archivos', 5); // Campo 'archivos', máximo 5 archivos
+
 // Función para obtener URL de imagen por defecto según especie
 export const getFotoDefaultPorEspecie = (especie) => {
   const especieNormalizada = especie.toLowerCase();
   const especiesIconos = {
     'perro': 'dog',
-    'gato': 'cat', 
+    'gato': 'cat',
     'ave': 'bird',
     'hamster': 'hamster',
     'conejo': 'rabbit',
@@ -108,7 +155,7 @@ export const getFotoDefaultPorEspecie = (especie) => {
     'pez': 'fish',
     'otro': 'pet'
   };
-  
+
   const icono = especiesIconos[especieNormalizada] || 'pet';
   return `/uploads/pacientes/default/${icono}.svg`;
 };

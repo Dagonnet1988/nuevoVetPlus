@@ -151,3 +151,19 @@ COMMENT ON TABLE financial.categorias_ingresos IS 'Categorías principales de in
 COMMENT ON TABLE financial.conceptos_ingresos IS 'Conceptos específicos dentro de cada categoría de ingresos';
 COMMENT ON TABLE financial.categorias_egresos IS 'Categorías principales de egresos (EGR01, EGR02, etc.)';
 COMMENT ON TABLE financial.conceptos_egresos IS 'Conceptos específicos dentro de cada categoría de egresos';
+
+-- ===========================================
+-- AGREGAR FOREIGN KEYS A TABLAS EXISTENTES
+-- ===========================================
+
+-- Agregar campos de categoría y concepto a la tabla de ingresos
+ALTER TABLE financial.ingresos
+ADD COLUMN IF NOT EXISTS id_concepto_ingreso UUID REFERENCES financial.conceptos_ingresos(id_concepto),
+ADD COLUMN IF NOT EXISTS categoria_legacy VARCHAR(50), -- Mantener campo anterior por compatibilidad
+ADD COLUMN IF NOT EXISTS observaciones TEXT;
+
+-- Agregar campos de categoría y concepto a la tabla de egresos
+ALTER TABLE financial.egresos
+ADD COLUMN IF NOT EXISTS id_concepto_egreso UUID REFERENCES financial.conceptos_egresos(id_concepto),
+ADD COLUMN IF NOT EXISTS categoria_legacy VARCHAR(50), -- Mantener campo anterior por compatibilidad
+ADD COLUMN IF NOT EXISTS observaciones TEXT;

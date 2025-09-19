@@ -58,7 +58,7 @@ router.get('/invoices-temp', async (req, res) => {
 router.use('/products', productRoutes);
 router.use('/invoices', invoiceRoutes);
 router.use('/therapies', therapyRoutes);
-router.use('/', cajasRoutes); // Rutas de cajas se montan directamente
+router.use('/cajas', cajasRoutes); // Rutas de cajas montadas en /cajas
 router.use('/', proveedoresRoutes); // Rutas de proveedores y órdenes de compra
 
 // Rutas POS (Punto de Venta) para búsqueda rápida

@@ -37,7 +37,8 @@ class WhatsAppBaileysService {
         this.connectionCallbacks = new Set();
         
         this.initAuthDir();
-        this.initConfig();
+        // Delay config initialization until database is ready
+        // this.initConfig();
     }
 
     /**
@@ -70,7 +71,14 @@ class WhatsAppBaileysService {
                 this.config = result.rows[0];
             }
         } catch (error) {
-            console.error('Error al cargar configuración de WhatsApp:', error);
+            // Si la tabla no existe aún (primera inicialización), ignorar el error
+            if (error.code === '42P01') {
+                console.log('⚠️ Tabla configuracion_empresa no existe aún, se creará en la inicialización');
+                this.config = null;
+            } else {
+                console.error('Error al cargar configuración de WhatsApp:', error);
+                this.config = null;
+            }
         }
     }
 
@@ -525,6 +533,13 @@ class WhatsAppBaileysService {
         } catch (error) {
             console.error('Error eliminando sesión:', error);
         }
+    }
+
+    /**
+     * Inicializar servicio (cargar configuración, etc.)
+     */
+    async initialize() {
+        await this.initConfig();
     }
 }
 

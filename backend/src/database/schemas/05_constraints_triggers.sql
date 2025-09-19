@@ -392,19 +392,23 @@ WHERE p.inventariable = true
 
 -- Vista de terapias próximas a vencer
 CREATE VIEW financial.v_terapias_por_vencer AS
-SELECT 
+SELECT
     ct.id_control,
     m.nombre as mascota,
     c.nombre as cliente,
     p.nombre as terapia,
     ct.sesiones_restantes,
     ct.fecha_vencimiento,
-    EXTRACT(DAYS FROM (ct.fecha_vencimiento::date - CURRENT_DATE::date)) as dias_restantes
+    CASE
+        WHEN ct.fecha_vencimiento IS NOT NULL THEN
+            (ct.fecha_vencimiento::date - CURRENT_DATE::date)
+        ELSE 0
+    END as dias_restantes
 FROM financial.control_terapias ct
 JOIN clinical.mascotas m ON ct.id_mascota = m.id_mascota
 JOIN clinical.clientes c ON m.id_cliente = c.id_cliente
 JOIN financial.productos p ON ct.id_producto = p.id_producto
-WHERE ct.activo = true 
+WHERE ct.activo = true
   AND ct.sesiones_restantes > 0
   AND ct.fecha_vencimiento <= CURRENT_DATE + INTERVAL '30 days'
 ORDER BY ct.fecha_vencimiento;

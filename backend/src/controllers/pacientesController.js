@@ -93,8 +93,8 @@ export async function createPacienteCompleto(req, res) {
 
         const clienteQuery = `
           INSERT INTO clinical.clientes (
-            id_cliente, nombre, cedula, telefono, email, direccion, activo, created_at, updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            id_cliente, nombre, cedula, telefono, email, direccion, activo, created_at, updated_at, created_by
+          ) VALUES ($1, $2, $3, $4, $5, $6, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $7)
           RETURNING *
         `;
 
@@ -104,7 +104,8 @@ export async function createPacienteCompleto(req, res) {
           cedula || null,
           telefono,
           email || null,
-          direccion || null
+          direccion || null,
+          req.user.id
         ];
 
         const clienteResult = await query(clienteQuery, clienteValues);
@@ -124,10 +125,10 @@ export async function createPacienteCompleto(req, res) {
       
       const mascotaQuery = `
         INSERT INTO clinical.mascotas (
-          id_mascota, id_cliente, nombre, especie, raza, edad, sexo, 
-          peso, color, fecha_nacimiento, microchip, notas, foto_url, activo, 
-          created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          id_mascota, id_cliente, nombre, especie, raza, edad, sexo,
+          peso, color, fecha_nacimiento, microchip, notas, foto_url, activo,
+          created_at, updated_at, created_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $14)
         RETURNING *
       `;
 
@@ -144,7 +145,8 @@ export async function createPacienteCompleto(req, res) {
         fecha_nacimiento || null,
         microchip || null,
         notas || null,
-        fotoDefault
+        fotoDefault,
+        req.user.id
       ];
 
       const mascotaResult = await query(mascotaQuery, mascotaValues);
@@ -445,14 +447,15 @@ export async function updatePacienteCompleto(req, res) {
 
       // 2. Actualizar datos del cliente
       const clienteQuery = `
-        UPDATE clinical.clientes 
-        SET 
+        UPDATE clinical.clientes
+        SET
           nombre = COALESCE($2, nombre),
           cedula = $3,
           telefono = COALESCE($4, telefono),
           email = $5,
           direccion = $6,
-          updated_at = CURRENT_TIMESTAMP
+          updated_at = CURRENT_TIMESTAMP,
+          updated_by = $7
         WHERE id_cliente = $1
         RETURNING *
       `;
@@ -463,7 +466,8 @@ export async function updatePacienteCompleto(req, res) {
         cedula || null,
         telefono,
         email || null,
-        direccion || null
+        direccion || null,
+        req.user.id
       ];
 
       await query(clienteQuery, clienteValues);
@@ -477,8 +481,8 @@ export async function updatePacienteCompleto(req, res) {
 
       // 4. Actualizar datos de la mascota
       const mascotaQuery = `
-        UPDATE clinical.mascotas 
-        SET 
+        UPDATE clinical.mascotas
+        SET
           nombre = COALESCE($2, nombre),
           especie = COALESCE($3, especie),
           raza = $4,
@@ -489,7 +493,8 @@ export async function updatePacienteCompleto(req, res) {
           fecha_nacimiento = $9,
           microchip = $10,
           notas = $11,
-          updated_at = CURRENT_TIMESTAMP
+          updated_at = CURRENT_TIMESTAMP,
+          updated_by = $12
         WHERE id_mascota = $1
         RETURNING *
       `;
@@ -505,7 +510,8 @@ export async function updatePacienteCompleto(req, res) {
         color || null,
         fecha_nacimiento || null,
         microchip || null,
-        notas || null
+        notas || null,
+        req.user.id
       ];
 
       const mascotaResult = await query(mascotaQuery, mascotaValues);

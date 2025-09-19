@@ -112,6 +112,14 @@ export const routes: Routes = [
         data: { roles: ['admin'] }
       },
 
+      // Cajas - Solo admin
+      {
+        path: 'cajas',
+        loadChildren: () => import('./components/cajas/cajas.routes').then(m => m.CAJAS_ROUTES),
+        canActivate: [RoleGuard],
+        data: { roles: ['admin'] }
+      },
+
       // Perfil temporal - placeholder
       {
         path: 'perfil',

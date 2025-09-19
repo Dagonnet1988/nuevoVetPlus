@@ -2,6 +2,7 @@ import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, FormArray, Validators, ReactiveFormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -167,7 +168,14 @@ import { ProductosService, Producto } from '../../../services/productos.service'
                   <div class="form-row">
                     <mat-form-field appearance="outline">
                       <mat-label>Temperatura (°C)</mat-label>
-                      <input matInput type="number" formControlName="temperatura" step="0.1">
+                      <input matInput type="number" formControlName="temperatura" step="0.1" min="30" max="45">
+                      <mat-error *ngIf="consultaForm.get('temperatura')?.hasError('temperaturaInvalida')">
+                        {{ consultaForm.get('temperatura')?.errors?.['temperaturaInvalida'] }}
+                      </mat-error>
+                      <mat-error *ngIf="consultaForm.get('temperatura')?.hasError('temperaturaFueraRango')">
+                        {{ consultaForm.get('temperatura')?.errors?.['temperaturaFueraRango'] }}
+                      </mat-error>
+                      <mat-hint>Rango normal: 30°C - 45°C</mat-hint>
                     </mat-form-field>
                     <mat-form-field appearance="outline">
                       <mat-label>Peso (kg)</mat-label>
@@ -436,20 +444,33 @@ import { ProductosService, Producto } from '../../../services/productos.service'
       position: relative;
     }
 
-    /* Header */
+    /* Header mejorado */
     .form-header {
-      margin-bottom: 24px;
+      margin-bottom: 32px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 16px;
+      padding: 24px;
+      color: white;
+      box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
     }
 
     .header-content {
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 20px;
     }
 
     .back-button {
-      background: rgba(46, 125, 50, 0.1);
-      color: #2e7d32;
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      backdrop-filter: blur(10px);
+      transition: all 0.3s ease;
+    }
+
+    .back-button:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: translateY(-2px);
     }
 
     .title-section {
@@ -459,48 +480,89 @@ import { ProductosService, Producto } from '../../../services/productos.service'
     .form-title {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 16px;
       margin: 0 0 8px 0;
-      font-size: 28px;
-      font-weight: 500;
-      color: #2e7d32;
+      font-size: 32px;
+      font-weight: 600;
+      color: white;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
 
     .title-icon {
-      font-size: 32px;
-      width: 32px;
-      height: 32px;
+      font-size: 36px;
+      width: 36px;
+      height: 36px;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
     }
 
     .form-subtitle {
       margin: 0;
-      color: #666;
-      font-size: 16px;
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 18px;
+      font-weight: 300;
     }
 
     .actions-section {
       display: flex;
-      gap: 12px;
+      gap: 16px;
     }
 
-    /* Form sections */
+    .actions-section .mat-stroked-button {
+      color: white;
+      border-color: rgba(255, 255, 255, 0.5);
+      backdrop-filter: blur(10px);
+    }
+
+    .actions-section .mat-stroked-button:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: white;
+    }
+
+    .actions-section .mat-raised-button {
+      background: rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    }
+
+    .actions-section .mat-raised-button:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+    }
+
+    /* Form sections mejoradas */
     .form-section {
-      margin-bottom: 24px;
-      border-radius: 12px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      margin-bottom: 32px;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      border: 1px solid rgba(255,255,255,0.8);
+      transition: all 0.3s ease;
+      overflow: hidden;
+    }
+
+    .form-section:hover {
+      box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+      transform: translateY(-2px);
     }
 
     .form-section .mat-mdc-card-header {
-      padding-bottom: 8px;
+      padding: 24px 24px 16px 24px;
+      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+      border-bottom: 1px solid rgba(0,0,0,0.06);
     }
 
     .form-section .mat-mdc-card-title {
       display: flex;
       align-items: center;
-      gap: 8px;
-      color: #2e7d32;
-      font-size: 18px;
-      font-weight: 500;
+      gap: 12px;
+      color: #495057;
+      font-size: 20px;
+      font-weight: 600;
+      margin: 0;
+    }
+
+    .form-section .mat-mdc-card-content {
+      padding: 24px;
     }
 
     /* Form layout */
@@ -787,6 +849,7 @@ export class HistoriaClinicaFormComponent implements OnInit {
   private citasService = inject(CitasService);
   private productosService = inject(ProductosService);
   private snackBar = inject(MatSnackBar);
+  private http = inject(HttpClient);
 
   // Signals
   loading = signal(false);
@@ -814,7 +877,7 @@ export class HistoriaClinicaFormComponent implements OnInit {
       id_veterinario: ['', Validators.required],
       fecha_consulta: [new Date(), Validators.required],
       motivo: ['', Validators.required],
-      temperatura: [''],
+      temperatura: ['', [this.temperaturaValidator]],
       peso: [''],
       frecuencia_cardiaca: [''],
       frecuencia_respiratoria: [''],
@@ -828,6 +891,24 @@ export class HistoriaClinicaFormComponent implements OnInit {
       enviar_recordatorio: [false],
       seguimiento_requerido: [false]
     });
+  }
+
+  // Validador personalizado para temperatura (30-45°C)
+  private temperaturaValidator(control: any): any {
+    if (!control.value) {
+      return null; // Permitir valores vacíos
+    }
+
+    const temperatura = parseFloat(control.value);
+    if (isNaN(temperatura)) {
+      return { temperaturaInvalida: 'La temperatura debe ser un número válido' };
+    }
+
+    if (temperatura < 30 || temperatura > 45) {
+      return { temperaturaFueraRango: 'La temperatura debe estar entre 30°C y 45°C' };
+    }
+
+    return null;
   }
 
   get medicamentosArray(): FormArray {
@@ -1025,7 +1106,7 @@ export class HistoriaClinicaFormComponent implements OnInit {
     });
   }
 
-  saveHistoriaClinica(): void {
+  async saveHistoriaClinica(): Promise<void> {
     if (this.consultaForm.invalid) {
       this.snackBar.open('Por favor completa todos los campos obligatorios', 'Cerrar', { duration: 3000 });
       return;
@@ -1042,32 +1123,76 @@ export class HistoriaClinicaFormComponent implements OnInit {
       formData.proxima_cita = formData.proxima_cita.toISOString();
     }
 
-    const operation = this.isEdit()
-      ? this.consultasService.updateConsulta(this.consulta()!.id_consulta, formData)
-      : this.consultasService.createConsulta(formData);
+    try {
+      let consultaId: string;
 
-    operation.subscribe({
-      next: (result) => {
-        this.snackBar.open(
-          this.isEdit() ? 'Historia clínica actualizada exitosamente' : 'Historia clínica creada exitosamente',
-          'Cerrar',
-          { duration: 3000 }
-        );
-        this.loading.set(false);
-
-        // Redirigir a la cita si tenemos el ID, sino a historia clínica
-        if (this.citaId()) {
-          this.router.navigate(['/citas', this.citaId()]);
-        } else {
-          this.router.navigate(['/historia-clinica']);
-        }
-      },
-      error: (error) => {
-        console.error('Error guardando historia clínica:', error);
-        this.snackBar.open('Error guardando historia clínica', 'Cerrar', { duration: 3000 });
-        this.loading.set(false);
+      // Primero guardar la historia clínica
+      if (this.isEdit()) {
+        const result = await this.consultasService.updateConsulta(this.consulta()!.id_consulta, formData).toPromise();
+        consultaId = this.consulta()!.id_consulta;
+        console.log('Historia clínica actualizada:', result);
+      } else {
+        const result = await this.consultasService.createConsulta(formData).toPromise();
+        consultaId = result.data?.id_consulta || result.id_consulta;
+        console.log('Historia clínica creada:', result);
       }
+
+      // Si hay archivos seleccionados, subirlos
+      if (this.archivosSeleccionados().length > 0 && consultaId) {
+        console.log(`Subiendo ${this.archivosSeleccionados().length} archivo(s) para consulta ${consultaId}`);
+
+        try {
+          await this.uploadArchivos(consultaId);
+          this.snackBar.open('Archivos subidos exitosamente', 'Cerrar', { duration: 2000 });
+        } catch (uploadError) {
+          console.error('Error subiendo archivos:', uploadError);
+          this.snackBar.open('Historia clínica guardada pero error subiendo archivos', 'Cerrar', { duration: 3000 });
+        }
+      }
+
+      this.snackBar.open(
+        this.isEdit() ? 'Historia clínica actualizada exitosamente' : 'Historia clínica creada exitosamente',
+        'Cerrar',
+        { duration: 3000 }
+      );
+
+      // Redirigir a la cita si tenemos el ID, sino a historia clínica
+      if (this.citaId()) {
+        this.router.navigate(['/citas', this.citaId()]);
+      } else {
+        this.router.navigate(['/historia-clinica']);
+      }
+
+    } catch (error) {
+      console.error('Error guardando historia clínica:', error);
+      this.snackBar.open('Error guardando historia clínica', 'Cerrar', { duration: 3000 });
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  private async uploadArchivos(consultaId: string): Promise<void> {
+    const archivos = this.archivosSeleccionados();
+
+    if (archivos.length === 0) {
+      return;
+    }
+
+    // Crear FormData para enviar archivos
+    const formData = new FormData();
+    archivos.forEach((archivo, index) => {
+      formData.append('archivos', archivo, archivo.name);
     });
+
+    // Usar HttpClient inyectado para subir archivos
+    const uploadUrl = `${this.consultasService['API_URL']}/consultations/${consultaId}/upload-files`;
+
+    const uploadResult = await this.http.post(uploadUrl, formData).toPromise();
+
+    console.log('Archivos subidos exitosamente:', uploadResult);
+
+    // Limpiar archivos seleccionados después del upload exitoso
+    this.archivosSeleccionados.set([]);
   }
 
   resetForm(): void {

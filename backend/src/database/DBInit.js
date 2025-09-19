@@ -35,6 +35,9 @@ class DBInit {
 
     this.schemasPath = path.join(__dirname, 'schemas');
     this.seedsPath = path.join(__dirname, 'seeds');
+    
+    // Bandera para mostrar la advertencia de psql solo una vez
+    this.psqlWarningShown = false;
   }
 
   /**
@@ -89,7 +92,7 @@ class DBInit {
       const client = new Client(this.adminConfig);
       await client.connect();
       
-      await client.query(`CREATE DATABASE "${this.config.database}"`);
+      await client.query(`CREATE DATABASE "${this.config.database}" WITH ENCODING 'UTF8' TEMPLATE template0`);
       console.log(`✅ Base de datos '${this.config.database}' creada`);
       
       await client.end();
@@ -192,7 +195,10 @@ class DBInit {
     } catch (error) {
       // Si psql no está disponible, intentar con cliente Node.js
       if (error.message.includes('psql') || error.code === 'ENOENT') {
-        console.log(`⚠️  psql no disponible, usando cliente Node.js...`);
+        if (!this.psqlWarningShown) {
+          console.log(`⚠️  psql no disponible, usando cliente Node.js para todos los archivos SQL...`);
+          this.psqlWarningShown = true;
+        }
         return await this.executeSQLWithNodeClient(filePath, description);
       }
       
@@ -236,6 +242,19 @@ class DBInit {
       console.log(`✅ ${description || path.basename(filePath)} ejecutado (Node.js)`);
       return true;
     } catch (error) {
+      // Manejar errores comunes que no son críticos
+      const errorMessage = error.message.toLowerCase();
+      const isNonCriticalError = 
+        errorMessage.includes('ya existe') ||
+        errorMessage.includes('already exists') ||
+        errorMessage.includes('duplicate key') ||
+        errorMessage.includes('llave duplicada');
+      
+      if (isNonCriticalError) {
+        console.log(`ℹ️  ${description || path.basename(filePath)} - Elementos ya existen, continuando...`);
+        return true; // No es un error crítico
+      }
+      
       console.error(`❌ Error con Node.js ${path.basename(filePath)}:`, error.message);
       return false;
     }
@@ -265,8 +284,49 @@ class DBInit {
   }
 
   /**
-   * Verifica el estado completo del sistema
+   * Verifica si el sistema ya está completamente inicializado
    */
+  async isSystemFullyInitialized() {
+    try {
+      // Verificar esquemas principales
+      const schemas = ['vetplus_auth', 'clinical', 'financial', 'system'];
+      for (const schema of schemas) {
+        if (!(await this.schemaExists(schema))) {
+          return false;
+        }
+      }
+      
+      // Verificar tablas principales
+      const tables = [
+        { name: 'usuarios', schema: 'vetplus_auth' },
+        { name: 'clientes', schema: 'clinical' },
+        { name: 'mascotas', schema: 'clinical' },
+        { name: 'cajas', schema: 'financial' },
+        { name: 'productos', schema: 'financial' },
+        { name: 'log_auditoria', schema: 'system' },
+        { name: 'categorias_ingresos', schema: 'financial' },
+        { name: 'proveedores', schema: 'financial' },
+        { name: 'ordenes_compra', schema: 'financial' }
+      ];
+      
+      for (const table of tables) {
+        if (!(await this.tableExists(table.name, table.schema))) {
+          return false;
+        }
+      }
+      
+      // Verificar si hay datos en la tabla de usuarios (sistema usado)
+      const client = new Client(this.config);
+      await client.connect();
+      const result = await client.query('SELECT COUNT(*) FROM vetplus_auth.usuarios');
+      await client.end();
+      
+      return parseInt(result.rows[0].count) > 0;
+    } catch (error) {
+      console.log('⚠️  Error verificando estado del sistema, procediendo con inicialización...');
+      return false;
+    }
+  }
   async checkSystemStatus() {
     console.log('\n📊 ESTADO DEL SISTEMA VETPLUS');
     console.log('='.repeat(50));
@@ -321,18 +381,37 @@ class DBInit {
         console.log(`✅ Base de datos '${this.config.database}' existe`);
       }
       
-      // 3. Ejecutar esquemas si no existen
+      // 3. Verificar si el sistema ya está completamente inicializado
+      const isFullyInitialized = await this.isSystemFullyInitialized();
+      if (isFullyInitialized) {
+        console.log('✅ Sistema ya está completamente inicializado');
+        console.log('⏭️  Saltando ejecución de scripts SQL...');
+        
+        // Mostrar estado del sistema
+        await this.checkSystemStatus();
+        
+        console.log('\n🎉 SISTEMA VETPLUS LISTO PARA USAR');
+        console.log('✅ Base de datos lista para usar');
+        console.log(`🌐 Servidor: ${this.config.host}:${this.config.port}`);
+        console.log(`🗄️  Base de datos: ${this.config.database}`);
+        
+        return true;
+      }
+      
+      // 4. Sistema no está inicializado, ejecutar esquemas
+      console.log('📦 Ejecutando inicialización completa del sistema...');
       const schemaFiles = [
         { file: '01_create_database.sql', desc: 'Extensiones y funciones base' },
         { file: '02_auth_tables.sql', desc: 'Módulo de autenticación' },
         { file: '03_clinical_tables.sql', desc: 'Módulo clínico' },
         { file: '04_financial_tables.sql', desc: 'Módulo financiero' },
         { file: '05_constraints_triggers.sql', desc: 'Constraints y triggers' },
-        { file: '06_audit_expansion.sql', desc: 'Expansión sistema auditoría' },
+        { file: '06_categorias_conceptos.sql', desc: 'Categorías y conceptos' },
         { file: '07_audit_tables.sql', desc: 'Tablas adicionales auditoría' },
         { file: '08_empresa_config.sql', desc: 'Configuración de empresa' },
         { file: '09_whatsapp_integration.sql', desc: 'Integración WhatsApp Business' },
-        { file: '10_workflow_integration.sql', desc: 'Integraciones de workflow y notificaciones' }
+        { file: '10_workflow_integration.sql', desc: 'Integraciones de workflow y notificaciones' },
+        { file: '11_audit_expansion.sql', desc: 'Expansión sistema auditoría' }
       ];
       
       for (const { file, desc } of schemaFiles) {
@@ -345,7 +424,7 @@ class DBInit {
         }
       }
       
-      // 4. Verificar si necesita datos iniciales
+      // 5. Verificar si necesita datos iniciales
       const hasUsers = await this.tableExists('usuarios', 'vetplus_auth');
       if (hasUsers) {
         const client = new Client(this.config);
@@ -367,7 +446,7 @@ class DBInit {
         }
       }
       
-      // 5. Mostrar estado final
+      // 6. Mostrar estado final
       await this.checkSystemStatus();
       
       console.log('\n🎉 SISTEMA VETPLUS INICIALIZADO CORRECTAMENTE');

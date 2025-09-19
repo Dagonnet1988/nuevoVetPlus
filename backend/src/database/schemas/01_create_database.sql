@@ -14,13 +14,13 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 SET timezone = 'America/Bogota';
 
 -- Crear esquemas para organizar las tablas
-CREATE SCHEMA IF NOT EXISTS auth;
+CREATE SCHEMA IF NOT EXISTS vetplus_auth;
 CREATE SCHEMA IF NOT EXISTS clinical;
 CREATE SCHEMA IF NOT EXISTS financial;
 CREATE SCHEMA IF NOT EXISTS system;
 
 -- Comentarios de esquemas
-COMMENT ON SCHEMA auth IS 'Autenticación, usuarios y auditoría';
+COMMENT ON SCHEMA vetplus_auth IS 'Autenticación, usuarios y auditoría';
 COMMENT ON SCHEMA clinical IS 'Módulo clínico: clientes, mascotas, consultas';
 COMMENT ON SCHEMA financial IS 'Módulo financiero: cajas, productos, facturación';
 COMMENT ON SCHEMA system IS 'Configuración del sistema y migraciones';

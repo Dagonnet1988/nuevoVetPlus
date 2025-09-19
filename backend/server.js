@@ -26,6 +26,8 @@ import { setAuditContext, auditActivity, auditAuthActivity } from './src/middlew
 
 // Importar servicio de notificaciones automáticas
 // import autoNotificationService from './src/services/autoNotificationService.js'; // TEMPORALMENTE DESACTIVADO
+import googleCalendarService from './src/services/googleCalendar.js';
+import whatsAppService from './src/services/whatsappBaileysService.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -162,6 +164,14 @@ async function startServer() {
     // console.log('🔔 Inicializando servicio de notificaciones automáticas...');
     // await autoNotificationService.initialize(); // TEMPORALMENTE DESACTIVADO
     // console.log('✅ Servicio de notificaciones inicializado');
+
+    // Initialize services after database is ready
+    try {
+      await googleCalendarService.initialize();
+      await whatsAppService.initialize();
+    } catch (error) {
+      console.error('Error initializing services:', error);
+    }
 
     app.listen(PORT, () => {
       console.log(`🚀 VetPlus API iniciada en puerto ${PORT}`);

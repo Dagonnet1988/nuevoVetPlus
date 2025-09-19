@@ -2,8 +2,7 @@
 -- VETPLUS - TABLAS DE AUTENTICACIÓN Y AUDITORÍA
 -- ===========================================
 
--- Crear esquema de autenticación personalizado
-CREATE SCHEMA IF NOT EXISTS vetplus_auth;
+-- El esquema vetplus_auth ya fue creado en 01_create_database.sql
 
 -- Tabla de usuarios del sistema
 CREATE TABLE vetplus_auth.usuarios (
@@ -163,7 +162,7 @@ CREATE INDEX idx_sesiones_usuario ON vetplus_auth.sesiones(id_usuario);
 CREATE INDEX idx_sesiones_token ON vetplus_auth.sesiones(token_jti);
 CREATE INDEX idx_password_resets_admin ON vetplus_auth.password_resets(realizado_por);
 CREATE INDEX idx_password_resets_usuario ON vetplus_auth.password_resets(id_usuario);
-CREATE INDEX idx_password_resets_target ON vetplus_auth.password_resets(target_user_id);
+CREATE INDEX idx_password_resets_target ON vetplus_auth.password_resets(id_usuario);
 CREATE INDEX idx_password_resets_date ON vetplus_auth.password_resets(created_at);
 CREATE INDEX idx_auditoria_usuario ON system.log_auditoria(id_usuario);
 CREATE INDEX idx_auditoria_tabla ON system.log_auditoria(tabla_afectada);

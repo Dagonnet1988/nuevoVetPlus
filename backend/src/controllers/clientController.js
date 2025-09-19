@@ -31,9 +31,9 @@ export async function createClient(req, res) {
 
     const queryText = `
       INSERT INTO clinical.clientes (
-        id_cliente, nombre, telefono, email, direccion, cedula, 
-        fecha_nacimiento, notas, activo, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        id_cliente, nombre, telefono, email, direccion, cedula,
+        fecha_nacimiento, notas, activo, created_at, updated_at, created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $9)
       RETURNING *
     `;
 
@@ -45,7 +45,8 @@ export async function createClient(req, res) {
       direccion || null,
       cedula || null,
       fecha_nacimiento || null,
-      notas || null
+      notas || null,
+      req.user.id
     ];
 
     const result = await query(queryText, values);
@@ -273,8 +274,9 @@ export async function updateClient(req, res) {
         fecha_nacimiento = $6,
         notas = $7,
         activo = $8,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id_cliente = $9
+        updated_at = CURRENT_TIMESTAMP,
+        updated_by = $9
+      WHERE id_cliente = $10
       RETURNING *
     `;
 
@@ -287,6 +289,7 @@ export async function updateClient(req, res) {
       fecha_nacimiento,
       notas,
       activo !== undefined ? activo : true,
+      req.user.id,
       id
     ];
 
@@ -349,13 +352,13 @@ export async function deleteClient(req, res) {
 
     // Soft delete del cliente
     const queryText = `
-      UPDATE clinical.clientes 
-      SET activo = false, updated_at = CURRENT_TIMESTAMP
+      UPDATE clinical.clientes
+      SET activo = false, updated_at = CURRENT_TIMESTAMP, updated_by = $2
       WHERE id_cliente = $1
       RETURNING nombre
     `;
 
-    const result = await query(queryText, [id]);
+    const result = await query(queryText, [id, req.user.id]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({

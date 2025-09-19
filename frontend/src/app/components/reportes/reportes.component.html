@@ -1,0 +1,282 @@
+<div class="reportes-container">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <div class="title-section">
+        <h1 class="page-title">
+          <mat-icon class="page-icon">analytics</mat-icon>
+          Reportes y Analytics
+        </h1>
+        <p class="page-subtitle">Dashboard ejecutivo y análisis de datos</p>
+      </div>
+      <div class="actions-section">
+        <button mat-stroked-button
+                [matMenuTriggerFor]="exportMenu"
+                class="export-button">
+          <mat-icon>download</mat-icon>
+          Exportar
+        </button>
+        <mat-menu #exportMenu="matMenu">
+          <button mat-menu-item (click)="exportarDashboard('pdf')">
+            <mat-icon>picture_as_pdf</mat-icon>
+            Exportar a PDF
+          </button>
+          <button mat-menu-item (click)="exportarDashboard('excel')">
+            <mat-icon>table_chart</mat-icon>
+            Exportar a Excel
+          </button>
+        </mat-menu>
+        <button mat-raised-button
+                color="primary"
+                (click)="actualizarDatos()"
+                [disabled]="loading()"
+                class="refresh-button">
+          <mat-icon>refresh</mat-icon>
+          Actualizar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filtros de período -->
+  <mat-card class="filters-card">
+    <mat-card-content>
+      <form [formGroup]="filtrosForm" class="filters-form">
+        <div class="period-selector">
+          <mat-button-toggle-group
+            [value]="periodoSeleccionado()"
+            (change)="cambiarPeriodo($event.value)"
+            class="period-toggle">
+            <mat-button-toggle value="dia">Hoy</mat-button-toggle>
+            <mat-button-toggle value="semana">Esta Semana</mat-button-toggle>
+            <mat-button-toggle value="mes">Este Mes</mat-button-toggle>
+            <mat-button-toggle value="año">Este Año</mat-button-toggle>
+            <mat-button-toggle value="personalizado">Personalizado</mat-button-toggle>
+          </mat-button-toggle-group>
+        </div>
+
+        @if (periodoSeleccionado() === 'personalizado') {
+          <div class="custom-date-range">
+            <mat-form-field appearance="outline" class="date-field">
+              <mat-label>Fecha inicio</mat-label>
+              <input matInput [matDatepicker]="startPicker" formControlName="fecha_inicio">
+              <mat-datepicker-toggle matIconSuffix [for]="startPicker"></mat-datepicker-toggle>
+              <mat-datepicker #startPicker></mat-datepicker>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="date-field">
+              <mat-label>Fecha fin</mat-label>
+              <input matInput [matDatepicker]="endPicker" formControlName="fecha_fin">
+              <mat-datepicker-toggle matIconSuffix [for]="endPicker"></mat-datepicker-toggle>
+              <mat-datepicker #endPicker></mat-datepicker>
+            </mat-form-field>
+          </div>
+        }
+      </form>
+    </mat-card-content>
+  </mat-card>
+
+  @if (loading()) {
+    <div class="loading-container">
+      <mat-spinner diameter="50"></mat-spinner>
+      <p>Cargando datos del dashboard...</p>
+    </div>
+  } @else {
+    <!-- KPIs Principales -->
+    <div class="kpis-section">
+      <div class="section-header">
+        <h2>
+          <mat-icon>trending_up</mat-icon>
+          Indicadores Clave de Rendimiento
+        </h2>
+        <span class="period-label">{{ getPeriodoLabel() }}</span>
+      </div>
+
+      <div class="kpis-grid">
+        @for (kpi of kpis(); track kpi.nombre) {
+          <mat-card class="kpi-card" [class]="'kpi-' + kpi.tendencia">
+            <mat-card-content>
+              <div class="kpi-content">
+                <div class="kpi-icon">
+                  <mat-icon [style.color]="kpi.color">{{ kpi.icono }}</mat-icon>
+                </div>
+                <div class="kpi-info">
+                  <div class="kpi-value">
+                    {{ formatearValor(kpi.valor_actual, kpi.tipo, kpi.unidad) }}
+                  </div>
+                  <div class="kpi-label">{{ kpi.nombre }}</div>
+                  <div class="kpi-change" [class]="'change-' + kpi.tendencia">
+                    <mat-icon class="change-icon">
+                      {{ getTendenciaIcon(kpi.tendencia) }}
+                    </mat-icon>
+                    <span>{{ formatearPorcentaje(kpi.variacion_porcentual) }}</span>
+                  </div>
+                </div>
+              </div>
+            </mat-card-content>
+          </mat-card>
+        }
+      </div>
+    </div>
+
+    <!-- Alertas Críticas -->
+    @if (alertasCriticas().length > 0) {
+      <div class="alerts-section">
+        <div class="section-header">
+          <h2>
+            <mat-icon>warning</mat-icon>
+            Alertas Críticas
+          </h2>
+          <mat-chip class="alert-count">{{ alertasCriticas().length }}</mat-chip>
+        </div>
+
+        <div class="alerts-grid">
+          @for (alerta of alertasCriticas(); track alerta.id) {
+            <mat-card class="alert-card" [class]="'alert-' + alerta.gravedad">
+              <mat-card-content>
+                <div class="alert-content">
+                  <div class="alert-header">
+                    <mat-icon class="alert-icon">
+                      {{ getAlertaIcon(alerta.tipo) }}
+                    </mat-icon>
+                    <div class="alert-info">
+                      <h3 class="alert-title">{{ alerta.titulo }}</h3>
+                      <p class="alert-description">{{ alerta.descripcion }}</p>
+                    </div>
+                    <mat-chip class="severity-chip" [class]="'severity-' + alerta.gravedad">
+                      {{ alerta.gravedad.toUpperCase() }}
+                    </mat-chip>
+                  </div>
+                  <div class="alert-action">
+                    <span class="action-text">{{ alerta.accion_sugerida }}</span>
+                    <button mat-button color="primary" class="action-button">
+                      Revisar
+                    </button>
+                  </div>
+                </div>
+              </mat-card-content>
+            </mat-card>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- Métricas Operativas -->
+    <div class="metrics-section">
+      <div class="section-header">
+        <h2>
+          <mat-icon>speed</mat-icon>
+          Métricas Operativas
+        </h2>
+      </div>
+
+      <div class="metrics-grid">
+        @for (metrica of metricasOperativas(); track metrica.nombre) {
+          <mat-card class="metric-card">
+            <mat-card-content>
+              <div class="metric-content">
+                <div class="metric-header">
+                  <h3 class="metric-name">{{ metrica.nombre }}</h3>
+                  <mat-chip class="metric-status" [class]="'status-' + metrica.estado">
+                    {{ getEstadoLabel(metrica.estado) }}
+                  </mat-chip>
+                </div>
+
+                <div class="metric-values">
+                  <div class="metric-current">
+                    <span class="value-label">Actual:</span>
+                    <span class="value-number">{{ formatearNumero(metrica.valor) }}</span>
+                  </div>
+                  <div class="metric-target">
+                    <span class="value-label">Objetivo:</span>
+                    <span class="value-number">{{ formatearNumero(metrica.objetivo) }}</span>
+                  </div>
+                </div>
+
+                <div class="metric-progress">
+                  <div class="progress-bar">
+                    <div class="progress-fill"
+                         [style.width.%]="metrica.porcentaje_cumplimiento"
+                         [class]="'progress-' + metrica.estado">
+                    </div>
+                  </div>
+                  <span class="progress-text">
+                    {{ formatearPorcentaje(metrica.porcentaje_cumplimiento) }}
+                  </span>
+                </div>
+              </div>
+            </mat-card-content>
+          </mat-card>
+        }
+      </div>
+    </div>
+
+    <!-- Navegación a Reportes Específicos -->
+    <div class="reports-navigation">
+      <div class="section-header">
+        <h2>
+          <mat-icon>assessment</mat-icon>
+          Reportes Detallados
+        </h2>
+      </div>
+
+      <div class="reports-grid">
+        <mat-card class="report-card" (click)="navegarAReporte('ventas')">
+          <mat-card-content>
+            <div class="report-content">
+              <mat-icon class="report-icon">attach_money</mat-icon>
+              <h3 class="report-title">Reportes de Ventas</h3>
+              <p class="report-description">Análisis detallado de ventas, facturación y rendimiento financiero</p>
+              <div class="report-stats">
+                <span class="stat-item">Ventas del mes: {{ formatearMoneda(statsVentas.ventas_mes) }}</span>
+                <span class="stat-item">Facturas: {{ statsVentas.total_facturas }}</span>
+              </div>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <mat-card class="report-card" (click)="navegarAReporte('pacientes')">
+          <mat-card-content>
+            <div class="report-content">
+              <mat-icon class="report-icon">pets</mat-icon>
+              <h3 class="report-title">Estadísticas de Pacientes</h3>
+              <p class="report-description">Demografía, tendencias y análisis de la base de pacientes</p>
+              <div class="report-stats">
+                <span class="stat-item">Total pacientes: {{ statsVentas.total_pacientes }}</span>
+                <span class="stat-item">Nuevos este mes: {{ statsVentas.pacientes_nuevos }}</span>
+              </div>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <mat-card class="report-card" (click)="navegarAReporte('inventario')">
+          <mat-card-content>
+            <div class="report-content">
+              <mat-icon class="report-icon">inventory</mat-icon>
+              <h3 class="report-title">Análisis de Inventario</h3>
+              <p class="report-description">Rotación, valorización y optimización del inventario</p>
+              <div class="report-stats">
+                <span class="stat-item">Valor inventario: {{ formatearMoneda(statsVentas.valor_inventario) }}</span>
+                <span class="stat-item">Productos activos: {{ statsVentas.productos_activos }}</span>
+              </div>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <mat-card class="report-card" (click)="navegarAReporte('operaciones')">
+          <mat-card-content>
+            <div class="report-content">
+              <mat-icon class="report-icon">event</mat-icon>
+              <h3 class="report-title">Reportes Operacionales</h3>
+              <p class="report-description">Citas, consultas y eficiencia operativa</p>
+              <div class="report-stats">
+                <span class="stat-item">Citas del mes: {{ statsVentas.citas_mes }}</span>
+                <span class="stat-item">Tasa cumplimiento: {{ formatearPorcentaje(statsVentas.tasa_cumplimiento) }}</span>
+              </div>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+    </div>
+  }
+</div>

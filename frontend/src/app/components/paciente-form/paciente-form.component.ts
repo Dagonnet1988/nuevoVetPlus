@@ -249,6 +249,14 @@ import { environment } from '../../../environments/environment';
                 </mat-form-field>
               </div>
 
+              <div class="form-row">
+                <div class="checkbox-field">
+                  <mat-checkbox formControlName="esterilizado">
+                    <mat-label>Esterilizado/Castrado</mat-label>
+                  </mat-checkbox>
+                </div>
+              </div>
+
               <mat-form-field appearance="outline" class="full-width">
                 <mat-label>Notas adicionales</mat-label>
                 <textarea matInput formControlName="notas" rows="3"></textarea>
@@ -504,6 +512,18 @@ import { environment } from '../../../environments/environment';
       margin-right: 8px;
     }
 
+    /* Campo checkbox */
+    .checkbox-field {
+      display: flex;
+      align-items: center;
+      padding: 16px 0;
+      margin-bottom: 16px;
+    }
+
+    .checkbox-field mat-checkbox {
+      margin-bottom: 0;
+    }
+
     /* Responsive */
     @media (max-width: 768px) {
       .form-container {
@@ -529,6 +549,10 @@ import { environment } from '../../../environments/environment';
       .submit-button {
         width: 100%;
         justify-content: center;
+      }
+
+      .checkbox-field {
+        padding: 12px 0;
       }
     }
 
@@ -714,6 +738,7 @@ export class PacienteFormComponent implements OnInit {
       sexo: ['', [Validators.required]],
       fecha_nacimiento: [''],
       peso: ['', [Validators.min(0)]],
+      esterilizado: [false],
       color: [''],
       microchip: [''],
       notas: ['']
@@ -812,6 +837,7 @@ export class PacienteFormComponent implements OnInit {
             sexo: sexoDbToFrontend(pacienteData.sexo),
             fecha_nacimiento: pacienteData.fecha_nacimiento ? new Date(pacienteData.fecha_nacimiento) : null,
             peso: pacienteData.peso || '',
+            esterilizado: pacienteData.esterilizado || false,
             color: pacienteData.color || '',
             microchip: pacienteData.microchip || '',
             notas: pacienteData.notas || ''
@@ -997,6 +1023,9 @@ export class PacienteFormComponent implements OnInit {
           mascotaData.peso = parseFloat(this.pacienteForm.value.peso);
         }
 
+        // Campo esterilizado (siempre se incluye ya que es booleano)
+        mascotaData.esterilizado = this.pacienteForm.value.esterilizado || false;
+
         if (this.pacienteForm.value.color && this.pacienteForm.value.color.trim()) {
           mascotaData.color = this.pacienteForm.value.color;
         }
@@ -1032,6 +1061,8 @@ export class PacienteFormComponent implements OnInit {
           ...(rawFormData.raza && rawFormData.raza.trim() && { raza: rawFormData.raza }),
           ...(rawFormData.fecha_nacimiento && { fecha_nacimiento: rawFormData.fecha_nacimiento }),
           ...(rawFormData.peso && rawFormData.peso !== '' && { peso: parseFloat(rawFormData.peso) }),
+          // Campo esterilizado (siempre se incluye ya que es booleano)
+          esterilizado: rawFormData.esterilizado || false,
           ...(rawFormData.color && rawFormData.color.trim() && { color: rawFormData.color }),
           ...(rawFormData.microchip && rawFormData.microchip.trim() && { microchip: rawFormData.microchip }),
           ...(rawFormData.notas && rawFormData.notas.trim() && { notas: rawFormData.notas })
