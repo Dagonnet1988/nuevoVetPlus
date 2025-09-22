@@ -19,7 +19,7 @@ export const CONFIGURACION_ROUTES: Routes = [
   },
   {
     path: 'google-calendar',
-    loadComponent: () => import('./google-calendar-simple/google-calendar-simple.component').then(m => m.GoogleCalendarSimpleComponent),
+    loadComponent: () => import('./google-calendar/google-calendar-config.component').then(m => m.GoogleCalendarConfigComponent),
     data: {
       title: 'Configuración de Google Calendar',
       breadcrumb: 'Google Calendar'

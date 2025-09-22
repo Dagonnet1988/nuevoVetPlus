@@ -4,6 +4,623 @@ import googleCalendarService from '../services/googleCalendar.js';
 import bidirectionalSyncService from '../services/bidirectionalSyncService.js';
 import syncScheduler from '../services/syncScheduler.js';
 
+// Controlador simplificado integrado
+class GoogleCalendarSimpleController {
+
+  // Obtener configuración actual
+  async getConfig(req, res) {
+    try {
+      const result = await query(`
+        SELECT
+          is_active as activo,
+          client_id as cliente_id,
+          client_secret as cliente_secret,
+          calendar_id,
+          timezone,
+          notification_email as sync_automatico,
+          redirect_uri,
+          created_at,
+          updated_at
+        FROM vetplus_auth.google_calendar_config
+        WHERE is_active = true
+        ORDER BY created_at DESC
+        LIMIT 1
+      `);
+
+      if (result.rows.length === 0) {
+        return res.json({
+          success: true,
+          data: null,
+          message: 'No hay configuración'
+        });
+      }
+
+      res.json({
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Error obteniendo configuración:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Guardar configuración
+  async saveConfig(req, res) {
+    try {
+      const {
+        activo,
+        cliente_id,
+        cliente_secret,
+        calendar_id,
+        sync_automatico,
+        prefijo_eventos
+      } = req.body;
+
+      // Validar campos requeridos
+      if (!cliente_id || !cliente_secret) {
+        return res.status(400).json({
+          success: false,
+          error: 'Client ID y Client Secret son requeridos'
+        });
+      }
+
+      const redirect_uri = `${process.env.BACKEND_URL || 'http://localhost:3000'}/api/google-calendar/callback`;
+
+      // Desactivar configuración anterior
+      await query(`UPDATE vetplus_auth.google_calendar_config SET is_active = false WHERE is_active = true`);
+
+      // Insertar nueva configuración (adaptando a las columnas existentes)
+      const result = await query(`
+        INSERT INTO vetplus_auth.google_calendar_config (
+          client_id, client_secret, calendar_id,
+          timezone, notification_email, redirect_uri, is_active, configured_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING *
+      `, [
+        cliente_id,
+        cliente_secret,
+        calendar_id || 'primary',
+        'UTC', // timezone por defecto
+        sync_automatico || false, // usando notification_email como sync_automatico
+        redirect_uri,
+        activo || false, // usando is_active
+        req.user?.id_usuario || null // configured_by
+      ]);
+
+      // Formatear respuesta para el frontend
+      const responseData = {
+        activo: result.rows[0].is_active,
+        cliente_id: result.rows[0].client_id,
+        cliente_secret: result.rows[0].client_secret,
+        calendar_id: result.rows[0].calendar_id,
+        sync_automatico: result.rows[0].notification_email,
+        prefijo_eventos: '[VetPlus]', // valor por defecto
+        redirect_uri: result.rows[0].redirect_uri
+      };
+
+      res.json({
+        success: true,
+        data: responseData,
+        message: 'Configuración guardada correctamente'
+      });
+    } catch (error) {
+      console.error('Error guardando configuración:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Obtener URL de autorización
+  async getAuthUrl(req, res) {
+    try {
+      const configResult = await query(`
+        SELECT client_id, redirect_uri
+        FROM vetplus_auth.google_calendar_config
+        WHERE is_active = true
+        ORDER BY created_at DESC
+        LIMIT 1
+      `);
+
+      if (configResult.rows.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'No hay configuración válida'
+        });
+      }
+
+      const { client_id, redirect_uri } = configResult.rows[0];
+
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `access_type=offline&` +
+        `scope=${encodeURIComponent('https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events')}&` +
+        `prompt=consent&` +
+        `response_type=code&` +
+        `client_id=${encodeURIComponent(client_id)}&` +
+        `redirect_uri=${encodeURIComponent(redirect_uri)}`;
+
+      res.json({
+        success: true,
+        authUrl: authUrl
+      });
+    } catch (error) {
+      console.error('Error generando URL de autorización:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Callback de autorización (simplificado)
+  async handleCallback(req, res) {
+    try {
+      const { code, error } = req.query;
+
+      if (error) {
+        return res.send(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Error - VetPlus</title>
+            <style>
+              body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+              .error { color: #d32f2f; font-size: 18px; }
+              .close-btn {
+                background: #1976d2;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 14px;
+                margin-top: 20px;
+              }
+              .close-btn:hover { background: #1565c0; }
+            </style>
+          </head>
+          <body>
+            <h2>❌ Error de Autorización</h2>
+            <p class="error">Error: ${error}</p>
+            <p>Puedes cerrar esta ventana y intentar nuevamente.</p>
+            <button class="close-btn" onclick="closeWindow()">Cerrar Ventana</button>
+            <script>
+              function closeWindow() {
+                try {
+                  window.close();
+                  setTimeout(() => {
+                    if (!window.closed) {
+                      window.location.href = '${process.env.FRONTEND_URL || 'http://localhost:4200'}/configuracion/google-calendar';
+                    }
+                  }, 100);
+                } catch (e) {
+                  console.error('Error cerrando ventana:', e);
+                  window.location.href = '${process.env.FRONTEND_URL || 'http://localhost:4200'}/configuracion/google-calendar';
+                }
+              }
+
+              // Auto-cerrar después de 5 segundos
+              setTimeout(closeWindow, 5000);
+
+              // Permitir cerrar con Escape
+              document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                  closeWindow();
+                }
+              });
+            </script>
+          </body>
+          </html>
+        `);
+      }
+
+      if (!code) {
+        return res.send(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Error - VetPlus</title>
+            <style>
+              body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+              .error { color: #d32f2f; font-size: 18px; }
+              .close-btn {
+                background: #1976d2;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 14px;
+                margin-top: 20px;
+              }
+              .close-btn:hover { background: #1565c0; }
+            </style>
+          </head>
+          <body>
+            <h2>❌ Error</h2>
+            <p class="error">No se recibió código de autorización.</p>
+            <p>Puedes cerrar esta ventana y intentar nuevamente.</p>
+            <button class="close-btn" onclick="closeWindow()">Cerrar Ventana</button>
+            <script>
+              function closeWindow() {
+                try {
+                  window.close();
+                  setTimeout(() => {
+                    if (!window.closed) {
+                      window.location.href = '${process.env.FRONTEND_URL || 'http://localhost:4200'}/configuracion/google-calendar';
+                    }
+                  }, 100);
+                } catch (e) {
+                  console.error('Error cerrando ventana:', e);
+                  window.location.href = '${process.env.FRONTEND_URL || 'http://localhost:4200'}/configuracion/google-calendar';
+                }
+              }
+
+              // Auto-cerrar después de 5 segundos
+              setTimeout(closeWindow, 5000);
+
+              // Permitir cerrar con Escape
+              document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                  closeWindow();
+                }
+              });
+            </script>
+          </body>
+          </html>
+        `);
+      }
+
+      // Obtener configuración
+      const configResult = await query(`
+        SELECT * FROM vetplus_auth.google_calendar_config
+        WHERE is_active = true
+        ORDER BY created_at DESC
+        LIMIT 1
+      `);
+
+      if (configResult.rows.length === 0) {
+        throw new Error('No se encontró configuración válida');
+      }
+
+      const config = configResult.rows[0];
+
+      // Intercambiar código por tokens
+      const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          code: code,
+          client_id: config.client_id,
+          client_secret: config.client_secret,
+          redirect_uri: config.redirect_uri,
+          grant_type: 'authorization_code'
+        })
+      });
+
+      const tokens = await tokenResponse.json();
+
+      if (!tokenResponse.ok) {
+        throw new Error(tokens.error_description || 'Error obteniendo tokens');
+      }
+
+      // Guardar tokens en la configuración
+      await query(`
+        UPDATE vetplus_auth.google_calendar_config
+        SET
+          access_token = $1,
+          refresh_token = $2,
+          token_expiry = $3,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE is_active = true
+      `, [
+        tokens.access_token,
+        tokens.refresh_token,
+        tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : null
+      ]);
+
+      // Página de éxito simple
+      res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Autorización Exitosa - VetPlus</title>
+          <style>
+            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+            .success { color: #2e7d32; font-size: 18px; }
+            .countdown { font-size: 14px; color: #666; }
+            .manual-close { margin-top: 20px; }
+            .close-btn {
+              background: #1976d2;
+              color: white;
+              border: none;
+              padding: 10px 20px;
+              border-radius: 4px;
+              cursor: pointer;
+              font-size: 14px;
+            }
+            .close-btn:hover { background: #1565c0; }
+          </style>
+        </head>
+        <body>
+          <h2>✅ Autorización Exitosa</h2>
+          <p class="success">Google Calendar se ha conectado correctamente.</p>
+          <p class="countdown">Esta ventana se cerrará automáticamente en <span id="countdown">3</span> segundos.</p>
+          <div class="manual-close">
+            <button class="close-btn" onclick="closeWindow()">Cerrar Ventana</button>
+          </div>
+          <script>
+            console.log('🎯 Página de éxito cargada, iniciando contador...');
+
+            let count = 3;
+            const countdownElement = document.getElementById('countdown');
+
+            function closeWindow() {
+              console.log('🔄 Intentando cerrar ventana...');
+
+              try {
+                // Comunicar con ventana padre si existe
+                if (window.opener && !window.opener.closed) {
+                  console.log('📤 Enviando mensaje a ventana padre');
+                  window.opener.postMessage({
+                    type: 'google-calendar-success',
+                    success: true,
+                    message: 'Google Calendar configurado exitosamente',
+                    timestamp: new Date().toISOString()
+                  }, '*');
+                }
+
+                // Intentar cerrar esta ventana
+                console.log('🚪 Cerrando ventana popup');
+                window.close();
+
+                // Verificar si se cerró después de un breve delay
+                setTimeout(() => {
+                  if (!window.closed) {
+                    console.log('⚠️ Ventana no se cerró automáticamente, redirigiendo...');
+                    window.location.href = '${process.env.FRONTEND_URL || 'http://localhost:4200'}/configuracion/google-calendar';
+                  } else {
+                    console.log('✅ Ventana cerrada exitosamente');
+                  }
+                }, 500);
+
+              } catch (e) {
+                console.error('❌ Error cerrando ventana:', e);
+                // Fallback: redirigir inmediatamente
+                window.location.href = '${process.env.FRONTEND_URL || 'http://localhost:4200'}/configuracion/google-calendar';
+              }
+            }
+
+            // Función para actualizar contador
+            function updateCountdown() {
+              count--;
+              console.log('⏰ Contador:', count);
+
+              if (countdownElement) {
+                countdownElement.textContent = count;
+              }
+
+              if (count <= 0) {
+                console.log('🎯 Contador llegó a 0, cerrando ventana...');
+                closeWindow();
+              }
+            }
+
+            // Iniciar contador automático
+            console.log('⏰ Iniciando contador automático');
+            const timer = setInterval(updateCountdown, 1000);
+
+            // Permitir cerrar manualmente con Escape
+            document.addEventListener('keydown', (e) => {
+              if (e.key === 'Escape') {
+                console.log('⎋ Tecla Escape presionada, cerrando ventana...');
+                clearInterval(timer);
+                closeWindow();
+              }
+            });
+
+            // Auto-cerrar después de 10 segundos como máximo
+            setTimeout(() => {
+              if (!window.closed) {
+                console.log('⏰ Timeout de 10 segundos alcanzado, cerrando ventana...');
+                clearInterval(timer);
+                closeWindow();
+              }
+            }, 10000);
+
+            console.log('✅ Script de cierre de ventana inicializado');
+          </script>
+        </body>
+        </html>
+      `);
+
+    } catch (error) {
+      console.error('Error en callback:', error);
+      res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Error - VetPlus</title>
+          <style>
+            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+            .error { color: #d32f2f; font-size: 18px; }
+          </style>
+        </head>
+        <body>
+          <h2>❌ Error Procesando Autorización</h2>
+          <p class="error">${error.message}</p>
+          <p>Puedes cerrar esta ventana y intentar nuevamente.</p>
+          <script>
+            setTimeout(() => {
+              window.close();
+            }, 5000);
+          </script>
+        </body>
+        </html>
+      `);
+    }
+  }
+
+  // Obtener estado de conexión
+  async getStatus(req, res) {
+    try {
+      const result = await query(`
+        SELECT
+          is_active as activo,
+          access_token,
+          refresh_token,
+          token_expiry,
+          calendar_id,
+          updated_at
+        FROM vetplus_auth.google_calendar_config
+        WHERE is_active = true
+        ORDER BY created_at DESC
+        LIMIT 1
+      `);
+
+      if (result.rows.length === 0) {
+        return res.json({
+          success: true,
+          data: {
+            conectado: false,
+            ultimo_sync: 'Nunca',
+            eventos_sincronizados: 0,
+            errores_recientes: [],
+            calendario_info: {
+              nombre: 'No configurado',
+              descripcion: 'No hay configuración',
+              zona_horaria: 'UTC'
+            }
+          }
+        });
+      }
+
+      const config = result.rows[0];
+      const hasTokens = config.access_token && config.refresh_token;
+      const isActive = config.activo;
+
+      res.json({
+        success: true,
+        data: {
+          conectado: hasTokens && isActive,
+          ultimo_sync: config.updated_at || 'Nunca',
+          eventos_sincronizados: 0,
+          errores_recientes: hasTokens ? [] : ['No autorizado'],
+          calendario_info: {
+            nombre: config.calendar_id || 'primary',
+            descripcion: hasTokens ? 'Conectado' : 'No autorizado',
+            zona_horaria: 'UTC'
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error obteniendo estado:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Probar conexión
+  async testConnection(req, res) {
+    try {
+      const configResult = await query(`
+        SELECT * FROM vetplus_auth.google_calendar_config
+        WHERE is_active = true
+        ORDER BY created_at DESC
+        LIMIT 1
+      `);
+
+      if (configResult.rows.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'No hay configuración válida'
+        });
+      }
+
+      const config = configResult.rows[0];
+
+      if (!config.access_token) {
+        return res.status(400).json({
+          success: false,
+          message: 'No está autorizado con Google'
+        });
+      }
+
+      // Probar llamada a Google Calendar API
+      const calendarResponse = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${config.calendar_id || 'primary'}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${config.access_token}`
+          }
+        }
+      );
+
+      if (calendarResponse.ok) {
+        const calendarData = await calendarResponse.json();
+        res.json({
+          success: true,
+          message: 'Conexión exitosa',
+          calendar: {
+            name: calendarData.summary,
+            timezone: calendarData.timeZone
+          }
+        });
+      } else {
+        res.json({
+          success: false,
+          message: 'Error conectando con Google Calendar'
+        });
+      }
+
+    } catch (error) {
+      console.error('Error probando conexión:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Desconectar
+  async disconnect(req, res) {
+    try {
+      await query(`
+        UPDATE vetplus_auth.google_calendar_config
+        SET
+          is_active = false,
+          access_token = NULL,
+          refresh_token = NULL,
+          token_expiry = NULL,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE is_active = true
+      `);
+
+      res.json({
+        success: true,
+        message: 'Google Calendar desconectado correctamente'
+      });
+    } catch (error) {
+      console.error('Error desconectando:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error interno del servidor'
+      });
+    }
+  }
+}
+
+export const googleCalendarSimpleController = new GoogleCalendarSimpleController();
+
 /**
  * Obtener configuración actual de Google Calendar (solo admins)
  */
@@ -414,16 +1031,16 @@ export const getSyncStatus = async (req, res) => {
         }
 
         const statsResult = await query(`
-            SELECT 
+            SELECT
                 google_sync_status,
                 COUNT(*) as cantidad
-            FROM clinical.calendario_citas 
+            FROM clinical.calendario_citas
             WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
             GROUP BY google_sync_status
         `);
 
         const recentErrorsResult = await query(`
-            SELECT 
+            SELECT
                 c.codigo_cita,
                 c.google_sync_error,
                 c.last_google_sync,
@@ -448,6 +1065,149 @@ export const getSyncStatus = async (req, res) => {
 
     } catch (error) {
         console.error('Error obteniendo estado de sincronización:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+/**
+ * Diagnóstico de sincronización con Google Calendar
+ */
+export const diagnoseGoogleCalendarSync = async (req, res) => {
+    try {
+        // Solo administradores pueden hacer diagnóstico
+        if (req.user.rol !== 'admin') {
+            return res.status(403).json({
+                success: false,
+                message: 'Solo los administradores pueden ejecutar diagnóstico'
+            });
+        }
+
+        console.log('🔍 Iniciando diagnóstico de sincronización con Google Calendar...');
+
+        const diagnostic = {
+            connection_status: null,
+            calendar_events: null,
+            vetplus_events: null,
+            last_sync_info: null,
+            configuration: null
+        };
+
+        // 1. Verificar conexión
+        console.log('📡 Probando conexión...');
+        const connectionTest = await googleCalendarService.testConnection();
+        diagnostic.connection_status = connectionTest;
+
+        if (!connectionTest.success) {
+            return res.json({
+                success: true,
+                diagnostic,
+                message: 'Conexión fallida - revisar configuración'
+            });
+        }
+
+        // 2. Obtener configuración
+        console.log('⚙️ Obteniendo configuración...');
+        const configResult = await query(`
+            SELECT
+                calendar_id,
+                timezone,
+                is_active,
+                refresh_token IS NOT NULL as has_refresh_token,
+                created_at,
+                updated_at
+            FROM vetplus_auth.google_calendar_config
+            WHERE is_active = true
+            LIMIT 1
+        `);
+        diagnostic.configuration = configResult.rows[0] || null;
+
+        // 3. Obtener información de última sincronización
+        console.log('📅 Obteniendo información de última sincronización...');
+        const lastSyncResult = await query(`
+            SELECT
+                COALESCE(MAX(last_google_sync), CURRENT_TIMESTAMP - INTERVAL '1 day') as last_sync,
+                COUNT(*) as total_citas_sync,
+                COUNT(CASE WHEN google_event_id IS NOT NULL THEN 1 END) as citas_con_event_id
+            FROM clinical.calendario_citas
+            WHERE google_event_id IS NOT NULL OR created_at >= CURRENT_DATE - INTERVAL '7 days'
+        `);
+        diagnostic.last_sync_info = lastSyncResult.rows[0];
+
+        // 4. Listar eventos recientes de Google Calendar (últimos 7 días)
+        console.log('📅 Listando eventos recientes de Google Calendar...');
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - 7); // 7 días atrás
+
+        const endDate = new Date();
+        endDate.setDate(endDate.getDate() + 30); // 30 días adelante
+
+        const eventsResult = await googleCalendarService.listEvents(
+            startDate.toISOString(),
+            endDate.toISOString()
+        );
+
+        if (eventsResult.success) {
+            diagnostic.calendar_events = {
+                total: eventsResult.events.length,
+                sample_events: eventsResult.events.slice(0, 5).map(event => ({
+                    id: event.id,
+                    summary: event.summary,
+                    start: event.start,
+                    status: event.status,
+                    updated: event.updated
+                }))
+            };
+
+            // 5. Filtrar eventos que serían considerados de VetPlus
+            const vetEvents = eventsResult.events.filter(event => {
+                const summary = event.summary || '';
+                const description = event.description || '';
+
+                return summary.includes('VetPlus') ||
+                       summary.includes('Cita') ||
+                       summary.includes('Consulta') ||
+                       description.includes('VetPlus') ||
+                       description.includes('Código de cita:');
+            });
+
+            diagnostic.vetplus_events = {
+                total: vetEvents.length,
+                sample_events: vetEvents.slice(0, 3).map(event => ({
+                    id: event.id,
+                    summary: event.summary,
+                    description: event.description?.substring(0, 100) + '...',
+                    start: event.start,
+                    status: event.status
+                }))
+            };
+        } else {
+            diagnostic.calendar_events = {
+                error: eventsResult.error
+            };
+        }
+
+        console.log('✅ Diagnóstico completado');
+
+        res.json({
+            success: true,
+            diagnostic,
+            recommendations: diagnostic.vetplus_events?.total === 0 ? [
+                'No se encontraron eventos de VetPlus en Google Calendar',
+                'Asegúrate de que los eventos contengan palabras clave como "VetPlus", "Cita" o "Consulta"',
+                'Verifica que estés consultando el calendario correcto',
+                'Considera crear un evento de prueba con "VetPlus" en el título'
+            ] : [
+                'Eventos encontrados correctamente',
+                'La sincronización debería funcionar'
+            ]
+        });
+
+    } catch (error) {
+        console.error('❌ Error en diagnóstico:', error);
         res.status(500).json({
             success: false,
             message: 'Error interno del servidor',
@@ -880,3 +1640,310 @@ export const renewWebhook = async (req, res) => {
         });
     }
 };
+
+/**
+ * Importar eventos de Google Calendar como citas en VetPlus
+ */
+export const importGoogleEventsToVetPlus = async (req, res) => {
+    try {
+        // Solo administradores pueden importar
+        if (req.user.rol !== 'admin') {
+            return res.status(403).json({
+                success: false,
+                message: 'Solo los administradores pueden importar eventos a VetPlus'
+            });
+        }
+
+        const {
+            fecha_inicio,
+            fecha_fin,
+            create_missing_data = false,
+            dry_run = false
+        } = req.body;
+
+        if (!fecha_inicio || !fecha_fin) {
+            return res.status(400).json({
+                success: false,
+                message: 'Las fechas de inicio y fin son obligatorias'
+            });
+        }
+
+        console.log('📥 Iniciando importación de eventos de Google Calendar a VetPlus...');
+        console.log('📅 Rango de fechas:', fecha_inicio, 'a', fecha_fin);
+        console.log('🔧 Modo dry-run:', dry_run);
+
+        // 1. Obtener eventos de Google Calendar
+        const eventsResult = await googleCalendarService.listEvents(fecha_inicio, fecha_fin);
+
+        if (!eventsResult.success) {
+            return res.status(500).json({
+                success: false,
+                message: 'Error obteniendo eventos de Google Calendar',
+                error: eventsResult.error
+            });
+        }
+
+        console.log(`📅 Encontrados ${eventsResult.events.length} eventos en Google Calendar`);
+
+        // 2. Filtrar eventos que parecen ser de VetPlus
+        const vetEvents = eventsResult.events.filter(event => {
+            const summary = event.summary || '';
+            const description = event.description || '';
+
+            return summary.includes('VetPlus') ||
+                   summary.includes('Cita') ||
+                   summary.includes('Consulta') ||
+                   summary.includes('Veterinaria') ||
+                   description.includes('VetPlus') ||
+                   description.includes('Código de cita:');
+        });
+
+        console.log(`🏥 Filtrados ${vetEvents.length} eventos que parecen ser de VetPlus`);
+
+        const results = {
+            total_events: eventsResult.events.length,
+            vetplus_events: vetEvents.length,
+            imported: 0,
+            skipped: 0,
+            errors: 0,
+            details: []
+        };
+
+        // 3. Procesar cada evento
+        for (const event of vetEvents) {
+            try {
+                console.log(`🔄 Procesando evento: ${event.summary}`);
+
+                // Extraer información del evento
+                const eventData = parseVetPlusEvent(event);
+
+                if (!eventData) {
+                    console.log(`⚠️ Evento no válido: ${event.summary}`);
+                    results.details.push({
+                        event_id: event.id,
+                        summary: event.summary,
+                        status: 'skipped',
+                        reason: 'No se pudo parsear la información del evento'
+                    });
+                    results.skipped++;
+                    continue;
+                }
+
+                // Verificar si ya existe una cita con este event_id
+                const existingCita = await query(`
+                    SELECT id_cita, codigo_cita
+                    FROM clinical.calendario_citas
+                    WHERE google_event_id = $1
+                `, [event.id]);
+
+                if (existingCita.rows.length > 0) {
+                    console.log(`⏭️ Cita ya existe: ${existingCita.rows[0].codigo_cita}`);
+                    results.details.push({
+                        event_id: event.id,
+                        summary: event.summary,
+                        status: 'skipped',
+                        reason: 'Cita ya existe en VetPlus',
+                        existing_cita: existingCita.rows[0].codigo_cita
+                    });
+                    results.skipped++;
+                    continue;
+                }
+
+                // Verificar datos requeridos
+                if (!eventData.id_mascota && !create_missing_data) {
+                    console.log(`⚠️ Mascota no encontrada y create_missing_data=false: ${event.summary}`);
+                    results.details.push({
+                        event_id: event.id,
+                        summary: event.summary,
+                        status: 'skipped',
+                        reason: 'Mascota no encontrada y creación de datos faltantes deshabilitada'
+                    });
+                    results.skipped++;
+                    continue;
+                }
+
+                if (!dry_run) {
+                    // Crear la cita en VetPlus
+                    const citaResult = await createCitaFromEvent(event, eventData, req.user.id_usuario);
+
+                    results.details.push({
+                        event_id: event.id,
+                        summary: event.summary,
+                        status: 'imported',
+                        nueva_cita: citaResult.codigo_cita,
+                        id_cita: citaResult.id_cita
+                    });
+                    results.imported++;
+                } else {
+                    results.details.push({
+                        event_id: event.id,
+                        summary: event.summary,
+                        status: 'would_import',
+                        event_data: eventData
+                    });
+                    results.imported++;
+                }
+
+            } catch (error) {
+                console.error(`❌ Error procesando evento ${event.id}:`, error);
+                results.details.push({
+                    event_id: event.id,
+                    summary: event.summary,
+                    status: 'error',
+                    error: error.message
+                });
+                results.errors++;
+            }
+        }
+
+        console.log('✅ Importación completada:', results);
+
+        res.json({
+            success: true,
+            message: dry_run ? 'Simulación de importación completada' : 'Importación completada exitosamente',
+            data: results,
+            dry_run
+        });
+
+    } catch (error) {
+        console.error('❌ Error importando eventos a VetPlus:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+/**
+ * Función auxiliar para parsear información de eventos de VetPlus
+ */
+function parseVetPlusEvent(event) {
+    const summary = event.summary || '';
+    const description = event.description || '';
+
+    // Intentar extraer información de la descripción
+    const mascotaMatch = description.match(/🐕 Mascota: ([^\n]+)/);
+    const clienteMatch = description.match(/👤 Cliente: ([^\n]+)/);
+    const veterinarioMatch = description.match(/👨‍⚕️ Veterinario: ([^\n]+)/);
+    const codigoMatch = description.match(/Código de cita: ([^\n]+)/);
+
+    let eventData = {
+        tipo: 'consulta_general',
+        motivo: summary,
+        notas: description,
+        fecha_inicio: event.start.dateTime || event.start.date,
+        fecha_fin: event.end.dateTime || event.end.date,
+        google_event_id: event.id
+    };
+
+    // Determinar tipo de cita basado en el título
+    if (summary.toLowerCase().includes('cirugía') || summary.toLowerCase().includes('cirugia')) {
+        eventData.tipo = 'cirugia';
+    } else if (summary.toLowerCase().includes('vacunación') || summary.toLowerCase().includes('vacuna')) {
+        eventData.tipo = 'vacunacion';
+    } else if (summary.toLowerCase().includes('control')) {
+        eventData.tipo = 'control';
+    }
+
+    // Buscar mascota por nombre si está en la descripción
+    if (mascotaMatch) {
+        const mascotaNombre = mascotaMatch[1].trim();
+        // Buscar mascota en BD
+        // Nota: Esta búsqueda se hace en el contexto de createCitaFromEvent
+        eventData.mascota_nombre = mascotaNombre;
+    }
+
+    // Buscar cliente por nombre
+    if (clienteMatch) {
+        const clienteNombre = clienteMatch[1].trim();
+        eventData.cliente_nombre = clienteNombre;
+    }
+
+    // Buscar veterinario por nombre
+    if (veterinarioMatch) {
+        const veterinarioNombre = veterinarioMatch[1].trim();
+        eventData.veterinario_nombre = veterinarioNombre;
+    }
+
+    return eventData;
+}
+
+/**
+ * Función auxiliar para crear cita desde evento
+ */
+async function createCitaFromEvent(event, eventData, createdBy) {
+    // Buscar o crear datos faltantes
+    let id_mascota = null;
+    let id_cliente = null;
+    let id_veterinario = null;
+
+    // Buscar mascota
+    if (eventData.mascota_nombre) {
+        const mascotaResult = await query(`
+            SELECT m.id_mascota, m.id_cliente
+            FROM clinical.mascotas m
+            WHERE LOWER(m.nombre) = LOWER($1)
+            LIMIT 1
+        `, [eventData.mascota_nombre]);
+
+        if (mascotaResult.rows.length > 0) {
+            id_mascota = mascotaResult.rows[0].id_mascota;
+            id_cliente = mascotaResult.rows[0].id_cliente;
+        }
+    }
+
+    // Buscar veterinario
+    if (eventData.veterinario_nombre) {
+        const vetResult = await query(`
+            SELECT id_usuario
+            FROM vetplus_auth.usuarios
+            WHERE LOWER(nombre) = LOWER($1) AND rol IN ('vet', 'admin')
+            LIMIT 1
+        `, [eventData.veterinario_nombre]);
+
+        if (vetResult.rows.length > 0) {
+            id_veterinario = vetResult.rows[0].id_usuario;
+        }
+    }
+
+    // Generar código de cita único
+    const codigo_cita = `GC-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+
+    // Crear la cita
+    const citaResult = await query(`
+        INSERT INTO clinical.calendario_citas (
+            codigo_cita,
+            id_mascota,
+            id_cliente,
+            id_veterinario,
+            fecha_inicio,
+            fecha_fin,
+            tipo,
+            motivo,
+            notas,
+            estado,
+            google_event_id,
+            google_sync_status,
+            created_by
+        ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9 || ' | Importado desde Google Calendar',
+            'confirmada', $10, 'synced', $11
+        )
+        RETURNING id_cita, codigo_cita
+    `, [
+        codigo_cita,
+        id_mascota,
+        id_cliente,
+        id_veterinario,
+        eventData.fecha_inicio,
+        eventData.fecha_fin,
+        eventData.tipo,
+        eventData.motivo,
+        eventData.notas,
+        event.google_event_id || event.id,
+        createdBy
+    ]);
+
+    return citaResult.rows[0];
+}

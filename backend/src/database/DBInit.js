@@ -18,15 +18,30 @@ class DBInit {
   constructor() {
     // Detectar usuario por defecto según el sistema
     const defaultUser = process.platform === 'win32' ? 'postgres' : (process.env.USER || 'postgres');
-    
-    this.config = {
-      host: process.env.DB_HOST || 'localhost',
-      port: process.env.DB_PORT || 5432,
-      user: process.env.DB_USER || defaultUser,
-      password: process.env.DB_PASSWORD || '',
-      database: process.env.DB_NAME || 'vetplus'
-    };
-    
+
+    // Si existe DATABASE_URL (como en Neon), extraer configuración de ahí
+    if (process.env.DATABASE_URL) {
+      const url = new URL(process.env.DATABASE_URL);
+      this.config = {
+        host: url.hostname,
+        port: parseInt(url.port) || 5432,
+        user: url.username,
+        password: url.password,
+        database: url.pathname.slice(1), // Remover el '/' inicial
+        ssl: { rejectUnauthorized: false }
+      };
+    } else {
+      // Configuración tradicional
+      this.config = {
+        host: process.env.DB_HOST || 'localhost',
+        port: process.env.DB_PORT || 5432,
+        user: process.env.DB_USER || defaultUser,
+        password: process.env.DB_PASSWORD || '',
+        database: process.env.DB_NAME || 'vetplus',
+        ssl: (process.env.DB_HOST && process.env.DB_HOST.includes('neon.tech')) ? { rejectUnauthorized: false } : false
+      };
+    }
+
     // Configuración para conexión inicial (sin especificar BD)
     this.adminConfig = {
       ...this.config,

@@ -15,6 +15,8 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatSelectModule } from '@angular/material/select';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatNativeDateModule } from '@angular/material/core';
 import { Router } from '@angular/router';
 import { ConfiguracionService, GoogleCalendarConfig, GoogleCalendarStatus, SyncStats } from '../../../services/configuracion.service';
 import { CitasService } from '../../../services/citas.service';
@@ -39,7 +41,9 @@ import { SyncDialogComponent } from '../../citas/sync-dialog.component';
     MatTooltipModule,
     MatTabsModule,
     MatSelectModule,
-    MatDialogModule
+    MatDialogModule,
+    MatDatepickerModule,
+    MatNativeDateModule
   ],
   template: `
     <div class="google-calendar-container">
@@ -686,8 +690,8 @@ export class GoogleCalendarConfigComponent implements OnInit {
   private createForm(): FormGroup {
     return this.fb.group({
       activo: [false],
-      cliente_id: ['54253011928-4vnccvis46n509hkm3oo975samb9sun0.apps.googleusercontent.com', Validators.required],
-      cliente_secret: ['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', Validators.required],
+      cliente_id: ['', Validators.required],
+      cliente_secret: ['', Validators.required],
       calendar_id: ['primary', Validators.required],
       sync_automatico: [true],
       intervalo_sync: [30, [Validators.required, Validators.min(5)]],

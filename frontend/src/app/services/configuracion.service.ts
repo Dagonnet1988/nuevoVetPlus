@@ -327,13 +327,61 @@ export class ConfiguracionService {
   // ===============================
 
   getGoogleCalendarConfig(): Observable<GoogleCalendarConfig> {
-    return this.http.get<any>(`${this.API_URL}/google-calendar/config`).pipe(
+    return this.http.get<any>(`${this.API_URL}/google-calendar/simple/config`).pipe(
       map((response: any) => {
         if (response.success && response.data) {
-          this.googleCalendarConfig.set(response.data);
-          return response.data;
+          // Transformar respuesta del backend simple al formato del frontend
+          const config: GoogleCalendarConfig = {
+            id: response.data.id_config,
+            activo: response.data.activo,
+            cliente_id: response.data.cliente_id,
+            cliente_secret: response.data.cliente_secret,
+            calendar_id: response.data.calendar_id,
+            sync_automatico: response.data.sync_automatico,
+            intervalo_sync: 30, // valor por defecto
+            prefijo_eventos: 'VetPlus', // valor por defecto
+            mapeo_colores: {
+              consulta: '#2196f3',
+              cirugia: '#f44336',
+              vacunacion: '#4caf50',
+              control: '#ff9800'
+            },
+            configuracion_eventos: {
+              duracion_default: 30,
+              recordatorio_default: 30,
+              incluir_cliente: true,
+              incluir_mascota: true,
+              incluir_veterinario: true
+            }
+          };
+          this.googleCalendarConfig.set(config);
+          return config;
         }
-        throw new Error('Error obteniendo configuración de Google Calendar');
+        // Si no hay configuración, devolver configuración por defecto
+        const defaultConfig: GoogleCalendarConfig = {
+          activo: false,
+          cliente_id: '',
+          cliente_secret: '',
+          calendar_id: 'primary',
+          sync_automatico: true,
+          intervalo_sync: 30,
+          prefijo_eventos: 'VetPlus',
+          mapeo_colores: {
+            consulta: '#2196f3',
+            cirugia: '#f44336',
+            vacunacion: '#4caf50',
+            control: '#ff9800'
+          },
+          configuracion_eventos: {
+            duracion_default: 30,
+            recordatorio_default: 30,
+            incluir_cliente: true,
+            incluir_mascota: true,
+            incluir_veterinario: true
+          }
+        };
+        this.googleCalendarConfig.set(defaultConfig);
+        return defaultConfig;
       })
     );
   }

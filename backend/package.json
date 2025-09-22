@@ -6,14 +6,14 @@
   "scripts": {
     "start": "node server.js",
     "start:simple": "node server-simple.js",
-    "start:production": "cross-env NODE_ENV=production node server-production.js",
+    "start:production": "NODE_ENV=production node server-production.js",
     "start:prod": "npm run start:production",
-    "dev": "cross-env NODE_ENV=development nodemon server.js",
-    "dev:simple": "cross-env NODE_ENV=development nodemon server-simple.js",
-    "dev:production": "cross-env NODE_ENV=production nodemon server-production.js",
-    "test": "cross-env NODE_ENV=test jest",
-    "test:watch": "cross-env NODE_ENV=test jest --watch",
-    "test:coverage": "cross-env NODE_ENV=test jest --coverage",
+    "dev": "NODE_ENV=development nodemon server.js",
+    "dev:simple": "NODE_ENV=development nodemon server-simple.js",
+    "dev:production": "NODE_ENV=production nodemon server-production.js",
+    "test": "NODE_ENV=test jest",
+    "test:watch": "NODE_ENV=test jest --watch",
+    "test:coverage": "NODE_ENV=test jest --coverage",
     "lint": "eslint src/ --ext .js",
     "lint:fix": "eslint src/ --ext .js --fix",
     "validate:config": "node -e \"import('./src/config/production.js').then(({validateConfig}) => validateConfig())\"",
@@ -85,7 +85,6 @@
   },
   "devDependencies": {
     "concurrently": "^9.2.0",
-    "cross-env": "^10.0.0",
     "nodemon": "^3.1.10"
   }
 }

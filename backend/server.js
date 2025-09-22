@@ -11,7 +11,7 @@ import financialRoutes from './src/routes/index.js';
 import financialConfigRoutes from './src/routes/financialConfig.js';
 import clinicalRoutes from './src/routes/clinical.js';
 import auditRoutes from './src/routes/audit.js';
-import googleCalendarRoutes from './src/routes/googleCalendarSimple.js';
+import googleCalendarRoutes from './src/routes/googleCalendar.js';
 import reportsRoutes from './src/routes/reports.js';
 import empresaConfigRoutes from './src/routes/empresaConfigRoutes.js';
 import whatsappRoutes from './src/routes/whatsappRoutes.js';

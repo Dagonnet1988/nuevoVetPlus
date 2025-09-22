@@ -234,38 +234,63 @@ export async function createInvoice(req, res) {
         let precioUnitario = precio_unitario || producto?.precio_venta || 0;
 
         // LÓGICA ESPECIAL PARA TERAPIAS:
-        // Si hay un paquete de terapia en la factura, las sesiones individuales cuestan 0
-        let hayPaqueteTerapia = false;
+        // 1. Si hay paquete de terapia en la misma factura, sesiones individuales cuestan $0
+        // 2. Si no hay paquete, sesiones cuestan precio normal
+        // 3. Si se compran paquete + sesión juntos, solo se cobra el paquete
+
+        let hayPaqueteTerapiaEnFactura = false;
         for (const itemCheck of productos) {
           if (itemCheck !== item) { // No verificar el mismo item
             const itemCheckData = itemCheck.producto || itemCheck;
             const checkCodigoBarras = itemCheckData.codigo_barras || itemCheckData.barcode;
             const checkCodigo = itemCheckData.codigo || itemCheckData.code;
-            
+
             if (checkCodigoBarras) {
               const paqueteResult = await query(
-                'SELECT tipo FROM financial.productos WHERE codigo_barras = $1 AND tipo = \'terapia_paquete\' AND activo = true',
+                'SELECT tipo FROM financial.productos WHERE codigo_barras = $1 AND tipo = \'Terapia Paquete\' AND activo = true',
                 [checkCodigoBarras]
               );
               if (paqueteResult.rows.length > 0) {
-                hayPaqueteTerapia = true;
+                hayPaqueteTerapiaEnFactura = true;
                 break;
               }
             } else if (checkCodigo) {
               const paqueteResult = await query(
-                'SELECT tipo FROM financial.productos WHERE codigo = $1 AND tipo = \'terapia_paquete\' AND activo = true',
+                'SELECT tipo FROM financial.productos WHERE codigo = $1 AND tipo = \'Terapia Paquete\' AND activo = true',
                 [checkCodigo]
               );
               if (paqueteResult.rows.length > 0) {
-                hayPaqueteTerapia = true;
+                hayPaqueteTerapiaEnFactura = true;
                 break;
               }
             }
           }
         }
 
-        if (hayPaqueteTerapia && producto?.tipo === 'Terapia Individual') {
-          precioUnitario = 0; // Sesión individual gratis si hay paquete
+        // Aplicar lógica de precios según reglas de negocio
+        if (hayPaqueteTerapiaEnFactura && producto?.tipo === 'Terapia Individual') {
+          precioUnitario = 0; // Sesión individual gratis si hay paquete en la misma factura
+          console.log(`🏥 Sesión individual "${producto.nombre}" gratis por paquete en factura`);
+        } else if (producto?.tipo === 'Terapia Individual') {
+          // Verificar si hay paquetes activos para esta mascota (fuera de esta factura)
+          if (id_consulta) {
+            // Obtener id_mascota desde la consulta
+            const consultaResult = await query(
+              'SELECT id_mascota FROM clinical.consultas_clinicas WHERE id_consulta = $1',
+              [id_consulta]
+            );
+            if (consultaResult.rows.length > 0) {
+              const idMascota = consultaResult.rows[0].id_mascota;
+              const paquetesActivos = await query(
+                'SELECT id_control, sesiones_restantes FROM financial.control_terapias WHERE id_mascota = $1 AND activo = true AND sesiones_restantes > 0',
+                [idMascota]
+              );
+              if (paquetesActivos.rows.length > 0) {
+                precioUnitario = 0; // Sesión gratis si hay paquete activo
+                console.log(`🏥 Sesión individual "${producto.nombre}" gratis por paquete activo existente`);
+              }
+            }
+          }
         }
 
         const total = precioUnitario * cantidad;
@@ -362,6 +387,108 @@ export async function createInvoice(req, res) {
       } else {
         console.log('💳 Factura a crédito - No se registra movimiento en caja');
       }      await query('COMMIT');
+
+      // PROCESAR PAQUETES DE TERAPIA: Crear registros en control_terapias
+      console.log('🏥 Procesando paquetes de terapia...');
+      const paquetesTerapia = productos.filter(item => {
+        const itemData = item.producto || item;
+        return itemData.tipo === 'Terapia Paquete';
+      });
+
+      if (paquetesTerapia.length > 0 && id_consulta) {
+        // Obtener id_mascota desde la consulta
+        const consultaResult = await query(
+          'SELECT id_mascota FROM clinical.consultas_clinicas WHERE id_consulta = $1',
+          [id_consulta]
+        );
+
+        if (consultaResult.rows.length > 0) {
+          const idMascota = consultaResult.rows[0].id_mascota;
+
+          for (const paquete of paquetesTerapia) {
+            const paqueteData = paquete.producto || paquete;
+            const sesionesTotal = paqueteData.sesiones_incluidas || 10; // Default 10 sesiones
+
+            // Crear registro en control_terapias
+            await query(`
+              INSERT INTO financial.control_terapias (
+                id_mascota, id_factura, id_producto, tipo, sesiones_total,
+                sesiones_usadas, fecha_inicio, activo, created_at, updated_at
+              ) VALUES ($1, $2, $3, 'Paquete', $4, 0, CURRENT_DATE, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            `, [
+              idMascota,
+              factura.id_factura,
+              paqueteData.id_producto,
+              sesionesTotal
+            ]);
+
+            console.log(`✅ Paquete de terapia registrado: ${paqueteData.nombre} (${sesionesTotal} sesiones) para mascota ${idMascota}`);
+          }
+        } else {
+          console.warn('⚠️ No se pudo obtener id_mascota para procesar paquetes de terapia');
+        }
+      }
+
+      // PROCESAR SESIONES DE TERAPIA: Descontar de paquetes activos
+      console.log('🏥 Procesando sesiones de terapia...');
+      const sesionesTerapia = productos.filter(item => {
+        const itemData = item.producto || item;
+        return itemData.tipo === 'Terapia Individual' && item.precio_unitario === 0; // Solo sesiones gratis
+      });
+
+      if (sesionesTerapia.length > 0 && id_consulta) {
+        // Obtener id_mascota desde la consulta
+        const consultaResult = await query(
+          'SELECT id_mascota FROM clinical.consultas_clinicas WHERE id_consulta = $1',
+          [id_consulta]
+        );
+
+        if (consultaResult.rows.length > 0) {
+          const idMascota = consultaResult.rows[0].id_mascota;
+
+          // Obtener paquetes activos para esta mascota
+          const paquetesActivos = await query(
+            'SELECT id_control, sesiones_restantes FROM financial.control_terapias WHERE id_mascota = $1 AND activo = true AND sesiones_restantes > 0 ORDER BY created_at ASC',
+            [idMascota]
+          );
+
+          if (paquetesActivos.rows.length > 0) {
+            let sesionesPorDescontar = sesionesTerapia.length;
+
+            for (const paquete of paquetesActivos.rows) {
+              if (sesionesPorDescontar <= 0) break;
+
+              const sesionesADescontar = Math.min(sesionesPorDescontar, paquete.sesiones_restantes);
+
+              // Actualizar sesiones usadas en el paquete
+              await query(
+                'UPDATE financial.control_terapias SET sesiones_usadas = sesiones_usadas + $1, updated_at = CURRENT_TIMESTAMP WHERE id_control = $2',
+                [sesionesADescontar, paquete.id_control]
+              );
+
+              // Registrar sesión individual
+              await query(`
+                INSERT INTO financial.sesiones_terapia (
+                  id_control, fecha_sesion, observaciones, realizada_por, created_at
+                ) VALUES ($1, CURRENT_TIMESTAMP, $2, $3, CURRENT_TIMESTAMP)
+              `, [
+                paquete.id_control,
+                `Sesión facturada automáticamente - Factura ${factura.codigo_factura}`,
+                userId
+              ]);
+
+              sesionesPorDescontar -= sesionesADescontar;
+              console.log(`✅ Descontadas ${sesionesADescontar} sesiones del paquete ${paquete.id_control}`);
+            }
+
+            if (sesionesPorDescontar > 0) {
+              console.warn(`⚠️ No había suficientes sesiones en paquetes activos. Faltaron ${sesionesPorDescontar} sesiones`);
+            }
+          } else {
+            console.warn('⚠️ No hay paquetes activos para descontar sesiones de terapia');
+          }
+        }
+      }
 
       // Obtener factura completa
       const facturaCompleta = await getInvoiceById(factura.id_factura);

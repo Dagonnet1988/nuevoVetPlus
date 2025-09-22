@@ -1,0 +1,26 @@
+services:
+  vetplus-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: vetplus-backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - FRONTEND_URL=http://localhost:4200
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - ./.env:/app/.env
+    command: npm run dev
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

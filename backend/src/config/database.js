@@ -3,12 +3,19 @@ const { Pool } = pkg;
 
 // Configuración de PostgreSQL
 const pool = new Pool({
-  user: process.env.DB_USER || 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'vetplus',
-  password: process.env.DB_PASSWORD || '',
-  port: process.env.DB_PORT || 5432,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  // Si existe DATABASE_URL (como en Neon), úsala directamente
+  ...(process.env.DATABASE_URL ? {
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  } : {
+    // Configuración tradicional
+    user: process.env.DB_USER || 'postgres',
+    host: process.env.DB_HOST || 'localhost',
+    database: process.env.DB_NAME || 'vetplus',
+    password: process.env.DB_PASSWORD || '',
+    port: process.env.DB_PORT || 5432,
+    ssl: (process.env.DB_HOST && process.env.DB_HOST.includes('neon.tech')) ? { rejectUnauthorized: false } : (process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false),
+  }),
   max: 20, // máximo número de conexiones en el pool
   idleTimeoutMillis: 30000, // tiempo de espera antes de cerrar conexiones inactivas
   connectionTimeoutMillis: 2000, // tiempo límite para obtener una conexión

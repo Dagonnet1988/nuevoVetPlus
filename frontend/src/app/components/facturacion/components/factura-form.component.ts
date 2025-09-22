@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, inject } from '@angular/core';
+import { Component, OnInit, signal, inject, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, FormArray, Validators, ReactiveFormsModule } from '@angular/forms';
 import { FormsModule } from '@angular/forms';
@@ -105,6 +105,15 @@ export class FacturaFormComponent implements OnInit {
   mostrarFormularioCliente = signal(false);
   filteredPacientes$!: Observable<Paciente[]>;
   editing = signal(false);
+
+  // Computed para detectar si hay terapias en las líneas
+  tieneTerapias = computed(() => {
+    const lineas = this.facturaForm.get('lineas') as FormArray;
+    return lineas.controls.some(linea =>
+      (linea.get('descripcion')?.value || '').toLowerCase().includes('terapia') ||
+      (linea.get('descripcion')?.value || '').toLowerCase().includes('fisioterapia')
+    );
+  });
 
   ngOnInit(): void {
     this.initializeForms();
@@ -412,6 +421,12 @@ export class FacturaFormComponent implements OnInit {
     const lineas = this.facturaForm.get('lineas') as FormArray;
     if (lineas.length === 0) {
       this.snackBar.open('Agregue al menos un producto a la factura', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    // Validación especial para terapias: requerir paciente
+    if (this.tieneTerapias() && !this.pacienteSeleccionado()) {
+      this.snackBar.open('Para productos de terapia, debe seleccionar un paciente', 'Cerrar', { duration: 4000 });
       return;
     }
 
