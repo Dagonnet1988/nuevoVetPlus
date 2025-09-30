@@ -1,5 +1,5 @@
 import { query } from '../config/database.js';
-import { validationResult } from 'express-validator';
+import { validationResult } from 'express-validator/lib/index.js';
 
 /**
  * Controlador para gestión de productos

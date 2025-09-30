@@ -16,7 +16,6 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { MatSelectModule } from '@angular/material/select';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatDatepickerModule } from '@angular/material/datepicker';
-import { MatNativeDateModule } from '@angular/material/core';
 import { Router } from '@angular/router';
 import { ConfiguracionService, GoogleCalendarConfig, GoogleCalendarStatus, SyncStats } from '../../../services/configuracion.service';
 import { CitasService } from '../../../services/citas.service';
@@ -42,8 +41,7 @@ import { SyncDialogComponent } from '../../citas/sync-dialog.component';
     MatTabsModule,
     MatSelectModule,
     MatDialogModule,
-    MatDatepickerModule,
-    MatNativeDateModule
+    MatDatepickerModule
   ],
   template: `
     <div class="google-calendar-container">
@@ -111,23 +109,26 @@ import { SyncDialogComponent } from '../../citas/sync-dialog.component';
                       <h3>Configuración OAuth 2.0</h3>
                       <div class="form-row">
                         <mat-form-field appearance="outline" class="form-field">
-                          <mat-label>Client ID</mat-label>
+                          <mat-label>Client ID *</mat-label>
                           <input matInput formControlName="cliente_id" placeholder="12345678-abcdefgh.apps.googleusercontent.com">
                           <mat-icon matSuffix>key</mat-icon>
+                          <mat-error *ngIf="configForm.get('cliente_id')?.hasError('required')">Client ID es requerido</mat-error>
                         </mat-form-field>
 
                         <mat-form-field appearance="outline" class="form-field">
-                          <mat-label>Client Secret</mat-label>
+                          <mat-label>Client Secret *</mat-label>
                           <input matInput type="password" formControlName="cliente_secret" placeholder="GOCSPX-xxxxxxxxxxxxx">
                           <mat-icon matSuffix>lock</mat-icon>
+                          <mat-error *ngIf="configForm.get('cliente_secret')?.hasError('required')">Client Secret es requerido</mat-error>
                         </mat-form-field>
                       </div>
 
                       <mat-form-field appearance="outline" class="form-field-full">
-                        <mat-label>ID del Calendario</mat-label>
+                        <mat-label>ID del Calendario *</mat-label>
                         <input matInput formControlName="calendar_id" placeholder="primary">
                         <mat-icon matSuffix>calendar_today</mat-icon>
                         <mat-hint>Usar 'primary' para el calendario principal</mat-hint>
+                        <mat-error *ngIf="configForm.get('calendar_id')?.hasError('required')">ID del calendario es requerido</mat-error>
                       </mat-form-field>
 
                       @if (!status().conectado) {
@@ -278,7 +279,7 @@ import { SyncDialogComponent } from '../../citas/sync-dialog.component';
 
                   <!-- Botones de acción -->
                   <div class="form-actions">
-                    <button mat-raised-button color="primary" (click)="saveConfigurationWrapper()" [disabled]="loading() || configForm.invalid">
+                    <button mat-raised-button color="primary" (click)="saveConfigurationWrapper()" [disabled]="loading() || (configForm.value.activo && configForm.invalid)">
                       @if (loading()) {
                         <mat-spinner diameter="20"></mat-spinner>
                       } @else {
@@ -685,19 +686,52 @@ export class GoogleCalendarConfigComponent implements OnInit {
     this.loadConfiguration();
     this.loadStatus();
     this.loadStats();
+
+    // Configurar validadores condicionales
+    this.setupConditionalValidators();
+  }
+
+  private setupConditionalValidators(): void {
+    // Cuando el toggle "activo" cambia, actualizar validadores
+    this.configForm.get('activo')?.valueChanges.subscribe(activo => {
+      this.updateValidators(activo);
+    });
+
+    // Inicializar validadores según el estado actual
+    this.updateValidators(this.configForm.get('activo')?.value);
+  }
+
+  private updateValidators(activo: boolean): void {
+    const clienteIdControl = this.configForm.get('cliente_id');
+    const clienteSecretControl = this.configForm.get('cliente_secret');
+    const calendarIdControl = this.configForm.get('calendar_id');
+
+    if (activo) {
+      clienteIdControl?.setValidators([Validators.required]);
+      clienteSecretControl?.setValidators([Validators.required]);
+      calendarIdControl?.setValidators([Validators.required]);
+    } else {
+      clienteIdControl?.clearValidators();
+      clienteSecretControl?.clearValidators();
+      calendarIdControl?.clearValidators();
+    }
+
+    clienteIdControl?.updateValueAndValidity();
+    clienteSecretControl?.updateValueAndValidity();
+    calendarIdControl?.updateValueAndValidity();
   }
 
   private createForm(): FormGroup {
     return this.fb.group({
       activo: [false],
-      cliente_id: ['', Validators.required],
-      cliente_secret: ['', Validators.required],
-      calendar_id: ['primary', Validators.required],
+      cliente_id: [''],
+      cliente_secret: [''],
+      calendar_id: ['primary'],
       sync_automatico: [true],
-      intervalo_sync: [30, [Validators.required, Validators.min(5)]],
-      prefijo_eventos: ['VetPlus', Validators.required],
-      duracion_default: [30, [Validators.required, Validators.min(15)]],
-      recordatorio_default: [30, [Validators.required, Validators.min(5)]],
+      intervalo_sync: [30, [Validators.min(5)]],
+      prefijo_eventos: ['VetPlus'],
+      duracion_default: [30, [Validators.min(15)]],
+      recordatorio_default: [30, [Validators.min(5)]],
       incluir_cliente: [true],
       incluir_mascota: [true],
       incluir_veterinario: [true],

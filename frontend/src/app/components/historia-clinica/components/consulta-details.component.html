@@ -1,0 +1,197 @@
+<div class="consulta-details-container">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <button mat-icon-button (click)="onBack()" class="back-button">
+        <mat-icon>arrow_back</mat-icon>
+      </button>
+      <div class="title-section">
+        <h1 class="page-title">
+          <mat-icon class="page-icon">assignment</mat-icon>
+          Detalles de Consulta
+        </h1>
+        <p class="page-subtitle">Información completa de la consulta clínica</p>
+      </div>
+      <div class="actions-section">
+        @if (canEdit()) {
+          <button mat-raised-button
+                  color="primary"
+                  (click)="onEdit()"
+                  class="edit-button">
+            <mat-icon>edit</mat-icon>
+            Editar
+          </button>
+        }
+        @if (canGoToFacturacion()) {
+          <button mat-stroked-button
+                  (click)="onGoToFacturacion()"
+                  class="facturacion-button">
+            <mat-icon>receipt</mat-icon>
+            Ir a Facturación
+          </button>
+        }
+        <button mat-stroked-button
+                (click)="onGoToCita()"
+                class="cita-button">
+          <mat-icon>event</mat-icon>
+          Ver Cita
+        </button>
+      </div>
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="loading-container">
+      <mat-spinner diameter="50"></mat-spinner>
+      <p>Cargando consulta...</p>
+    </div>
+  } @else if (consulta()) {
+    <div class="consulta-content">
+      <!-- Información básica -->
+      <mat-card class="info-card">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>info</mat-icon>
+            Información General
+          </mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="label">Código:</span>
+              <span class="value">{{ consulta()?.codigo_consulta }}</span>
+            </div>
+            <div class="info-item">
+              <span class="label">Fecha:</span>
+              <span class="value">{{ formatearFecha(consulta()?.fecha_consulta || '') }}</span>
+            </div>
+            <div class="info-item">
+              <span class="label">Estado:</span>
+              <mat-chip [style.background-color]="getEstadoColor(consulta()?.estado || '')"
+                        [style.color]="'white'">
+                {{ consulta()?.estado }}
+              </mat-chip>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Información del paciente -->
+      <mat-card class="paciente-card">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>pets</mat-icon>
+            Información del Paciente
+          </mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="paciente-info">
+            <div class="paciente-avatar">
+              <mat-icon>pets</mat-icon>
+            </div>
+            <div class="paciente-details">
+              <h3>{{ consulta()?.mascota?.nombre }}</h3>
+              <p>{{ consulta()?.mascota?.especie }} - {{ consulta()?.mascota?.raza }}</p>
+              <p>Peso: {{ consulta()?.mascota?.peso || 'No especificado' }} kg</p>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Detalles de la consulta -->
+      <mat-card class="detalles-card">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>medical_services</mat-icon>
+            Detalles de la Consulta
+          </mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <mat-tab-group>
+            <mat-tab label="Información General">
+              <div class="tab-content">
+                <div class="field-group">
+                  <h4>Motivo de Consulta</h4>
+                  <p>{{ consulta()?.motivo || 'No especificado' }}</p>
+                </div>
+
+                <div class="field-group">
+                  <h4>Anamnesis</h4>
+                  <p>{{ consulta()?.anamnesis || 'No registrada' }}</p>
+                </div>
+
+                <div class="field-group">
+                  <h4>Examen Físico</h4>
+                  <p>{{ consulta()?.examen_fisico || 'No realizado' }}</p>
+                </div>
+              </div>
+            </mat-tab>
+
+            <mat-tab label="Signos Vitales">
+              <div class="tab-content">
+                <div class="vital-signs-grid">
+                  <div class="vital-sign">
+                    <span class="label">Temperatura:</span>
+                    <span class="value">{{ consulta()?.temperatura || 'N/A' }} °C</span>
+                  </div>
+                  <div class="vital-sign">
+                    <span class="label">Peso:</span>
+                    <span class="value">{{ consulta()?.peso || 'N/A' }} kg</span>
+                  </div>
+                  <div class="vital-sign">
+                    <span class="label">Frecuencia Cardíaca:</span>
+                    <span class="value">{{ consulta()?.frecuencia_cardiaca || 'N/A' }} lpm</span>
+                  </div>
+                  <div class="vital-sign">
+                    <span class="label">Frecuencia Respiratoria:</span>
+                    <span class="value">{{ consulta()?.frecuencia_respiratoria || 'N/A' }} rpm</span>
+                  </div>
+                </div>
+              </div>
+            </mat-tab>
+
+            <mat-tab label="Diagnóstico y Tratamiento">
+              <div class="tab-content">
+                <div class="field-group">
+                  <h4>Diagnóstico</h4>
+                  <p>{{ consulta()?.diagnostico || 'Pendiente' }}</p>
+                </div>
+
+                <div class="field-group">
+                  <h4>Tratamiento</h4>
+                  <p>{{ consulta()?.tratamiento || 'No prescrito' }}</p>
+                </div>
+
+                <div class="field-group">
+                  <h4>Medicamentos</h4>
+                  <div class="medicamentos-list">
+                    @if (consulta()?.medicamentos) {
+                      @if (consulta()?.medicamentos) {
+                        <p>{{ consulta()?.medicamentos }}</p>
+                      } @else {
+                        <p>No hay medicamentos prescritos</p>
+                      }
+                    } @else {
+                      <p>No hay medicamentos prescritos</p>
+                    }
+                  </div>
+                </div>
+
+                <div class="field-group">
+                  <h4>Recomendaciones</h4>
+                  <p>{{ consulta()?.recomendaciones || 'Ninguna' }}</p>
+                </div>
+              </div>
+            </mat-tab>
+          </mat-tab-group>
+        </mat-card-content>
+      </mat-card>
+    </div>
+  } @else {
+    <div class="no-data">
+      <mat-icon>assignment</mat-icon>
+      <h3>Consulta no encontrada</h3>
+      <p>La consulta solicitada no existe o ha sido eliminada</p>
+    </div>
+  }
+</div>

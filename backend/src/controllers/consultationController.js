@@ -344,9 +344,9 @@ export const getConsultations = async (req, res) => {
         const validOffset = Math.max(parseInt(offset), 0);
 
         let selectSQL = `
-            SELECT 
+            SELECT
                 c.*,
-                c.fecha as fecha_consulta,
+                TO_CHAR(c.fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD"T"HH24:MI:SS') as fecha_consulta,
                 m.nombre as nombre_mascota,
                 m.especie,
                 m.raza,

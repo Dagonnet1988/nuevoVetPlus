@@ -1,4 +1,4 @@
-import { body, param, query } from 'express-validator';
+import { body, param, query } from 'express-validator/lib/index.js';
 
 // Validación para generar contraseña temporal
 export const validateGenerateTempPassword = [

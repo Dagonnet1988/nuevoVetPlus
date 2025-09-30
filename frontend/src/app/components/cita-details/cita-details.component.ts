@@ -136,9 +136,37 @@ export class CitaDetailsComponent implements OnInit {
       } else {
         throw new Error(response?.message || 'Error actualizando estado');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error actualizando estado:', error);
-      this.snackBar.open('Error actualizando el estado', 'Cerrar', { duration: 3000 });
+
+      // Manejar errores específicos de validación de historia clínica
+      if (error.error?.code === 'CONSULTATION_REQUIRED') {
+        this.snackBar.open(
+          'No se puede completar la cita sin historia clínica. Primero debe crear la historia clínica.',
+          'Ir a Historia Clínica',
+          { duration: 6000 }
+        ).onAction().subscribe(() => {
+          this.onViewHistoriaClinica();
+        });
+      } else if (error.error?.code === 'CONSULTATION_NOT_COMPLETED') {
+        this.snackBar.open(
+          'La historia clínica debe estar completada antes de marcar la cita como completada.',
+          'Completar Historia Clínica',
+          { duration: 6000 }
+        ).onAction().subscribe(() => {
+          this.onViewHistoriaClinica();
+        });
+      } else if (error.status === 400) {
+        // Manejar errores 400 específicos
+        const errorMessage = error.error?.message || 'Error de validación en el servidor';
+        this.snackBar.open(errorMessage, 'Cerrar', { duration: 5000 });
+      } else if (error.status === 404) {
+        this.snackBar.open('Cita no encontrada', 'Cerrar', { duration: 3000 });
+      } else if (error.status === 500) {
+        this.snackBar.open('Error interno del servidor. Intenta nuevamente.', 'Cerrar', { duration: 3000 });
+      } else {
+        this.snackBar.open('Error actualizando el estado', 'Cerrar', { duration: 3000 });
+      }
     } finally {
       this.updating.set(false);
     }

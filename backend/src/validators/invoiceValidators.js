@@ -1,4 +1,4 @@
-import { body, param, query } from 'express-validator';
+import { body, param, query } from 'express-validator/lib/index.js';
 
 export const validateCreateInvoice = [
   body('id_cliente')

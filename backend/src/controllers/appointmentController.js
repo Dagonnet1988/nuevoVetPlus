@@ -786,6 +786,38 @@ export const updateAppointmentStatus = async (req, res) => {
             estado_actual: citaExistente.rows[0].estado
         });
 
+        // Validación especial: No permitir completar cita sin historia clínica completada
+        if (estadoDb === 'completada') {
+            console.log('🔍 Validando historia clínica antes de completar cita...');
+
+            // Verificar si existe consulta clínica para esta cita
+            const consultaResult = await query(
+                'SELECT id_consulta, estado FROM clinical.consultas_clinicas WHERE id_cita = $1',
+                [id]
+            );
+
+            if (consultaResult.rows.length === 0) {
+                console.log('❌ No se encontró consulta clínica para esta cita');
+                return res.status(400).json({
+                    success: false,
+                    message: 'No se puede completar la cita sin historia clínica. Primero debe crear y completar la historia clínica.',
+                    code: 'CONSULTATION_REQUIRED'
+                });
+            }
+
+            const consulta = consultaResult.rows[0];
+            if (consulta.estado !== 'Completada') {
+                console.log('❌ Consulta clínica no está completada:', consulta.estado);
+                return res.status(400).json({
+                    success: false,
+                    message: 'La historia clínica debe estar completada antes de marcar la cita como completada.',
+                    code: 'CONSULTATION_NOT_COMPLETED'
+                });
+            }
+
+            console.log('✅ Validación de historia clínica pasada');
+        }
+
         // Iniciar transacción para operaciones múltiples
         await query('BEGIN');
         console.log('🔄 Transacción iniciada');

@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { query } from '../config/database.js';
 import { generateToken } from '../middleware/auth.js';
-import { validationResult } from 'express-validator';
+import { validationResult } from 'express-validator/lib/index.js';
 
 /**
  * Controlador de autenticación

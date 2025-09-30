@@ -251,25 +251,6 @@
                   </td>
                 </ng-container>
 
-                <!-- Columna Motivo -->
-                <ng-container matColumnDef="motivo">
-                  <th mat-header-cell *matHeaderCellDef>Motivo</th>
-                  <td mat-cell *matCellDef="let consulta">
-                    <span [matTooltip]="consulta.motivo">
-                      {{ truncateText(consulta.motivo, 30) }}
-                    </span>
-                  </td>
-                </ng-container>
-
-                <!-- Columna Diagnóstico -->
-                <ng-container matColumnDef="diagnostico">
-                  <th mat-header-cell *matHeaderCellDef>Diagnóstico</th>
-                  <td mat-cell *matCellDef="let consulta">
-                    <span [matTooltip]="consulta.diagnostico">
-                      {{ truncateText(consulta.diagnostico || 'Sin diagnóstico', 30) }}
-                    </span>
-                  </td>
-                </ng-container>
 
                 <!-- Columna Estado -->
                 <ng-container matColumnDef="estado">
@@ -286,7 +267,7 @@
                 <ng-container matColumnDef="acciones">
                   <th mat-header-cell *matHeaderCellDef>Acciones</th>
                   <td mat-cell *matCellDef="let consulta">
-                    <button mat-icon-button [matMenuTriggerFor]="consultaMenu">
+                    <button mat-icon-button [matMenuTriggerFor]="consultaMenu" (click)="$event.stopPropagation()">
                       <mat-icon>more_vert</mat-icon>
                     </button>
                     <mat-menu #consultaMenu="matMenu">

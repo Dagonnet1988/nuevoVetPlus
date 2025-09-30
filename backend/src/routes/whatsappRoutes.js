@@ -5,7 +5,7 @@
  */
 
 import express from 'express';
-import { body, param, query } from 'express-validator';
+import { body, param, query } from 'express-validator/lib/index.js';
 import { authenticateToken, authorize } from '../middleware/auth.js';
 import {
     getWhatsAppStatus,

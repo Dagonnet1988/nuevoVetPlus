@@ -1,7 +1,7 @@
 import express from 'express';
 import AuditController from '../controllers/auditController.js';
 import { authenticateToken, authorize } from '../middleware/auth.js';
-import { body, query, validationResult } from 'express-validator';
+import { body, query, validationResult } from 'express-validator/lib/index.js';
 
 const router = express.Router();
 

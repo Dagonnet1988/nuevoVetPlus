@@ -5,7 +5,7 @@
  */
 
 import express from 'express';
-import { body, param, query } from 'express-validator';
+import { body, param, query } from 'express-validator/lib/index.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';

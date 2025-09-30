@@ -1,5 +1,5 @@
 import { query } from '../config/database.js';
-import { validationResult } from 'express-validator';
+import { validationResult } from 'express-validator/lib/index.js';
 
 // Registrar una sesión de terapia usada
 export async function recordTherapySession(req, res) {

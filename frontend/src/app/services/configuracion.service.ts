@@ -1,7 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { Observable, of } from 'rxjs';
+import { map, catchError } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 
 // ===============================
@@ -382,29 +382,78 @@ export class ConfiguracionService {
         };
         this.googleCalendarConfig.set(defaultConfig);
         return defaultConfig;
+      }),
+      catchError((error) => {
+        console.warn('Error obteniendo configuración de Google Calendar, usando configuración por defecto:', error);
+        // Si hay error, devolver configuración por defecto
+        const defaultConfig: GoogleCalendarConfig = {
+          activo: false,
+          cliente_id: '',
+          cliente_secret: '',
+          calendar_id: 'primary',
+          sync_automatico: true,
+          intervalo_sync: 30,
+          prefijo_eventos: 'VetPlus',
+          mapeo_colores: {
+            consulta: '#2196f3',
+            cirugia: '#f44336',
+            vacunacion: '#4caf50',
+            control: '#ff9800'
+          },
+          configuracion_eventos: {
+            duracion_default: 30,
+            recordatorio_default: 30,
+            incluir_cliente: true,
+            incluir_mascota: true,
+            incluir_veterinario: true
+          }
+        };
+        this.googleCalendarConfig.set(defaultConfig);
+        return of(defaultConfig);
       })
     );
   }
 
   updateGoogleCalendarConfig(config: GoogleCalendarConfig): Observable<GoogleCalendarConfig> {
-    // Transformar los datos al formato que espera el backend
+    // Transformar los datos al formato que espera el backend simple
     const backendConfig = {
-      client_id: config.cliente_id,
-      client_secret: config.cliente_secret,
-      redirect_uri: `${environment.backendUrl}/api/google-calendar/callback`,
+      activo: config.activo,
+      cliente_id: config.cliente_id,
+      cliente_secret: config.cliente_secret,
       calendar_id: config.calendar_id || 'primary',
-      timezone: 'America/Bogota',
-      notification_email: true,
-      notification_popup: true,
-      default_reminder_minutes: config.configuracion_eventos?.recordatorio_default || 30,
-      email_reminder_hours: 24
+      sync_automatico: config.sync_automatico,
+      prefijo_eventos: config.prefijo_eventos || 'VetPlus'
     };
 
-    return this.http.post<any>(`${this.API_URL}/google-calendar/configure`, backendConfig).pipe(
+    return this.http.post<any>(`${this.API_URL}/google-calendar/simple/configure`, backendConfig).pipe(
       map((response: any) => {
         if (response.success && response.data) {
-          this.googleCalendarConfig.set(response.data);
-          return response.data;
+          // Transformar respuesta del backend al formato del frontend
+          const frontendConfig: GoogleCalendarConfig = {
+            id: response.data.id_config,
+            activo: response.data.activo,
+            cliente_id: response.data.cliente_id,
+            cliente_secret: response.data.cliente_secret,
+            calendar_id: response.data.calendar_id,
+            sync_automatico: response.data.sync_automatico,
+            intervalo_sync: 30,
+            prefijo_eventos: response.data.prefijo_eventos || 'VetPlus',
+            mapeo_colores: {
+              consulta: '#2196f3',
+              cirugia: '#f44336',
+              vacunacion: '#4caf50',
+              control: '#ff9800'
+            },
+            configuracion_eventos: {
+              duracion_default: 30,
+              recordatorio_default: 30,
+              incluir_cliente: true,
+              incluir_mascota: true,
+              incluir_veterinario: true
+            }
+          };
+          this.googleCalendarConfig.set(frontendConfig);
+          return frontendConfig;
         }
         throw new Error('Error actualizando configuración de Google Calendar');
       })
@@ -412,7 +461,7 @@ export class ConfiguracionService {
   }
 
   getGoogleOAuthUrl(): Observable<string> {
-    return this.http.get<any>(`${this.API_URL}/google-calendar/auth-url`).pipe(
+    return this.http.get<any>(`${this.API_URL}/google-calendar/simple/auth-url`).pipe(
       map((response: any) => {
         if (response.success && response.authUrl) {
           return response.authUrl;
@@ -423,10 +472,22 @@ export class ConfiguracionService {
   }
 
   getGoogleCalendarStatus(): Observable<GoogleCalendarStatus> {
-    return this.http.get<any>(`${this.API_URL}/google-calendar/sync-status`).pipe(
+    return this.http.get<any>(`${this.API_URL}/google-calendar/simple/status`).pipe(
       map((response: any) => {
         if (response.success && response.data) {
-          return response.data;
+          // Transformar respuesta del backend al formato esperado por el frontend
+          const data = response.data;
+          return {
+            conectado: data.conectado,
+            ultimo_sync: data.ultimo_sync,
+            eventos_sincronizados: data.eventos_sincronizados || 0,
+            errores_recientes: data.errores_recientes || [],
+            calendario_info: data.calendario_info || {
+              nombre: 'No configurado',
+              descripcion: 'No hay configuración',
+              zona_horaria: 'UTC'
+            }
+          };
         }
         throw new Error('Error obteniendo estado de Google Calendar');
       })
@@ -438,11 +499,11 @@ export class ConfiguracionService {
   }
 
   testGoogleCalendarConnection(): Observable<any> {
-    return this.http.post<any>(`${this.API_URL}/google-calendar/test-connection`, {});
+    return this.http.post<any>(`${this.API_URL}/google-calendar/simple/test-connection`, {});
   }
 
   disableGoogleCalendar(): Observable<any> {
-    return this.http.post<any>(`${this.API_URL}/google-calendar/disable`, {});
+    return this.http.post<any>(`${this.API_URL}/google-calendar/simple/disable`, {});
   }
 
   syncGoogleCalendar(): Observable<any> {

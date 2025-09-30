@@ -5,7 +5,7 @@
  */
 
 import { query } from '../config/database.js';
-import { validationResult } from 'express-validator';
+import { validationResult } from 'express-validator/lib/index.js';
 import fs from 'fs/promises';
 import path from 'path';
 

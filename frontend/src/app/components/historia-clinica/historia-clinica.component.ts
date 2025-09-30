@@ -79,8 +79,6 @@ export class HistoriaClinicaComponent implements OnInit {
     'codigo_consulta',
     'mascota',
     'veterinario',
-    'motivo',
-    'diagnostico',
     'estado',
     'acciones'
   ];

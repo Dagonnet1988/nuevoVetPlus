@@ -1,4 +1,4 @@
-import { body, query, param } from 'express-validator';
+import { body, query, param } from 'express-validator/lib/index.js';
 
 /**
  * Validador para crear paciente completo (cliente + mascota)

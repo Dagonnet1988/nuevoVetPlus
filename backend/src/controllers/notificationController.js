@@ -4,7 +4,7 @@
  * @author VetPlus Development Team
  */
 
-import { validationResult } from 'express-validator';
+import { validationResult } from 'express-validator/lib/index.js';
 import { query } from '../config/database.js';
 import autoNotificationService from '../services/autoNotificationService.js';
 

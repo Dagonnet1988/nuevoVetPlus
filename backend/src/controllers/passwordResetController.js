@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { query } from '../config/database.js';
-import { validationResult } from 'express-validator';
+import { validationResult } from 'express-validator/lib/index.js';
 import { v4 as uuidv4 } from 'uuid';
 
 /**

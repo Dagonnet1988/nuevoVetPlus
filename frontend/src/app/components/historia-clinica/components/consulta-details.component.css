@@ -1,0 +1,241 @@
+.consulta-details-container {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.back-button {
+  margin-right: 8px;
+}
+
+.title-section h1 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-icon {
+  color: #1976d2;
+}
+
+.page-subtitle {
+  margin: 4px 0 0 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.actions-section {
+  margin-left: auto;
+  display: flex;
+  gap: 12px;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+  gap: 16px;
+}
+
+.consulta-content {
+  display: grid;
+  gap: 24px;
+}
+
+.info-card, .paciente-card, .detalles-card {
+  margin-bottom: 16px;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-item .label {
+  font-weight: 500;
+  color: #666;
+  font-size: 14px;
+}
+
+.info-item .value {
+  font-size: 16px;
+}
+
+.paciente-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.paciente-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background-color: #e3f2fd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.paciente-avatar mat-icon {
+  font-size: 32px;
+  color: #1976d2;
+}
+
+.paciente-details h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.paciente-details p {
+  margin: 4px 0;
+  color: #666;
+}
+
+.tab-content {
+  padding: 24px 0;
+}
+
+.field-group {
+  margin-bottom: 24px;
+}
+
+.field-group h4 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+}
+
+.field-group p {
+  margin: 0;
+  line-height: 1.5;
+  color: #555;
+}
+
+.vital-signs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.vital-sign {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+}
+
+.vital-sign .label {
+  font-weight: 500;
+  color: #666;
+}
+
+.vital-sign .value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1976d2;
+}
+
+.medicamentos-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.medicamento-item {
+  padding: 12px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #1976d2;
+}
+
+.medicamento-item strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #333;
+}
+
+.medicamento-item span {
+  display: inline-block;
+  margin-right: 16px;
+  font-size: 14px;
+  color: #666;
+}
+
+.no-data {
+  text-align: center;
+  padding: 48px;
+  color: #666;
+}
+
+.no-data mat-icon {
+  font-size: 64px;
+  height: 64px;
+  width: 64px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.no-data h3 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+}
+
+.no-data p {
+  margin: 0;
+  font-size: 14px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .consulta-details-container {
+    padding: 16px;
+  }
+
+  .header-content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .actions-section {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .info-grid, .vital-signs-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .paciente-info {
+    flex-direction: column;
+    text-align: center;
+  }
+}

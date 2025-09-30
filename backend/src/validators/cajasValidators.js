@@ -1,4 +1,4 @@
-import { body, param, query, validationResult } from 'express-validator';
+import { body, param, query, validationResult } from 'express-validator/lib/index.js';
 
 // Middleware para manejar errores de validación
 export const handleValidationErrors = (req, res, next) => {
