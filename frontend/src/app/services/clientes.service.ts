@@ -36,9 +36,10 @@ export class ClientesService {
     return this.http.get<any>(this.API_URL, { params }).pipe(
       map((response: any) => {
         if (response.success && response.data) {
+          // El backend devuelve { clients: [...], pagination: {...} }
           return {
-            data: Array.isArray(response.data) ? response.data : [],
-            pagination: response.pagination || {}
+            data: response.data.clients || [],
+            pagination: response.data.pagination || {}
           };
         }
         return { data: [], pagination: {} };

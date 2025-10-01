@@ -1,0 +1,304 @@
+<div class="nueva-factura">
+  <div class="header">
+    <h1>
+      <mat-icon>receipt_long</mat-icon>
+      Nueva Factura
+    </h1>
+    <p>Busque un cliente y agregue productos para crear una factura</p>
+  </div>
+
+  <!-- Sección de Cliente -->
+  <mat-card class="cliente-card">
+    <mat-card-header>
+      <mat-card-title>
+        <mat-icon>person</mat-icon>
+        Información del Cliente
+      </mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <!-- Barra de búsqueda -->
+      <mat-form-field appearance="outline" class="cliente-search">
+        <mat-label>Buscar Cliente Existente</mat-label>
+        <input matInput
+               #clienteSearchInput
+               [matAutocomplete]="clienteAuto"
+               placeholder="Nombre, documento o teléfono"
+               (input)="onClienteSearchInput($any($event.target).value)">
+        <mat-icon matSuffix>search</mat-icon>
+      </mat-form-field>
+
+      <mat-autocomplete #clienteAuto="matAutocomplete"
+                       [displayWith]="displayCliente"
+                       (optionSelected)="onClienteSeleccionado($event)">
+        @for (cliente of clientesFiltrados$ | async; track cliente.id_cliente) {
+          <mat-option [value]="cliente">
+            <div class="cliente-option">
+              <strong>{{ cliente.nombre }}</strong>
+              <small>📄 {{ cliente.cedula || 'Sin cédula' }}</small>
+              @if (cliente.telefono) {
+                <small>📞 {{ cliente.telefono }}</small>
+              }
+            </div>
+          </mat-option>
+        }
+      </mat-autocomplete>
+
+      <!-- Formulario de cliente -->
+      <form [formGroup]="clienteForm" class="cliente-form">
+        <div class="form-row">
+          <mat-form-field appearance="outline">
+            <mat-label>Nombre Completo *</mat-label>
+            <input matInput formControlName="nombre" placeholder="Ingrese el nombre completo">
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Documento/Cédula</mat-label>
+            <input matInput formControlName="cedula" placeholder="Número de documento">
+          </mat-form-field>
+        </div>
+
+        <div class="form-row">
+          <mat-form-field appearance="outline">
+            <mat-label>Teléfono</mat-label>
+            <input matInput formControlName="telefono" placeholder="Número de teléfono">
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Email</mat-label>
+            <input matInput type="email" formControlName="email" placeholder="correo@ejemplo.com">
+          </mat-form-field>
+        </div>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Dirección</mat-label>
+          <textarea matInput formControlName="direccion" rows="2" placeholder="Dirección completa"></textarea>
+        </mat-form-field>
+
+        <!-- Campo de paciente (opcional) -->
+        @if (clienteSeleccionado()) {
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Paciente (Opcional)</mat-label>
+            <mat-select formControlName="id_mascota">
+              <mat-option [value]="''">Sin paciente específico</mat-option>
+              @for (mascota of mascotasCliente(); track mascota.id_mascota) {
+                <mat-option [value]="mascota.id_mascota">
+                  {{ mascota.nombre }} - {{ mascota.especie }} ({{ mascota.raza }})
+                </mat-option>
+              }
+            </mat-select>
+            <mat-hint>Selecciona una mascota del cliente para asociarla a la factura</mat-hint>
+          </mat-form-field>
+        }
+      </form>
+
+      @if (clienteSeleccionado()) {
+        <div class="cliente-seleccionado">
+          <mat-icon color="primary">check_circle</mat-icon>
+          <span>Cliente seleccionado: <strong>{{ clienteSeleccionado()?.nombre }}</strong></span>
+        </div>
+      } @else {
+        <div class="cliente-manual">
+          <mat-icon color="accent">info</mat-icon>
+          <span>Complete los datos manualmente. El cliente se creará al guardar la factura.</span>
+        </div>
+      }
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Sección de Productos -->
+  <mat-card class="productos-card">
+    <mat-card-header>
+      <mat-card-title>
+        <mat-icon>shopping_cart</mat-icon>
+        Productos de la Factura
+      </mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <form [formGroup]="facturaForm">
+        <!-- Barra de búsqueda de productos -->
+        <div class="producto-search-section">
+          <mat-form-field appearance="outline" class="producto-search">
+            <mat-label>Buscar Producto</mat-label>
+            <input matInput
+                   #productoSearchInput
+                   [matAutocomplete]="productoAuto"
+                   placeholder="Nombre, código o descripción del producto"
+                   (input)="onProductoInput($any($event.target).value)">
+            <mat-icon matSuffix>search</mat-icon>
+          </mat-form-field>
+
+          <mat-autocomplete #productoAuto="matAutocomplete"
+                           [displayWith]="displayProducto"
+                           (optionSelected)="onProductoSeleccionado($event)">
+            @for (producto of productosFiltrados$(); track producto.id_producto) {
+              <mat-option [value]="producto">
+                <div class="producto-option">
+                  <div class="producto-info">
+                    <strong>{{ producto.nombre }}</strong>
+                    <small class="producto-codigo">Código: {{ producto.codigo || 'N/A' }}</small>
+                    @if (producto.descripcion) {
+                      <small class="producto-descripcion">{{ producto.descripcion }}</small>
+                    }
+                  </div>
+                  <div class="producto-precio-stock">
+                    <span class="precio">${{ producto.precio_venta | number:'1.0-0' }}</span>
+                    @if (producto.inventariable) {
+                      <small class="stock">Stock: {{ producto.stock_actual }}</small>
+                    }
+                  </div>
+                </div>
+              </mat-option>
+            }
+          </mat-autocomplete>
+        </div>
+
+        <!-- Lista de productos agregados -->
+        <div formArrayName="lineas" class="productos-agregados">
+          @for (linea of lineasArray.controls; track $index) {
+            <div [formGroupName]="$index" class="producto-row">
+              <!-- Información del producto -->
+              <div class="producto-info-display">
+                <div class="producto-nombre">
+                  <strong>{{ linea.get('descripcion')?.value }}</strong>
+                  @if (linea.get('codigo')?.value) {
+                    <small class="codigo">({{ linea.get('codigo')?.value }})</small>
+                  }
+                </div>
+                @if (linea.get('presentacion')?.value) {
+                  <small class="presentacion">{{ linea.get('presentacion')?.value }}</small>
+                }
+              </div>
+
+              <!-- Controles de cantidad y precio -->
+              <div class="producto-controles">
+                <mat-form-field appearance="outline" class="campo-cantidad">
+                  <mat-label>Cantidad</mat-label>
+                  <input matInput
+                         type="number"
+                         formControlName="cantidad"
+                         min="1"
+                         step="1"
+                         (input)="validarStock($index)"
+                         [max]="linea.get('stock_disponible')?.value || 999">
+                  @if (linea.get('stock_disponible')?.value !== null) {
+                    <mat-hint>Stock: {{ linea.get('stock_disponible')?.value }}</mat-hint>
+                  }
+                </mat-form-field>
+
+                <mat-form-field appearance="outline" class="campo-presentacion">
+                  <mat-label>Presentación</mat-label>
+                  <div formControlName="presentacion">{{ linea.get('presentacion')?.value }}</div>
+                  <mat-hint>Presentación</mat-hint>
+                </mat-form-field>
+
+                <div class="precio-display">
+                  <span class="precio-unitario">${{ linea.get('precio_unitario')?.value | number:'1.0-0' }}</span>
+                  <small>c/u</small>
+                </div>
+
+                <mat-form-field appearance="outline" class="campo-descuento">
+                  <mat-label>Descuento %</mat-label>
+                  <input matInput
+                         type="number"
+                         formControlName="descuento"
+                         min="0"
+                         max="100"
+                         step="0.01">
+                </mat-form-field>
+
+                <div class="subtotal-display">
+                  <span class="subtotal-label">Subtotal:</span>
+                  <span class="subtotal-value">${{ calcularSubtotalLinea($index) | number:'1.0-0' }}</span>
+                </div>
+
+                <button mat-icon-button
+                        color="warn"
+                        (click)="removerProducto($index)"
+                        matTooltip="Eliminar producto">
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </div>
+            </div>
+
+            @if ($index < lineasArray.length - 1) {
+              <mat-divider></mat-divider>
+            }
+          }
+        </div>
+
+        <!-- Configuración de pago -->
+        @if (lineasArray.length > 0) {
+          <mat-divider></mat-divider>
+
+          <div class="factura-config">
+            <mat-form-field appearance="outline">
+              <mat-label>Método de Pago</mat-label>
+              <mat-select formControlName="metodo_pago">
+                <mat-option value="Efectivo">💵 Efectivo</mat-option>
+                <mat-option value="Tarjeta">💳 Tarjeta</mat-option>
+                <mat-option value="Transferencia">🏦 Transferencia</mat-option>
+                <mat-option value="Cheque">📄 Cheque</mat-option>
+                <mat-option value="Crédito">⏰ Crédito</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            @if (mostrarCampoCaja()) {
+              <mat-form-field appearance="outline">
+                <mat-label>Caja</mat-label>
+                <mat-select formControlName="id_caja">
+                  @for (caja of cajas(); track caja.id_caja) {
+                    <mat-option [value]="caja.id_caja">
+                      {{ caja.nombre }}
+                    </mat-option>
+                  }
+                </mat-select>
+                <mat-hint>Seleccione la caja donde se registrará el pago</mat-hint>
+              </mat-form-field>
+            } @else {
+              <div class="credito-info">
+                <mat-icon color="accent">info</mat-icon>
+                <span>Las facturas a crédito no afectan el saldo de caja hasta su pago</span>
+              </div>
+            }
+
+            <mat-form-field appearance="outline">
+              <mat-label>Notas (Opcional)</mat-label>
+              <textarea matInput formControlName="notas" rows="2"></textarea>
+            </mat-form-field>
+          </div>
+
+          <!-- Total -->
+          <div class="total-section">
+            <div class="total-line">
+              <span class="total-label">Total de la Factura:</span>
+              <span class="total-value">${{ calcularTotal() | number:'1.0-0' }}</span>
+            </div>
+          </div>
+        }
+
+        @if (lineasArray.length === 0) {
+          <div class="empty-state">
+            <mat-icon>shopping_cart</mat-icon>
+            <h4>No hay productos agregados</h4>
+            <p>Busque y seleccione productos para agregarlos a la factura</p>
+          </div>
+        }
+      </form>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Acciones -->
+  <div class="actions">
+    <button mat-button (click)="cancelar()">
+      <mat-icon>cancel</mat-icon>
+      Cancelar
+    </button>
+    <button mat-raised-button
+            color="primary"
+            (click)="guardarFactura()"
+            [disabled]="!clienteSeleccionado() || lineasArray.length === 0 || guardando()">
+      <mat-icon *ngIf="guardando()">refresh</mat-icon>
+      {{ guardando() ? 'Creando...' : 'Crear Factura' }}
+    </button>
+  </div>
+</div>

@@ -10,7 +10,7 @@ import { environment } from '../../environments/environment';
 
 export interface EmpresaConfig {
   id?: string;
-  nombre: string;
+  nombre_empresa: string;
   nit: string;
   direccion: string;
   telefono: string;
@@ -217,9 +217,44 @@ export interface WhatsAppMessage {
 
   // Contexto del mensaje
   contexto?: {
-    tipo: 'cita' | 'factura' | 'formula' | 'general';
+    tipo: 'confirmacion' | 'recordatorio' | 'factura' | 'formula' | 'cancelacion' | 'manual';
     referencia_id?: string;
     cliente_nombre?: string;
+  };
+}
+
+export interface WhatsAppLimites {
+  limite_diario: number;
+  limite_por_hora: number;
+  intervalo_minimo: number; // segundos
+  max_reintentos: number;
+
+  // Límites por tipo
+  limitar_confirmaciones: boolean;
+  limite_confirmaciones_dia: number;
+  limitar_recordatorios: boolean;
+  limite_recordatorios_dia: number;
+  limitar_facturas: boolean;
+  limite_facturas_dia: number;
+  limitar_manuales: boolean;
+  limite_manuales_dia: number;
+
+  // Pausas automáticas
+  pausas_automaticas: boolean;
+  pausa_limite_hora: number; // minutos
+  pausa_limite_dia: number; // horas
+}
+
+export interface WhatsAppEstadoLimites {
+  mensajes_hoy: number;
+  mensajes_hora: number;
+  pausado: boolean;
+  pausa_hasta?: Date;
+  limites_por_tipo: {
+    confirmaciones: number;
+    recordatorios: number;
+    facturas: number;
+    manuales: number;
   };
 }
 
@@ -273,18 +308,18 @@ export class ConfiguracionService {
 
     return this.http.post<any>(`${this.API_URL}/admin/empresa/logo`, formData).pipe(
       map((response: any) => {
-        if (response.success && response.logo_url) {
+        if (response.success && response.data?.logo_url) {
           // Actualizar la configuración local
           const currentConfig = this.empresaConfig();
           if (currentConfig) {
             this.empresaConfig.set({
               ...currentConfig,
-              logo_url: response.logo_url
+              logo_url: response.data.logo_url
             });
           }
-          return response.logo_url;
+          return response.data.logo_url;
         }
-        throw new Error('Error subiendo logo');
+        throw new Error(response.message || 'Error subiendo logo');
       })
     );
   }
@@ -619,6 +654,65 @@ export class ConfiguracionService {
   }
 
   // ===============================
+  // LÍMITES Y CONTROL DE WHATSAPP
+  // ===============================
+
+  getWhatsAppLimites(): Observable<WhatsAppLimites> {
+    return this.http.get<any>(`${this.API_URL}/admin/empresa/whatsapp/limites`).pipe(
+      map((response: any) => {
+        if (response.success && response.data) {
+          return response.data;
+        }
+        throw new Error('Error obteniendo límites de WhatsApp');
+      })
+    );
+  }
+
+  updateWhatsAppLimites(limites: WhatsAppLimites): Observable<WhatsAppLimites> {
+    return this.http.put<any>(`${this.API_URL}/admin/empresa/whatsapp/limites`, limites).pipe(
+      map((response: any) => {
+        if (response.success && response.data) {
+          return response.data;
+        }
+        throw new Error('Error actualizando límites de WhatsApp');
+      })
+    );
+  }
+
+  getWhatsAppEstadoLimites(): Observable<WhatsAppEstadoLimites> {
+    return this.http.get<any>(`${this.API_URL}/admin/empresa/whatsapp/estado-limites`).pipe(
+      map((response: any) => {
+        if (response.success && response.data) {
+          return response.data;
+        }
+        throw new Error('Error obteniendo estado de límites');
+      })
+    );
+  }
+
+  resetWhatsAppContadores(): Observable<any> {
+    return this.http.post<any>(`${this.API_URL}/admin/empresa/whatsapp/reset-contadores`, {}).pipe(
+      map((response: any) => {
+        if (response.success) {
+          return response;
+        }
+        throw new Error('Error reseteando contadores');
+      })
+    );
+  }
+
+  reanudarWhatsAppEnvios(): Observable<any> {
+    return this.http.post<any>(`${this.API_URL}/admin/empresa/whatsapp/reanudar`, {}).pipe(
+      map((response: any) => {
+        if (response.success) {
+          return response;
+        }
+        throw new Error('Error reanudando envíos');
+      })
+    );
+  }
+
+  // ===============================
   // ESTADO DEL SISTEMA
   // ===============================
 
@@ -660,7 +754,7 @@ export class ConfiguracionService {
   validateEmpresaConfig(config: EmpresaConfig): string[] {
     const errors: string[] = [];
 
-    if (!config.nombre?.trim()) errors.push('El nombre de la empresa es requerido');
+    if (!config.nombre_empresa?.trim()) errors.push('El nombre de la empresa es requerido');
     if (!config.nit?.trim()) errors.push('El NIT es requerido');
     if (!config.direccion?.trim()) errors.push('La dirección es requerida');
     if (!config.telefono?.trim()) errors.push('El teléfono es requerido');

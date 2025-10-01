@@ -188,7 +188,7 @@ class GoogleCalendarSimpleController {
             <h2>❌ Error de Autorización</h2>
             <p class="error">Error: ${error}</p>
             <p>Puedes cerrar esta ventana y intentar nuevamente.</p>
-            <button class="close-btn" onclick="closeWindow()">Cerrar Ventana</button>
+            <button class="close-btn" id="closeErrorBtn2">Cerrar Ventana</button>
             <script>
               function closeWindow() {
                 try {
@@ -202,6 +202,12 @@ class GoogleCalendarSimpleController {
                   console.error('Error cerrando ventana:', e);
                   window.location.href = '${process.env.FRONTEND_URL || 'http://localhost:4200'}/configuracion/google-calendar';
                 }
+              }
+
+              // Configurar event listener para botón (sin usar onclick para evitar CSP)
+              const closeErrorBtn2 = document.getElementById('closeErrorBtn2');
+              if (closeErrorBtn2) {
+                closeErrorBtn2.addEventListener('click', closeWindow);
               }
 
               // Auto-cerrar después de 5 segundos
@@ -245,7 +251,7 @@ class GoogleCalendarSimpleController {
             <h2>❌ Error</h2>
             <p class="error">No se recibió código de autorización.</p>
             <p>Puedes cerrar esta ventana y intentar nuevamente.</p>
-            <button class="close-btn" onclick="closeWindow()">Cerrar Ventana</button>
+            <button class="close-btn" id="closeErrorBtn">Cerrar Ventana</button>
             <script>
               function closeWindow() {
                 try {
@@ -259,6 +265,12 @@ class GoogleCalendarSimpleController {
                   console.error('Error cerrando ventana:', e);
                   window.location.href = '${process.env.FRONTEND_URL || 'http://localhost:4200'}/configuracion/google-calendar';
                 }
+              }
+
+              // Configurar event listener para botón (sin usar onclick para evitar CSP)
+              const closeErrorBtn = document.getElementById('closeErrorBtn');
+              if (closeErrorBtn) {
+                closeErrorBtn.addEventListener('click', closeWindow);
               }
 
               // Auto-cerrar después de 5 segundos
@@ -326,117 +338,103 @@ class GoogleCalendarSimpleController {
         tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : null
       ]);
 
-      // Página de éxito simple
+      // Página de éxito simplificada sin JavaScript inline (compatible con CSP)
       res.send(`
         <!DOCTYPE html>
         <html>
         <head>
           <title>Autorización Exitosa - VetPlus</title>
+          <meta http-equiv="refresh" content="5;url=${process.env.FRONTEND_URL || 'http://localhost:4200'}/configuracion/google-calendar">
           <style>
-            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
-            .success { color: #2e7d32; font-size: 18px; }
-            .countdown { font-size: 14px; color: #666; }
-            .manual-close { margin-top: 20px; }
-            .close-btn {
-              background: #1976d2;
+            body {
+              font-family: Arial, sans-serif;
+              text-align: center;
+              padding: 50px;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
               color: white;
-              border: none;
-              padding: 10px 20px;
-              border-radius: 4px;
-              cursor: pointer;
-              font-size: 14px;
+              min-height: 100vh;
+              margin: 0;
             }
-            .close-btn:hover { background: #1565c0; }
+            .container {
+              background: rgba(255, 255, 255, 0.1);
+              border-radius: 15px;
+              padding: 40px;
+              box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+              backdrop-filter: blur(10px);
+              max-width: 500px;
+              margin: 0 auto;
+            }
+            .success-icon {
+              font-size: 64px;
+              margin-bottom: 20px;
+            }
+            .success { color: #4CAF50; font-size: 24px; font-weight: bold; }
+            .message { font-size: 16px; margin: 20px 0; }
+            .countdown {
+              font-size: 18px;
+              color: #FFD700;
+              font-weight: bold;
+              margin: 20px 0;
+            }
+            .manual-actions {
+              margin-top: 30px;
+            }
+            .action-link {
+              display: inline-block;
+              background: #4CAF50;
+              color: white;
+              text-decoration: none;
+              padding: 15px 30px;
+              border-radius: 8px;
+              font-size: 16px;
+              font-weight: bold;
+              transition: all 0.3s ease;
+              margin: 10px;
+            }
+            .action-link:hover {
+              background: #45a049;
+              transform: translateY(-2px);
+              box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            }
+            .secondary-link {
+              background: #2196F3;
+            }
+            .secondary-link:hover {
+              background: #1976D2;
+            }
+            .status {
+              font-size: 14px;
+              color: #E0E0E0;
+              margin-top: 20px;
+            }
+            .help-text {
+              font-size: 12px;
+              color: #B0B0B0;
+              margin-top: 15px;
+            }
           </style>
         </head>
         <body>
-          <h2>✅ Autorización Exitosa</h2>
-          <p class="success">Google Calendar se ha conectado correctamente.</p>
-          <p class="countdown">Esta ventana se cerrará automáticamente en <span id="countdown">3</span> segundos.</p>
-          <div class="manual-close">
-            <button class="close-btn" onclick="closeWindow()">Cerrar Ventana</button>
+          <div class="container">
+            <div class="success-icon">✅</div>
+            <h2 class="success">¡Autorización Exitosa!</h2>
+            <p class="message">Google Calendar se ha conectado correctamente a VetPlus.</p>
+            <p class="countdown">Redirigiendo automáticamente en 5 segundos...</p>
+
+            <div class="manual-actions">
+              <a href="javascript:window.close()" class="action-link">Cerrar Ventana</a>
+              <a href="${process.env.FRONTEND_URL || 'http://localhost:4200'}/configuracion/google-calendar" class="action-link secondary-link">Ir a VetPlus</a>
+            </div>
+
+            <div class="status">Configuración completada exitosamente</div>
+            <div class="help-text">
+              Si la ventana no se cierra automáticamente, use los botones de arriba.<br>
+              También puede presionar Escape para cerrar.
+            </div>
           </div>
-          <script>
-            console.log('🎯 Página de éxito cargada, iniciando contador...');
 
-            let count = 3;
-            const countdownElement = document.getElementById('countdown');
-
-            function closeWindow() {
-              console.log('🔄 Intentando cerrar ventana...');
-
-              try {
-                // Comunicar con ventana padre si existe
-                if (window.opener && !window.opener.closed) {
-                  console.log('📤 Enviando mensaje a ventana padre');
-                  window.opener.postMessage({
-                    type: 'google-calendar-success',
-                    success: true,
-                    message: 'Google Calendar configurado exitosamente',
-                    timestamp: new Date().toISOString()
-                  }, '*');
-                }
-
-                // Intentar cerrar esta ventana
-                console.log('🚪 Cerrando ventana popup');
-                window.close();
-
-                // Verificar si se cerró después de un breve delay
-                setTimeout(() => {
-                  if (!window.closed) {
-                    console.log('⚠️ Ventana no se cerró automáticamente, redirigiendo...');
-                    window.location.href = '${process.env.FRONTEND_URL || 'http://localhost:4200'}/configuracion/google-calendar';
-                  } else {
-                    console.log('✅ Ventana cerrada exitosamente');
-                  }
-                }, 500);
-
-              } catch (e) {
-                console.error('❌ Error cerrando ventana:', e);
-                // Fallback: redirigir inmediatamente
-                window.location.href = '${process.env.FRONTEND_URL || 'http://localhost:4200'}/configuracion/google-calendar';
-              }
-            }
-
-            // Función para actualizar contador
-            function updateCountdown() {
-              count--;
-              console.log('⏰ Contador:', count);
-
-              if (countdownElement) {
-                countdownElement.textContent = count;
-              }
-
-              if (count <= 0) {
-                console.log('🎯 Contador llegó a 0, cerrando ventana...');
-                closeWindow();
-              }
-            }
-
-            // Iniciar contador automático
-            console.log('⏰ Iniciando contador automático');
-            const timer = setInterval(updateCountdown, 1000);
-
-            // Permitir cerrar manualmente con Escape
-            document.addEventListener('keydown', (e) => {
-              if (e.key === 'Escape') {
-                console.log('⎋ Tecla Escape presionada, cerrando ventana...');
-                clearInterval(timer);
-                closeWindow();
-              }
-            });
-
-            // Auto-cerrar después de 10 segundos como máximo
-            setTimeout(() => {
-              if (!window.closed) {
-                console.log('⏰ Timeout de 10 segundos alcanzado, cerrando ventana...');
-                clearInterval(timer);
-                closeWindow();
-              }
-            }, 10000);
-
-            console.log('✅ Script de cierre de ventana inicializado');
-          </script>
+          <!-- Script externo para funcionalidades básicas -->
+          <script src="/api/google-calendar/static/callback-script.js"></script>
         </body>
         </html>
       `);
@@ -1947,3 +1945,94 @@ async function createCitaFromEvent(event, eventData, createdBy) {
 
     return citaResult.rows[0];
 }
+
+// Servir archivo JavaScript estático para callback (compatible con CSP)
+export const serveCallbackScript = async (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache por 1 hora
+
+  res.send(`
+    console.log('🎯 Script de callback de Google Calendar cargado');
+
+    // Función para comunicar con la ventana padre
+    function communicateWithParent() {
+      try {
+        // Método 1: postMessage (funciona si es same-origin)
+        if (window.opener && !window.opener.closed) {
+          console.log('📤 Enviando mensaje a ventana padre');
+          window.opener.postMessage({
+            type: 'google-calendar-success',
+            success: true,
+            message: 'Google Calendar configurado exitosamente',
+            timestamp: new Date().toISOString()
+          }, '*');
+        }
+
+        // Método 2: localStorage (funciona cross-origin)
+        try {
+          localStorage.setItem('vetplus-google-auth-success', JSON.stringify({
+            success: true,
+            timestamp: new Date().toISOString(),
+            message: 'Google Calendar configurado exitosamente'
+          }));
+          console.log('💾 Datos guardados en localStorage');
+        } catch (e) {
+          console.warn('⚠️ No se pudo usar localStorage:', e.message);
+        }
+
+        // Método 3: sessionStorage
+        try {
+          sessionStorage.setItem('vetplus-google-auth-success', JSON.stringify({
+            success: true,
+            timestamp: new Date().toISOString(),
+            message: 'Google Calendar configurado exitosamente'
+          }));
+          console.log('💾 Datos guardados en sessionStorage');
+        } catch (e) {
+          console.warn('⚠️ No se pudo usar sessionStorage:', e.message);
+        }
+
+        return true;
+      } catch (e) {
+        console.error('❌ Error en comunicación:', e);
+        return false;
+      }
+    }
+
+    // Función para intentar cerrar la ventana
+    function attemptClose() {
+      try {
+        console.log('🚪 Intentando cerrar ventana');
+        window.close();
+
+        // Verificar si se cerró después de un delay
+        setTimeout(() => {
+          if (!window.closed) {
+            console.log('⚠️ Ventana no se cerró automáticamente');
+          } else {
+            console.log('✅ Ventana cerrada exitosamente');
+          }
+        }, 500);
+
+      } catch (e) {
+        console.error('❌ Error cerrando ventana:', e);
+      }
+    }
+
+    // Comunicar inmediatamente al cargar
+    communicateWithParent();
+
+    // Intentar cerrar después de un breve delay
+    setTimeout(attemptClose, 100);
+
+    // Permitir cerrar con Escape
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        console.log('⎋ Tecla Escape presionada');
+        attemptClose();
+      }
+    });
+
+    console.log('✅ Script de callback inicializado');
+  `);
+};

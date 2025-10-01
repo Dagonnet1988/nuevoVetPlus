@@ -222,20 +222,18 @@ class WhatsAppBaileysService {
     /**
      * Enviar mensaje de texto
      */
-    async sendTextMessage(to, message) {
-        if (!this.isReady()) {
-            throw new Error('WhatsApp no está conectado o no está configurado');
-        }
-
+    async sendTextMessage(to, message, tipoDocumento = 'manual') {
         try {
-            const jid = this.formatPhoneNumber(to);
-            
-            const messageInfo = await this.sock.sendMessage(jid, {
-                text: message
+            if (!this.isConnected) {
+                throw new Error('WhatsApp no está conectado');
+            }
+
+            const messageInfo = await this.sock.sendMessage(to + '@s.whatsapp.net', { 
+                text: message 
             });
 
-            // Registrar en log
-            await this.logWhatsAppMessage(to, 'text', message, 'sent', messageInfo);
+            // Log del envío
+            await this.logWhatsAppMessage(to, 'text', message, 'sent', messageInfo, tipoDocumento);
 
             return {
                 success: true,
@@ -244,8 +242,11 @@ class WhatsAppBaileysService {
             };
 
         } catch (error) {
-            console.error('Error enviando mensaje de texto:', error);
-            await this.logWhatsAppMessage(to, 'text', message, 'failed', error.message);
+            console.error('Error enviando mensaje de WhatsApp:', error);
+            
+            // Log del error
+            await this.logWhatsAppMessage(to, 'text', message, 'failed', error.message, tipoDocumento);
+            
             throw error;
         }
     }
@@ -253,7 +254,7 @@ class WhatsAppBaileysService {
     /**
      * Enviar documento PDF
      */
-    async sendDocument(to, documentPath, caption, filename) {
+    async sendDocument(to, documentPath, caption, filename, tipoDocumento = 'documento') {
         if (!this.isReady()) {
             throw new Error('WhatsApp no está conectado o no está configurado');
         }
@@ -272,7 +273,7 @@ class WhatsAppBaileysService {
             });
 
             // Registrar en log
-            await this.logWhatsAppMessage(to, 'document', caption, 'sent', messageInfo);
+            await this.logWhatsAppMessage(to, 'document', caption, 'sent', messageInfo, tipoDocumento);
 
             return {
                 success: true,
@@ -282,7 +283,7 @@ class WhatsAppBaileysService {
 
         } catch (error) {
             console.error('Error enviando documento:', error);
-            await this.logWhatsAppMessage(to, 'document', caption, 'failed', error.message);
+            await this.logWhatsAppMessage(to, 'document', caption, 'failed', error.message, tipoDocumento);
             throw error;
         }
     }
@@ -452,19 +453,20 @@ class WhatsAppBaileysService {
     /**
      * Registrar mensaje en log
      */
-    async logWhatsAppMessage(to, type, content, status, response) {
+    async logWhatsAppMessage(to, type, content, status, response, tipoDocumento = null) {
         try {
             await query(`
                 INSERT INTO system.whatsapp_log 
-                (numero_destino, tipo_mensaje, contenido, estado, respuesta_api, fecha, message_id)
-                VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6)
+                (numero_destino, tipo_mensaje, contenido, estado, respuesta_api, fecha, message_id, tipo_documento)
+                VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6, $7)
             `, [
                 to,
                 type,
                 content,
                 status,
                 typeof response === 'object' ? JSON.stringify(response) : response,
-                response?.key?.id || null
+                response?.key?.id || null,
+                tipoDocumento
             ]);
         } catch (error) {
             console.error('Error registrando log de WhatsApp:', error);

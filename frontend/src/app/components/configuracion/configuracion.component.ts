@@ -138,23 +138,25 @@ export class ConfiguracionComponent implements OnInit {
   private updateSectionStatuses(status: any): void {
     // Mapear estados del backend a estados de UI
     const getUIStatus = (backendStatus: string): 'active' | 'pending' | 'error' => {
-      switch (backendStatus) {
+      switch (backendStatus?.toLowerCase()) {
         case 'configurado':
         case 'conectado':
         case 'operativo':
+        case 'desconectado': // ✅ Agregar estado desconectado como activo (configurado pero no conectado)
           return 'active';
         case 'error':
+        case 'fallido':
           return 'error';
         default:
           return 'pending';
       }
     };
 
-    // Actualizar estado de cada sección
-    this.updateSectionStatus('Empresa', getUIStatus(status.empresa?.status || 'pending'));
-    this.updateSectionStatus('Google Calendar', getUIStatus(status.google_calendar?.status || 'pending'));
-    this.updateSectionStatus('WhatsApp', getUIStatus(status.whatsapp?.status || 'pending'));
-    this.updateSectionStatus('Sistema', getUIStatus(status.sistema?.status || 'pending'));
+    // Actualizar estado de cada sección basado en configuración real
+    this.updateSectionStatus('Empresa', getUIStatus(status.empresa?.estado || 'pending'));
+    this.updateSectionStatus('Google Calendar', getUIStatus(status.google_calendar?.estado || 'pending'));
+    this.updateSectionStatus('WhatsApp', getUIStatus(status.whatsapp?.estado || 'pending'));
+    this.updateSectionStatus('Sistema', getUIStatus(status.sistema?.estado || 'pending'));
   }
 
   private updateQuickStats(status: any): void {
@@ -162,10 +164,13 @@ export class ConfiguracionComponent implements OnInit {
       empresa_configurada: status.empresa?.configurado || false,
       google_calendar_conectado: status.google_calendar?.conectado || false,
       whatsapp_conectado: status.whatsapp?.conectado || false,
-      usuarios_activos: 0, // Se puede obtener de otra API
-      total_configuraciones: Object.values(status).filter(
-        (module: any) => module.status === 'configurado' || module.status === 'conectado' || module.status === 'operativo'
-      ).length
+      usuarios_activos: status.sistema?.usuarios_activos || 0,
+      total_configuraciones: [
+        status.empresa?.configurado,
+        status.google_calendar?.conectado,
+        status.whatsapp?.conectado,
+        status.sistema?.estado === 'operativo'
+      ].filter(Boolean).length
     };
 
     this.quickStats.set(stats);

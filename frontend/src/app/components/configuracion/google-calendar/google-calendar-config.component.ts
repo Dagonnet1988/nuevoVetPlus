@@ -131,7 +131,19 @@ import { SyncDialogComponent } from '../../citas/sync-dialog.component';
                         <mat-error *ngIf="configForm.get('calendar_id')?.hasError('required')">ID del calendario es requerido</mat-error>
                       </mat-form-field>
 
-                      @if (!status().conectado) {
+                      @if (status().conectado) {
+                        <div class="oauth-actions">
+                          <button mat-raised-button color="warn" (click)="disconnectGoogle()" [disabled]="disconnecting()">
+                            @if (disconnecting()) {
+                              <mat-spinner diameter="20"></mat-spinner>
+                            } @else {
+                              <mat-icon>logout</mat-icon>
+                            }
+                            Desconectar Google Calendar
+                          </button>
+                          <p class="help-text">Desconecta la integración con Google Calendar. Podrás reconectar en cualquier momento.</p>
+                        </div>
+                      } @else {
                         <div class="oauth-actions">
                           <button mat-raised-button color="primary" (click)="initializeOAuth()" [disabled]="oauthLoading()">
                             @if (oauthLoading()) {
@@ -654,6 +666,7 @@ export class GoogleCalendarConfigComponent implements OnInit {
   loading = signal(false);
   oauthLoading = signal(false);
   syncing = signal(false);
+  disconnecting = signal(false);
 
   config = signal<GoogleCalendarConfig | null>(null);
   status = signal<GoogleCalendarStatus>({
@@ -671,6 +684,10 @@ export class GoogleCalendarConfigComponent implements OnInit {
 
   configForm: FormGroup;
 
+  // Listeners para comunicación cross-origin
+  private storageListener: (event: StorageEvent) => void;
+  private messageListener: (event: MessageEvent) => void;
+
   constructor(
     private fb: FormBuilder,
     private configuracionService: ConfiguracionService,
@@ -680,6 +697,10 @@ export class GoogleCalendarConfigComponent implements OnInit {
     private citasService: CitasService
   ) {
     this.configForm = this.createForm();
+
+    // Inicializar listeners
+    this.storageListener = this.handleStorageEvent.bind(this);
+    this.messageListener = this.handleMessageEvent.bind(this);
   }
 
   ngOnInit(): void {
@@ -689,6 +710,16 @@ export class GoogleCalendarConfigComponent implements OnInit {
 
     // Configurar validadores condicionales
     this.setupConditionalValidators();
+
+    // Configurar listeners para comunicación cross-origin
+    this.setupStorageListeners();
+    this.setupMessageListeners();
+  }
+
+  ngOnDestroy(): void {
+    // Limpiar listeners
+    window.removeEventListener('storage', this.storageListener);
+    window.removeEventListener('message', this.messageListener);
   }
 
   private setupConditionalValidators(): void {
@@ -1035,6 +1066,34 @@ export class GoogleCalendarConfigComponent implements OnInit {
     }, 600000);
   }
 
+  disconnectGoogle(): void {
+    const confirmed = confirm(
+      '¿Estás seguro de desconectar Google Calendar?\n\n' +
+      'Esto eliminará la conexión actual y tendrás que autorizar nuevamente.\n' +
+      'Los datos locales no se verán afectados.'
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    this.disconnecting.set(true);
+
+    this.configuracionService.disableGoogleCalendar().subscribe({
+      next: () => {
+        this.snackBar.open('Google Calendar desconectado exitosamente', 'Cerrar', { duration: 3000 });
+        this.disconnecting.set(false);
+        this.loadStatus();
+        this.loadConfiguration();
+      },
+      error: (error) => {
+        console.error('Error desconectando Google Calendar:', error);
+        this.snackBar.open('Error desconectando Google Calendar', 'Cerrar', { duration: 3000 });
+        this.disconnecting.set(false);
+      }
+    });
+  }
+
   syncNow(): void {
     this.syncing.set(true);
 
@@ -1203,5 +1262,110 @@ export class GoogleCalendarConfigComponent implements OnInit {
 
   goBack(): void {
     this.router.navigate(['/configuracion']);
+  }
+
+  // ===============================
+  // COMUNICACIÓN CROSS-ORIGIN
+  // ===============================
+
+  private setupStorageListeners(): void {
+    console.log('🔧 Configurando listener de storage para Google Calendar');
+    window.addEventListener('storage', this.storageListener);
+  }
+
+  private setupMessageListeners(): void {
+    console.log('🔧 Configurando listener de mensajes para Google Calendar');
+    window.addEventListener('message', this.messageListener);
+  }
+
+  private handleStorageEvent(event: StorageEvent): void {
+    // Solo procesar cambios en las claves específicas de Google Calendar
+    if (event.key === 'vetplus-google-auth-success' && event.newValue) {
+      console.log('📦 Recibido evento de storage:', event.key, event.newValue);
+
+      try {
+        const data = JSON.parse(event.newValue);
+        if (data.success) {
+          this.handleAuthSuccess(data);
+        }
+      } catch (error) {
+        console.error('❌ Error procesando datos de storage:', error);
+      }
+
+      // Limpiar el storage después de procesar
+      localStorage.removeItem('vetplus-google-auth-success');
+      sessionStorage.removeItem('vetplus-google-auth-success');
+    }
+  }
+
+  private handleMessageEvent(event: MessageEvent): void {
+    // Filtrar mensajes de Angular DevTools y otros no relacionados
+    if (!event.data || typeof event.data !== 'object') {
+      return;
+    }
+
+    // Ignorar mensajes de Angular DevTools
+    if (event.data.source && event.data.source.includes('angular-devtools')) {
+      return;
+    }
+
+    // Ignorar mensajes de detección de Angular
+    if (event.data.isAngular || event.data.isIvy || event.data.topic) {
+      return;
+    }
+
+    // Solo procesar mensajes específicos de Google Calendar
+    if (event.data.type !== 'google-calendar-success' && event.data.type !== 'google-calendar-error') {
+      return;
+    }
+
+    console.log('📩 Mensaje de Google Calendar recibido:', event.data, 'desde:', event.origin);
+
+    // Verificar origen por seguridad
+    if (event.origin !== window.location.origin) {
+      console.warn('⚠️ Origen no válido:', event.origin, 'esperado:', window.location.origin);
+      return;
+    }
+
+    if (event.data.type === 'google-calendar-success') {
+      this.handleAuthSuccess(event.data);
+    } else if (event.data.type === 'google-calendar-error') {
+      this.handleAuthError(event.data);
+    }
+  }
+
+  private handleAuthSuccess(data: any): void {
+    console.log('✅ Autorización exitosa procesada:', data);
+
+    // Mostrar información detallada del éxito
+    const message = data.testResult?.success
+      ? '✅ Google Calendar configurado y conexión verificada exitosamente'
+      : '⚠️ Google Calendar configurado pero con advertencias en la conexión';
+
+    this.snackBar.open(message, 'Cerrar', {
+      duration: 5000,
+      panelClass: data.testResult?.success ? ['success-snackbar'] : ['warning-snackbar']
+    });
+
+    // Recargar estado y configuración
+    this.loadStatus();
+    this.loadConfiguration();
+
+    // Limpiar estado de carga
+    this.oauthLoading.set(false);
+  }
+
+  private handleAuthError(data: any): void {
+    console.error('❌ Error en autorización:', data);
+
+    // Mostrar error detallado
+    this.snackBar.open(
+      `❌ Error en autorización: ${data.error || 'Error desconocido'}`,
+      'Cerrar',
+      { duration: 7000, panelClass: ['error-snackbar'] }
+    );
+
+    // Limpiar estado de carga
+    this.oauthLoading.set(false);
   }
 }

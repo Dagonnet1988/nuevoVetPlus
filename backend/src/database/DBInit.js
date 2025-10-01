@@ -80,6 +80,21 @@ class DBInit {
    * Verifica si existe la base de datos
    */
   async checkDatabase() {
+    // Si se está usando DATABASE_URL (como en Neon), asumir que la BD existe
+    if (process.env.DATABASE_URL) {
+      console.log(`🔍 Usando DATABASE_URL, verificando conexión a '${this.config.database}'...`);
+      try {
+        const client = new Client(this.config);
+        await client.connect();
+        await client.end();
+        console.log(`✅ Conectado a base de datos '${this.config.database}'`);
+        return true;
+      } catch (error) {
+        console.error('❌ Error conectando a la base de datos:', error.message);
+        return false;
+      }
+    }
+
     try {
       console.log(`🔍 Verificando base de datos '${this.config.database}'...`);
       const client = new Client(this.adminConfig);

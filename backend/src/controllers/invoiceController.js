@@ -2,6 +2,7 @@ import { query } from '../config/database.js';
 import { validationResult } from 'express-validator/lib/index.js';
 import fs from 'fs/promises';
 import pdfGeneratorService from '../services/pdfGeneratorService.js';
+import { InvoiceService } from '../services/invoiceService.js';
 
 // Endpoint de debug para verificar estado de facturas
 export async function debugInvoices(req, res) {

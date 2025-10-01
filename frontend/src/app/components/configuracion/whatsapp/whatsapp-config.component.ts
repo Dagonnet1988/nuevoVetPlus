@@ -15,12 +15,19 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatSelectModule } from '@angular/material/select';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatTableModule } from '@angular/material/table';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import {
   ConfiguracionService,
   WhatsAppConfig,
   WhatsAppStatus,
-  WhatsAppStats
+  WhatsAppStats,
+  WhatsAppMessage,
+  WhatsAppLimites,
+  WhatsAppEstadoLimites
 } from '../../../services/configuracion.service';
 
 @Component({
@@ -43,7 +50,11 @@ import {
     MatTooltipModule,
     MatTabsModule,
     MatSelectModule,
-    MatCheckboxModule
+    MatCheckboxModule,
+    MatTableModule,
+    MatPaginatorModule,
+    MatProgressBarModule,
+    MatDialogModule
   ],
   templateUrl: './whatsapp-config.component.html',
   styleUrls: ['./whatsapp-config.component.css']
@@ -65,7 +76,41 @@ export class WhatsAppConfigComponent implements OnInit {
   qrCode = signal<string | null>(null);
 
   configForm: FormGroup;
+  limitesForm: FormGroup;
   diasActivos = signal<number[]>([1, 2, 3, 4, 5]); // Lunes a Viernes por defecto
+
+  // Historial de mensajes
+  historialLoading = signal(false);
+  mensajes = signal<WhatsAppMessage[]>([]);
+  mensajesFiltrados = signal<WhatsAppMessage[]>([]);
+  totalMensajes = signal(0);
+
+  // Filtros para historial
+  filtroEstado = '';
+  filtroTipo = '';
+  fechaDesde = '';
+  fechaHasta = '';
+
+  // Paginación
+  tamañoPagina = 25;
+  paginaActual = 0;
+
+  // Columnas de la tabla
+  columnasHistorial = ['fecha', 'cliente', 'tipo', 'estado', 'mensaje', 'intentos', 'acciones'];
+
+  // Estado de límites
+  estadoLimites = signal<WhatsAppEstadoLimites>({
+    mensajes_hoy: 0,
+    mensajes_hora: 0,
+    pausado: false,
+    pausa_hasta: undefined,
+    limites_por_tipo: {
+      confirmaciones: 0,
+      recordatorios: 0,
+      facturas: 0,
+      manuales: 0
+    }
+  });
 
   diasSemana = [
     { label: 'Domingo', value: 0 },
@@ -81,15 +126,20 @@ export class WhatsAppConfigComponent implements OnInit {
     private fb: FormBuilder,
     private configuracionService: ConfiguracionService,
     private snackBar: MatSnackBar,
-    private router: Router
+    private router: Router,
+    private dialog: MatDialog
   ) {
     this.configForm = this.createForm();
+    this.limitesForm = this.createLimitesForm();
   }
 
   ngOnInit(): void {
     this.loadConfiguration();
     this.loadStatus();
     this.loadStats();
+    this.loadHistorial();
+    this.loadEstadoLimites();
+    this.loadLimitesConfiguration();
   }
 
   private createForm(): FormGroup {
@@ -113,6 +163,31 @@ export class WhatsAppConfigComponent implements OnInit {
       auto_cita_recordatorio: [true],
       auto_consulta_completada: [false],
       auto_factura_generada: [false]
+    });
+  }
+
+  private createLimitesForm(): FormGroup {
+    return this.fb.group({
+      // Límites generales
+      limite_diario: [50, [Validators.required, Validators.min(1), Validators.max(200)]],
+      limite_por_hora: [15, [Validators.required, Validators.min(1), Validators.max(50)]],
+      intervalo_minimo: [20, [Validators.required, Validators.min(5), Validators.max(300)]],
+      max_reintentos: [3, [Validators.required, Validators.min(1), Validators.max(5)]],
+
+      // Límites por tipo
+      limitar_confirmaciones: [false],
+      limite_confirmaciones_dia: [20, Validators.min(1)],
+      limitar_recordatorios: [false],
+      limite_recordatorios_dia: [15, Validators.min(1)],
+      limitar_facturas: [false],
+      limite_facturas_dia: [10, Validators.min(1)],
+      limitar_manuales: [false],
+      limite_manuales_dia: [5, Validators.min(1)],
+
+      // Pausas automáticas
+      pausas_automaticas: [true],
+      pausa_limite_hora: [30, [Validators.min(5), Validators.max(120)]],
+      pausa_limite_dia: [8, [Validators.min(1), Validators.max(24)]]
     });
   }
 
@@ -177,6 +252,17 @@ export class WhatsAppConfigComponent implements OnInit {
       },
       error: (error) => {
         console.error('Error cargando estadísticas:', error);
+      }
+    });
+  }
+
+  private loadLimitesConfiguration(): void {
+    this.configuracionService.getWhatsAppLimites().subscribe({
+      next: (limites) => {
+        this.limitesForm.patchValue(limites);
+      },
+      error: (error) => {
+        console.error('Error cargando configuración de límites:', error);
       }
     });
   }
@@ -369,5 +455,288 @@ export class WhatsAppConfigComponent implements OnInit {
 
   goBack(): void {
     this.router.navigate(['/configuracion']);
+  }
+
+  // ===============================
+  // MÉTODOS PARA HISTORIAL DE MENSAJES
+  // ===============================
+
+  loadHistorial(): void {
+    this.historialLoading.set(true);
+
+    const filtros = {
+      fecha_inicio: this.fechaDesde,
+      fecha_fin: this.fechaHasta,
+      estado: this.filtroEstado
+    };
+
+    this.configuracionService.getWhatsAppMessages(filtros).subscribe({
+      next: (mensajes) => {
+        this.mensajes.set(mensajes);
+        this.aplicarFiltros();
+        this.historialLoading.set(false);
+      },
+      error: (error) => {
+        console.error('Error cargando historial:', error);
+        this.historialLoading.set(false);
+      }
+    });
+  }
+
+  filtrarMensajes(): void {
+    this.aplicarFiltros();
+  }
+
+  private aplicarFiltros(): void {
+    let mensajesFiltrados = [...this.mensajes()];
+
+    // Filtrar por estado
+    if (this.filtroEstado) {
+      mensajesFiltrados = mensajesFiltrados.filter(m => m.estado === this.filtroEstado);
+    }
+
+    // Filtrar por tipo
+    if (this.filtroTipo) {
+      mensajesFiltrados = mensajesFiltrados.filter(m => m.contexto?.tipo === this.filtroTipo);
+    }
+
+    // Filtrar por fechas
+    if (this.fechaDesde) {
+      const fechaDesde = new Date(this.fechaDesde);
+      mensajesFiltrados = mensajesFiltrados.filter(m => new Date(m.fecha_creacion) >= fechaDesde);
+    }
+
+    if (this.fechaHasta) {
+      const fechaHasta = new Date(this.fechaHasta);
+      fechaHasta.setHours(23, 59, 59, 999);
+      mensajesFiltrados = mensajesFiltrados.filter(m => new Date(m.fecha_creacion) <= fechaHasta);
+    }
+
+    this.mensajesFiltrados.set(mensajesFiltrados);
+    this.totalMensajes.set(mensajesFiltrados.length);
+  }
+
+  limpiarFiltros(): void {
+    this.filtroEstado = '';
+    this.filtroTipo = '';
+    this.fechaDesde = '';
+    this.fechaHasta = '';
+    this.aplicarFiltros();
+  }
+
+  refreshHistorial(): void {
+    this.loadHistorial();
+  }
+
+  cambiarPagina(event: PageEvent): void {
+    this.paginaActual = event.pageIndex;
+    this.tamañoPagina = event.pageSize;
+  }
+
+  reintentarMensaje(messageId: string): void {
+    this.configuracionService.retryWhatsAppMessage(messageId).subscribe({
+      next: () => {
+        this.snackBar.open('Mensaje reenviado', 'Cerrar', { duration: 3000 });
+        this.loadHistorial();
+      },
+      error: (error) => {
+        console.error('Error reenviando mensaje:', error);
+        this.snackBar.open('Error al reenviar mensaje', 'Cerrar', { duration: 3000 });
+      }
+    });
+  }
+
+  verDetallesMensaje(mensaje: WhatsAppMessage): void {
+    // TODO: Implementar diálogo de detalles
+    console.log('Ver detalles:', mensaje);
+  }
+
+  verErrorMensaje(mensaje: WhatsAppMessage): void {
+    this.snackBar.open(mensaje.error_mensaje || 'Error desconocido', 'Cerrar', { duration: 5000 });
+  }
+
+  // Métodos auxiliares para la tabla
+  getTipoColor(tipo: string): string {
+    switch (tipo) {
+      case 'confirmacion': return '#4caf50';
+      case 'recordatorio': return '#ff9800';
+      case 'factura': return '#2196f3';
+      case 'formula': return '#9c27b0';
+      case 'cancelacion': return '#f44336';
+      case 'manual': return '#607d8b';
+      default: return '#9e9e9e';
+    }
+  }
+
+  getTipoLabel(tipo: string): string {
+    switch (tipo) {
+      case 'confirmacion': return 'Confirmación';
+      case 'recordatorio': return 'Recordatorio';
+      case 'factura': return 'Factura';
+      case 'formula': return 'Fórmula';
+      case 'cancelacion': return 'Cancelación';
+      case 'manual': return 'Manual';
+      default: return 'Otro';
+    }
+  }
+
+  getEstadoColor(estado: string): string {
+    switch (estado) {
+      case 'enviado': return '#4caf50';
+      case 'entregado': return '#2196f3';
+      case 'leido': return '#009688';
+      case 'fallido': return '#f44336';
+      case 'pendiente': return '#ff9800';
+      default: return '#9e9e9e';
+    }
+  }
+
+  getEstadoIcon(estado: string): string {
+    switch (estado) {
+      case 'enviado': return 'check';
+      case 'entregado': return 'done_all';
+      case 'leido': return 'mark_chat_read';
+      case 'fallido': return 'error';
+      case 'pendiente': return 'schedule';
+      default: return 'help';
+    }
+  }
+
+  getEstadoLabel(estado: string): string {
+    switch (estado) {
+      case 'enviado': return 'Enviado';
+      case 'entregado': return 'Entregado';
+      case 'leido': return 'Leído';
+      case 'fallido': return 'Fallido';
+      case 'pendiente': return 'Pendiente';
+      default: return 'Desconocido';
+    }
+  }
+
+  // ===============================
+  // MÉTODOS PARA CONTROL DE LÍMITES
+  // ===============================
+
+  loadEstadoLimites(): void {
+    this.configuracionService.getWhatsAppEstadoLimites().subscribe({
+      next: (estado) => {
+        this.estadoLimites.set(estado);
+      },
+      error: (error) => {
+        console.error('Error cargando estado de límites:', error);
+      }
+    });
+  }
+
+  guardarLimites(): void {
+    if (this.limitesForm.invalid) {
+      this.snackBar.open('Por favor completa todos los campos requeridos', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    this.loading.set(true);
+    const limites = this.limitesForm.value;
+
+    this.configuracionService.updateWhatsAppLimites(limites).subscribe({
+      next: () => {
+        this.loading.set(false);
+        this.snackBar.open('Límites guardados exitosamente', 'Cerrar', { duration: 3000 });
+        this.loadEstadoLimites(); // Recargar estado
+      },
+      error: (error) => {
+        console.error('Error guardando límites:', error);
+        this.loading.set(false);
+        this.snackBar.open('Error guardando límites', 'Cerrar', { duration: 3000 });
+      }
+    });
+  }
+
+  restablecerLimites(): void {
+    this.limitesForm.patchValue({
+      limite_diario: 50,
+      limite_por_hora: 15,
+      intervalo_minimo: 20,
+      max_reintentos: 3,
+      limitar_confirmaciones: false,
+      limite_confirmaciones_dia: 20,
+      limitar_recordatorios: false,
+      limite_recordatorios_dia: 15,
+      limitar_facturas: false,
+      limite_facturas_dia: 10,
+      limitar_manuales: false,
+      limite_manuales_dia: 5,
+      pausas_automaticas: true,
+      pausa_limite_hora: 30,
+      pausa_limite_dia: 8
+    });
+  }
+
+  resetearContadores(): void {
+    this.loading.set(true);
+
+    this.configuracionService.resetWhatsAppContadores().subscribe({
+      next: () => {
+        this.estadoLimites.set({
+          mensajes_hoy: 0,
+          mensajes_hora: 0,
+          pausado: false,
+          pausa_hasta: undefined,
+          limites_por_tipo: {
+            confirmaciones: 0,
+            recordatorios: 0,
+            facturas: 0,
+            manuales: 0
+          }
+        });
+        this.loading.set(false);
+        this.snackBar.open('Contadores reseteados', 'Cerrar', { duration: 3000 });
+      },
+      error: (error) => {
+        console.error('Error reseteando contadores:', error);
+        this.loading.set(false);
+        this.snackBar.open('Error reseteando contadores', 'Cerrar', { duration: 3000 });
+      }
+    });
+  }
+
+  reanudarEnvios(): void {
+    this.loading.set(true);
+
+    this.configuracionService.reanudarWhatsAppEnvios().subscribe({
+      next: () => {
+        this.estadoLimites.update(estado => ({
+          ...estado,
+          pausado: false,
+          pausa_hasta: undefined
+        }));
+        this.loading.set(false);
+        this.snackBar.open('Envíos reanudados', 'Cerrar', { duration: 3000 });
+      },
+      error: (error) => {
+        console.error('Error reanudando envíos:', error);
+        this.loading.set(false);
+        this.snackBar.open('Error reanudando envíos', 'Cerrar', { duration: 3000 });
+      }
+    });
+  }
+
+  // Métodos auxiliares para límites
+  getPorcentajeUso(actual: number, limite: number): number {
+    return limite > 0 ? (actual / limite) * 100 : 0;
+  }
+
+  getColorUsoLimite(actual: number, limite: number): string {
+    const porcentaje = this.getPorcentajeUso(actual, limite);
+    if (porcentaje >= 90) return '#f44336';
+    if (porcentaje >= 75) return '#ff9800';
+    if (porcentaje >= 50) return '#ffc107';
+    return '#4caf50';
+  }
+
+  getColorBarraLimite(actual: number, limite: number): 'primary' | 'accent' | 'warn' {
+    const porcentaje = this.getPorcentajeUso(actual, limite);
+    if (porcentaje >= 75) return 'warn';
+    if (porcentaje >= 50) return 'accent';
+    return 'primary';
   }
 }

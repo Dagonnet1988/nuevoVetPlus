@@ -175,13 +175,11 @@ async function checkSistemaStatus() {
     
     // Verificar última actividad del sistema
     const lastActivity = await query(`
-      SELECT 
-        fecha as ultima_actividad,
-        COUNT(*) as total_logs
-      FROM system.log_auditoria 
+      SELECT
+        COUNT(*) as total_logs,
+        MAX(fecha) as ultima_actividad
+      FROM system.log_auditoria
       WHERE fecha > NOW() - INTERVAL '24 hours'
-      ORDER BY fecha DESC
-      LIMIT 1
     `);
     
     // Verificar si hay usuarios activos

@@ -115,13 +115,13 @@ Por favor confirma tu asistencia respondiendo a este mensaje.
                     // Intentar enviar por WhatsApp
                     let sent = false;
                     try {
-                        await this.whatsappService.sendTextMessage(cita.cliente_telefono, mensaje);
+                        await this.whatsappService.sendTextMessage(cita.cliente_telefono, mensaje, 'recordatorio');
                         sent = true;
                         console.log(`✅ Recordatorio enviado a ${cita.cliente_nombre} - ${cita.cliente_telefono}`);
                     } catch (error) {
                         console.log(`⚠️ Error con WhatsApp Baileys, intentando con Business API...`);
                         try {
-                            await this.whatsappBusinessService.sendTextMessage(cita.cliente_telefono, mensaje);
+                            await this.whatsappBusinessService.sendTextMessage(cita.cliente_telefono, mensaje, 'recordatorio');
                             sent = true;
                             console.log(`✅ Recordatorio enviado via Business API a ${cita.cliente_nombre}`);
                         } catch (businessError) {

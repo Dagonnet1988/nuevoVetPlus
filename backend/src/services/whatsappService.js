@@ -61,7 +61,7 @@ class WhatsAppService {
     /**
      * Enviar mensaje de texto simple
      */
-    async sendTextMessage(to, message) {
+    async sendTextMessage(to, message, tipoDocumento = 'manual') {
         try {
             if (!await this.isConfigured()) {
                 throw new Error('WhatsApp no está configurado o no está activo');
@@ -86,7 +86,7 @@ class WhatsAppService {
             });
 
             // Log del envío
-            await this.logWhatsAppMessage(to, 'text', message, 'sent', response.data);
+            await this.logWhatsAppMessage(to, 'text', message, 'sent', response.data, tipoDocumento);
 
             return {
                 success: true,
@@ -98,7 +98,7 @@ class WhatsAppService {
             console.error('Error al enviar mensaje de WhatsApp:', error);
             
             // Log del error
-            await this.logWhatsAppMessage(to, 'text', message, 'failed', error.message);
+            await this.logWhatsAppMessage(to, 'text', message, 'failed', error.message, tipoDocumento);
             
             throw error;
         }
@@ -107,7 +107,7 @@ class WhatsAppService {
     /**
      * Enviar documento por WhatsApp
      */
-    async sendDocument(to, documentPath, caption, filename) {
+    async sendDocument(to, documentPath, caption, filename, tipoDocumento = 'documento') {
         try {
             if (!await this.isConfigured()) {
                 throw new Error('WhatsApp no está configurado o no está activo');
@@ -140,7 +140,7 @@ class WhatsAppService {
             });
 
             // Log del envío
-            await this.logWhatsAppMessage(to, 'document', caption, 'sent', response.data);
+            await this.logWhatsAppMessage(to, 'document', caption, 'sent', response.data, tipoDocumento);
 
             return {
                 success: true,
@@ -152,7 +152,7 @@ class WhatsAppService {
             console.error('Error al enviar documento por WhatsApp:', error);
             
             // Log del error
-            await this.logWhatsAppMessage(to, 'document', caption, 'failed', error.message);
+            await this.logWhatsAppMessage(to, 'document', caption, 'failed', error.message, tipoDocumento);
             
             throw error;
         }
@@ -237,7 +237,8 @@ class WhatsAppService {
             // Por ahora, enviar solo mensaje de texto
             const resultado = await this.sendTextMessage(
                 numeroTelefono || factura.cliente_telefono,
-                mensaje
+                mensaje,
+                'factura'
             );
 
             // Registrar envío en la base de datos
@@ -303,7 +304,8 @@ class WhatsAppService {
             // Por ahora, enviar solo mensaje de texto
             const resultado = await this.sendTextMessage(
                 numeroTelefono || consulta.cliente_telefono,
-                mensaje
+                mensaje,
+                'formula'
             );
 
             // Registrar envío en la base de datos
@@ -326,18 +328,19 @@ class WhatsAppService {
     /**
      * Registrar mensaje de WhatsApp en log
      */
-    async logWhatsAppMessage(to, type, content, status, response) {
+    async logWhatsAppMessage(to, type, content, status, response, tipoDocumento = null) {
         try {
             await query(`
                 INSERT INTO system.whatsapp_log 
-                (numero_destino, tipo_mensaje, contenido, estado, respuesta_api, fecha)
-                VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+                (numero_destino, tipo_mensaje, contenido, estado, respuesta_api, fecha, tipo_documento)
+                VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6)
             `, [
                 to,
                 type,
                 content,
                 status,
-                typeof response === 'object' ? JSON.stringify(response) : response
+                typeof response === 'object' ? JSON.stringify(response) : response,
+                tipoDocumento
             ]);
         } catch (error) {
             console.error('Error al registrar log de WhatsApp:', error);

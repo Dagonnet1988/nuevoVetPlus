@@ -1,0 +1,146 @@
+.facturacion-container {
+  padding: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.title-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 24px;
+  font-weight: 500;
+}
+
+.page-subtitle {
+  margin: 4px 0 0 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.back-button {
+  margin-right: 8px;
+}
+
+.main-content {
+  margin-bottom: 24px;
+}
+
+.tab-content {
+  padding: 24px;
+}
+
+.filters-section {
+  margin-bottom: 24px;
+}
+
+.filter-form {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.filter-field {
+  min-width: 200px;
+}
+
+.table-container {
+  overflow-x: auto;
+}
+
+.facturas-table {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.estado-chip {
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.estado-pendiente {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.estado-pagada {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.estado-cancelada {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  padding: 40px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #666;
+}
+
+.empty-icon {
+  font-size: 64px;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.coming-soon {
+  text-align: center;
+  padding: 60px 20px;
+  color: #666;
+}
+
+.coming-soon-icon {
+  font-size: 64px;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.danger {
+  color: #dc3545;
+}
+
+@media (max-width: 768px) {
+  .filter-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-field {
+    min-width: unset;
+  }
+}

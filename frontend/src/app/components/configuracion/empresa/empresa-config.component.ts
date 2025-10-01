@@ -33,386 +33,8 @@ import { ConfiguracionService, EmpresaConfig, HorarioAtencion, DiaEspecial } fro
     MatChipsModule,
     FormsModule
   ],
-  template: `
-    <div class="empresa-config-container">
-      <!-- Header -->
-      <div class="page-header">
-        <div class="header-content">
-          <div class="title-section">
-            <button mat-icon-button (click)="goBack()" class="back-button">
-              <mat-icon>arrow_back</mat-icon>
-            </button>
-            <div>
-              <h1 class="page-title">
-                <mat-icon class="page-icon">business</mat-icon>
-                Configuración de Empresa
-              </h1>
-              <p class="page-subtitle">Información general de la clínica veterinaria</p>
-            </div>
-          </div>
-          
-          <div class="header-actions">
-            <button mat-raised-button color="primary" (click)="saveConfiguration()" [disabled]="loading() || empresaForm.invalid">
-              @if (loading()) {
-                <mat-spinner diameter="20"></mat-spinner>
-              } @else {
-                <mat-icon>save</mat-icon>
-              }
-              Guardar
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Formulario en tabs -->
-      <mat-card class="config-card">
-        <mat-tab-group>
-          <!-- Tab 1: Información General -->
-          <mat-tab label="Información General">
-            <div class="tab-content">
-              <form [formGroup]="empresaForm" class="empresa-form">
-                <div class="form-row">
-                  <mat-form-field appearance="outline" class="form-field">
-                    <mat-label>Nombre de la Empresa</mat-label>
-                    <input matInput formControlName="nombre" placeholder="Clínica Veterinaria...">
-                    <mat-icon matSuffix>business</mat-icon>
-                  </mat-form-field>
-                  
-                  <mat-form-field appearance="outline" class="form-field">
-                    <mat-label>NIT</mat-label>
-                    <input matInput formControlName="nit" placeholder="123456789-1">
-                    <mat-icon matSuffix>receipt_long</mat-icon>
-                  </mat-form-field>
-                </div>
-
-                <mat-form-field appearance="outline" class="form-field-full">
-                  <mat-label>Dirección</mat-label>
-                  <input matInput formControlName="direccion" placeholder="Calle 123 # 45-67, Ciudad">
-                  <mat-icon matSuffix>location_on</mat-icon>
-                </mat-form-field>
-
-                <div class="form-row">
-                  <mat-form-field appearance="outline" class="form-field">
-                    <mat-label>Teléfono</mat-label>
-                    <input matInput formControlName="telefono" placeholder="+57 300 123 4567">
-                    <mat-icon matSuffix>phone</mat-icon>
-                  </mat-form-field>
-                  
-                  <mat-form-field appearance="outline" class="form-field">
-                    <mat-label>Email</mat-label>
-                    <input matInput formControlName="email" type="email" placeholder="contacto@clinica.com">
-                    <mat-icon matSuffix>email</mat-icon>
-                  </mat-form-field>
-                </div>
-
-                <div class="form-row">
-                  <mat-form-field appearance="outline" class="form-field">
-                    <mat-label>Sitio Web</mat-label>
-                    <input matInput formControlName="sitio_web" placeholder="https://www.clinica.com">
-                    <mat-icon matSuffix>language</mat-icon>
-                  </mat-form-field>
-                  
-                  <mat-form-field appearance="outline" class="form-field">
-                    <mat-label>Eslogan</mat-label>
-                    <input matInput formControlName="eslogan" placeholder="Cuidamos a tu mascota">
-                    <mat-icon matSuffix>format_quote</mat-icon>
-                  </mat-form-field>
-                </div>
-
-                <!-- Logo -->
-                <div class="logo-section">
-                  <h3>Logo de la Empresa</h3>
-                  @if (empresaConfig()?.logo_url) {
-                    <div class="current-logo">
-                      <img [src]="empresaConfig()?.logo_url" alt="Logo actual" class="logo-preview">
-                      <button mat-button color="warn" (click)="removeLogo()">
-                        <mat-icon>delete</mat-icon>
-                        Eliminar Logo
-                      </button>
-                    </div>
-                  }
-                  
-                  <div class="logo-upload">
-                    <input type="file" #fileInput (change)="onLogoSelected($event)" accept="image/*" style="display: none;">
-                    <button mat-raised-button color="accent" (click)="fileInput.click()">
-                      <mat-icon>cloud_upload</mat-icon>
-                      {{ empresaConfig()?.logo_url ? 'Cambiar Logo' : 'Subir Logo' }}
-                    </button>
-                    <p class="help-text">Formatos: JPG, PNG. Tamaño máximo: 2MB</p>
-                  </div>
-                </div>
-              </form>
-            </div>
-          </mat-tab>
-
-          <!-- Tab 2: Horarios de Atención -->
-          <mat-tab label="Horarios">
-            <div class="tab-content">
-              <h3>Horarios de Atención</h3>
-              <div class="horarios-section">
-                @for (horario of horarios(); track horario.dia_semana) {
-                  <div class="horario-row">
-                    <div class="dia-info">
-                      <mat-checkbox 
-                        [(ngModel)]="horario.activo" 
-                        (change)="updateHorario(horario.dia_semana, horario)">
-                        {{ getDayName(horario.dia_semana) }}
-                      </mat-checkbox>
-                    </div>
-                    
-                    @if (horario.activo) {
-                      <div class="horario-inputs">
-                        <mat-form-field appearance="outline" class="time-field">
-                          <mat-label>Apertura</mat-label>
-                          <input matInput type="time" [(ngModel)]="horario.hora_inicio" 
-                                 (change)="updateHorario(horario.dia_semana, horario)">
-                        </mat-form-field>
-                        
-                        <mat-form-field appearance="outline" class="time-field">
-                          <mat-label>Cierre</mat-label>
-                          <input matInput type="time" [(ngModel)]="horario.hora_fin"
-                                 (change)="updateHorario(horario.dia_semana, horario)">
-                        </mat-form-field>
-                        
-                        <mat-form-field appearance="outline" class="time-field">
-                          <mat-label>Almuerzo Inicio</mat-label>
-                          <input matInput type="time" [(ngModel)]="horario.hora_almuerzo_inicio"
-                                 (change)="updateHorario(horario.dia_semana, horario)">
-                        </mat-form-field>
-                        
-                        <mat-form-field appearance="outline" class="time-field">
-                          <mat-label>Almuerzo Fin</mat-label>
-                          <input matInput type="time" [(ngModel)]="horario.hora_almuerzo_fin"
-                                 (change)="updateHorario(horario.dia_semana, horario)">
-                        </mat-form-field>
-                      </div>
-                    }
-                  </div>
-                }
-              </div>
-            </div>
-          </mat-tab>
-
-          <!-- Tab 3: Configuración General -->
-          <mat-tab label="Configuración">
-            <div class="tab-content">
-              <form [formGroup]="configForm" class="config-form">
-                <h3>Configuración Regional</h3>
-                <div class="form-row">
-                  <mat-form-field appearance="outline" class="form-field">
-                    <mat-label>Moneda</mat-label>
-                    <mat-select formControlName="moneda">
-                      <mat-option value="COP">Peso Colombiano (COP)</mat-option>
-                      <mat-option value="USD">Dólar Americano (USD)</mat-option>
-                      <mat-option value="EUR">Euro (EUR)</mat-option>
-                    </mat-select>
-                  </mat-form-field>
-                  
-                  <mat-form-field appearance="outline" class="form-field">
-                    <mat-label>Zona Horaria</mat-label>
-                    <mat-select formControlName="zona_horaria">
-                      <mat-option value="America/Bogota">América/Bogotá</mat-option>
-                      <mat-option value="America/New_York">América/Nueva York</mat-option>
-                      <mat-option value="Europe/Madrid">Europa/Madrid</mat-option>
-                    </mat-select>
-                  </mat-form-field>
-                </div>
-
-                <div class="form-row">
-                  <mat-form-field appearance="outline" class="form-field">
-                    <mat-label>Idioma</mat-label>
-                    <mat-select formControlName="idioma">
-                      <mat-option value="es">Español</mat-option>
-                      <mat-option value="en">Inglés</mat-option>
-                      <mat-option value="fr">Francés</mat-option>
-                    </mat-select>
-                  </mat-form-field>
-                  
-                  <mat-form-field appearance="outline" class="form-field">
-                    <mat-label>Formato de Fecha</mat-label>
-                    <mat-select formControlName="formato_fecha">
-                      <mat-option value="DD/MM/YYYY">DD/MM/YYYY</mat-option>
-                      <mat-option value="MM/DD/YYYY">MM/DD/YYYY</mat-option>
-                      <mat-option value="YYYY-MM-DD">YYYY-MM-DD</mat-option>
-                    </mat-select>
-                  </mat-form-field>
-                </div>
-
-                <h3>Numeración de Documentos</h3>
-                <div class="form-row">
-                  <mat-form-field appearance="outline" class="form-field">
-                    <mat-label>Prefijo Facturas</mat-label>
-                    <input matInput formControlName="factura_prefijo" placeholder="FAC">
-                  </mat-form-field>
-                  
-                  <mat-form-field appearance="outline" class="form-field">
-                    <mat-label>Siguiente Número</mat-label>
-                    <input matInput type="number" formControlName="factura_siguiente" placeholder="1">
-                  </mat-form-field>
-                  
-                  <mat-form-field appearance="outline" class="form-field">
-                    <mat-label>Dígitos</mat-label>
-                    <input matInput type="number" formControlName="factura_digitos" placeholder="6">
-                  </mat-form-field>
-                </div>
-              </form>
-            </div>
-          </mat-tab>
-        </mat-tab-group>
-      </mat-card>
-    </div>
-  `,
-  styles: [`
-    .empresa-config-container {
-      padding: 20px;
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-
-    .page-header {
-      margin-bottom: 24px;
-    }
-
-    .header-content {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 16px;
-    }
-
-    .title-section {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .page-title {
-      margin: 0;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 24px;
-      font-weight: 500;
-    }
-
-    .page-subtitle {
-      margin: 4px 0 0 0;
-      color: #666;
-      font-size: 14px;
-    }
-
-    .back-button {
-      margin-right: 8px;
-    }
-
-    .config-card {
-      margin-bottom: 24px;
-    }
-
-    .tab-content {
-      padding: 24px;
-    }
-
-    .empresa-form, .config-form {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-
-    .form-row {
-      display: flex;
-      gap: 16px;
-      flex-wrap: wrap;
-    }
-
-    .form-field {
-      flex: 1;
-      min-width: 250px;
-    }
-
-    .form-field-full {
-      width: 100%;
-    }
-
-    .logo-section {
-      margin-top: 24px;
-      padding: 16px;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-    }
-
-    .current-logo {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      margin-bottom: 16px;
-    }
-
-    .logo-preview {
-      max-width: 100px;
-      max-height: 100px;
-      border-radius: 8px;
-      border: 1px solid #ddd;
-    }
-
-    .logo-upload {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .help-text {
-      font-size: 12px;
-      color: #666;
-      margin: 0;
-    }
-
-    .horarios-section {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-
-    .horario-row {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      padding: 12px;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-    }
-
-    .dia-info {
-      min-width: 120px;
-    }
-
-    .horario-inputs {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-      flex: 1;
-    }
-
-    .time-field {
-      min-width: 120px;
-    }
-
-    @media (max-width: 768px) {
-      .form-row {
-        flex-direction: column;
-      }
-      
-      .horario-inputs {
-        flex-direction: column;
-        width: 100%;
-      }
-      
-      .time-field {
-        min-width: unset;
-      }
-    }
-  `]
+  templateUrl: './empresa-config.component.html',
+  styleUrl: './empresa-config.component.css'
 })
 export class EmpresaConfigComponent implements OnInit {
   loading = signal(false);
@@ -464,7 +86,7 @@ export class EmpresaConfigComponent implements OnInit {
 
   private loadConfiguration(): void {
     this.loading.set(true);
-    
+
     this.configuracionService.getEmpresaConfig().subscribe({
       next: (config) => {
         this.populateForm(config);
@@ -479,29 +101,50 @@ export class EmpresaConfigComponent implements OnInit {
   }
 
   private populateForm(config: EmpresaConfig): void {
+    console.log('Configuración recibida:', config);
+
     // Llenar formulario de empresa
     this.empresaForm.patchValue({
-      nombre: config.nombre,
+      nombre: config.nombre_empresa,
       nit: config.nit,
       direccion: config.direccion,
       telefono: config.telefono,
       email: config.email,
-      sitio_web: config.sitio_web,
-      eslogan: config.eslogan
+      sitio_web: config.sitio_web || '',
+      eslogan: config.eslogan || ''
     });
 
     // Llenar configuración general
     if (config.configuracion_general) {
-      this.configForm.patchValue(config.configuracion_general);
+      const configGeneral = typeof config.configuracion_general === 'string'
+        ? JSON.parse(config.configuracion_general)
+        : config.configuracion_general;
+      this.configForm.patchValue(configGeneral);
     }
 
     // Llenar numeración
     if (config.configuracion_numeracion) {
-      this.configForm.patchValue(config.configuracion_numeracion);
+      const configNumeracion = typeof config.configuracion_numeracion === 'string'
+        ? JSON.parse(config.configuracion_numeracion)
+        : config.configuracion_numeracion;
+      this.configForm.patchValue(configNumeracion);
     }
 
-    // Cargar horarios
-    this.horarios.set(config.horarios || this.configuracionService.generateDefaultHorarios());
+    // Cargar horarios - asegurar que sean válidos
+    let horariosCargados = config.horarios;
+    if (!horariosCargados || !Array.isArray(horariosCargados) || horariosCargados.length !== 7) {
+      horariosCargados = this.configuracionService.generateDefaultHorarios();
+    }
+
+    // Verificar que todos los horarios tengan dia_semana único
+    const diasUnicos = new Set(horariosCargados.map(h => h.dia_semana));
+    if (diasUnicos.size !== 7) {
+      console.warn('Horarios con días duplicados, generando por defecto');
+      horariosCargados = this.configuracionService.generateDefaultHorarios();
+    }
+
+    this.horarios.set(horariosCargados);
+    console.log('Horarios cargados:', horariosCargados);
   }
 
   private initializeDefaults(): void {
@@ -517,7 +160,13 @@ export class EmpresaConfigComponent implements OnInit {
     this.loading.set(true);
 
     const empresaConfig: EmpresaConfig = {
-      ...this.empresaForm.value,
+      nombre_empresa: this.empresaForm.value.nombre,
+      nit: this.empresaForm.value.nit,
+      direccion: this.empresaForm.value.direccion,
+      telefono: this.empresaForm.value.telefono,
+      email: this.empresaForm.value.email,
+      sitio_web: this.empresaForm.value.sitio_web,
+      eslogan: this.empresaForm.value.eslogan,
       horarios: this.horarios(),
       configuracion_general: {
         moneda: this.configForm.value.moneda,
@@ -581,8 +230,10 @@ export class EmpresaConfigComponent implements OnInit {
     const horarios = this.horarios();
     const index = horarios.findIndex(h => h.dia_semana === dia);
     if (index >= 0) {
-      horarios[index] = { ...horario };
-      this.horarios.set([...horarios]);
+      // Crear un nuevo array con el horario actualizado
+      const nuevosHorarios = [...horarios];
+      nuevosHorarios[index] = { ...horario };
+      this.horarios.set(nuevosHorarios);
     }
   }
 

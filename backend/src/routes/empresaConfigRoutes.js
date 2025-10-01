@@ -16,6 +16,13 @@ import {
     updateEmpresaConfig,
     uploadLogo,
     configureWhatsApp,
+    getWhatsAppConfig,
+    updateWhatsAppConfig,
+    getWhatsAppLimites,
+    updateWhatsAppLimites,
+    getWhatsAppEstadoLimites,
+    resetWhatsAppContadores,
+    reanudarWhatsAppEnvios,
     getDiasEspeciales,
     addDiaEspecial,
     getSiguienteNumeroFactura,
@@ -98,8 +105,8 @@ const validateEmpresaConfig = [
     
     body('horarios')
         .optional()
-        .isArray()
-        .withMessage('Los horarios deben ser un array'),
+        .isArray({ max: 7 })
+        .withMessage('Los horarios deben ser un array de máximo 7 elementos'),
     
     body('horarios.*.dia_semana')
         .if(body('horarios').exists())
@@ -116,7 +123,21 @@ const validateEmpresaConfig = [
         .if(body('horarios').exists())
         .optional()
         .matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)
-        .withMessage('Formato de hora inválido (HH:MM)')
+        .withMessage('Formato de hora inválido (HH:MM)'),
+
+    // Validación personalizada: verificar días únicos
+    body('horarios').custom((horarios) => {
+        if (horarios && Array.isArray(horarios)) {
+            const diasVistos = new Set();
+            for (const horario of horarios) {
+                if (diasVistos.has(horario.dia_semana)) {
+                    throw new Error(`Día de semana ${horario.dia_semana} duplicado en horarios`);
+                }
+                diasVistos.add(horario.dia_semana);
+            }
+        }
+        return true;
+    })
 ];
 
 const validateWhatsAppConfig = [
@@ -261,6 +282,46 @@ router.post('/logo', authenticateToken, requireAdmin, upload.single('logo'), upl
 /**
  * @swagger
  * /api/admin/empresa/whatsapp:
+ *   get:
+ *     summary: Obtener configuración de WhatsApp
+ *     tags: [Configuración Empresa]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Configuración de WhatsApp obtenida exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     activo:
+ *                       type: boolean
+ *                     numero_telefono:
+ *                       type: string
+ *                     nombre_empresa:
+ *                       type: string
+ *                     templates:
+ *                       type: object
+ *                     configuracion_envios:
+ *                       type: object
+ *                     horarios_envio:
+ *                       type: object
+ *                     notificaciones_automaticas:
+ *                       type: object
+ *       403:
+ *         description: Acceso denegado
+ */
+router.get('/whatsapp', authenticateToken, requireAdmin, getWhatsAppConfig);
+
+/**
+ * @swagger
+ * /api/admin/empresa/whatsapp:
  *   put:
  *     summary: Configurar WhatsApp Business
  *     tags: [Configuración Empresa]
@@ -293,7 +354,7 @@ router.post('/logo', authenticateToken, requireAdmin, upload.single('logo'), upl
  *       403:
  *         description: Acceso denegado
  */
-router.put('/whatsapp', authenticateToken, requireAdmin, validateWhatsAppConfig, configureWhatsApp);
+router.put('/whatsapp', authenticateToken, requireAdmin, updateWhatsAppConfig);
 
 /**
  * @swagger
@@ -324,6 +385,101 @@ router.put('/whatsapp', authenticateToken, requireAdmin, validateWhatsAppConfig,
  *         description: Acceso denegado
  */
 router.post('/whatsapp/test', authenticateToken, requireAdmin, testWhatsAppConfig);
+
+/**
+ * @swagger
+ * /api/admin/empresa/whatsapp/limites:
+ *   get:
+ *     summary: Obtener configuración de límites de WhatsApp
+ *     tags: [Configuración Empresa]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Límites obtenidos exitosamente
+ *       403:
+ *         description: Acceso denegado
+ */
+router.get('/whatsapp/limites', authenticateToken, requireAdmin, getWhatsAppLimites);
+
+/**
+ * @swagger
+ * /api/admin/empresa/whatsapp/limites:
+ *   put:
+ *     summary: Actualizar límites de WhatsApp
+ *     tags: [Configuración Empresa]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               limite_diario:
+ *                 type: number
+ *               limite_por_hora:
+ *                 type: number
+ *               intervalo_minimo:
+ *                 type: number
+ *     responses:
+ *       200:
+ *         description: Límites actualizados exitosamente
+ *       400:
+ *         description: Datos inválidos
+ *       403:
+ *         description: Acceso denegado
+ */
+router.put('/whatsapp/limites', authenticateToken, requireAdmin, updateWhatsAppLimites);
+
+/**
+ * @swagger
+ * /api/admin/empresa/whatsapp/estado-limites:
+ *   get:
+ *     summary: Obtener estado actual de límites de WhatsApp
+ *     tags: [Configuración Empresa]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Estado de límites obtenido exitosamente
+ *       403:
+ *         description: Acceso denegado
+ */
+router.get('/whatsapp/estado-limites', authenticateToken, requireAdmin, getWhatsAppEstadoLimites);
+
+/**
+ * @swagger
+ * /api/admin/empresa/whatsapp/reset-contadores:
+ *   post:
+ *     summary: Resetear contadores de límites
+ *     tags: [Configuración Empresa]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Contadores reseteados exitosamente
+ *       403:
+ *         description: Acceso denegado
+ */
+router.post('/whatsapp/reset-contadores', authenticateToken, requireAdmin, resetWhatsAppContadores);
+
+/**
+ * @swagger
+ * /api/admin/empresa/whatsapp/reanudar:
+ *   post:
+ *     summary: Reanudar envíos de WhatsApp
+ *     tags: [Configuración Empresa]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Envíos reanudados exitosamente
+ *       403:
+ *         description: Acceso denegado
+ */
+router.post('/whatsapp/reanudar', authenticateToken, requireAdmin, reanudarWhatsAppEnvios);
 
 /**
  * @swagger

@@ -33,6 +33,14 @@ CREATE TABLE IF NOT EXISTS system.configuracion_empresa (
     whatsapp_webhook_verify_token VARCHAR(100),
     whatsapp_activo BOOLEAN DEFAULT false,
     
+    -- Configuración WhatsApp Extendida
+    whatsapp_numero_telefono VARCHAR(20), -- Número de teléfono de WhatsApp Business (+57XXXXXXXXXX)
+    whatsapp_templates JSONB, -- Templates de mensajes para diferentes tipos de notificaciones
+    whatsapp_configuracion_envios JSONB, -- Configuración de envíos automáticos y reintentos
+    whatsapp_horarios_envio JSONB, -- Horarios permitidos para envío de mensajes
+    whatsapp_notificaciones_automaticas JSONB, -- Configuración de notificaciones automáticas
+    whatsapp_limites_config JSONB, -- Configuración de límites y control de envíos
+    
     -- Configuración de numeración
     prefijo_factura VARCHAR(10) DEFAULT 'FV',
     siguiente_numero_factura INTEGER DEFAULT 1,
@@ -49,6 +57,13 @@ CREATE TABLE IF NOT EXISTS system.configuracion_empresa (
 
 -- Solo puede haber una configuración activa
 CREATE UNIQUE INDEX idx_config_empresa_activa ON system.configuracion_empresa(activa) WHERE activa = true;
+
+-- Índices GIN para optimizar consultas en campos JSON de WhatsApp
+CREATE INDEX IF NOT EXISTS idx_whatsapp_templates_gin ON system.configuracion_empresa USING GIN (whatsapp_templates);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_config_envios_gin ON system.configuracion_empresa USING GIN (whatsapp_configuracion_envios);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_horarios_gin ON system.configuracion_empresa USING GIN (whatsapp_horarios_envio);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_notificaciones_gin ON system.configuracion_empresa USING GIN (whatsapp_notificaciones_automaticas);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_limites_gin ON system.configuracion_empresa USING GIN (whatsapp_limites_config);
 
 -- Tabla para horarios de atención
 CREATE TABLE IF NOT EXISTS system.horarios_atencion (

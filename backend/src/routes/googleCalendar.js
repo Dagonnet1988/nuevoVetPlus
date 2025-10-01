@@ -21,6 +21,7 @@ import {
     stopWebhook,
     getWebhookStatus,
     renewWebhook,
+    serveCallbackScript,
     googleCalendarSimpleController
 } from '../controllers/googleCalendarController.js';
 
@@ -28,6 +29,9 @@ const router = express.Router();
 
 // Callback de Google Calendar (no requiere autenticación)
 router.get('/callback', googleCalendarSimpleController.handleCallback);
+
+// Servir script JavaScript para callback (compatible con CSP)
+router.get('/static/callback-script.js', serveCallbackScript);
 
 // Aplicar autenticación a todas las demás rutas
 router.use(authenticateToken);

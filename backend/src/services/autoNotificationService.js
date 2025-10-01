@@ -153,7 +153,8 @@ class AutoNotificationService {
             if (await this.canSendMessage() && whatsappService.isReady()) {
                 const result = await whatsappService.sendTextMessage(
                     appointmentData.cliente_telefono,
-                    mensaje
+                    mensaje,
+                    'confirmacion'
                 );
                 
                 await this.logNotification('confirmacion_cita', appointmentData.id_cita, 
@@ -319,7 +320,8 @@ class AutoNotificationService {
 
             const result = await whatsappService.sendTextMessage(
                 notification.numero_telefono,
-                notification.mensaje
+                notification.mensaje,
+                notification.tipo_notificacion || 'manual'
             );
 
             // Marcar como enviada

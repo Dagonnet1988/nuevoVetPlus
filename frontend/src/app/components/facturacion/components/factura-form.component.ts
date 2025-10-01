@@ -15,12 +15,16 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatStepperModule } from '@angular/material/stepper';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatExpansionModule } from '@angular/material/expansion';
 import { Router, ActivatedRoute } from '@angular/router';
 import { Observable, map, startWith } from 'rxjs';
 
 import { ClientesService } from '../../../services/clientes.service';
 import { PacientesService } from '../../../services/pacientes.service';
 import { FacturacionService } from '../../../services/facturacion.service';
+import { ClienteSelectorComponent } from './cliente-selector.component';
+import { LineasFacturaComponent } from './lineas-factura.component';
 
 
 interface Paciente {
@@ -28,14 +32,7 @@ interface Paciente {
   nombre: string;
   especie: string;
   raza: string;
-  cliente?: {
-    id_cliente: string;
-    nombre: string;
-    documento: string;
-    telefono: string;
-    email: string;
-    direccion?: string;
-  };
+  cliente?: Cliente;
 }
 
 interface Producto {
@@ -45,6 +42,15 @@ interface Producto {
   precio_venta: number;
   stock_actual: number;
   inventariable: boolean;
+}
+
+interface Cliente {
+  id_cliente: string;
+  nombre: string;
+  documento: string;
+  telefono?: string;
+  email?: string;
+  direccion?: string;
 }
 
 @Component({
@@ -66,7 +72,11 @@ interface Producto {
     MatProgressSpinnerModule,
     MatDividerModule,
     MatStepperModule,
-    MatButtonToggleModule
+    MatButtonToggleModule,
+    MatTooltipModule,
+    MatExpansionModule,
+    ClienteSelectorComponent,
+    LineasFacturaComponent
   ],
   templateUrl: './factura-form.component.html',
   styleUrls: ['./factura-form.component.css']
@@ -86,6 +96,7 @@ export class FacturaFormComponent implements OnInit {
   pacientes = signal<Paciente[]>([]);
   productos = signal<Producto[]>([]);
   cajas = signal<any[]>([]);
+  totalFactura = signal(0);
 
   // Formularios
   pacienteForm!: FormGroup;
@@ -94,17 +105,20 @@ export class FacturaFormComponent implements OnInit {
   facturaForm!: FormGroup;
 
   // Estado del tipo de factura
-  tipoFactura: 'con_paciente' | 'sin_paciente' = 'con_paciente';
+  tipoFactura: 'con_paciente' | 'sin_paciente' = 'sin_paciente'; // Default sin paciente
 
-  // Estado para búsqueda de clientes
-  clientesFiltrados$ = signal<any[]>([]);
-  clienteSeleccionado: any = null;
+  // Estado del cliente (OBLIGATORIO)
+  clienteSeleccionado = signal<Cliente | null>(null);
 
   // Estados
   pacienteSeleccionado = signal<Paciente | null>(null);
   mostrarFormularioCliente = signal(false);
   filteredPacientes$!: Observable<Paciente[]>;
   editing = signal(false);
+
+  // Estados de UI para secciones colapsables
+  seccionClienteExpandida = signal(true);
+  seccionProductosExpandida = signal(true);
 
   // Computed para detectar si hay terapias en las líneas
   tieneTerapias = computed(() => {
@@ -406,12 +420,13 @@ export class FacturaFormComponent implements OnInit {
   }
 
   async guardarFactura(): Promise<void> {
-    // Validar formularios básicos
-    if (this.clienteForm.invalid) {
-      this.snackBar.open('Complete la información del cliente', 'Cerrar', { duration: 3000 });
+    // Validar cliente obligatorio
+    if (!this.clienteSeleccionado()) {
+      this.snackBar.open('Debe seleccionar un cliente', 'Cerrar', { duration: 3000 });
       return;
     }
 
+    // Validar formulario de factura
     if (this.facturaForm.invalid) {
       this.snackBar.open('Complete todos los campos requeridos de la factura', 'Cerrar', { duration: 3000 });
       return;
@@ -430,42 +445,29 @@ export class FacturaFormComponent implements OnInit {
       return;
     }
 
+    // Confirmación antes de guardar
+    const clienteNombre = this.clienteSeleccionado()?.nombre;
+    const totalFormateado = this.facturacionService.formatearMoneda(this.totalFactura());
+    const confirmado = confirm(
+      `¿Está seguro de crear la factura?\n\n` +
+      `Cliente: ${clienteNombre}\n` +
+      `Total: ${totalFormateado}\n` +
+      `Productos: ${lineas.length}\n\n` +
+      `Esta acción no se puede deshacer.`
+    );
+
+    if (!confirmado) {
+      return;
+    }
+
     this.guardando.set(true);
 
     try {
-      let idCliente = '';
-      let idPaciente = '';
-
-      // 1. Crear o usar cliente existente
-      if (this.clienteForm.value.documento) {
-        // Buscar cliente existente por documento
-        const clienteExistente = await this.buscarClientePorDocumento(this.clienteForm.value.documento);
-
-        if (clienteExistente) {
-          idCliente = clienteExistente.id_cliente;
-        } else {
-          // Crear nuevo cliente
-          const clienteCreado = await this.crearClienteSync();
-          idCliente = clienteCreado.id_cliente;
-        }
-      }
-
-      // 2. Manejar paciente si es necesario
-      if (this.tipoFactura === 'con_paciente') {
-        if (this.pacienteSeleccionado()) {
-          // Usar paciente seleccionado
-          idPaciente = this.pacienteSeleccionado()!.id_paciente;
-        } else {
-          // No se permite crear paciente nuevo desde facturación
-          throw new Error('Debe seleccionar un paciente existente. Para crear un paciente nuevo, vaya al módulo de Pacientes.');
-        }
-      }
-
-      // 3. Preparar datos de la factura
+      // Preparar datos de la factura
       const facturaData = {
         ...this.facturaForm.value,
-        id_cliente: idCliente,
-        id_paciente: idPaciente,
+        id_cliente: this.clienteSeleccionado()!.id_cliente,
+        id_paciente: this.pacienteSeleccionado()?.id_paciente || '',
         items: lineas.value.map((linea: any) => ({
           codigo: linea.id_producto,
           cantidad: linea.cantidad,
@@ -475,7 +477,7 @@ export class FacturaFormComponent implements OnInit {
         }))
       };
 
-      // 4. Crear la factura
+      // Crear la factura
       this.facturacionService.createFactura(facturaData).subscribe({
         next: (response: any) => {
           this.guardando.set(false);
@@ -494,6 +496,10 @@ export class FacturaFormComponent implements OnInit {
       console.error('Error en el proceso:', error);
       this.snackBar.open('Error en el proceso de creación', 'Cerrar', { duration: 3000 });
     }
+  }
+
+  onTotalChanged(total: number): void {
+    this.totalFactura.set(total);
   }
 
   cancelar(): void {
@@ -522,53 +528,35 @@ export class FacturaFormComponent implements OnInit {
       this.pacienteSeleccionado.set(null);
       this.pacienteForm.reset();
       this.facturaForm.patchValue({ id_paciente: '' });
-      this.clienteSeleccionado = null;
-      this.clientesFiltrados$.set([]);
+      this.clienteSeleccionado.set(null);
     } else {
-      // Para "con paciente", limpiar búsqueda de cliente
-      this.clienteSeleccionado = null;
-      this.clientesFiltrados$.set([]);
+      // Para "con paciente", limpiar selección de cliente
+      this.clienteSeleccionado.set(null);
     }
   }
 
-  // Método para buscar cliente por nombre
-  buscarClientePorNombre(event: any): void {
-    const nombre = event.target.value;
+  // Método para buscar cliente por nombre - ELIMINADO
+  // Ahora se maneja en ClienteSelectorComponent
 
-    if (this.tipoFactura === 'sin_paciente' && nombre && nombre.length >= 2) {
-      // Buscar clientes por nombre usando el método existente
-      this.clientesService.getClientes(1, 10, nombre).subscribe({
-        next: (response: any) => {
-          this.clientesFiltrados$.set(response.data || []);
-        },
-        error: (error: any) => {
-          console.error('Error buscando clientes:', error);
-          this.clientesFiltrados$.set([]);
-        }
-      });
-    } else {
-      this.clientesFiltrados$.set([]);
-    }
-  }
-
-  // Método para mostrar cliente en autocomplete
-  displayCliente(cliente: any): string {
-    return cliente ? cliente.nombre : '';
-  }
-
-  // Método para seleccionar cliente del autocomplete
-  onClienteSeleccionado(cliente: any): void {
+  // Método para seleccionar cliente del ClienteSelectorComponent
+  onClienteSeleccionado(cliente: Cliente | null): void {
+    this.clienteSeleccionado.set(cliente);
     if (cliente) {
-      this.clienteSeleccionado = cliente;
-      this.clienteForm.patchValue({
-        nombre: cliente.nombre,
-        documento: cliente.documento,
-        telefono: cliente.telefono,
-        email: cliente.email,
-        direccion: cliente.direccion
+      this.facturaForm.patchValue({
+        id_cliente: cliente.id_cliente
       });
-      this.snackBar.open('Cliente cargado automáticamente', 'Cerrar', { duration: 2000 });
+      this.snackBar.open('Cliente seleccionado', 'Cerrar', { duration: 2000 });
+    } else {
+      this.facturaForm.patchValue({
+        id_cliente: ''
+      });
+      this.snackBar.open('Cliente removido', 'Cerrar', { duration: 2000 });
     }
+  }
+
+  // Método para manejar creación de nuevo cliente
+  onNuevoClienteClick(): void {
+    this.mostrarFormularioCliente.set(true);
   }
 
   // Método auxiliar para buscar cliente por documento
@@ -601,4 +589,58 @@ export class FacturaFormComponent implements OnInit {
 
   // Método auxiliar para crear paciente de forma asíncrona - ELIMINADO
   // Los pacientes nuevos deben crearse desde el módulo de Pacientes
+
+  // ===========================================
+  // MÉTODOS DE UI Y UX
+  // ===========================================
+
+  toggleSeccionCliente(): void {
+    this.seccionClienteExpandida.set(!this.seccionClienteExpandida());
+  }
+
+  toggleSeccionProductos(): void {
+    this.seccionProductosExpandida.set(!this.seccionProductosExpandida());
+  }
+
+  // Método para manejar errores de red y reconexión
+  private handleNetworkError(error: any, operation: string): void {
+    console.error(`Error en ${operation}:`, error);
+
+    let mensaje = 'Error de conexión. ';
+
+    if (error.status === 0) {
+      mensaje += 'Verifique su conexión a internet.';
+    } else if (error.status === 500) {
+      mensaje += 'Error interno del servidor. Intente nuevamente.';
+    } else if (error.status === 404) {
+      mensaje += 'Recurso no encontrado.';
+    } else {
+      mensaje += 'Intente nuevamente en unos momentos.';
+    }
+
+    this.snackBar.open(mensaje, 'Reintentar', {
+      duration: 5000
+    }).onAction().subscribe(() => {
+      // Reintentar la operación
+      this.retryLastOperation();
+    });
+  }
+
+  private retryLastOperation(): void {
+    // Lógica para reintentar la última operación fallida
+    this.snackBar.open('Reintentando operación...', 'Cerrar', { duration: 2000 });
+    // Aquí iría la lógica específica de reintento
+  }
+
+  // Método para validar conectividad antes de operaciones críticas
+  private async checkConnectivity(): Promise<boolean> {
+    try {
+      // Verificar conectividad con un endpoint ligero
+      await this.facturacionService.getCajas().toPromise();
+      return true;
+    } catch (error) {
+      this.handleNetworkError(error, 'verificación de conectividad');
+      return false;
+    }
+  }
 }

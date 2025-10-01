@@ -1,0 +1,139 @@
+<div class="lineas-factura-container">
+  <!-- Header con acciones -->
+  <div class="lineas-header">
+    <h3>Productos y Servicios</h3>
+    <button mat-raised-button color="primary" (click)="agregarLinea()">
+      <mat-icon>add</mat-icon>
+      Agregar Producto
+    </button>
+  </div>
+
+  <!-- Lista de líneas de factura -->
+  <div class="lineas-list">
+    <mat-card class="linea-card" *ngFor="let linea of lineasArray.controls; let i = index" [formGroupName]="i">
+      <mat-card-content>
+        <div class="linea-content">
+          <!-- Selector de producto -->
+          <div class="producto-selector">
+            <mat-form-field appearance="outline" class="producto-field">
+              <mat-label>Producto</mat-label>
+              <input matInput
+                     formControlName="id_producto"
+                     [matAutocomplete]="autoProducto"
+                     placeholder="Buscar producto por código o nombre"
+                     (blur)="onProductoBlur(i)">
+              <mat-icon matSuffix>search</mat-icon>
+            </mat-form-field>
+
+            <mat-autocomplete #autoProducto="matAutocomplete"
+                             [displayWith]="displayProducto"
+                             (optionSelected)="onProductoSeleccionado($event, i)">
+              <mat-option *ngFor="let producto of getProductosFiltrados(searchTerm(i)) | async" [value]="producto">
+                <div class="producto-option">
+                  <div class="producto-info">
+                    <strong>{{ producto.nombre }}</strong>
+                    <small class="producto-codigo">Código: {{ producto.codigo }}</small>
+                  </div>
+                  <div class="producto-precio">
+                    <span class="precio">${{ producto.precio_venta | number:'1.0-0':'es-CO' }}</span>
+                    <small class="stock" *ngIf="producto.inventariable">Stock: {{ producto.stock_actual }}</small>
+                  </div>
+                </div>
+              </mat-option>
+              <mat-option *ngIf="(getProductosFiltrados(searchTerm(i)) | async)?.length === 0 && searchTerm(i)" disabled>
+                <div class="no-results">
+                  <mat-icon>search_off</mat-icon>
+                  <span>No se encontraron productos</span>
+                </div>
+              </mat-option>
+            </mat-autocomplete>
+          </div>
+
+          <!-- Descripción manual (si no hay producto seleccionado) -->
+          <mat-form-field appearance="outline" class="descripcion-field" *ngIf="!linea.get('producto')?.value">
+            <mat-label>Descripción</mat-label>
+            <input matInput formControlName="descripcion" placeholder="Descripción del producto o servicio">
+          </mat-form-field>
+
+          <!-- Información del producto seleccionado -->
+          <div class="producto-info-display" *ngIf="linea.get('producto')?.value">
+            <mat-chip-listbox>
+              <mat-chip>{{ linea.get('producto')?.value.nombre }}</mat-chip>
+              <mat-chip color="accent" selected>
+                Código: {{ linea.get('producto')?.value.codigo }}
+              </mat-chip>
+              <mat-chip color="primary" selected *ngIf="linea.get('producto')?.value.inventariable">
+                Stock: {{ linea.get('producto')?.value.stock_actual }}
+              </mat-chip>
+            </mat-chip-listbox>
+          </div>
+
+          <!-- Campos numéricos -->
+          <div class="campos-numericos">
+            <mat-form-field appearance="outline" class="campo-numerico">
+              <mat-label>Cantidad</mat-label>
+              <input matInput
+                     type="number"
+                     formControlName="cantidad"
+                     min="0.01"
+                     step="0.01"
+                     (input)="calcularSubtotal(i)">
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="campo-numerico">
+              <mat-label>Precio Unitario</mat-label>
+              <input matInput
+                     type="number"
+                     formControlName="precio_unitario"
+                     min="0"
+                     step="0.01"
+                     (input)="calcularSubtotal(i)">
+              <span matSuffix>$</span>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="campo-numerico">
+              <mat-label>Descuento (%)</mat-label>
+              <input matInput
+                     type="number"
+                     formControlName="descuento"
+                     min="0"
+                     max="100"
+                     step="0.01"
+                     (input)="calcularSubtotal(i)">
+              <span matSuffix>%</span>
+            </mat-form-field>
+
+            <!-- Subtotal calculado -->
+            <div class="subtotal-display">
+              <span class="subtotal-label">Subtotal:</span>
+              <span class="subtotal-value">${{ calcularSubtotalLinea(i) | number:'1.0-0':'es-CO' }}</span>
+            </div>
+          </div>
+
+          <!-- Acciones de línea -->
+          <div class="linea-actions">
+            <button mat-icon-button color="warn" (click)="removerLinea(i)" matTooltip="Remover línea">
+              <mat-icon>delete</mat-icon>
+            </button>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <!-- Mensaje cuando no hay líneas -->
+  <div class="empty-state" *ngIf="lineasArray.length === 0">
+    <mat-icon class="empty-icon">shopping_cart</mat-icon>
+    <h4>No hay productos agregados</h4>
+    <p>Haga clic en "Agregar Producto" para comenzar</p>
+  </div>
+
+  <!-- Total general -->
+  <div class="total-general" *ngIf="lineasArray.length > 0">
+    <mat-divider class="total-divider"></mat-divider>
+    <div class="total-line">
+      <span class="total-label">Total de la Factura:</span>
+      <span class="total-value">${{ calcularTotalGeneral() | number:'1.0-0':'es-CO' }}</span>
+    </div>
+  </div>
+</div>

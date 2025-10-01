@@ -324,7 +324,379 @@
         </div>
       </mat-tab>
 
-      <!-- Tab 3: Estadísticas -->
+      <!-- Tab 3: Historial de Mensajes -->
+      <mat-tab label="Historial">
+        <div class="tab-content">
+          <div class="historial-section">
+            <div class="historial-header">
+              <h3>Historial de Mensajes</h3>
+              <div class="historial-controls">
+                <mat-form-field appearance="outline" class="filter-field">
+                  <mat-label>Estado</mat-label>
+                  <mat-select [(value)]="filtroEstado" (selectionChange)="filtrarMensajes()">
+                    <mat-option value="">Todos</mat-option>
+                    <mat-option value="enviado">Enviado</mat-option>
+                    <mat-option value="entregado">Entregado</mat-option>
+                    <mat-option value="leido">Leído</mat-option>
+                    <mat-option value="fallido">Fallido</mat-option>
+                    <mat-option value="pendiente">Pendiente</mat-option>
+                  </mat-select>
+                </mat-form-field>
+
+                <mat-form-field appearance="outline" class="filter-field">
+                  <mat-label>Tipo</mat-label>
+                  <mat-select [(value)]="filtroTipo" (selectionChange)="filtrarMensajes()">
+                    <mat-option value="">Todos</mat-option>
+                    <mat-option value="confirmacion">Confirmación</mat-option>
+                    <mat-option value="recordatorio">Recordatorio</mat-option>
+                    <mat-option value="factura">Factura</mat-option>
+                    <mat-option value="formula">Fórmula</mat-option>
+                    <mat-option value="cancelacion">Cancelación</mat-option>
+                    <mat-option value="manual">Manual</mat-option>
+                  </mat-select>
+                </mat-form-field>
+
+                <mat-form-field appearance="outline" class="filter-field">
+                  <mat-label>Fecha desde</mat-label>
+                  <input matInput type="date" [(ngModel)]="fechaDesde" (change)="filtrarMensajes()">
+                </mat-form-field>
+
+                <mat-form-field appearance="outline" class="filter-field">
+                  <mat-label>Fecha hasta</mat-label>
+                  <input matInput type="date" [(ngModel)]="fechaHasta" (change)="filtrarMensajes()">
+                </mat-form-field>
+
+                <button mat-icon-button (click)="limpiarFiltros()" matTooltip="Limpiar filtros">
+                  <mat-icon>clear</mat-icon>
+                </button>
+
+                <button mat-icon-button (click)="refreshHistorial()" matTooltip="Actualizar">
+                  <mat-icon>refresh</mat-icon>
+                </button>
+              </div>
+            </div>
+
+            <!-- Tabla de mensajes -->
+            @if (historialLoading()) {
+              <div class="loading-container">
+                <mat-spinner></mat-spinner>
+                <p>Cargando historial...</p>
+              </div>
+            } @else if (mensajesFiltrados().length > 0) {
+              <div class="mensajes-table">
+                <table mat-table [dataSource]="mensajesFiltrados()" class="mensajes-mat-table">
+                  <!-- Columna Fecha -->
+                  <ng-container matColumnDef="fecha">
+                    <th mat-header-cell *matHeaderCellDef>Fecha</th>
+                    <td mat-cell *matCellDef="let mensaje">
+                      {{ mensaje.fecha_creacion | date:'dd/MM/yy HH:mm' }}
+                    </td>
+                  </ng-container>
+
+                  <!-- Columna Cliente -->
+                  <ng-container matColumnDef="cliente">
+                    <th mat-header-cell *matHeaderCellDef>Cliente</th>
+                    <td mat-cell *matCellDef="let mensaje">
+                      <div class="cliente-info">
+                        <span class="cliente-nombre">{{ mensaje.contexto?.cliente_nombre || 'N/A' }}</span>
+                        <span class="cliente-numero">{{ mensaje.numero_destino }}</span>
+                      </div>
+                    </td>
+                  </ng-container>
+
+                  <!-- Columna Tipo -->
+                  <ng-container matColumnDef="tipo">
+                    <th mat-header-cell *matHeaderCellDef>Tipo</th>
+                    <td mat-cell *matCellDef="let mensaje">
+                      <mat-chip class="tipo-chip" [style.background-color]="getTipoColor(mensaje.contexto?.tipo)">
+                        {{ getTipoLabel(mensaje.contexto?.tipo) }}
+                      </mat-chip>
+                    </td>
+                  </ng-container>
+
+                  <!-- Columna Estado -->
+                  <ng-container matColumnDef="estado">
+                    <th mat-header-cell *matHeaderCellDef>Estado</th>
+                    <td mat-cell *matCellDef="let mensaje">
+                      <div class="estado-container">
+                        <mat-icon [style.color]="getEstadoColor(mensaje.estado)">
+                          {{ getEstadoIcon(mensaje.estado) }}
+                        </mat-icon>
+                        <span [style.color]="getEstadoColor(mensaje.estado)">
+                          {{ getEstadoLabel(mensaje.estado) }}
+                        </span>
+                      </div>
+                    </td>
+                  </ng-container>
+
+                  <!-- Columna Mensaje -->
+                  <ng-container matColumnDef="mensaje">
+                    <th mat-header-cell *matHeaderCellDef>Mensaje</th>
+                    <td mat-cell *matCellDef="let mensaje">
+                      <div class="mensaje-preview" [matTooltip]="mensaje.contenido">
+                        {{ mensaje.contenido | slice:0:50 }}{{ mensaje.contenido.length > 50 ? '...' : '' }}
+                      </div>
+                    </td>
+                  </ng-container>
+
+                  <!-- Columna Intentos -->
+                  <ng-container matColumnDef="intentos">
+                    <th mat-header-cell *matHeaderCellDef>Intentos</th>
+                    <td mat-cell *matCellDef="let mensaje">
+                      <div class="intentos-info">
+                        <span class="intentos-numero">{{ mensaje.intentos }}</span>
+                        @if (mensaje.estado === 'fallido' && mensaje.intentos < 3) {
+                          <button mat-icon-button (click)="reintentarMensaje(mensaje.id)"
+                                  matTooltip="Reintentar envío" class="retry-button">
+                            <mat-icon>refresh</mat-icon>
+                          </button>
+                        }
+                      </div>
+                    </td>
+                  </ng-container>
+
+                  <!-- Columna Acciones -->
+                  <ng-container matColumnDef="acciones">
+                    <th mat-header-cell *matHeaderCellDef>Acciones</th>
+                    <td mat-cell *matCellDef="let mensaje">
+                      <button mat-icon-button (click)="verDetallesMensaje(mensaje)" matTooltip="Ver detalles">
+                        <mat-icon>info</mat-icon>
+                      </button>
+                      @if (mensaje.estado === 'fallido') {
+                        <button mat-icon-button (click)="verErrorMensaje(mensaje)" matTooltip="Ver error" color="warn">
+                          <mat-icon>error</mat-icon>
+                        </button>
+                      }
+                    </td>
+                  </ng-container>
+
+                  <tr mat-header-row *matHeaderRowDef="columnasHistorial"></tr>
+                  <tr mat-row *matRowDef="let row; columns: columnasHistorial;"></tr>
+                </table>
+              </div>
+
+              <!-- Paginación -->
+              <mat-paginator
+                [length]="totalMensajes()"
+                [pageSizeOptions]="[10, 25, 50, 100]"
+                (page)="cambiarPagina($event)"
+                showFirstLastButtons>
+              </mat-paginator>
+            } @else {
+              <div class="no-mensajes">
+                <mat-icon class="no-mensajes-icon">message</mat-icon>
+                <h3>Sin Mensajes</h3>
+                <p>No se encontraron mensajes con los filtros aplicados</p>
+              </div>
+            }
+          </div>
+        </div>
+      </mat-tab>
+
+      <!-- Tab 4: Control de Límites -->
+      <mat-tab label="Límites">
+        <div class="tab-content">
+          <form [formGroup]="limitesForm" class="limites-form">
+            <div class="limites-section">
+              <h3>Control de Límites de Mensajería</h3>
+              <p class="section-description">
+                <mat-icon style="color: #ff9800;">warning</mat-icon>
+                Configura límites para evitar ser detectado como spam por WhatsApp y posibles bloqueos de la cuenta.
+              </p>
+
+              <!-- Límites Generales -->
+              <mat-card class="limite-card">
+                <mat-card-header>
+                  <mat-card-title>Límites Generales</mat-card-title>
+                </mat-card-header>
+                <mat-card-content>
+                  <div class="form-row">
+                    <mat-form-field appearance="outline" class="form-field">
+                      <mat-label>Límite diario de mensajes</mat-label>
+                      <input matInput type="number" formControlName="limite_diario" min="1" max="200">
+                      <mat-hint>Recomendado: 50-100 mensajes por día</mat-hint>
+                    </mat-form-field>
+
+                    <mat-form-field appearance="outline" class="form-field">
+                      <mat-label>Límite por hora</mat-label>
+                      <input matInput type="number" formControlName="limite_por_hora" min="1" max="50">
+                      <mat-hint>Recomendado: 10-20 mensajes por hora</mat-hint>
+                    </mat-form-field>
+                  </div>
+
+                  <div class="form-row">
+                    <mat-form-field appearance="outline" class="form-field">
+                      <mat-label>Intervalo mínimo entre mensajes (segundos)</mat-label>
+                      <input matInput type="number" formControlName="intervalo_minimo" min="5" max="300">
+                      <mat-hint>Recomendado: 15-30 segundos</mat-hint>
+                    </mat-form-field>
+
+                    <mat-form-field appearance="outline" class="form-field">
+                      <mat-label>Máximo de reintentos</mat-label>
+                      <input matInput type="number" formControlName="max_reintentos" min="1" max="5">
+                      <mat-hint>Recomendado: 3 reintentos</mat-hint>
+                    </mat-form-field>
+                  </div>
+                </mat-card-content>
+              </mat-card>
+
+              <!-- Límites por Tipo de Mensaje -->
+              <mat-card class="limite-card">
+                <mat-card-header>
+                  <mat-card-title>Límites por Tipo de Mensaje</mat-card-title>
+                </mat-card-header>
+                <mat-card-content>
+                  <div class="tipo-limites">
+                    <div class="tipo-limite-item">
+                      <mat-checkbox formControlName="limitar_confirmaciones">
+                        Limitar confirmaciones de citas
+                      </mat-checkbox>
+                      @if (limitesForm.value.limitar_confirmaciones) {
+                        <mat-form-field appearance="outline" class="limite-input">
+                          <mat-label>Por día</mat-label>
+                          <input matInput type="number" formControlName="limite_confirmaciones_dia" min="1">
+                        </mat-form-field>
+                      }
+                    </div>
+
+                    <div class="tipo-limite-item">
+                      <mat-checkbox formControlName="limitar_recordatorios">
+                        Limitar recordatorios de citas
+                      </mat-checkbox>
+                      @if (limitesForm.value.limitar_recordatorios) {
+                        <mat-form-field appearance="outline" class="limite-input">
+                          <mat-label>Por día</mat-label>
+                          <input matInput type="number" formControlName="limite_recordatorios_dia" min="1">
+                        </mat-form-field>
+                      }
+                    </div>
+
+                    <div class="tipo-limite-item">
+                      <mat-checkbox formControlName="limitar_facturas">
+                        Limitar notificaciones de facturas
+                      </mat-checkbox>
+                      @if (limitesForm.value.limitar_facturas) {
+                        <mat-form-field appearance="outline" class="limite-input">
+                          <mat-label>Por día</mat-label>
+                          <input matInput type="number" formControlName="limite_facturas_dia" min="1">
+                        </mat-form-field>
+                      }
+                    </div>
+
+                    <div class="tipo-limite-item">
+                      <mat-checkbox formControlName="limitar_manuales">
+                        Limitar mensajes manuales
+                      </mat-checkbox>
+                      @if (limitesForm.value.limitar_manuales) {
+                        <mat-form-field appearance="outline" class="limite-input">
+                          <mat-label>Por día</mat-label>
+                          <input matInput type="number" formControlName="limite_manuales_dia" min="1">
+                        </mat-form-field>
+                      }
+                    </div>
+                  </div>
+                </mat-card-content>
+              </mat-card>
+
+              <!-- Configuración de Pausas -->
+              <mat-card class="limite-card">
+                <mat-card-header>
+                  <mat-card-title>Configuración de Pausas Automáticas</mat-card-title>
+                </mat-card-header>
+                <mat-card-content>
+                  <div class="pause-config">
+                    <mat-slide-toggle formControlName="pausas_automaticas" color="primary">
+                      Habilitar pausas automáticas cuando se alcancen límites
+                    </mat-slide-toggle>
+
+                    @if (limitesForm.value.pausas_automaticas) {
+                      <div class="pause-settings">
+                        <mat-form-field appearance="outline" class="form-field">
+                          <mat-label>Duración de pausa al alcanzar límite por hora (minutos)</mat-label>
+                          <input matInput type="number" formControlName="pausa_limite_hora" min="5" max="120">
+                        </mat-form-field>
+
+                        <mat-form-field appearance="outline" class="form-field">
+                          <mat-label>Pausa al alcanzar límite diario (horas hasta siguiente día)</mat-label>
+                          <input matInput type="number" formControlName="pausa_limite_dia" min="1" max="24">
+                        </mat-form-field>
+                      </div>
+                    }
+                  </div>
+                </mat-card-content>
+              </mat-card>
+
+              <!-- Estado Actual de Límites -->
+              <mat-card class="limite-card">
+                <mat-card-header>
+                  <mat-card-title>Estado Actual</mat-card-title>
+                </mat-card-header>
+                <mat-card-content>
+                  <div class="estado-limites">
+                    <div class="limite-actual">
+                      <span class="limite-label">Mensajes enviados hoy:</span>
+                      <span class="limite-valor" [style.color]="getColorUsoLimite(estadoLimites().mensajes_hoy, limitesForm.value.limite_diario)">
+                        {{ estadoLimites().mensajes_hoy }}/{{ limitesForm.value.limite_diario }}
+                      </span>
+                      <mat-progress-bar
+                        mode="determinate"
+                        [value]="getPorcentajeUso(estadoLimites().mensajes_hoy, limitesForm.value.limite_diario)"
+                        [color]="getColorBarraLimite(estadoLimites().mensajes_hoy, limitesForm.value.limite_diario)">
+                      </mat-progress-bar>
+                    </div>
+
+                    <div class="limite-actual">
+                      <span class="limite-label">Mensajes enviados esta hora:</span>
+                      <span class="limite-valor" [style.color]="getColorUsoLimite(estadoLimites().mensajes_hora, limitesForm.value.limite_por_hora)">
+                        {{ estadoLimites().mensajes_hora }}/{{ limitesForm.value.limite_por_hora }}
+                      </span>
+                      <mat-progress-bar
+                        mode="determinate"
+                        [value]="getPorcentajeUso(estadoLimites().mensajes_hora, limitesForm.value.limite_por_hora)"
+                        [color]="getColorBarraLimite(estadoLimites().mensajes_hora, limitesForm.value.limite_por_hora)">
+                      </mat-progress-bar>
+                    </div>
+
+                    @if (estadoLimites().pausado) {
+                      <div class="estado-pausa">
+                        <mat-icon style="color: #ff9800;">pause_circle</mat-icon>
+                        <span>Sistema pausado hasta: {{ estadoLimites().pausa_hasta | date:'dd/MM/yyyy HH:mm' }}</span>
+                        <button mat-button color="warn" (click)="reanudarEnvios()" [disabled]="loading()">
+                          Reanudar Manualmente
+                        </button>
+                      </div>
+                    }
+                  </div>
+                </mat-card-content>
+              </mat-card>
+
+              <!-- Botones de acción -->
+              <div class="form-actions">
+                <button mat-raised-button color="primary" (click)="guardarLimites()" [disabled]="loading() || limitesForm.invalid">
+                  @if (loading()) {
+                    <mat-spinner diameter="20"></mat-spinner>
+                  } @else {
+                    <mat-icon>save</mat-icon>
+                  }
+                  Guardar Límites
+                </button>
+
+                <button mat-button color="accent" (click)="restablecerLimites()">
+                  <mat-icon>restore</mat-icon>
+                  Restablecer por Defecto
+                </button>
+
+                <button mat-button color="warn" (click)="resetearContadores()" [disabled]="loading()">
+                  <mat-icon>refresh</mat-icon>
+                  Resetear Contadores
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </mat-tab>
+
+      <!-- Tab 5: Estadísticas (el tab original) -->
       <mat-tab label="Estadísticas">
         <div class="tab-content">
           @if (stats()) {

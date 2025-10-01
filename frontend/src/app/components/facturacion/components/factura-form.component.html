@@ -8,15 +8,32 @@
   </div>
 
   <!-- Paso 1: Información del Cliente y Paciente -->
-  <mat-card class="step-card">
-    <mat-card-header>
-      <mat-card-title>
-        <mat-icon>person</mat-icon>
-        1. Información del Cliente y Paciente
-      </mat-card-title>
-    </mat-card-header>
+  <mat-expansion-panel
+    [expanded]="seccionClienteExpandida()"
+    (opened)="seccionClienteExpandida.set(true)"
+    (closed)="seccionClienteExpandida.set(false)"
+    class="step-expansion-panel"
+    role="region"
+    aria-labelledby="cliente-paciente-title">
 
-    <mat-card-content>
+    <mat-expansion-panel-header>
+      <mat-panel-title id="cliente-paciente-title">
+        <mat-icon aria-hidden="true">person</mat-icon>
+        1. Información del Cliente y Paciente
+      </mat-panel-title>
+      <mat-panel-description>
+        <mat-icon
+          matTooltip="Seleccione un cliente obligatorio. El paciente es opcional salvo para terapias."
+          matTooltipPosition="left"
+          class="info-icon"
+          aria-label="Información sobre cliente y paciente">
+          info
+        </mat-icon>
+        <span *ngIf="clienteSeleccionado()">Cliente: {{ clienteSeleccionado()?.nombre }}</span>
+        <span *ngIf="!clienteSeleccionado()" class="pending-text">Pendiente: Seleccionar cliente</span>
+      </mat-panel-description>
+    </mat-expansion-panel-header>
+
       <!-- Selector de tipo de factura -->
       <div class="tipo-factura-selector">
         <mat-button-toggle-group [(ngModel)]="tipoFactura" (change)="onTipoFacturaChange($event.value)">
@@ -31,61 +48,40 @@
         </mat-button-toggle-group>
       </div>
 
-      <!-- Formulario de cliente (siempre visible) -->
+      <!-- Formulario de cliente usando componente dedicado -->
       <div class="cliente-section">
         <h3>Información del Cliente</h3>
-        <form [formGroup]="clienteForm" class="cliente-form">
-          <div class="form-row">
-            <mat-form-field appearance="outline" class="cliente-nombre-field">
-              <mat-label>Nombre Completo</mat-label>
-              <input matInput
-                     formControlName="nombre"
-                     required
-                     [matAutocomplete]="clienteAuto"
-                     (input)="buscarClientePorNombre($event)"
-                     placeholder="Escribe el nombre para buscar cliente existente">
-              <mat-icon matSuffix>search</mat-icon>
-            </mat-form-field>
+        <app-cliente-selector
+          (clienteSeleccionadoChange)="onClienteSeleccionado($event)">
+        </app-cliente-selector>
 
-            <mat-autocomplete #clienteAuto="matAutocomplete" [displayWith]="displayCliente" (optionSelected)="onClienteSeleccionado($event.option.value)">
-              <mat-option *ngFor="let cliente of clientesFiltrados$()" [value]="cliente">
-                <div class="cliente-option">
-                  <span class="cliente-nombre">{{ cliente.nombre }}</span>
-                  <span class="cliente-info">{{ cliente.documento }} - {{ cliente.telefono }}</span>
-                </div>
-              </mat-option>
-            </mat-autocomplete>
-
-            <mat-form-field appearance="outline">
-              <mat-label>Documento</mat-label>
-              <input matInput formControlName="documento" required>
-            </mat-form-field>
-          </div>
-
-          <div class="form-row">
-            <mat-form-field appearance="outline">
-              <mat-label>Teléfono</mat-label>
-              <input matInput formControlName="telefono">
-            </mat-form-field>
-
-            <mat-form-field appearance="outline">
-              <mat-label>Email</mat-label>
-              <input matInput formControlName="email" type="email">
-            </mat-form-field>
-          </div>
-
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Dirección</mat-label>
-            <textarea matInput formControlName="direccion" rows="2"></textarea>
-          </mat-form-field>
-
-          @if (tipoFactura === 'sin_paciente' && clienteSeleccionado) {
-            <div class="cliente-encontrado">
-              <mat-icon color="primary">check_circle</mat-icon>
-              <span>Cliente encontrado y cargado automáticamente</span>
-            </div>
-          }
-        </form>
+        <!-- Información del cliente seleccionado -->
+        <div class="cliente-info" *ngIf="clienteSeleccionado()">
+          <mat-card class="cliente-card">
+            <mat-card-header>
+              <mat-card-title>
+                <mat-icon>person</mat-icon>
+                {{ clienteSeleccionado()?.nombre }}
+              </mat-card-title>
+              <mat-card-subtitle>
+                Documento: {{ clienteSeleccionado()?.documento }}
+              </mat-card-subtitle>
+            </mat-card-header>
+            <mat-card-content>
+              <div class="cliente-details">
+                <p *ngIf="clienteSeleccionado()?.telefono">
+                  <strong>Teléfono:</strong> {{ clienteSeleccionado()?.telefono }}
+                </p>
+                <p *ngIf="clienteSeleccionado()?.email">
+                  <strong>Email:</strong> {{ clienteSeleccionado()?.email }}
+                </p>
+                <p *ngIf="clienteSeleccionado()?.direccion">
+                  <strong>Dirección:</strong> {{ clienteSeleccionado()?.direccion }}
+                </p>
+              </div>
+            </mat-card-content>
+          </mat-card>
+        </div>
       </div>
 
       <!-- Sección de paciente (solo si es con paciente) -->
@@ -152,85 +148,86 @@
           </mat-card-content>
         </mat-card>
       </div>
-    </mat-card-content>
-  </mat-card>
+    </mat-expansion-panel>
 
-  <!-- Paso 2: Detalles de la Factura -->
-  <mat-card class="step-card">
-    <mat-card-header>
-      <mat-card-title>
-        <mat-icon>shopping_cart</mat-icon>
-        2. Detalles de la Factura
-      </mat-card-title>
-    </mat-card-header>
+  <!-- Paso 2: Productos y Servicios -->
+  <mat-expansion-panel
+    [expanded]="seccionProductosExpandida()"
+    (opened)="seccionProductosExpandida.set(true)"
+    (closed)="seccionProductosExpandida.set(false)"
+    class="step-expansion-panel"
+    role="region"
+    aria-labelledby="productos-title">
 
-    <mat-card-content>
+    <mat-expansion-panel-header>
+      <mat-panel-title id="productos-title">
+        <mat-icon aria-hidden="true">shopping_cart</mat-icon>
+        2. Productos y Servicios
+      </mat-panel-title>
+      <mat-panel-description>
+        <span *ngIf="lineasFactura.length > 0">{{lineasFactura.length}} productos agregados</span>
+        <span *ngIf="lineasFactura.length === 0" class="pending-text">Sin productos</span>
+      </mat-panel-description>
+    </mat-expansion-panel-header>
+
+    <div>
       <form [formGroup]="facturaForm" class="factura-details-form">
-        <div class="form-row">
-          <mat-form-field appearance="outline">
-            <mat-label>Método de Pago</mat-label>
-            <mat-select formControlName="metodo_pago" required>
-              <mat-option value="Efectivo">Efectivo</mat-option>
-              <mat-option value="Tarjeta">Tarjeta</mat-option>
-              <mat-option value="Transferencia">Transferencia</mat-option>
-              <mat-option value="Cheque">Cheque</mat-option>
-              <mat-option value="Crédito">Crédito</mat-option>
-            </mat-select>
-          </mat-form-field>
+        <!-- Configuración básica de la factura -->
+        <div class="factura-config-section">
+          <div class="config-row">
+            <mat-form-field appearance="outline" class="metodo-pago-field">
+              <mat-label>Método de Pago</mat-label>
+              <mat-select formControlName="metodo_pago" required>
+                <mat-option value="Efectivo">
+                  <mat-icon>money</mat-icon>
+                  Efectivo
+                </mat-option>
+                <mat-option value="Tarjeta">
+                  <mat-icon>credit_card</mat-icon>
+                  Tarjeta
+                </mat-option>
+                <mat-option value="Transferencia">
+                  <mat-icon>account_balance</mat-icon>
+                  Transferencia
+                </mat-option>
+                <mat-option value="Cheque">
+                  <mat-icon>receipt_long</mat-icon>
+                  Cheque
+                </mat-option>
+                <mat-option value="Crédito">
+                  <mat-icon>schedule</mat-icon>
+                  Crédito
+                </mat-option>
+              </mat-select>
+              <mat-hint>Seleccione el método de pago para esta factura</mat-hint>
+            </mat-form-field>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Notas</mat-label>
-            <textarea matInput formControlName="notas" rows="2"
-                      placeholder="Notas adicionales de la factura"></textarea>
-          </mat-form-field>
-        </div>
-
-        <!-- Productos/Servicios -->
-        <div formArrayName="lineas" class="lineas-factura">
-          <div *ngFor="let linea of lineasFactura.controls; let i = index"
-               [formGroupName]="i"
-               class="linea-factura">
-
-            <div class="linea-header">
-              <h4>Producto {{ i + 1 }}</h4>
-              <button mat-icon-button color="warn" (click)="removerLineaFactura(i)">
-                <mat-icon>delete</mat-icon>
-              </button>
-            </div>
-
-            <div class="linea-content">
-              <mat-form-field appearance="outline">
-                <mat-label>Código del Producto</mat-label>
-                <input matInput formControlName="id_producto" (blur)="buscarProducto(i)">
-              </mat-form-field>
-
-              <mat-form-field appearance="outline">
-                <mat-label>Cantidad</mat-label>
-                <input matInput type="number" formControlName="cantidad" min="0.01" step="0.01">
-              </mat-form-field>
-
-              <mat-form-field appearance="outline">
-                <mat-label>Precio Unitario</mat-label>
-                <input matInput type="number" formControlName="precio_unitario" min="0" step="0.01">
-                <span matSuffix>$</span>
-              </mat-form-field>
-
-              <mat-form-field appearance="outline">
-                <mat-label>Descuento (%)</mat-label>
-                <input matInput type="number" formControlName="descuento" min="0" max="100">
-                <span matSuffix>%</span>
-              </mat-form-field>
-
-              <div class="linea-total">
-                <strong>Total: {{ formatearMoneda(calcularTotalLinea(i)) }}</strong>
-              </div>
-            </div>
-
-            <mat-form-field appearance="outline" class="full-width">
-              <mat-label>Descripción</mat-label>
-              <input matInput formControlName="descripcion">
+            <mat-form-field appearance="outline" class="notas-field">
+              <mat-label>Notas (Opcional)</mat-label>
+              <textarea matInput
+                        formControlName="notas"
+                        rows="2"
+                        placeholder="Observaciones adicionales sobre la factura"
+                        maxlength="500"></textarea>
+              <mat-hint>{{facturaForm.get('notas')?.value?.length || 0}}/500 caracteres</mat-hint>
             </mat-form-field>
           </div>
+        </div>
+
+        <mat-divider class="section-divider"></mat-divider>
+
+        <!-- Componente de líneas de factura -->
+        <div class="productos-section">
+          <h3>Detalle de Productos</h3>
+          <p class="section-description">
+            Agregue los productos o servicios que se incluirán en la factura.
+            Los precios se obtienen automáticamente del inventario.
+          </p>
+
+          <app-lineas-factura
+            [lineasArray]="lineasFactura"
+            (totalChanged)="onTotalChanged($event)">
+          </app-lineas-factura>
         </div>
 
         <!-- Totales -->
@@ -239,31 +236,17 @@
           <div class="totales-content">
             <div class="total-line">
               <span>Subtotal:</span>
-              <span>{{ formatearMoneda(calcularTotalFactura()) }}</span>
+              <span class="monto">{{ formatearMoneda(totalFactura()) }}</span>
             </div>
             <div class="total-line final">
               <span><strong>Total a Pagar:</strong></span>
-              <span><strong>{{ formatearMoneda(calcularTotalFactura()) }}</strong></span>
+              <span class="monto final"><strong>{{ formatearMoneda(totalFactura()) }}</strong></span>
             </div>
           </div>
         </div>
       </form>
-    </mat-card-content>
-  </mat-card>
-
-  <!-- Paso 3: Productos/Servicios -->
-  <mat-card class="step-card">
-    <mat-card-header>
-      <mat-card-title>
-        <mat-icon>inventory</mat-icon>
-        3. Productos y Servicios
-      </mat-card-title>
-      <button mat-raised-button color="primary" (click)="agregarLineaFactura()">
-        <mat-icon>add</mat-icon>
-        Agregar Producto
-      </button>
-    </mat-card-header>
-  </mat-card>
+    </div>
+  </mat-expansion-panel>
 
   <!-- Acciones del formulario -->
   <div class="form-actions">
@@ -275,7 +258,7 @@
     <button mat-raised-button
             color="primary"
             (click)="guardarFactura()"
-            [disabled]="facturaForm.invalid || guardando() || clienteForm.invalid">
+            [disabled]="facturaForm.invalid || guardando() || !clienteSeleccionado()">
       <mat-icon *ngIf="guardando()">refresh</mat-icon>
       {{ guardando() ? 'Guardando...' : 'Crear Factura' }}
     </button>
