@@ -1,10 +1,53 @@
 import { body, param, query } from 'express-validator/lib/index.js';
 
 export const validateCreateInvoice = [
+  // Validación condicional: debe tener id_cliente O cliente_nuevo
+  body().custom((body) => {
+    const hasIdCliente = body.id_cliente && body.id_cliente.trim() !== '';
+    const hasClienteNuevo = body.cliente_nuevo && typeof body.cliente_nuevo === 'object';
+
+    if (!hasIdCliente && !hasClienteNuevo) {
+      throw new Error('Debe proporcionar id_cliente existente o datos de cliente_nuevo');
+    }
+
+    if (hasIdCliente && hasClienteNuevo) {
+      throw new Error('No puede proporcionar tanto id_cliente como cliente_nuevo. Use uno u otro');
+    }
+
+    return true;
+  }),
+
   body('id_cliente')
     .optional()
     .isUUID()
     .withMessage('ID de cliente debe ser un UUID válido'),
+
+  // Validaciones para cliente_nuevo
+  body('cliente_nuevo.nombre')
+    .if(body('cliente_nuevo').exists())
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Nombre del cliente debe tener entre 2 y 100 caracteres'),
+
+  body('cliente_nuevo.cedula')
+    .if(body('cliente_nuevo').exists())
+    .isLength({ min: 5, max: 20 })
+    .withMessage('Cédula del cliente debe tener entre 5 y 20 caracteres'),
+
+  body('cliente_nuevo.telefono')
+    .if(body('cliente_nuevo').exists())
+    .isLength({ min: 7, max: 20 })
+    .withMessage('Teléfono del cliente debe tener entre 7 y 20 caracteres'),
+
+  body('cliente_nuevo.email')
+    .if(body('cliente_nuevo').exists())
+    .isEmail()
+    .withMessage('Email del cliente debe ser válido'),
+
+  body('cliente_nuevo.direccion')
+    .if(body('cliente_nuevo').exists())
+    .optional()
+    .isLength({ max: 500 })
+    .withMessage('Dirección del cliente no puede exceder 500 caracteres'),
 
   body('items')
     .isArray({ min: 1 })

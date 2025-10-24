@@ -7,10 +7,17 @@ export class InvoiceService {
     this.stockService = new StockService();
     this.therapyService = new TherapyService();
     this.cashService = new CashService();
+    this.clientService = new ClientService();
   }
 
   async createInvoice(invoiceData, userId) {
-    const { id_cliente, id_consulta, items, descuento = 0, notas = null, tipo_pago = 'Efectivo' } = invoiceData;
+    const { id_cliente, cliente_nuevo, id_consulta, items, descuento = 0, notas = null, tipo_pago = 'Efectivo' } = invoiceData;
+
+    // Resolver cliente: usar existente o crear nuevo
+    let clienteId = id_cliente;
+    if (cliente_nuevo) {
+      clienteId = await this.clientService.findOrCreateClient(cliente_nuevo, userId);
+    }
 
     // Iniciar transacción
     await query('BEGIN');
@@ -24,7 +31,7 @@ export class InvoiceService {
 
       // Crear factura
       const factura = await this.invoiceRepository.create({
-        id_cliente,
+        id_cliente: clienteId,
         id_consulta,
         descuento,
         notas,
@@ -664,5 +671,38 @@ export class CashService {
       SET saldo_actual = saldo_actual + $1, updated_at = CURRENT_TIMESTAMP
       WHERE id_caja = $2
     `, [monto, factura.id_caja]);
+  }
+}
+
+export class ClientService {
+  async findOrCreateClient(clientData, userId) {
+    const { cedula } = clientData;
+
+    // Buscar cliente por cédula
+    const existingClient = await query(
+      'SELECT id_cliente FROM clinical.clientes WHERE cedula = $1 AND activo = true',
+      [cedula]
+    );
+
+    if (existingClient.rows.length > 0) {
+      return existingClient.rows[0].id_cliente;
+    }
+
+    // Crear nuevo cliente
+    const result = await query(`
+      INSERT INTO clinical.clientes (
+        nombre, cedula, telefono, email, direccion, created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING id_cliente
+    `, [
+      clientData.nombre,
+      clientData.cedula,
+      clientData.telefono,
+      clientData.email,
+      clientData.direccion || null,
+      userId
+    ]);
+
+    return result.rows[0].id_cliente;
   }
 }

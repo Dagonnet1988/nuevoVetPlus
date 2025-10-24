@@ -1,17 +1,21 @@
 import { Injectable } from '@angular/core';
 import { HttpInterceptor, HttpRequest, HttpHandler, HttpEvent, HttpErrorResponse } from '@angular/common/http';
-import { Observable, throwError } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { Observable, throwError, BehaviorSubject } from 'rxjs';
+import { catchError, switchMap, filter, take } from 'rxjs/operators';
 import { AuthService } from '../../services/auth.service';
 import { Router } from '@angular/router';
+import { MatSnackBar } from '@angular/material/snack-bar';
 
 @Injectable()
 export class AuthInterceptor implements HttpInterceptor {
   private isLoggingOut = false; // Flag para evitar bucles
+  private isRefreshing = false; // Flag para evitar múltiples refresh simultáneos
+  private refreshTokenSubject: BehaviorSubject<any> = new BehaviorSubject<any>(null);
 
   constructor(
     private authService: AuthService,
-    private router: Router
+    private router: Router,
+    private snackBar: MatSnackBar
   ) {}
 
   intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
@@ -27,7 +31,7 @@ export class AuthInterceptor implements HttpInterceptor {
 
     // Agregar headers adicionales (solo para requests que no son FormData)
     const isFormData = authReq.body instanceof FormData;
-    
+
     if (!isFormData) {
       authReq = authReq.clone({
         headers: authReq.headers
@@ -45,38 +49,26 @@ export class AuthInterceptor implements HttpInterceptor {
       catchError((error: HttpErrorResponse) => {
         // Manejar errores de autenticación
         if (error.status === 401 && !this.isLoggingOut) {
-          // Token expirado o inválido
-          console.warn('Token expirado o inválido, cerrando sesión...');
-
-          // Evitar bucles: si ya estamos haciendo logout, forzar logout local
-          if (req.url.includes('/auth/logout')) {
+          // Verificar si es un error de token expirado (no de credenciales inválidas)
+          if (this.isTokenExpiredError(error)) {
+            return this.handleTokenExpired(req, next);
+          } else {
+            // Credenciales inválidas o error de autenticación general
+            console.warn('Error de autenticación, cerrando sesión...');
             this.forceLogout();
             return throwError(() => error);
           }
-
-          // Marcar que estamos en proceso de logout
-          this.isLoggingOut = true;
-
-          // Usar logout que no hace petición al servidor para evitar bucles
-          this.authService.logout(true);
-
-          // Resetear flag después de un tiempo
-          setTimeout(() => {
-            this.isLoggingOut = false;
-          }, 1000);
-
-          return throwError(() => error);
         }
 
         if (error.status === 403) {
           // Sin permisos
           console.warn('Acceso denegado - Sin permisos suficientes');
-          
+
           // No redirigir automáticamente si es una request de sincronización
           if (!req.url.includes('sync-google') && !req.url.includes('sync-all')) {
             this.router.navigate(['/dashboard']);
           }
-          
+
           return throwError(() => error);
         }
 
@@ -93,8 +85,80 @@ export class AuthInterceptor implements HttpInterceptor {
   // Forzar logout sin hacer petición HTTP
   private forceLogout(): void {
     localStorage.removeItem('vetplus_token');
+    localStorage.removeItem('vetplus_refresh_token');
     localStorage.removeItem('vetplus_user');
     this.router.navigate(['/login']);
     window.location.reload(); // Forzar recarga completa para limpiar el estado
+  }
+
+  // Mostrar mensaje de sesión expirada
+  private showSessionExpiredMessage(): void {
+    this.snackBar.open(
+      'Su sesión ha expirado por seguridad. Por favor, inicie sesión nuevamente.',
+      'Entendido',
+      {
+        duration: 6000,
+        horizontalPosition: 'center',
+        verticalPosition: 'top',
+        panelClass: ['session-expired-snackbar']
+      }
+    );
+  }
+
+  // Verificar si el error es por token expirado
+  private isTokenExpiredError(error: HttpErrorResponse): boolean {
+    // Verificar mensaje de error o código específico
+    const errorMessage = error.error?.message || '';
+    const errorCode = error.error?.error;
+
+    return errorCode === 'INVALID_TOKEN' ||
+           errorMessage.includes('expirado') ||
+           errorMessage.includes('expired');
+  }
+
+  // Manejar token expirado intentando refresh
+  private handleTokenExpired(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    if (!this.isRefreshing) {
+      this.isRefreshing = true;
+      this.refreshTokenSubject.next(null);
+
+      return this.authService.refreshToken().pipe(
+        switchMap(() => {
+          this.isRefreshing = false;
+          const newToken = this.authService.getToken();
+          this.refreshTokenSubject.next(newToken);
+
+          // Reintentar la petición original con el nuevo token
+          const authReq = req.clone({
+            headers: req.headers.set('Authorization', `Bearer ${newToken}`)
+          });
+
+          return next.handle(authReq);
+        }),
+        catchError((err) => {
+          this.isRefreshing = false;
+          this.refreshTokenSubject.next(null);
+
+          // Si el refresh falla, mostrar mensaje y hacer logout
+          console.warn('Refresh token expirado, sesión finalizada por seguridad');
+          this.showSessionExpiredMessage();
+          this.forceLogout();
+          return throwError(() => err);
+        })
+      );
+    } else {
+      // Si ya hay un refresh en proceso, esperar a que termine
+      return this.refreshTokenSubject.pipe(
+        filter(token => token != null),
+        take(1),
+        switchMap(() => {
+          const newToken = this.authService.getToken();
+          const authReq = req.clone({
+            headers: req.headers.set('Authorization', `Bearer ${newToken}`)
+          });
+          return next.handle(authReq);
+        })
+      );
+    }
   }
 }

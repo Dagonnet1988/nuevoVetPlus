@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { query } from '../config/database.js';
-import { generateToken } from '../middleware/auth.js';
+import { generateToken, generateRefreshToken, verifyRefreshToken } from '../middleware/auth.js';
 import { validationResult } from 'express-validator/lib/index.js';
 
 /**
@@ -99,7 +99,7 @@ class AuthController {
       // Verificar si debe cambiar contraseña
       const needsPasswordChange = user.debe_cambiar_password || user.password_temporal;
 
-      // Generar token JWT
+      // Generar tokens JWT
       const token = generateToken({
         id_usuario: user.id_usuario,
         email: user.email,
@@ -107,6 +107,11 @@ class AuthController {
         nombre: user.nombre,
         apellido: user.apellido,
         rol: user.rol
+      });
+
+      const refreshToken = generateRefreshToken({
+        id_usuario: user.id_usuario,
+        email: user.email
       });
 
       // Log de login exitoso (simplificado)
@@ -117,6 +122,7 @@ class AuthController {
         message: 'Login exitoso',
         data: {
           token,
+          refreshToken,
           user: {
             id: user.id_usuario,
             nombre: user.nombre,
@@ -140,40 +146,128 @@ class AuthController {
   }
 
   /**
-   * Logout de usuario
-   */
-  async logout(req, res) {
-    try {
-      const authHeader = req.headers['authorization'];
-      const token = authHeader && authHeader.split(' ')[1];
+    * Logout de usuario
+    */
+   async logout(req, res) {
+     try {
+       const authHeader = req.headers['authorization'];
+       const token = authHeader && authHeader.split(' ')[1];
 
-      if (token) {
-        // Agregar token a blacklist
-        await query(
-          'INSERT INTO vetplus_auth.blacklisted_tokens (token, id_usuario, razon) VALUES ($1, $2, $3)',
-          [token, req.user?.id_usuario, 'logout']
-        );
+       if (token) {
+         // Agregar token a blacklist
+         await query(
+           'INSERT INTO vetplus_auth.blacklisted_tokens (token, id_usuario, razon) VALUES ($1, $2, $3)',
+           [token, req.user?.id_usuario, 'logout']
+         );
 
-        // Log de logout (simplificado)
-        if (req.user) {
-          console.log(`👋 Logout exitoso para usuario ${req.user.email}`);
-        }
-      }
+         // Log de logout (simplificado)
+         if (req.user) {
+           console.log(`👋 Logout exitoso para usuario ${req.user.email}`);
+         }
+       }
 
-      res.json({
-        success: true,
-        message: 'Logout exitoso'
-      });
+       res.json({
+         success: true,
+         message: 'Logout exitoso'
+       });
 
-    } catch (error) {
-      console.error('Error en logout:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor',
-        error: 'INTERNAL_ERROR'
-      });
-    }
-  }
+     } catch (error) {
+       console.error('Error en logout:', error);
+       res.status(500).json({
+         success: false,
+         message: 'Error interno del servidor',
+         error: 'INTERNAL_ERROR'
+       });
+     }
+   }
+
+   /**
+    * Refresh token - genera un nuevo token de acceso
+    */
+   async refreshToken(req, res) {
+     try {
+       const { refreshToken } = req.body;
+
+       if (!refreshToken) {
+         return res.status(400).json({
+           success: false,
+           message: 'Refresh token requerido',
+           error: 'MISSING_REFRESH_TOKEN'
+         });
+       }
+
+       // Verificar refresh token
+       const decoded = verifyRefreshToken(refreshToken);
+
+       // Verificar que el usuario existe y está activo
+       const userResult = await query(
+         'SELECT id_usuario, nombre, apellido, email, documento, rol, activo FROM vetplus_auth.usuarios WHERE id_usuario = $1',
+         [decoded.id]
+       );
+
+       if (userResult.rows.length === 0) {
+         return res.status(401).json({
+           success: false,
+           message: 'Usuario no encontrado',
+           error: 'USER_NOT_FOUND'
+         });
+       }
+
+       const user = userResult.rows[0];
+
+       if (!user.activo) {
+         return res.status(401).json({
+           success: false,
+           message: 'Usuario desactivado',
+           error: 'USER_DISABLED'
+         });
+       }
+
+       // Generar nuevo token de acceso
+       const newToken = generateToken({
+         id_usuario: user.id_usuario,
+         email: user.email,
+         documento: user.documento,
+         nombre: user.nombre,
+         apellido: user.apellido,
+         rol: user.rol
+       });
+
+       // Opcional: generar nuevo refresh token
+       const newRefreshToken = generateRefreshToken({
+         id_usuario: user.id_usuario,
+         email: user.email
+       });
+
+       console.log(`🔄 Token refrescado para usuario ${user.email}`);
+
+       res.json({
+         success: true,
+         message: 'Token refrescado exitosamente',
+         data: {
+           token: newToken,
+           refreshToken: newRefreshToken
+         }
+       });
+
+     } catch (error) {
+       console.error('Error en refresh token:', error);
+
+       if (error.message === 'Refresh token inválido o expirado') {
+         return res.status(401).json({
+           success: false,
+           message: error.message,
+           error: 'INVALID_REFRESH_TOKEN'
+         });
+       }
+
+       res.status(500).json({
+         success: false,
+         message: 'Error interno del servidor',
+         error: 'INTERNAL_ERROR'
+       });
+     }
+   }
 
   /**
    * Obtener información del usuario actual

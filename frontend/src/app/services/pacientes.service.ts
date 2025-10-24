@@ -18,7 +18,7 @@ import {
 })
 export class PacientesService {
   private readonly API_URL = `${environment.apiUrl}/clinical`;
-  
+
   // BehaviorSubject para notificar cambios de fotos
   private photoUpdatedSubject = new BehaviorSubject<{mascotaId: string, fotoUrl: string} | null>(null);
   public photoUpdated$ = this.photoUpdatedSubject.asObservable();
@@ -87,7 +87,8 @@ export class PacientesService {
   }
 
   getMascotasByCliente(clienteId: string): Observable<Mascota[]> {
-    return this.http.get<Mascota[]>(`${this.API_URL}/pacientes/client/${clienteId}`);
+    return this.http.get<Mascota[]>(`${this.API_URL}/pets/client/${clienteId}`
+    );
   }
 
   createMascota(mascota: Partial<Mascota>): Observable<Mascota> {

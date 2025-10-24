@@ -4,7 +4,8 @@ import { query } from '../config/database.js';
 // Configuración JWT
 const JWT_CONFIG = {
   secret: process.env.JWT_SECRET || 'vetplus_super_secret_key_2024',
-  expiresIn: process.env.JWT_EXPIRES_IN || '24h',
+  expiresIn: process.env.JWT_EXPIRES_IN || '1h', // Cambiado de 24h a 1h
+  refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '12h', // 12 horas para refresh token
   issuer: 'VetPlus',
   audience: 'vetplus-users'
 };
@@ -31,6 +32,26 @@ const generateToken = (user) => {
 };
 
 /**
+ * Genera un refresh token JWT para un usuario
+ * @param {Object} user - Datos del usuario
+ * @returns {String} Refresh token JWT
+ */
+const generateRefreshToken = (user) => {
+  const payload = {
+    id: user.id_usuario,
+    email: user.email,
+    type: 'refresh',
+    iat: Math.floor(Date.now() / 1000)
+  };
+
+  return jwt.sign(payload, JWT_CONFIG.secret, {
+    expiresIn: JWT_CONFIG.refreshExpiresIn,
+    issuer: JWT_CONFIG.issuer,
+    audience: JWT_CONFIG.audience
+  });
+};
+
+/**
  * Verifica un token JWT
  * @param {String} token - Token a verificar
  * @returns {Object} Payload decodificado
@@ -43,6 +64,28 @@ const verifyToken = (token) => {
     });
   } catch (error) {
     throw new Error('Token inválido o expirado');
+  }
+};
+
+/**
+ * Verifica un refresh token JWT
+ * @param {String} token - Refresh token a verificar
+ * @returns {Object} Payload decodificado
+ */
+const verifyRefreshToken = (token) => {
+  try {
+    const decoded = jwt.verify(token, JWT_CONFIG.secret, {
+      issuer: JWT_CONFIG.issuer,
+      audience: JWT_CONFIG.audience
+    });
+
+    if (decoded.type !== 'refresh') {
+      throw new Error('Token no es un refresh token válido');
+    }
+
+    return decoded;
+  } catch (error) {
+    throw new Error('Refresh token inválido o expirado');
   }
 };
 
@@ -225,7 +268,9 @@ const optionalAuth = async (req, res, next) => {
 export {
   JWT_CONFIG,
   generateToken,
+  generateRefreshToken,
   verifyToken,
+  verifyRefreshToken,
   decodeToken,
   authenticateToken,
   authorize,

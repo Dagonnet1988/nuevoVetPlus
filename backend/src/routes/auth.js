@@ -38,6 +38,13 @@ router.put('/change-password', authenticateToken, validateChangePassword, authCo
 router.get('/me', authenticateToken, authController.me);
 
 /**
+ * @route   POST /api/auth/refresh
+ * @desc    Refrescar token de acceso
+ * @access  Public (con refresh token válido)
+ */
+router.post('/refresh', authController.refreshToken);
+
+/**
  * @route   GET /api/auth/check-email
  * @desc    Verificar disponibilidad de email
  * @access  Public

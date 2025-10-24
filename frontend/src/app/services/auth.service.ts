@@ -11,6 +11,7 @@ import { environment } from '../../environments/environment';
 export class AuthService {
   private readonly API_URL = environment.apiUrl;
   private readonly TOKEN_KEY = 'vetplus_token';
+  private readonly REFRESH_TOKEN_KEY = 'vetplus_refresh_token';
   private readonly USER_KEY = 'vetplus_user';
   private readonly THEME_KEY = 'vetplus_theme';
 
@@ -39,8 +40,8 @@ export class AuthService {
       .pipe(
         tap(response => {
           if (response.success && response.data) {
-            // Extraer token y user de response.data
-            const { token, user, must_change_password } = response.data;
+            // Extraer token, refreshToken y user de response.data
+            const { token, refreshToken, user, must_change_password } = response.data;
 
             // Convertir formato del backend al formato esperado por el frontend
             const frontendUser = {
@@ -55,7 +56,7 @@ export class AuthService {
               created_at: new Date().toISOString()
             };
 
-            this.setUserSession(token, frontendUser);
+            this.setUserSession(token, refreshToken, frontendUser);
 
             // Redirigir según el estado del usuario
             if (must_change_password) {
@@ -94,6 +95,7 @@ export class AuthService {
 
   private clearSession(): void {
     localStorage.removeItem(this.TOKEN_KEY);
+    localStorage.removeItem(this.REFRESH_TOKEN_KEY);
     localStorage.removeItem(this.USER_KEY);
     this.currentUser.set(null);
     this.authStatus.set(false);
@@ -137,8 +139,9 @@ export class AuthService {
   // GESTIÓN DE SESIÓN
   // ===============================
 
-  private setUserSession(token: string, user: User): void {
+  private setUserSession(token: string, refreshToken: string, user: User): void {
     localStorage.setItem(this.TOKEN_KEY, token);
+    localStorage.setItem(this.REFRESH_TOKEN_KEY, refreshToken);
     localStorage.setItem(this.USER_KEY, JSON.stringify(user));
     this.currentUser.set(user);
     this.authStatus.set(true);
@@ -150,9 +153,27 @@ export class AuthService {
       const userJson = localStorage.getItem(this.USER_KEY);
 
       if (token && userJson) {
-        const user = JSON.parse(userJson);
-        this.currentUser.set(user);
-        this.authStatus.set(true);
+        // Verificar si el token está expirado antes de autenticar
+        if (this.isTokenExpired(token)) {
+          console.warn('Token expirado encontrado, intentando refresh...');
+          // Intentar refresh automático
+          this.refreshToken().subscribe({
+            next: () => {
+              // Si el refresh fue exitoso, cargar usuario
+              const user = JSON.parse(userJson);
+              this.currentUser.set(user);
+              this.authStatus.set(true);
+            },
+            error: () => {
+              // Si el refresh falla, limpiar sesión
+              this.clearSession();
+            }
+          });
+        } else {
+          const user = JSON.parse(userJson);
+          this.currentUser.set(user);
+          this.authStatus.set(true);
+        }
       } else {
         this.authStatus.set(false);
       }
@@ -162,8 +183,23 @@ export class AuthService {
     }
   }
 
+  // Método auxiliar para verificar expiración
+  private isTokenExpired(token: string): boolean {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const expirationTime = payload.exp * 1000;
+      return Date.now() >= expirationTime;
+    } catch (error) {
+      return true; // Si no se puede decodificar, considerar expirado
+    }
+  }
+
   getToken(): string | null {
     return localStorage.getItem(this.TOKEN_KEY);
+  }
+
+  getRefreshToken(): string | null {
+    return localStorage.getItem(this.REFRESH_TOKEN_KEY);
   }
 
   // Verificar si el token está próximo a expirar
@@ -182,6 +218,32 @@ export class AuthService {
     } catch (error) {
       return true;
     }
+  }
+
+  // Refrescar token automáticamente
+  refreshToken(): Observable<any> {
+    const refreshToken = this.getRefreshToken();
+    if (!refreshToken) {
+      this.logout(true);
+      return throwError(() => new Error('No refresh token available'));
+    }
+
+    return this.http.post<any>(`${this.API_URL}/auth/refresh`, { refreshToken })
+      .pipe(
+        tap(response => {
+          if (response.success && response.data) {
+            const { token, refreshToken: newRefreshToken } = response.data;
+            localStorage.setItem(this.TOKEN_KEY, token);
+            localStorage.setItem(this.REFRESH_TOKEN_KEY, newRefreshToken);
+            console.log('Token refrescado automáticamente');
+          }
+        }),
+        catchError(error => {
+          console.error('Error refrescando token:', error);
+          this.logout(true);
+          return throwError(() => error);
+        })
+      );
   }
 
   // ===============================

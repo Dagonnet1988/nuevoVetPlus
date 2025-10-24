@@ -15,7 +15,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { Router } from '@angular/router';
 import { Observable, map, startWith, debounceTime, distinctUntilChanged, switchMap, of } from 'rxjs';
 
-import { FacturacionService } from '../../services/facturacion.service';
+import { FacturacionService, CreateFacturaData } from '../../services/facturacion.service';
 import { ClientesService } from '../../services/clientes.service';
 import { PacientesService } from '../../services/pacientes.service';
 
@@ -218,16 +218,23 @@ export class NuevaFacturaComponent implements OnInit, AfterViewInit {
   }
 
   private cargarMascotasCliente(idCliente: string): void {
+    console.log('🔍 Cargando mascotas para cliente:', idCliente);
     this.pacientesService.getMascotasByCliente(idCliente).subscribe({
-      next: (mascotas: any[]) => {
+      next: (response: any) => {
+        console.log('✅ Respuesta del backend:', response);
+        // ✅ El backend devuelve { success: true, data: [...], total: N }
+        const mascotas = response.data || [];
+        console.log('✅ Mascotas extraídas:', mascotas);
+
         const mascotasConCliente = mascotas.map((mascota: any) => ({
           ...mascota,
           cliente: this.clienteSeleccionado()
         }));
         this.mascotasCliente.set(mascotasConCliente);
+        console.log('📋 Signal mascotasCliente actualizado:', this.mascotasCliente());
       },
       error: (error: any) => {
-        console.error('Error cargando mascotas del cliente:', error);
+        console.error('❌ Error cargando mascotas del cliente:', error);
         this.mascotasCliente.set([]);
       }
     });
@@ -249,10 +256,13 @@ export class NuevaFacturaComponent implements OnInit, AfterViewInit {
     const producto = event.option.value;
     this.agregarProducto(producto);
 
-    // ✅ Limpiar el input de búsqueda igual que con el cliente
+    // ✅ Limpiar el input de búsqueda y resetear el autocomplete
     if (this.productoSearchInput) {
       this.productoSearchInput.nativeElement.value = '';
     }
+
+    // ✅ Limpiar la lista de productos filtrados para evitar mostrar resultados antiguos
+    this.productosFiltrados$.set([]);
 
     this.snackBar.open(`Producto "${producto.nombre}" agregado a la factura`, 'Cerrar', { duration: 2000 });
   }
@@ -293,10 +303,21 @@ export class NuevaFacturaComponent implements OnInit, AfterViewInit {
       clearTimeout(this.timeoutId);
     }
 
+    // Si el término está vacío, limpiar resultados
+    if (!termino || termino.trim() === '') {
+      this.productosFiltrados$.set([]);
+      return;
+    }
+
     // Establecer nuevo timeout para búsqueda con debounce
     this.timeoutId = setTimeout(() => {
       this.buscarProductos(termino);
     }, 300); // 300ms de debounce
+  }
+
+  onProductoFocus(): void {
+    // ✅ Limpiar resultados anteriores cuando el usuario hace focus
+    this.productosFiltrados$.set([]);
   }
 
   private timeoutId: any;
@@ -395,39 +416,26 @@ export class NuevaFacturaComponent implements OnInit, AfterViewInit {
         return;
       }
 
-      const lineas = this.lineasArray.value.map((linea: any) => ({
-        id_linea: '',
-        id_producto: linea.id_producto || '',
-        producto: linea.id_producto ? {
-          codigo: linea.codigo || '',
-          nombre: linea.descripcion,
-          descripcion: linea.descripcion,
-          tipo: 'Producto',
-          categoria: 'General',
-          unidad_medida: linea.presentacion || 'unidad',
-          iva_aplicable: 0
-        } : undefined,
+      // ✅ Mapear a formato que espera el backend (items en lugar de lineas)
+      const items = this.lineasArray.value.map((linea: any) => ({
+        // ✅ Usar código o código de barras según corresponda
+        codigo: linea.codigo || '',
+        // ✅ Asegurar que precio_unitario sea número
+        precio_unitario: parseFloat(linea.precio_unitario) || 0,
         cantidad: linea.cantidad,
-        precio_unitario: linea.precio_unitario,
-        descuento: linea.descuento || 0,
-        subtotal: this.calcularSubtotalLinea(this.lineasArray.controls.findIndex(l => l === linea))
+        descripcion: linea.descripcion,
+        descuento: linea.descuento || 0
       }));
 
       const total = this.calcularTotal();
 
       const facturaData = {
         id_cliente: idCliente,
-        id_consulta: this.clienteForm.get('id_mascota')?.value || null, // Usar id_mascota como id_consulta por compatibilidad
-        fecha: new Date().toISOString(),
-        subtotal: total,
-        impuestos: 0,
+        id_consulta: null, // Por ahora no asociamos a consulta específica desde facturación
         descuento: 0,
-        total: total,
-        metodo_pago: metodoPago,
-        estado: 'Pendiente' as const,
-        id_caja: idCaja || '',
         notas: this.facturaForm.get('notas')?.value || '',
-        lineas: lineas
+        tipo_pago: metodoPago,
+        items: items // ✅ Enviar items en lugar de lineas
       };
 
       // 3. Crear factura

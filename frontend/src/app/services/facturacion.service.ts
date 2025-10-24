@@ -145,6 +145,33 @@ export interface VentasMetodoPago {
   total_vendido: number;
 }
 
+// Tipo específico para crear facturas (coincide con backend)
+export interface CreateFacturaData {
+  // Cliente existente (opcional si se proporciona cliente_nuevo)
+  id_cliente?: string;
+
+  // Datos para crear cliente nuevo (opcional si se proporciona id_cliente)
+  cliente_nuevo?: {
+    nombre: string;
+    cedula: string;
+    telefono: string;
+    email: string;
+    direccion?: string;
+  };
+
+  id_consulta?: string | null;
+  descuento?: number;
+  notas?: string;
+  tipo_pago: string;
+  items: Array<{
+    codigo?: string;
+    precio_unitario: number;
+    cantidad: number;
+    descripcion?: string;
+    descuento?: number;
+  }>;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -197,8 +224,8 @@ export class FacturacionService {
     );
   }
 
-  createFactura(factura: Omit<Factura, 'id_factura' | 'codigo_factura' | 'created_at' | 'created_by'>): Observable<Factura> {
-    return this.http.post<any>(`${this.API_URL}/invoices`, factura).pipe(
+  createFactura(facturaData: CreateFacturaData): Observable<Factura> {
+    return this.http.post<any>(`${this.API_URL}/invoices`, facturaData).pipe(
       map((response: any) => {
         if (response.success && response.data) {
           return response.data;
