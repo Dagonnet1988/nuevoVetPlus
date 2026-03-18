@@ -7,15 +7,10 @@ import DBInit from './src/database/DBInit.js';
 
 // Importar rutas
 import authRoutes from './src/routes/auth.js';
-import financialRoutes from './src/routes/index.js';
-import financialConfigRoutes from './src/routes/financialConfig.js';
 import clinicalRoutes from './src/routes/clinical.js';
 import auditRoutes from './src/routes/audit.js';
 import googleCalendarRoutes from './src/routes/googleCalendar.js';
-import reportsRoutes from './src/routes/reports.js';
 import empresaConfigRoutes from './src/routes/empresaConfigRoutes.js';
-import whatsappRoutes from './src/routes/whatsappRoutes.js';
-import notificationRoutes from './src/routes/notifications.js';
 import appointmentExportRoutes from './src/routes/appointmentExport.js';
 import googleCalendarWebhookRoutes from './src/routes/googleCalendarWebhook.js';
 import systemStatusRoutes from './src/routes/systemStatus.js';
@@ -27,7 +22,6 @@ import { setAuditContext, auditActivity, auditAuthActivity } from './src/middlew
 // Importar servicio de notificaciones automáticas
 // import autoNotificationService from './src/services/autoNotificationService.js'; // TEMPORALMENTE DESACTIVADO
 import googleCalendarService from './src/services/googleCalendar.js';
-import whatsAppService from './src/services/whatsappBaileysService.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -66,7 +60,7 @@ app.get('/', (req, res) => {
   res.json({
     message: 'VetPlus API - Sistema de Gestión Veterinaria',
     version: '1.0.0',
-    modules: ['clinical', 'financial', 'auth'],
+    modules: ['clinical', 'auth'],
     status: 'active'
   });
 });
@@ -82,15 +76,10 @@ app.get('/health', (req, res) => {
 
 // Rutas principales API
 app.use('/api/auth', auditAuthActivity, authRoutes);
-app.use('/api/financial', financialRoutes);
-app.use('/api/financial/config', financialConfigRoutes);
 app.use('/api/clinical', clinicalRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/google-calendar', googleCalendarRoutes);
-app.use('/api/reports', reportsRoutes);
 app.use('/api/admin/empresa', empresaConfigRoutes);
-app.use('/api/whatsapp', whatsappRoutes);
-app.use('/api/admin/notifications', notificationRoutes);
 app.use('/api/appointments/export', appointmentExportRoutes);
 app.use('/api/google-calendar-webhook', googleCalendarWebhookRoutes);
 app.use('/api/system', systemStatusRoutes);
@@ -168,7 +157,6 @@ async function startServer() {
     // Initialize services after database is ready
     try {
       await googleCalendarService.initialize();
-      await whatsAppService.initialize();
     } catch (error) {
       console.error('Error initializing services:', error);
     }
@@ -176,7 +164,7 @@ async function startServer() {
     app.listen(PORT, () => {
       console.log(`🚀 VetPlus API iniciada en puerto ${PORT}`);
       console.log(`📍 URL: http://localhost:${PORT}`);
-      console.log(`🏥 Módulos: Clínico y Financiero`);
+      console.log(`🏥 Módulos: Clínico`);
       console.log(`🔒 Autenticación: JWT habilitada`);
       console.log(`📊 Base de datos: Lista y verificada`);
       console.log(`🔔 Notificaciones automáticas: Activas`);

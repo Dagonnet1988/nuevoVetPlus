@@ -300,11 +300,6 @@ export class AuthService {
     return this.hasAnyRole(['admin', 'vet']);
   }
 
-  // Verificar si puede acceder a funciones financieras
-  canAccessFinancial(): boolean {
-    return this.hasAnyRole(['admin', 'aux_admin']);
-  }
-
   // ===============================
   // GESTIÓN DE TEMAS
   // ===============================

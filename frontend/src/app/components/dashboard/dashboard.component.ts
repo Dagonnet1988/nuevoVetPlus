@@ -10,7 +10,6 @@ import { StatsWidgetComponent, StatItem } from './components/stats-widget.compon
 import { RecentActivityComponent } from './components/recent-activity.component';
 import { QuickActionsComponent } from './components/quick-actions.component';
 import { AppointmentsCalendarComponent, AppointmentSummary } from './components/appointments-calendar.component';
-import { LineChartComponent } from '../../shared/components/charts/line-chart.component';
 import { DoughnutChartComponent } from '../../shared/components/charts/doughnut-chart.component';
 
 @Component({
@@ -26,7 +25,6 @@ import { DoughnutChartComponent } from '../../shared/components/charts/doughnut-
     RecentActivityComponent,
     QuickActionsComponent,
     AppointmentsCalendarComponent,
-    LineChartComponent,
     DoughnutChartComponent
   ],
   templateUrl: './dashboard.component.html',
@@ -38,9 +36,7 @@ export class DashboardComponent implements OnInit {
   todayAppointments: AppointmentSummary[] = [];
 
   // Datos para gráficos
-  ventasMensualesData: any;
   citasPorEstadoData: any;
-  pacientesPorEspecieData: any;
 
   constructor(
     public authService: AuthService,
@@ -100,63 +96,13 @@ export class DashboardComponent implements OnInit {
           trend: { value: 8, isPositive: false },
           route: '/citas',
           category: 'citas-pacientes'
-        },
-
-        // Estadísticas financieras
-        {
-          title: 'Ventas del Mes',
-          value: this.formatCurrency(stats.ventas.mes),
-          subtitle: 'vs mes anterior',
-          icon: 'attach_money',
-          color: 'warning',
-          trend: { value: 15, isPositive: true },
-          route: '/facturacion',
-          category: 'finanzas'
-        },
-        {
-          title: 'Ingresos Hoy',
-          value: this.formatCurrency(stats.ventas.dia),
-          subtitle: 'Ingresos de hoy',
-          icon: 'payments',
-          color: 'success',
-          trend: { value: 8, isPositive: true },
-          route: '/facturacion',
-          category: 'finanzas'
-        },
-        {
-          title: 'Stock Bajo',
-          value: stats.inventario.productos_bajo_stock,
-          subtitle: `de ${stats.inventario.total_productos} productos`,
-          icon: 'inventory',
-          color: 'error',
-          route: '/inventario',
-          category: 'finanzas'
-        },
-        {
-          title: 'Total Productos',
-          value: stats.inventario.total_productos,
-          subtitle: `${stats.inventario.productos_bajo_stock} con stock bajo`,
-          icon: 'inventory_2',
-          color: 'primary',
-          trend: { value: 3, isPositive: true },
-          route: '/inventario',
-          category: 'finanzas'
         }
       ];
-
-      // Filtrar widgets según rol
-      if (!this.authService.hasAnyRole(['admin', 'aux_admin'])) {
-        this.statsWidgets = this.statsWidgets.filter(widget =>
-          !['Ventas del Mes', 'Stock Bajo'].includes(widget.title)
-        );
-      }
     });
   }
 
   private loadChartData() {
-    this.ventasMensualesData = this.dashboardService.getVentasMensuales();
     this.citasPorEstadoData = this.dashboardService.getCitasPorEstado();
-    this.pacientesPorEspecieData = this.dashboardService.getPacientesPorEspecie();
   }
 
   private loadTodayAppointments() {
@@ -185,23 +131,11 @@ export class DashboardComponent implements OnInit {
 
   shouldShowChart(chartType: string): boolean {
     switch (chartType) {
-      case 'ventas':
-        return this.authService.hasAnyRole(['admin', 'aux_admin']);
       case 'citas':
         return this.authService.hasAnyRole(['admin', 'vet', 'aux_admin', 'aux_vet']);
-      case 'pacientes':
-        return this.authService.hasAnyRole(['admin', 'vet']);
       default:
         return true;
     }
-  }
-
-  private formatCurrency(value: number): string {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0
-    }).format(value);
   }
 
   getStatsByCategory(category: string): StatItem[] {

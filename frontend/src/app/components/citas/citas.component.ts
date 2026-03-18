@@ -703,7 +703,7 @@ export class CitasComponent implements OnInit, OnDestroy {
   }
 
   private exportAgenda(options: ExportOptions): void {
-    const loadingSnackBar = this.snackBar.open('Generando reporte...', undefined, {
+    const loadingSnackBar = this.snackBar.open('Generando exportacion...', undefined, {
       duration: 0,
       horizontalPosition: 'center'
     });

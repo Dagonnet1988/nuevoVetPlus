@@ -59,15 +59,6 @@ export class ConfiguracionComponent implements OnInit {
       status: 'loading'
     },
     {
-      title: 'WhatsApp',
-      description: 'Configuración de mensajería automática con Baileys',
-      icon: 'chat',
-      route: '/configuracion/whatsapp',
-      color: '#25d366',
-      adminOnly: true,
-      status: 'loading'
-    },
-    {
       title: 'Sistema',
       description: 'Configuraciones generales del sistema',
       icon: 'settings',
@@ -84,15 +75,6 @@ export class ConfiguracionComponent implements OnInit {
       color: '#34a853',
       adminOnly: true,
       status: 'active'
-    },
-    {
-      title: 'Reportes',
-      description: 'Configuración de reportes y analytics',
-      icon: 'analytics',
-      route: '/reportes',
-      color: '#9c27b0',
-      adminOnly: false,
-      status: 'active'
     }
   ];
 
@@ -107,7 +89,6 @@ export class ConfiguracionComponent implements OnInit {
   quickStats = signal({
     empresa_configurada: false,
     google_calendar_conectado: false,
-    whatsapp_conectado: false,
     usuarios_activos: 0,
     total_configuraciones: 0
   });
@@ -155,7 +136,6 @@ export class ConfiguracionComponent implements OnInit {
     // Actualizar estado de cada sección basado en configuración real
     this.updateSectionStatus('Empresa', getUIStatus(status.empresa?.estado || 'pending'));
     this.updateSectionStatus('Google Calendar', getUIStatus(status.google_calendar?.estado || 'pending'));
-    this.updateSectionStatus('WhatsApp', getUIStatus(status.whatsapp?.estado || 'pending'));
     this.updateSectionStatus('Sistema', getUIStatus(status.sistema?.estado || 'pending'));
   }
 
@@ -163,12 +143,10 @@ export class ConfiguracionComponent implements OnInit {
     const stats = {
       empresa_configurada: status.empresa?.configurado || false,
       google_calendar_conectado: status.google_calendar?.conectado || false,
-      whatsapp_conectado: status.whatsapp?.conectado || false,
       usuarios_activos: status.sistema?.usuarios_activos || 0,
       total_configuraciones: [
         status.empresa?.configurado,
         status.google_calendar?.conectado,
-        status.whatsapp?.conectado,
         status.sistema?.estado === 'operativo'
       ].filter(Boolean).length
     };

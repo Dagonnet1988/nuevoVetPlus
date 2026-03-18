@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS system.session_audit (
 CREATE TABLE IF NOT EXISTS system.sensitive_access_log (
     id_access UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     id_usuario UUID REFERENCES vetplus_auth.usuarios(id_usuario) ON DELETE SET NULL,
-    tipo_datos VARCHAR(50) NOT NULL, -- MEDICAL_RECORD, FINANCIAL_REPORT, CLIENT_DATA, etc.
+    tipo_datos VARCHAR(50) NOT NULL, -- MEDICAL_RECORD, CLIENT_DATA, SYSTEM_DATA, etc.
     tabla_accedida VARCHAR(100),
     id_entidad_accedida VARCHAR(100),
     accion VARCHAR(20) NOT NULL, -- VIEW, EXPORT, PRINT, DOWNLOAD

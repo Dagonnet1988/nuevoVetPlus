@@ -301,7 +301,7 @@ class DBInit {
       const result = await client.query(`
         SELECT schemaname, tablename 
         FROM pg_tables 
-        WHERE schemaname IN ('public', 'vetplus_auth', 'clinical', 'financial', 'system')
+        WHERE schemaname IN ('public', 'vetplus_auth', 'clinical', 'system')
         ORDER BY schemaname, tablename
       `);
       
@@ -319,7 +319,7 @@ class DBInit {
   async isSystemFullyInitialized() {
     try {
       // Verificar esquemas principales
-      const schemas = ['vetplus_auth', 'clinical', 'financial', 'system'];
+      const schemas = ['vetplus_auth', 'clinical', 'system'];
       for (const schema of schemas) {
         if (!(await this.schemaExists(schema))) {
           return false;
@@ -331,12 +331,8 @@ class DBInit {
         { name: 'usuarios', schema: 'vetplus_auth' },
         { name: 'clientes', schema: 'clinical' },
         { name: 'mascotas', schema: 'clinical' },
-        { name: 'cajas', schema: 'financial' },
-        { name: 'productos', schema: 'financial' },
         { name: 'log_auditoria', schema: 'system' },
-        { name: 'categorias_ingresos', schema: 'financial' },
-        { name: 'proveedores', schema: 'financial' },
-        { name: 'ordenes_compra', schema: 'financial' }
+        { name: 'configuracion_empresa', schema: 'system' }
       ];
       
       for (const table of tables) {
@@ -362,7 +358,7 @@ class DBInit {
     console.log('='.repeat(50));
     
     // Verificar esquemas
-    const schemas = ['vetplus_auth', 'clinical', 'financial', 'system'];
+    const schemas = ['vetplus_auth', 'clinical', 'system'];
     for (const schema of schemas) {
       const exists = await this.schemaExists(schema);
       console.log(`${exists ? '✅' : '❌'} Esquema ${schema}`);
@@ -373,8 +369,7 @@ class DBInit {
       { name: 'usuarios', schema: 'vetplus_auth' },
       { name: 'clientes', schema: 'clinical' },
       { name: 'mascotas', schema: 'clinical' },
-      { name: 'cajas', schema: 'financial' },
-      { name: 'productos', schema: 'financial' },
+      { name: 'configuracion_empresa', schema: 'system' },
       { name: 'log_auditoria', schema: 'system' }
     ];
     
@@ -434,12 +429,9 @@ class DBInit {
         { file: '01_create_database.sql', desc: 'Extensiones y funciones base' },
         { file: '02_auth_tables.sql', desc: 'Módulo de autenticación' },
         { file: '03_clinical_tables.sql', desc: 'Módulo clínico' },
-        { file: '04_financial_tables.sql', desc: 'Módulo financiero' },
         { file: '05_constraints_triggers.sql', desc: 'Constraints y triggers' },
-        { file: '06_categorias_conceptos.sql', desc: 'Categorías y conceptos' },
         { file: '07_audit_tables.sql', desc: 'Tablas adicionales auditoría' },
         { file: '08_empresa_config.sql', desc: 'Configuración de empresa' },
-        { file: '09_whatsapp_integration.sql', desc: 'Integración WhatsApp Business' },
         { file: '10_workflow_integration.sql', desc: 'Integraciones de workflow y notificaciones' },
         { file: '11_audit_expansion.sql', desc: 'Expansión sistema auditoría' }
       ];

@@ -10,12 +10,9 @@ import { productionConfig, validateConfig, getConfigByEnvironment } from './src/
 
 // Importar rutas
 import authRoutes from './src/routes/auth.js';
-import financialRoutes from './src/routes/index.js';
-import financialConfigRoutes from './src/routes/financialConfig.js';
 import clinicalRoutes from './src/routes/clinical.js';
 import auditRoutes from './src/routes/audit.js';
 import googleCalendarRoutes from './src/routes/googleCalendar.js';
-import reportsRoutes from './src/routes/reports.js';
 
 // Importar middleware de auditoría
 import { setAuditContext, auditActivity, auditAuthActivity } from './src/middleware/auditMiddleware.js';
@@ -28,7 +25,6 @@ import {
     generalRateLimit,
     authRateLimit,
     adminRateLimit,
-    reportsRateLimit,
     endpointRateLimit,
     rateLimitStats
 } from './src/middleware/rateLimiter.js';
@@ -52,7 +48,6 @@ import {
 import {
     intelligentCompression,
     intelligentCaching,
-    reportsCache,
     configCache,
     paginatedCache,
     performanceHeaders,
@@ -179,9 +174,7 @@ app.get('/', intelligentCaching({ ttl: 3600 }), (req, res) => {
             modules: [
                 'authentication',
                 'clinical_management', 
-                'financial_system',
                 'google_calendar',
-                'reports_analytics',
                 'audit_system'
             ],
             endpoints: {
@@ -203,18 +196,6 @@ app.use('/api/auth',
     authRoutes
 );
 
-app.use('/api/financial', 
-    endpointRateLimit('financial.*'),
-    intelligentCaching({ ttl: 300 }),
-    financialRoutes
-);
-
-app.use('/api/financial/config', 
-    adminRateLimit,
-    configCache,
-    financialConfigRoutes
-);
-
 app.use('/api/clinical', 
     endpointRateLimit('clinical.*'),
     paginatedCache,
@@ -229,12 +210,6 @@ app.use('/api/audit',
 app.use('/api/google-calendar', 
     adminRateLimit,
     googleCalendarRoutes
-);
-
-app.use('/api/reports', 
-    reportsRateLimit,
-    reportsCache,
-    reportsRoutes
 );
 
 // ============ MIDDLEWARE DE MANEJO DE ERRORES ============
@@ -305,8 +280,6 @@ app.use((req, res) => {
             '/health',
             '/api/auth',
             '/api/clinical',
-            '/api/financial',
-            '/api/reports',
             '/api/google-calendar',
             '/api/audit'
         ],
@@ -384,9 +357,7 @@ async function startServer() {
             console.log('🏥 Módulos Activos:');
             console.log('   ✅ Autenticación y Usuarios');
             console.log('   ✅ Gestión Clínica Completa');
-            console.log('   ✅ Sistema Financiero');
             console.log('   ✅ Google Calendar Integration');
-            console.log('   ✅ Reportes y Analytics');
             console.log('   ✅ Sistema de Auditoría');
             console.log('═'.repeat(60));
             console.log('🛡️  Seguridad Production Ready:');

@@ -256,35 +256,6 @@ export class CitaDetailsComponent implements OnInit {
     }
   }
 
-  onGoToFacturacion(): void {
-    const cita = this.cita();
-    console.log('🎯 Cita completa:', cita);
-    console.log('🎯 Mascota cliente:', cita?.mascota?.cliente);
-    console.log('🎯 cliente_documento plano:', cita?.cliente_documento);
-
-    if (!cita || cita.estado !== 'completada') {
-      this.snackBar.open('Solo se puede facturar citas completadas', 'Cerrar', { duration: 3000 });
-      return;
-    }
-
-    // Navegar a facturación con los datos precargados
-    const queryParams = {
-      citaId: cita.id_cita,
-      clienteNombre: cita.mascota?.cliente?.nombre || cita.cliente_nombre,
-      clienteDocumento: cita.mascota?.cliente?.documento || cita.cliente_documento,
-      clienteTelefono: cita.mascota?.cliente?.telefono || cita.cliente_telefono,
-      clienteEmail: cita.mascota?.cliente?.email || cita.cliente_email,
-      clienteDireccion: cita.mascota?.cliente?.direccion || cita.cliente_direccion,
-      mascotaNombre: cita.mascota?.nombre || cita.mascota_nombre,
-      mascotaId: cita.id_mascota
-    };
-
-    console.log('🎯 QueryParams a enviar:', queryParams);
-
-    this.router.navigate(['/facturacion/nueva'], {
-      queryParams
-    });
-  }
 
   async onViewHistoriaClinica(): Promise<void> {
     const cita = this.cita();
@@ -542,11 +513,6 @@ export class CitaDetailsComponent implements OnInit {
       'no_asistio': 'event_busy'
     };
     return icons[estado] || 'radio_button_unchecked';
-  }
-
-  canShowFacturacion(): boolean {
-    const cita = this.cita();
-    return cita?.estado === 'completada';
   }
 
   // ===============================

@@ -37,8 +37,6 @@ const router = Router();
  *                       type: object
  *                     google_calendar:
  *                       type: object
- *                     whatsapp:
- *                       type: object
  *                     sistema:
  *                       type: object
  */

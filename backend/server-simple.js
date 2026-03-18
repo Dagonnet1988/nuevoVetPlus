@@ -1,6 +1,6 @@
 /**
  * Servidor simple de VetPlus para desarrollo del frontend
- * Sin dependencias complejas de WhatsApp y base de datos
+ * Sin dependencias complejas de base de datos
  */
 
 import express from 'express';
@@ -112,30 +112,7 @@ app.get('/api/dashboard/stats', mockAuth, (req, res) => {
       hoy: 12,
       semana: 87,
       pendientes: 23
-    },
-    ventas: {
-      dia: 2850000,
-      mes: 45600000,
-      año: 387500000
-    },
-    inventario: {
-      productos_bajo_stock: 8,
-      productos_vencidos: 2,
-      total_productos: 156
     }
-  });
-});
-
-app.get('/api/dashboard/ventas-mensuales', mockAuth, (req, res) => {
-  res.json({
-    labels: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun'],
-    datasets: [{
-      label: 'Ventas (COP)',
-      data: [12000000, 19000000, 15000000, 25000000, 22000000, 18000000],
-      borderColor: '#2e7d32',
-      backgroundColor: 'rgba(46, 125, 50, 0.1)',
-      tension: 0.4
-    }]
   });
 });
 
@@ -182,15 +159,6 @@ app.get('/api/dashboard/actividad-reciente', mockAuth, (req, res) => {
     },
     {
       id: '2',
-      tipo: 'venta',
-      descripcion: 'Factura #001235 generada por $125,000',
-      fecha: new Date(Date.now() - 1800000).toISOString(),
-      usuario: 'Ana Auxiliar',
-      icono: 'receipt',
-      color: '#ff9800'
-    },
-    {
-      id: '3',
       tipo: 'paciente',
       descripcion: 'Nuevo paciente registrado: Luna (Gato Persa)',
       fecha: new Date(Date.now() - 3600000).toISOString(),

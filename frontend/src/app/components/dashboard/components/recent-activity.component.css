@@ -121,19 +121,9 @@
   color: #2e7d32;
 }
 
-.type-venta {
-  background-color: rgba(255, 152, 0, 0.1);
-  color: #ff9800;
-}
-
 .type-paciente {
   background-color: rgba(76, 175, 80, 0.1);
   color: #4caf50;
-}
-
-.type-inventario {
-  background-color: rgba(33, 150, 243, 0.1);
-  color: #2196f3;
 }
 
 .no-activity {

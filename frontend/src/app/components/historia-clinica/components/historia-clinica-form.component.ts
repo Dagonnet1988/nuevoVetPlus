@@ -12,7 +12,6 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatChipsModule } from '@angular/material/chips';
-import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTabsModule } from '@angular/material/tabs';
@@ -22,7 +21,6 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { ConsultasService, ConsultaClinica } from '../../../services/consultas.service';
 import { PacientesService } from '../../../services/pacientes.service';
 import { CitasService } from '../../../services/citas.service';
-import { ProductosService, Producto } from '../../../services/productos.service';
 
 @Component({
   selector: 'app-historia-clinica-form',
@@ -39,7 +37,6 @@ import { ProductosService, Producto } from '../../../services/productos.service'
     MatDatepickerModule,
     MatNativeDateModule,
     MatChipsModule,
-    MatAutocompleteModule,
     MatSnackBarModule,
     MatProgressSpinnerModule,
     MatTabsModule,
@@ -284,23 +281,7 @@ import { ProductosService, Producto } from '../../../services/productos.service'
                       <mat-label>Nombre del Medicamento</mat-label>
                       <input matInput
                              formControlName="nombre"
-                             placeholder="Ej: Amoxicilina"
-                             (input)="onMedicamentoInput($event, $index)"
-                             [matAutocomplete]="autoMedicamentos">
-                      <mat-autocomplete #autoMedicamentos="matAutocomplete"
-                                       (optionSelected)="selectMedicamento($event.option.value, $index)">
-                        @for (medicamento of medicamentosInventario(); track medicamento.id_producto) {
-                          <mat-option [value]="medicamento">
-                            <div class="medicamento-option">
-                              <div class="medicamento-nombre">{{ medicamento.nombre }}</div>
-                              <div class="medicamento-info">
-                                <span class="stock">Stock: {{ medicamento.stock_actual }}</span>
-                                <span class="precio">Precio: {{ medicamento.precio_venta }}</span>
-                              </div>
-                            </div>
-                          </mat-option>
-                        }
-                      </mat-autocomplete>
+                             placeholder="Ej: Amoxicilina">
                     </mat-form-field>
 
                     <mat-form-field appearance="outline" class="dosis-field">
@@ -847,7 +828,6 @@ export class HistoriaClinicaFormComponent implements OnInit {
   private consultasService = inject(ConsultasService);
   private pacientesService = inject(PacientesService);
   private citasService = inject(CitasService);
-  private productosService = inject(ProductosService);
   private snackBar = inject(MatSnackBar);
   private http = inject(HttpClient);
 
@@ -857,7 +837,6 @@ export class HistoriaClinicaFormComponent implements OnInit {
   consulta = signal<ConsultaClinica | null>(null);
   pacientes = signal<any[]>([]);
   veterinarios = signal<any[]>([]);
-  medicamentosInventario = signal<Producto[]>([]);
   citaId = signal<string | null>(null);
   archivosSeleccionados = signal<File[]>([]);
 
@@ -932,42 +911,6 @@ export class HistoriaClinicaFormComponent implements OnInit {
     this.medicamentosArray.removeAt(index);
   }
 
-  searchMedicamentos(query: string): void {
-    if (query.length < 2) {
-      this.medicamentosInventario.set([]);
-      return;
-    }
-
-    this.productosService.getProductos(1, 10, {
-      search: query,
-      activo: true,
-      categoria: 'Medicamentos' // Filtrar solo medicamentos
-    }).subscribe({
-      next: (response) => {
-        const medicamentos = response?.data?.products || response?.data || [];
-        this.medicamentosInventario.set(Array.isArray(medicamentos) ? medicamentos : []);
-      },
-      error: (error) => {
-        console.error('Error buscando medicamentos:', error);
-        this.medicamentosInventario.set([]);
-      }
-    });
-  }
-
-  onMedicamentoInput(event: Event, index: number): void {
-    const input = event.target as HTMLInputElement;
-    this.searchMedicamentos(input.value);
-  }
-
-  selectMedicamento(medicamento: Producto, index: number): void {
-    const medicamentoGroup = this.medicamentosArray.at(index) as FormGroup;
-    if (medicamentoGroup) {
-      medicamentoGroup.patchValue({
-        nombre: medicamento.nombre
-      });
-      this.medicamentosInventario.set([]);
-    }
-  }
 
   async ngOnInit(): Promise<void> {
     const consultaId = this.route.snapshot.paramMap.get('id');

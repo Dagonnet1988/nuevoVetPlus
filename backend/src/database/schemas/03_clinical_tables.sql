@@ -69,8 +69,6 @@ CREATE TABLE clinical.consultas_clinicas (
     proxima_cita DATE,
     estado VARCHAR(20) DEFAULT 'Completada' CHECK (estado IN ('Programada', 'En Curso', 'Completada', 'Cancelada')),
     costo DECIMAL(10,2),
-    formula_enviada_whatsapp BOOLEAN DEFAULT false,
-    fecha_envio_formula TIMESTAMP WITH TIME ZONE,
     recordatorio_medicamentos_enviado BOOLEAN DEFAULT false,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

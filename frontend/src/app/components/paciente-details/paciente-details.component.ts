@@ -18,7 +18,6 @@ import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angu
 import { PacientesService } from '../../services/pacientes.service';
 import { CitasService } from '../../services/citas.service';
 import { ConsultasService } from '../../services/consultas.service';
-import { ReportesService } from '../../services/reportes.service';
 import { Mascota, Cliente } from '../../models/paciente.interface';
 import { environment } from '../../../environments/environment';
 import { Subscription } from 'rxjs';
@@ -84,7 +83,6 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
     private pacientesService: PacientesService,
     private citasService: CitasService,
     private consultasService: ConsultasService,
-    private reportesService: ReportesService,
     private snackBar: MatSnackBar,
     private dialog: MatDialog
   ) {}
@@ -368,24 +366,6 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
 
     this.router.navigate(['/historia-clinica'], {
       queryParams: {
-        pacienteId: this.paciente()?.id_mascota,
-        pacienteNombre: this.paciente()?.nombre
-      }
-    });
-  }
-
-  generateReport(): void {
-    if (!this.paciente()?.id_mascota) {
-      this.snackBar.open('Error: No se pudo identificar el paciente', 'Cerrar', { duration: 3000 });
-      return;
-    }
-
-    this.snackBar.open('Generando reporte del paciente...', 'Cerrar', { duration: 2000 });
-
-    // Navegar a la sección de reportes con filtros del paciente
-    this.router.navigate(['/reportes'], {
-      queryParams: {
-        tipo: 'paciente',
         pacienteId: this.paciente()?.id_mascota,
         pacienteNombre: this.paciente()?.nombre
       }

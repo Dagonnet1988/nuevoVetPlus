@@ -77,10 +77,7 @@ export class EmpresaConfigComponent implements OnInit {
       zona_horaria: ['America/Bogota', Validators.required],
       idioma: ['es', Validators.required],
       formato_fecha: ['DD/MM/YYYY', Validators.required],
-      formato_hora: ['HH:mm', Validators.required],
-      factura_prefijo: ['FAC', Validators.required],
-      factura_siguiente: [1, [Validators.required, Validators.min(1)]],
-      factura_digitos: [6, [Validators.required, Validators.min(3)]]
+      formato_hora: ['HH:mm', Validators.required]
     });
   }
 
@@ -176,9 +173,6 @@ export class EmpresaConfigComponent implements OnInit {
         formato_hora: this.configForm.value.formato_hora
       },
       configuracion_numeracion: {
-        factura_prefijo: this.configForm.value.factura_prefijo,
-        factura_siguiente: this.configForm.value.factura_siguiente,
-        factura_digitos: this.configForm.value.factura_digitos,
         cita_prefijo: 'CIT',
         cita_siguiente: 1,
         cita_digitos: 6

@@ -14,7 +14,6 @@ VetPlus utiliza **PostgreSQL** con un sistema de schemas consolidado que garanti
 vetplus/
 ├── auth.*          # Autenticación y usuarios
 ├── clinical.*      # Módulo clínico (mascotas, consultas)
-├── financial.*     # Módulo financiero (cajas, facturas)
 └── system.*        # Sistema (migraciones, logs)
 ```
 
@@ -71,8 +70,7 @@ npm run db:migrate
 1. **01_create_database.sql** - Esquemas y funciones base
 2. **02_auth_tables.sql** - Usuarios y autenticación
 3. **03_clinical_tables.sql** - Clientes, mascotas, consultas
-4. **04_financial_tables.sql** - Cajas, productos, facturas
-5. **05_constraints_triggers.sql** - Triggers y validaciones
+4. **05_constraints_triggers.sql** - Triggers y validaciones
 
 ### Características de Seguridad
 - ✅ **Transacciones** - Si algo falla, se revierte todo
@@ -92,12 +90,6 @@ npm run db:migrate
 - `clinical.mascotas` - Registro de mascotas
 - `clinical.consultas_clinicas` - Historial médico
 - `clinical.calendario_citas` - Agenda integrada
-
-### Financial (Módulo Financiero)
-- `financial.cajas` - Múltiples cajas de efectivo
-- `financial.productos` - Inventario y servicios
-- `financial.facturas_venta` - Facturación
-- `financial.control_terapias` - Control de paquetes
 
 ## Configuración de Base de Datos
 
@@ -119,9 +111,7 @@ DB_PASSWORD=tu_password
 
 Después de ejecutar `npm run db:seed`:
 - ✅ Usuario admin por defecto (admin@vetplus.com / admin123)
-- ✅ Cajas predeterminadas (Caja Menor, Cuenta Bancaria, Caja Fuerte)
-- ✅ Productos de terapia base
-- ✅ Proveedor de ejemplo
+- ✅ Configuración de empresa básica
 
 ## Backup y Restauración
 

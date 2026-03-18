@@ -1,5 +1,5 @@
 import { Injectable, signal } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
@@ -24,9 +24,6 @@ export interface EmpresaConfig {
 
   // Configuración de numeración
   configuracion_numeracion: {
-    factura_prefijo: string;
-    factura_siguiente: number;
-    factura_digitos: number;
     cita_prefijo: string;
     cita_siguiente: number;
     cita_digitos: number;
@@ -119,145 +116,6 @@ export interface SyncStats {
   proxima_ejecucion: string;
 }
 
-// ===============================
-// WHATSAPP INTERFACES
-// ===============================
-
-export interface WhatsAppConfig {
-  activo: boolean;
-  numero_telefono: string;
-  nombre_empresa: string;
-
-  // Templates de mensajes
-  templates: {
-    confirmacion_cita: string;
-    recordatorio_cita: string;
-    cancelacion_cita: string;
-    factura_enviada: string;
-    formula_enviada: string;
-    recordatorio_pago: string;
-  };
-
-  // Configuración de envíos
-  configuracion_envios: {
-    enviar_confirmaciones: boolean;
-    enviar_recordatorios: boolean;
-    tiempo_recordatorio: number; // horas antes
-    enviar_facturas: boolean;
-    enviar_formulas: boolean;
-    reintentos_max: number;
-    tiempo_entre_reintentos: number; // minutos
-  };
-
-  // Horarios de envío
-  horarios_envio: {
-    hora_inicio: string;
-    hora_fin: string;
-    dias_activos: number[]; // 0-6, Domingo = 0
-  };
-
-  // Notificaciones automáticas
-  notificaciones_automaticas?: {
-    activo: boolean;
-    auto_cita_confirmada: boolean;
-    auto_cita_recordatorio: boolean;
-    auto_consulta_completada: boolean;
-    auto_factura_generada: boolean;
-    limite_diario: number;
-    intervalo_minimo_minutos: number;
-  };
-}
-
-export interface WhatsAppStatus {
-  conectado: boolean;
-  numero_vinculado: string;
-  estado_conexion: 'conectado' | 'desconectado' | 'conectando' | 'error';
-  ultimo_heartbeat: string;
-  qr_code?: string; // Base64 del QR si no está conectado
-  info_dispositivo?: {
-    nombre: string;
-    navegador: string;
-    plataforma: string;
-  };
-}
-
-export interface WhatsAppStats {
-  mensajes_enviados_hoy: number;
-  mensajes_enviados_mes: number;
-  mensajes_fallidos_hoy: number;
-  mensajes_pendientes: number;
-
-  // Desglose por tipo
-  tipos_mensajes: {
-    confirmaciones: number;
-    recordatorios: number;
-    facturas: number;
-    formulas: number;
-    otros: number;
-  };
-
-  // Estadísticas históricas
-  historico_mensual: {
-    mes: string;
-    enviados: number;
-    fallidos: number;
-  }[];
-}
-
-export interface WhatsAppMessage {
-  id: string;
-  numero_destino: string;
-  tipo: 'texto' | 'documento' | 'imagen';
-  contenido: string;
-  estado: 'pendiente' | 'enviado' | 'entregado' | 'leido' | 'fallido';
-  intentos: number;
-  fecha_creacion: string;
-  fecha_envio?: string;
-  error_mensaje?: string;
-
-  // Contexto del mensaje
-  contexto?: {
-    tipo: 'confirmacion' | 'recordatorio' | 'factura' | 'formula' | 'cancelacion' | 'manual';
-    referencia_id?: string;
-    cliente_nombre?: string;
-  };
-}
-
-export interface WhatsAppLimites {
-  limite_diario: number;
-  limite_por_hora: number;
-  intervalo_minimo: number; // segundos
-  max_reintentos: number;
-
-  // Límites por tipo
-  limitar_confirmaciones: boolean;
-  limite_confirmaciones_dia: number;
-  limitar_recordatorios: boolean;
-  limite_recordatorios_dia: number;
-  limitar_facturas: boolean;
-  limite_facturas_dia: number;
-  limitar_manuales: boolean;
-  limite_manuales_dia: number;
-
-  // Pausas automáticas
-  pausas_automaticas: boolean;
-  pausa_limite_hora: number; // minutos
-  pausa_limite_dia: number; // horas
-}
-
-export interface WhatsAppEstadoLimites {
-  mensajes_hoy: number;
-  mensajes_hora: number;
-  pausado: boolean;
-  pausa_hasta?: Date;
-  limites_por_tipo: {
-    confirmaciones: number;
-    recordatorios: number;
-    facturas: number;
-    manuales: number;
-  };
-}
-
 @Injectable({
   providedIn: 'root'
 })
@@ -267,7 +125,6 @@ export class ConfiguracionService {
   // Signals para estado reactivo
   public empresaConfig = signal<EmpresaConfig | null>(null);
   public googleCalendarConfig = signal<GoogleCalendarConfig | null>(null);
-  public whatsappConfig = signal<WhatsAppConfig | null>(null);
   public loading = signal<boolean>(false);
 
   constructor(private http: HttpClient) {
@@ -342,17 +199,6 @@ export class ConfiguracionService {
           return response.data;
         }
         throw new Error('Error agregando día especial');
-      })
-    );
-  }
-
-  getSiguienteNumeroFactura(): Observable<number> {
-    return this.http.get<any>(`${this.API_URL}/admin/empresa/siguiente-numero/factura`).pipe(
-      map((response: any) => {
-        if (response.success && response.numero) {
-          return response.numero;
-        }
-        return 1;
       })
     );
   }
@@ -556,158 +402,6 @@ export class ConfiguracionService {
           return response.data;
         }
         throw new Error('Error obteniendo estadísticas del scheduler');
-      })
-    );
-  }
-
-  // ===============================
-  // WHATSAPP
-  // ===============================
-
-  getWhatsAppStatus(): Observable<WhatsAppStatus> {
-    return this.http.get<any>(`${this.API_URL}/whatsapp/status`).pipe(
-      map((response: any) => {
-        if (response.success && response.data) {
-          return response.data;
-        }
-        throw new Error('Error obteniendo estado de WhatsApp');
-      })
-    );
-  }
-
-  getWhatsAppQR(): Observable<string> {
-    return this.http.get<any>(`${this.API_URL}/whatsapp/qr`).pipe(
-      map((response: any) => {
-        if (response.success && response.qr_code) {
-          return response.qr_code;
-        }
-        throw new Error('Error obteniendo código QR');
-      })
-    );
-  }
-
-  restartWhatsApp(): Observable<any> {
-    return this.http.post<any>(`${this.API_URL}/whatsapp/restart`, {});
-  }
-
-  logoutWhatsApp(): Observable<any> {
-    return this.http.post<any>(`${this.API_URL}/whatsapp/logout`, {});
-  }
-
-  testWhatsAppMessage(numero: string, mensaje: string): Observable<any> {
-    return this.http.post<any>(`${this.API_URL}/whatsapp/test-message`, { numero, mensaje });
-  }
-
-  getWhatsAppStats(): Observable<WhatsAppStats> {
-    return this.http.get<any>(`${this.API_URL}/whatsapp/stats`).pipe(
-      map((response: any) => {
-        if (response.success && response.data) {
-          return response.data;
-        }
-        throw new Error('Error obteniendo estadísticas de WhatsApp');
-      })
-    );
-  }
-
-  getWhatsAppMessages(filtros?: { fecha_inicio?: string; fecha_fin?: string; estado?: string }): Observable<WhatsAppMessage[]> {
-    let params = new HttpParams();
-    if (filtros?.fecha_inicio) params = params.set('fecha_inicio', filtros.fecha_inicio);
-    if (filtros?.fecha_fin) params = params.set('fecha_fin', filtros.fecha_fin);
-    if (filtros?.estado) params = params.set('estado', filtros.estado);
-
-    return this.http.get<any>(`${this.API_URL}/whatsapp/messages`, { params }).pipe(
-      map((response: any) => {
-        if (response.success && response.data) {
-          return response.data;
-        }
-        return [];
-      })
-    );
-  }
-
-  retryWhatsAppMessage(logId: string): Observable<any> {
-    return this.http.post<any>(`${this.API_URL}/whatsapp/retry/${logId}`, {});
-  }
-
-  getWhatsAppConfig(): Observable<WhatsAppConfig> {
-    return this.http.get<any>(`${this.API_URL}/admin/empresa/whatsapp`).pipe(
-      map((response: any) => {
-        if (response.success && response.data) {
-          this.whatsappConfig.set(response.data);
-          return response.data;
-        }
-        throw new Error('Error obteniendo configuración de WhatsApp');
-      })
-    );
-  }
-
-  updateWhatsAppConfig(config: WhatsAppConfig): Observable<WhatsAppConfig> {
-    return this.http.put<any>(`${this.API_URL}/admin/empresa/whatsapp`, config).pipe(
-      map((response: any) => {
-        if (response.success && response.data) {
-          this.whatsappConfig.set(response.data);
-          return response.data;
-        }
-        throw new Error('Error actualizando configuración de WhatsApp');
-      })
-    );
-  }
-
-  // ===============================
-  // LÍMITES Y CONTROL DE WHATSAPP
-  // ===============================
-
-  getWhatsAppLimites(): Observable<WhatsAppLimites> {
-    return this.http.get<any>(`${this.API_URL}/admin/empresa/whatsapp/limites`).pipe(
-      map((response: any) => {
-        if (response.success && response.data) {
-          return response.data;
-        }
-        throw new Error('Error obteniendo límites de WhatsApp');
-      })
-    );
-  }
-
-  updateWhatsAppLimites(limites: WhatsAppLimites): Observable<WhatsAppLimites> {
-    return this.http.put<any>(`${this.API_URL}/admin/empresa/whatsapp/limites`, limites).pipe(
-      map((response: any) => {
-        if (response.success && response.data) {
-          return response.data;
-        }
-        throw new Error('Error actualizando límites de WhatsApp');
-      })
-    );
-  }
-
-  getWhatsAppEstadoLimites(): Observable<WhatsAppEstadoLimites> {
-    return this.http.get<any>(`${this.API_URL}/admin/empresa/whatsapp/estado-limites`).pipe(
-      map((response: any) => {
-        if (response.success && response.data) {
-          return response.data;
-        }
-        throw new Error('Error obteniendo estado de límites');
-      })
-    );
-  }
-
-  resetWhatsAppContadores(): Observable<any> {
-    return this.http.post<any>(`${this.API_URL}/admin/empresa/whatsapp/reset-contadores`, {}).pipe(
-      map((response: any) => {
-        if (response.success) {
-          return response;
-        }
-        throw new Error('Error reseteando contadores');
-      })
-    );
-  }
-
-  reanudarWhatsAppEnvios(): Observable<any> {
-    return this.http.post<any>(`${this.API_URL}/admin/empresa/whatsapp/reanudar`, {}).pipe(
-      map((response: any) => {
-        if (response.success) {
-          return response;
-        }
-        throw new Error('Error reanudando envíos');
       })
     );
   }

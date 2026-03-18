@@ -207,7 +207,7 @@ export class ConsultasService {
   }
 
   // ===============================
-  // ESTADÍSTICAS Y REPORTES
+  // ESTADISTICAS CLINICAS
   // ===============================
 
   getEstadisticasConsultas(fechaInicio?: string, fechaFin?: string): Observable<any> {
@@ -253,7 +253,7 @@ export class ConsultasService {
   }
 
   // ===============================
-  // GENERACIÓN DE REPORTES
+  // EXPORTACION DE DOCUMENTOS
   // ===============================
 
   generarReceta(consultaId: string): Observable<any> {

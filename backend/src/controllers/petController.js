@@ -258,11 +258,9 @@ export const getPetsByClient = async (req, res) => {
         const selectSQL = `
             SELECT 
                 m.*,
-                COUNT(con.id_consulta) as total_consultas,
-                COUNT(CASE WHEN ct.activo = true THEN 1 END) as terapias_activas
+                COUNT(con.id_consulta) as total_consultas
             FROM clinical.mascotas m
             LEFT JOIN clinical.consultas_clinicas con ON m.id_mascota = con.id_mascota
-            LEFT JOIN financial.control_terapias ct ON m.id_mascota = ct.id_mascota
             WHERE m.id_cliente = $1 AND m.activo = true
             GROUP BY m.id_mascota
             ORDER BY m.created_at DESC
@@ -402,19 +400,6 @@ export const deletePet = async (req, res) => {
             return res.status(404).json({
                 success: false,
                 message: 'Mascota no encontrada'
-            });
-        }
-
-        // Verificar si tiene terapias activas
-        const terapiasActivas = await query(
-            'SELECT COUNT(*) FROM financial.control_terapias WHERE id_mascota = $1 AND activo = true',
-            [id]
-        );
-
-        if (parseInt(terapiasActivas.rows[0].count) > 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'No se puede eliminar la mascota porque tiene terapias activas'
             });
         }
 

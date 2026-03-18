@@ -30,7 +30,6 @@ export const getSystemStatus = async (req, res) => {
         const status = {
             empresa: await checkEmpresaStatus(),
             google_calendar: await checkGoogleCalendarStatus(),
-            whatsapp: await checkWhatsAppStatus(),
             sistema: await checkSistemaStatus()
         };
 
@@ -123,49 +122,6 @@ async function checkGoogleCalendarStatus() {
     };
   }
 }/**
- * Verificar estado de WhatsApp
- */
-async function checkWhatsAppStatus() {
-  try {
-    const result = await query(`
-      SELECT 
-        whatsapp_business_number,
-        whatsapp_api_token,
-        whatsapp_activo,
-        CASE 
-          WHEN whatsapp_activo = true AND whatsapp_business_number IS NOT NULL THEN 'Conectado'
-          WHEN whatsapp_activo = false THEN 'Desconectado'
-          ELSE 'Pendiente'
-        END as estado
-      FROM system.configuracion_empresa
-      WHERE activa = true
-      LIMIT 1
-    `);
-    
-    if (result.rows.length === 0) {
-      return {
-        estado: 'Pendiente',
-        conectado: false,
-        mensaje: 'WhatsApp Business no configurado'
-      };
-    }
-    
-    const config = result.rows[0];
-    
-    return {
-      estado: config.estado,
-      conectado: config.whatsapp_activo && config.whatsapp_business_number !== null,
-      mensaje: config.estado === 'Conectado' ? 'WhatsApp Business conectado' : 'WhatsApp Business no configurado'
-    };
-  } catch (error) {
-    console.error('Error verificando estado de WhatsApp:', error);
-    return {
-      estado: 'Error',
-      conectado: false,
-      mensaje: 'Error al verificar estado de WhatsApp'
-    };
-  }
-}/**
  * Verificar estado general del sistema
  */
 async function checkSistemaStatus() {
@@ -222,13 +178,12 @@ export const getConfigSummary = async (req, res) => {
         const status = {
             empresa: await checkEmpresaStatus(),
             google_calendar: await checkGoogleCalendarStatus(),
-            whatsapp: await checkWhatsAppStatus(),
             sistema: await checkSistemaStatus()
         };
 
-        const totalModules = 4;
+        const totalModules = 3;
         const configuredModules = Object.values(status).filter(
-            module => module.status === 'configurado' || module.status === 'conectado' || module.status === 'operativo'
+          module => module.estado === 'Configurado' || module.estado === 'Conectado' || module.estado === 'Operativo'
         ).length;
 
         res.json({

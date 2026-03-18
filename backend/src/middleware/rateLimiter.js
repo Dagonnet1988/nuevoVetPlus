@@ -45,10 +45,6 @@ export const roleBasedRateLimit = (limits = {}) => {
 };
 
 // Rate limiting deshabilitado para desarrollo
-export const financialRateLimit = (req, res, next) => {
-    next();
-};
-
 // Rate limiting deshabilitado para desarrollo
 export const searchRateLimit = (req, res, next) => {
     next();

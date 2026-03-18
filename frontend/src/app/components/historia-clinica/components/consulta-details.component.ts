@@ -83,26 +83,6 @@ export class ConsultaDetailsComponent implements OnInit {
     }
   }
 
-  onGoToFacturacion(): void {
-    const consulta = this.consulta();
-    if (consulta?.estado === 'Completada') {
-      // Navegar a facturación con datos de la consulta
-      const queryParams = {
-        consultaId: consulta.id_consulta,
-        clienteNombre: (consulta as any).cliente?.nombre || '',
-        clienteDocumento: (consulta as any).cliente?.documento || '',
-        clienteTelefono: (consulta as any).cliente?.telefono || '',
-        clienteEmail: (consulta as any).cliente?.email || '',
-        mascotaNombre: consulta.mascota?.nombre || '',
-        mascotaId: consulta.id_mascota
-      };
-
-      this.router.navigate(['/facturacion/nueva'], { queryParams });
-    } else {
-      this.snackBar.open('Solo se puede facturar consultas completadas', 'Cerrar', { duration: 3000 });
-    }
-  }
-
   onBack(): void {
     this.router.navigate(['/historia-clinica']);
   }
@@ -130,11 +110,6 @@ export class ConsultaDetailsComponent implements OnInit {
   canEdit(): boolean {
     const consulta = this.consulta();
     return consulta?.estado !== 'Completada';
-  }
-
-  canGoToFacturacion(): boolean {
-    const consulta = this.consulta();
-    return consulta?.estado === 'Completada';
   }
 
   // Helper para Array.isArray en template

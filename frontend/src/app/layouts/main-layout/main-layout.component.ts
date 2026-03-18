@@ -49,7 +49,7 @@ interface MenuItem {
         [attr.role]="'navigation'"
         [mode]="isMobile() ? 'over' : 'side'"
         [opened]="!isMobile()">
-        
+
         <!-- Logo y nombre de la app -->
         <div class="sidebar-header">
           <div class="logo-section">
@@ -72,7 +72,7 @@ interface MenuItem {
         <!-- Menú de navegación -->
         <mat-nav-list class="nav-list">
           @for (item of filteredMenuItems(); track item.route) {
-            <a mat-list-item 
+            <a mat-list-item
                [routerLink]="item.route"
                routerLinkActive="active-link"
                class="nav-item">
@@ -112,15 +112,15 @@ interface MenuItem {
 
           <!-- Breadcrumb o título de página -->
           <span class="page-title">{{ getCurrentPageTitle() }}</span>
-          
+
           <span class="spacer"></span>
 
           <!-- Notificaciones -->
           <app-notifications></app-notifications>
 
           <!-- Menú de usuario -->
-          <button mat-icon-button 
-                  [matMenuTriggerFor]="userMenu" 
+          <button mat-icon-button
+                  [matMenuTriggerFor]="userMenu"
                   [matTooltip]="'Opciones de usuario'"
                   type="button"
                   (click)="openUserMenu()"
@@ -354,7 +354,7 @@ interface MenuItem {
 })
 export class MainLayoutComponent {
   @ViewChild(MatMenuTrigger) userMenuTrigger!: MatMenuTrigger;
-  
+
   isMobile = signal(false);
   notificationCount = signal(3);
 
@@ -385,24 +385,6 @@ export class MainLayoutComponent {
       roles: ['admin', 'vet']
     },
     {
-      label: 'Inventario',
-      icon: 'inventory',
-      route: '/inventario',
-      roles: ['admin', 'vet']
-    },
-    {
-      label: 'Facturación',
-      icon: 'receipt',
-      route: '/facturacion',
-      roles: ['admin', 'vet', 'aux_admin', 'aux_vet']
-    },
-    {
-      label: 'Reportes',
-      icon: 'analytics',
-      route: '/reportes',
-      roles: ['admin']
-    },
-    {
       label: 'Usuarios',
       icon: 'people',
       route: '/usuarios',
@@ -425,14 +407,14 @@ export class MainLayoutComponent {
   }
 
   filteredMenuItems() {
-    return this.menuItems.filter(item => 
+    return this.menuItems.filter(item =>
       this.authService.hasAnyRole(item.roles)
     );
   }
 
   getCurrentPageTitle(): string {
     const currentRoute = this.router.url;
-    const menuItem = this.menuItems.find(item => 
+    const menuItem = this.menuItems.find(item =>
       currentRoute.startsWith(item.route)
     );
     return menuItem?.label || 'VetPlus';

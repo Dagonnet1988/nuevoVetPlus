@@ -36,9 +36,7 @@ export class RecentActivityComponent {
   getTypeLabel(tipo: string): string {
     const labels: { [key: string]: string } = {
       'cita': 'Cita',
-      'venta': 'Venta',
-      'paciente': 'Paciente',
-      'inventario': 'Inventario'
+      'paciente': 'Paciente'
     };
     return labels[tipo] || tipo;
   }
@@ -60,9 +58,9 @@ export class RecentActivityComponent {
     } else if (diffInDays < 7) {
       return `${diffInDays}d`;
     } else {
-      return date.toLocaleDateString('es-ES', { 
-        day: '2-digit', 
-        month: '2-digit' 
+      return date.toLocaleDateString('es-ES', {
+        day: '2-digit',
+        month: '2-digit'
       });
     }
   }

@@ -17,7 +17,7 @@
         </h1>
         <p class="page-subtitle">Gestiona la configuración global de VetPlus</p>
       </div>
-      
+
       <div class="header-actions">
         <button mat-raised-button color="primary" (click)="refreshConfigurations()">
           <mat-icon>refresh</mat-icon>
@@ -41,7 +41,7 @@
               <span class="stat-value">{{ quickStats().empresa_configurada ? 'Configurada' : 'Pendiente' }}</span>
             </div>
           </div>
-          
+
           <div class="stat-item">
             <mat-icon [style.color]="quickStats().google_calendar_conectado ? '#4caf50' : '#ff9800'">
               {{ quickStats().google_calendar_conectado ? 'check_circle' : 'schedule' }}
@@ -51,22 +51,12 @@
               <span class="stat-value">{{ quickStats().google_calendar_conectado ? 'Conectado' : 'Desconectado' }}</span>
             </div>
           </div>
-          
-          <div class="stat-item">
-            <mat-icon [style.color]="quickStats().whatsapp_conectado ? '#4caf50' : '#ff9800'">
-              {{ quickStats().whatsapp_conectado ? 'check_circle' : 'schedule' }}
-            </mat-icon>
-            <div class="stat-info">
-              <span class="stat-label">WhatsApp</span>
-              <span class="stat-value">{{ quickStats().whatsapp_conectado ? 'Conectado' : 'Desconectado' }}</span>
-            </div>
-          </div>
-          
+
           <div class="stat-item">
             <mat-icon [style.color]="'#2196f3'">admin_panel_settings</mat-icon>
             <div class="stat-info">
               <span class="stat-label">Configuraciones</span>
-              <span class="stat-value">{{ quickStats().total_configuraciones }}/6</span>
+              <span class="stat-value">{{ quickStats().total_configuraciones }}/3</span>
             </div>
           </div>
         </div>
@@ -90,7 +80,7 @@
           </mat-card-title>
           <mat-card-subtitle>{{ section.description }}</mat-card-subtitle>
         </mat-card-header>
-        
+
         <mat-card-content>
           <div class="section-status">
             <mat-icon [style.color]="getStatusColor(section.status)">
@@ -101,7 +91,7 @@
             </span>
           </div>
         </mat-card-content>
-        
+
         <mat-card-actions>
           <button mat-button color="primary">
             @if (section.status === 'active') {

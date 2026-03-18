@@ -21,42 +21,6 @@ CREATE TRIGGER audit_citas
     AFTER INSERT OR UPDATE OR DELETE ON clinical.calendario_citas
     FOR EACH ROW EXECUTE FUNCTION create_audit_log();
 
--- MÓDULO FINANCIERO - PRODUCTOS Y INVENTARIO
-CREATE TRIGGER audit_productos
-    AFTER INSERT OR UPDATE OR DELETE ON financial.productos
-    FOR EACH ROW EXECUTE FUNCTION create_audit_log();
-
-CREATE TRIGGER audit_proveedores
-    AFTER INSERT OR UPDATE OR DELETE ON financial.proveedores
-    FOR EACH ROW EXECUTE FUNCTION create_audit_log();
-
--- MÓDULO FINANCIERO - CAJAS Y MOVIMIENTOS
-CREATE TRIGGER audit_cajas
-    AFTER INSERT OR UPDATE OR DELETE ON financial.cajas
-    FOR EACH ROW EXECUTE FUNCTION create_audit_log();
-
-CREATE TRIGGER audit_ingresos
-    AFTER INSERT OR UPDATE OR DELETE ON financial.ingresos
-    FOR EACH ROW EXECUTE FUNCTION create_audit_log();
-
-CREATE TRIGGER audit_egresos
-    AFTER INSERT OR UPDATE OR DELETE ON financial.egresos
-    FOR EACH ROW EXECUTE FUNCTION create_audit_log();
-
--- MÓDULO FINANCIERO - LÍNEAS DE ÓRDENES Y FACTURAS
-CREATE TRIGGER audit_lineas_orden
-    AFTER INSERT OR UPDATE OR DELETE ON financial.lineas_orden_compra
-    FOR EACH ROW EXECUTE FUNCTION create_audit_log();
-
-CREATE TRIGGER audit_lineas_factura
-    AFTER INSERT OR UPDATE OR DELETE ON financial.lineas_factura
-    FOR EACH ROW EXECUTE FUNCTION create_audit_log();
-
--- MÓDULO TERAPIAS
-CREATE TRIGGER audit_control_terapias
-    AFTER INSERT OR UPDATE OR DELETE ON financial.control_terapias
-    FOR EACH ROW EXECUTE FUNCTION create_audit_log();
-
 -- Función mejorada para auditoría con mejor manejo de errores
 CREATE OR REPLACE FUNCTION create_audit_log_enhanced()
 RETURNS TRIGGER AS $$
@@ -93,16 +57,8 @@ BEGIN
             WHEN 'usuarios' THEN entity_id := COALESCE(NEW.id_usuario, OLD.id_usuario)::TEXT;
             WHEN 'clientes' THEN entity_id := COALESCE(NEW.id_cliente, OLD.id_cliente)::TEXT;
             WHEN 'mascotas' THEN entity_id := COALESCE(NEW.id_mascota, OLD.id_mascota)::TEXT;
-            WHEN 'productos' THEN entity_id := COALESCE(NEW.id_producto, OLD.id_producto)::TEXT;
-            WHEN 'proveedores' THEN entity_id := COALESCE(NEW.id_proveedor, OLD.id_proveedor)::TEXT;
-            WHEN 'cajas' THEN entity_id := COALESCE(NEW.id_caja, OLD.id_caja)::TEXT;
-            WHEN 'ingresos' THEN entity_id := COALESCE(NEW.id_ingreso, OLD.id_ingreso)::TEXT;
-            WHEN 'egresos' THEN entity_id := COALESCE(NEW.id_egreso, OLD.id_egreso)::TEXT;
-            WHEN 'ordenes_compra' THEN entity_id := COALESCE(NEW.id_orden, OLD.id_orden)::TEXT;
-            WHEN 'facturas_venta' THEN entity_id := COALESCE(NEW.id_factura, OLD.id_factura)::TEXT;
             WHEN 'consultas_clinicas' THEN entity_id := COALESCE(NEW.id_consulta, OLD.id_consulta)::TEXT;
             WHEN 'calendario_citas' THEN entity_id := COALESCE(NEW.id_cita, OLD.id_cita)::TEXT;
-            WHEN 'control_terapias' THEN entity_id := COALESCE(NEW.id_control, OLD.id_control)::TEXT;
             ELSE entity_id := 'unknown';
         END CASE;
     EXCEPTION WHEN OTHERS THEN

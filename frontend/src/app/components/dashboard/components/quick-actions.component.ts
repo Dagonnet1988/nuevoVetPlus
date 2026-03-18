@@ -51,36 +51,12 @@ export class QuickActionsComponent {
       description: 'Registrar mascota'
     },
     {
-      title: 'Nueva Factura',
-      icon: 'receipt_long',
-      route: '/facturacion/nueva',
-      color: 'warning',
-      roles: ['admin', 'aux_admin'],
-      description: 'Generar factura'
-    },
-    {
       title: 'Consulta Médica',
       icon: 'medical_services',
       route: '/historia-clinica/nueva',
       color: 'info',
       roles: ['admin', 'vet'],
       description: 'Nueva consulta'
-    },
-    {
-      title: 'Inventario',
-      icon: 'inventory_2',
-      route: '/inventario',
-      color: 'primary',
-      roles: ['admin', 'aux_admin'],
-      description: 'Gestionar stock'
-    },
-    {
-      title: 'Reportes',
-      icon: 'analytics',
-      route: '/reportes',
-      color: 'info',
-      roles: ['admin'],
-      description: 'Ver estadísticas'
     },
     {
       title: 'Usuarios',
@@ -104,8 +80,8 @@ export class QuickActionsComponent {
 
   get filteredActions(): QuickAction[] {
     const actionsToFilter = this.actions.length > 0 ? this.actions : this.defaultActions;
-    
-    return actionsToFilter.filter(action => 
+
+    return actionsToFilter.filter(action =>
       this.authService.hasAnyRole(action.roles)
     );
   }

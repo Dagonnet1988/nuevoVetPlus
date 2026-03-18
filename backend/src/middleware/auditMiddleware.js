@@ -8,7 +8,6 @@ import { query } from '../config/database.js';
 // Lista de rutas que NO requieren auditoría (para evitar spam de logs)
 const EXCLUDED_ROUTES = [
   '/api/auth/me',           // Consulta info usuario actual (muy frecuente)
-  '/api/financial/test',    // Rutas de prueba
   '/api/clinical/test',     // Rutas de prueba
   '/favicon.ico',           // Requests del browser
   '/health',                // Health checks
@@ -22,7 +21,6 @@ const HIGH_SENSITIVITY_ROUTES = [
   '/api/auth/admin/reset-password',
   '/api/auth/admin/generate-temp-password',
   '/api/auth/users',
-  '/api/financial/reportes',
   '/api/clinical/consultas',
 ];
 
@@ -125,10 +123,9 @@ function shouldAuditRequest(url, method) {
     return true;
   }
   
-  // Auditar GET en rutas específicas (consultas médicas, reportes)
+  // Auditar GET en rutas específicas (consultas médicas, administración)
   if (method === 'GET' && (
     url.includes('/api/clinical/consultas') ||
-    url.includes('/api/financial/reportes') ||
     url.includes('/api/auth/admin')
   )) {
     return true;
@@ -246,10 +243,6 @@ function determineActivityType(url, method, statusCode) {
   if (url.includes('/auth/logout')) return 'LOGOUT';
   if (url.includes('/auth/admin/reset-password')) return 'PASSWORD_RESET';
   if (url.includes('/api/clinical/consultas')) return 'MEDICAL_ACCESS';
-  if (url.includes('/api/financial/reportes')) return 'REPORT_ACCESS';
-  if (url.includes('/api/financial/cajas')) return 'CASH_MANAGEMENT';
-  if (url.includes('/api/financial/facturas')) return 'BILLING';
-  if (url.includes('/api/financial/productos')) return 'INVENTORY';
   if (url.includes('/api/clinical/clientes')) return 'CLIENT_MANAGEMENT';
   if (url.includes('/api/clinical/mascotas')) return 'PET_MANAGEMENT';
   
@@ -278,8 +271,6 @@ function generateActivityDescription(requestData, statusCode) {
   if (url.includes('/auth/login')) return `${status}: User login attempt`;
   if (url.includes('/auth/logout')) return `${status}: User logout`;
   if (url.includes('/api/clinical/consultas')) return `${status}: ${action} medical consultation`;
-  if (url.includes('/api/financial/reportes')) return `${status}: ${action} financial report`;
-  if (url.includes('/api/financial/cajas')) return `${status}: ${action} cash register`;
   if (url.includes('/api/clinical/clientes')) return `${status}: ${action} client record`;
   if (url.includes('/api/clinical/mascotas')) return `${status}: ${action} pet record`;
   

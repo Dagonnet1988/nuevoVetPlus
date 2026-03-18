@@ -72,29 +72,6 @@ export const routes: Routes = [
         data: { roles: ['admin', 'vet'] }
       },
 
-      // Inventario - Accesible para admin, vet
-      {
-        path: 'inventario',
-        loadChildren: () => import('./components/inventario/inventario.routes').then(m => m.inventarioRoutes),
-        canActivate: [RoleGuard],
-        data: { roles: ['admin', 'vet'] }
-      },
-
-      // Facturación - Accesible para admin, vet, aux_admin
-      {
-        path: 'facturacion',
-        loadChildren: () => import('./components/facturacion/facturacion.routes').then(m => m.FACTURACION_ROUTES),
-        canActivate: [RoleGuard],
-        data: { roles: ['admin', 'vet', 'aux_admin'] }
-      },
-
-      // Reportes - Accesible para admin, vet
-      {
-        path: 'reportes',
-        loadChildren: () => import('./components/reportes/reportes.routes').then(m => m.REPORTES_ROUTES),
-        canActivate: [RoleGuard],
-        data: { roles: ['admin', 'vet'] }
-      },
 
       // Usuarios - Solo admin
       {
@@ -108,14 +85,6 @@ export const routes: Routes = [
       {
         path: 'configuracion',
         loadChildren: () => import('./components/configuracion/configuracion.routes').then(m => m.CONFIGURACION_ROUTES),
-        canActivate: [RoleGuard],
-        data: { roles: ['admin'] }
-      },
-
-      // Cajas - Solo admin
-      {
-        path: 'cajas',
-        loadChildren: () => import('./components/cajas/cajas.routes').then(m => m.CAJAS_ROUTES),
         canActivate: [RoleGuard],
         data: { roles: ['admin'] }
       },

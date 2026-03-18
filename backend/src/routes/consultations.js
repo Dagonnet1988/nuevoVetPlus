@@ -9,8 +9,7 @@ import {
     getConsultationByAppointmentId,
     getConsultationsByPet,
     updateConsultation,
-    getConsultationStats,
-    completeConsultationWithInvoice
+    getConsultationStats
 } from '../controllers/consultationController.js';
 import {
     validateCreateConsultation,
@@ -107,67 +106,6 @@ router.put('/:id',
     validateUpdateConsultation,
     validateRequest,
     updateConsultation
-);
-
-// 🔥 COMPLETAR CONSULTA CON FACTURACIÓN AUTOMÁTICA
-// POST /api/clinical/consultations/:id/complete-with-invoice
-router.post('/:id/complete-with-invoice',
-    authorize(['admin', 'vet']), // Solo admin y veterinarios
-    validateConsultationId,
-    validateRequest,
-    completeConsultationWithInvoice
-);
-
-// ✅ EXPORTAR CONSULTA CLÍNICA A PDF
-// GET /api/clinical/consultations/:id/export
-router.get('/:id/export',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
-    validateConsultationId,
-    validateRequest,
-    async (req, res) => {
-        try {
-            const { id } = req.params;
-            const { formato = 'pdf' } = req.query;
-
-            if (formato !== 'pdf') {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Formato no soportado. Solo se soporta PDF.'
-                });
-            }
-
-            // Importar el servicio de PDF
-            const { default: pdfGeneratorService } = await import('../services/pdfGeneratorService.js');
-
-            // Generar PDF de la consulta
-            const filepath = await pdfGeneratorService.generarConsultaPDF(id);
-
-            // Leer el archivo generado
-            const fs = await import('fs/promises');
-            const pdfBuffer = await fs.readFile(filepath);
-
-            // Configurar headers para descarga
-            res.setHeader('Content-Type', 'application/pdf');
-            res.setHeader('Content-Disposition', `attachment; filename=consulta-${id}.pdf`);
-            res.setHeader('Content-Length', pdfBuffer.length);
-
-            // Enviar PDF
-            res.send(pdfBuffer);
-
-            // Limpiar archivo temporal después de enviarlo
-            setTimeout(() => {
-                fs.unlink(filepath).catch(err => console.error('Error eliminando archivo temporal:', err));
-            }, 1000);
-
-        } catch (error) {
-            console.error('Error exportando consulta:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor',
-                error: error.message
-            });
-        }
-    }
 );
 
 export default router;

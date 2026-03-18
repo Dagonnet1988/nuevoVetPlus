@@ -18,10 +18,7 @@ const options = {
                 ## Características Principales
                 - 🔐 Autenticación JWT con roles diferenciados
                 - 🏥 Gestión clínica completa (clientes, mascotas, consultas, citas)
-                - 💰 Sistema financiero integrado (facturación, inventario, cajas)
-                - 🏭 Gestión de proveedores y órdenes de compra
                 - 📅 Integración con Google Calendar
-                - 📊 Reportes y analytics avanzados
                 - 🔍 Sistema de auditoría completo
                 - 🛡️ Rate limiting y validaciones exhaustivas
                 - 📈 Monitoring y health checks
@@ -32,7 +29,7 @@ const options = {
                 
                 ## Roles de Usuario
                 - **admin**: Acceso completo al sistema
-                - **vet**: Acceso a módulos clínicos y reportes
+                - **vet**: Acceso a módulos clínicos
                 - **auxiliar**: Acceso limitado a operaciones básicas
                 
                 ## Rate Limiting
@@ -218,57 +215,15 @@ const options = {
                 },
                 
                 // Schemas financieros
-                Producto: {
-                    type: 'object',
-                    properties: {
-                        id_producto: { type: 'string', format: 'uuid' },
-                        nombre: { type: 'string', example: 'Vacuna Antirrábica' },
-                        categoria: { type: 'string', example: 'Medicamentos' },
-                        codigo_barras: { type: 'string', example: '7891234567890' },
-                        precio_venta: { type: 'number', format: 'float', example: 45000 },
-                        stock_actual: { type: 'integer', example: 15 },
-                        stock_minimo: { type: 'integer', example: 5 },
-                        activo: { type: 'boolean', example: true }
-                    }
-                },
-                Factura: {
-                    type: 'object',
-                    properties: {
-                        id_factura: { type: 'string', format: 'uuid' },
-                        codigo_factura: { type: 'string', example: 'F-2024-001' },
-                        id_cliente: { type: 'string', format: 'uuid' },
-                        subtotal: { type: 'number', format: 'float', example: 100000 },
-                        impuestos: { type: 'number', format: 'float', example: 19000 },
-                        total: { type: 'number', format: 'float', example: 119000 },
-                        estado: { type: 'string', enum: ['pendiente', 'pagada', 'cancelada'] },
-                        fecha: { type: 'string', format: 'date-time' }
-                    }
-                },
-                
-                // Schemas de reportes
+                // Schemas de dashboard
                 DashboardStats: {
                     type: 'object',
                     properties: {
-                        ventas: {
-                            type: 'object',
-                            properties: {
-                                total_facturas: { type: 'integer', example: 45 },
-                                total_ventas: { type: 'number', format: 'float', example: 2500000 },
-                                promedio_venta: { type: 'number', format: 'float', example: 55555.56 }
-                            }
-                        },
                         clientes: {
                             type: 'object',
                             properties: {
                                 total_clientes: { type: 'integer', example: 150 },
                                 nuevos_clientes: { type: 'integer', example: 12 }
-                            }
-                        },
-                        inventario: {
-                            type: 'object',
-                            properties: {
-                                productos_bajo_stock: { type: 'integer', example: 5 },
-                                productos_agotados: { type: 'integer', example: 2 }
                             }
                         },
                         citas: {
@@ -475,28 +430,8 @@ const options = {
                 description: 'Sistema de citas y calendario'
             },
             {
-                name: 'Productos',
-                description: 'Gestión de inventario y productos'
-            },
-            {
-                name: 'Facturación',
-                description: 'Sistema de facturación y ventas'
-            },
-            {
-                name: 'Cajas',
-                description: 'Control de ingresos y egresos'
-            },
-            {
-                name: 'Proveedores',
-                description: 'Gestión de proveedores y órdenes de compra'
-            },
-            {
                 name: 'Google Calendar',
                 description: 'Integración con Google Calendar'
-            },
-            {
-                name: 'Reportes',
-                description: 'Reportes y analytics del sistema'
             },
             {
                 name: 'Auditoría',

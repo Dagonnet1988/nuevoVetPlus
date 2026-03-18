@@ -23,7 +23,7 @@ class AdvancedCache {
             checkperiod: 120 // verificar cada 2 minutos
         });
         
-        // Cache de reportes con TTL de 1 hora
+        // Cache de analitica con TTL de 1 hora
         this.reportsCache = new NodeCache({ 
             stdTTL: 3600, // 1 hora
             checkperiod: 300 // verificar cada 5 minutos
@@ -63,7 +63,7 @@ class AdvancedCache {
         return this.mainCache.set(key, value, ttl);
     }
     
-    // Obtener del cache de reportes
+    // Obtener del cache de analitica
     getReport(key) {
         const value = this.reportsCache.get(key);
         if (value !== undefined) {
@@ -74,7 +74,7 @@ class AdvancedCache {
         return null;
     }
     
-    // Guardar en cache de reportes
+    // Guardar en cache de analitica
     setReport(key, value, ttl = 3600) {
         this.stats.sets++;
         return this.reportsCache.set(key, value, ttl);
@@ -271,7 +271,7 @@ export const intelligentCaching = (options = {}) => {
     };
 };
 
-// Cache específico para reportes
+// Cache especifico para analitica
 export const reportsCache = intelligentCaching({
     ttl: 3600, // 1 hora
     cacheType: 'reports',

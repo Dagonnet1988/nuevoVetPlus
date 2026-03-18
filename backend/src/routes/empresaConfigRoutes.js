@@ -15,18 +15,8 @@ import {
     getEmpresaConfig,
     updateEmpresaConfig,
     uploadLogo,
-    configureWhatsApp,
-    getWhatsAppConfig,
-    updateWhatsAppConfig,
-    getWhatsAppLimites,
-    updateWhatsAppLimites,
-    getWhatsAppEstadoLimites,
-    resetWhatsAppContadores,
-    reanudarWhatsAppEnvios,
     getDiasEspeciales,
-    addDiaEspecial,
-    getSiguienteNumeroFactura,
-    testWhatsAppConfig
+    addDiaEspecial
 } from '../controllers/empresaConfigController.js';
 
 const router = express.Router();
@@ -98,11 +88,6 @@ const validateEmpresaConfig = [
         .isEmail()
         .withMessage('Formato de email inválido'),
     
-    body('prefijo_factura')
-        .optional()
-        .isLength({ min: 1, max: 10 })
-        .withMessage('El prefijo de factura debe tener entre 1 y 10 caracteres'),
-    
     body('horarios')
         .optional()
         .isArray({ max: 7 })
@@ -138,28 +123,6 @@ const validateEmpresaConfig = [
         }
         return true;
     })
-];
-
-const validateWhatsAppConfig = [
-    body('whatsapp_business_number')
-        .optional()
-        .matches(/^[0-9]{10,15}$/)
-        .withMessage('Número de WhatsApp Business inválido'),
-    
-    body('whatsapp_api_token')
-        .optional()
-        .isLength({ min: 10 })
-        .withMessage('Token de API inválido'),
-    
-    body('whatsapp_webhook_verify_token')
-        .optional()
-        .isLength({ min: 8 })
-        .withMessage('Token de verificación debe tener al menos 8 caracteres'),
-    
-    body('whatsapp_activo')
-        .optional()
-        .isBoolean()
-        .withMessage('Estado de WhatsApp debe ser booleano')
 ];
 
 const validateDiaEspecial = [
@@ -281,208 +244,6 @@ router.post('/logo', authenticateToken, requireAdmin, upload.single('logo'), upl
 
 /**
  * @swagger
- * /api/admin/empresa/whatsapp:
- *   get:
- *     summary: Obtener configuración de WhatsApp
- *     tags: [Configuración Empresa]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Configuración de WhatsApp obtenida exitosamente
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *                   properties:
- *                     activo:
- *                       type: boolean
- *                     numero_telefono:
- *                       type: string
- *                     nombre_empresa:
- *                       type: string
- *                     templates:
- *                       type: object
- *                     configuracion_envios:
- *                       type: object
- *                     horarios_envio:
- *                       type: object
- *                     notificaciones_automaticas:
- *                       type: object
- *       403:
- *         description: Acceso denegado
- */
-router.get('/whatsapp', authenticateToken, requireAdmin, getWhatsAppConfig);
-
-/**
- * @swagger
- * /api/admin/empresa/whatsapp:
- *   put:
- *     summary: Configurar WhatsApp Business
- *     tags: [Configuración Empresa]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               whatsapp_business_number:
- *                 type: string
- *                 example: "573001234567"
- *               whatsapp_api_token:
- *                 type: string
- *                 example: "EAAYourTokenHere"
- *               whatsapp_webhook_verify_token:
- *                 type: string
- *                 example: "your_verify_token"
- *               whatsapp_activo:
- *                 type: boolean
- *                 example: true
- *     responses:
- *       200:
- *         description: WhatsApp configurado exitosamente
- *       400:
- *         description: Datos inválidos
- *       403:
- *         description: Acceso denegado
- */
-router.put('/whatsapp', authenticateToken, requireAdmin, updateWhatsAppConfig);
-
-/**
- * @swagger
- * /api/admin/empresa/whatsapp/test:
- *   post:
- *     summary: Probar configuración de WhatsApp
- *     tags: [Configuración Empresa]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - numero_prueba
- *             properties:
- *               numero_prueba:
- *                 type: string
- *                 example: "573001234567"
- *     responses:
- *       200:
- *         description: Mensaje de prueba enviado
- *       400:
- *         description: Configuración inválida
- *       403:
- *         description: Acceso denegado
- */
-router.post('/whatsapp/test', authenticateToken, requireAdmin, testWhatsAppConfig);
-
-/**
- * @swagger
- * /api/admin/empresa/whatsapp/limites:
- *   get:
- *     summary: Obtener configuración de límites de WhatsApp
- *     tags: [Configuración Empresa]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Límites obtenidos exitosamente
- *       403:
- *         description: Acceso denegado
- */
-router.get('/whatsapp/limites', authenticateToken, requireAdmin, getWhatsAppLimites);
-
-/**
- * @swagger
- * /api/admin/empresa/whatsapp/limites:
- *   put:
- *     summary: Actualizar límites de WhatsApp
- *     tags: [Configuración Empresa]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               limite_diario:
- *                 type: number
- *               limite_por_hora:
- *                 type: number
- *               intervalo_minimo:
- *                 type: number
- *     responses:
- *       200:
- *         description: Límites actualizados exitosamente
- *       400:
- *         description: Datos inválidos
- *       403:
- *         description: Acceso denegado
- */
-router.put('/whatsapp/limites', authenticateToken, requireAdmin, updateWhatsAppLimites);
-
-/**
- * @swagger
- * /api/admin/empresa/whatsapp/estado-limites:
- *   get:
- *     summary: Obtener estado actual de límites de WhatsApp
- *     tags: [Configuración Empresa]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Estado de límites obtenido exitosamente
- *       403:
- *         description: Acceso denegado
- */
-router.get('/whatsapp/estado-limites', authenticateToken, requireAdmin, getWhatsAppEstadoLimites);
-
-/**
- * @swagger
- * /api/admin/empresa/whatsapp/reset-contadores:
- *   post:
- *     summary: Resetear contadores de límites
- *     tags: [Configuración Empresa]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Contadores reseteados exitosamente
- *       403:
- *         description: Acceso denegado
- */
-router.post('/whatsapp/reset-contadores', authenticateToken, requireAdmin, resetWhatsAppContadores);
-
-/**
- * @swagger
- * /api/admin/empresa/whatsapp/reanudar:
- *   post:
- *     summary: Reanudar envíos de WhatsApp
- *     tags: [Configuración Empresa]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Envíos reanudados exitosamente
- *       403:
- *         description: Acceso denegado
- */
-router.post('/whatsapp/reanudar', authenticateToken, requireAdmin, reanudarWhatsAppEnvios);
-
-/**
- * @swagger
  * /api/admin/empresa/dias-especiales:
  *   get:
  *     summary: Obtener días especiales y festivos
@@ -538,20 +299,6 @@ router.get('/dias-especiales', authenticateToken, getDiasEspeciales);
  *         description: Acceso denegado
  */
 router.post('/dias-especiales', authenticateToken, requireAdmin, validateDiaEspecial, addDiaEspecial);
-
-/**
- * @swagger
- * /api/admin/empresa/siguiente-numero/factura:
- *   get:
- *     summary: Obtener siguiente número de factura
- *     tags: [Configuración Empresa]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Siguiente número obtenido
- */
-router.get('/siguiente-numero/factura', authenticateToken, requireAdmin, getSiguienteNumeroFactura);
 
 // Middleware de manejo de errores para multer
 router.use((error, req, res, next) => {

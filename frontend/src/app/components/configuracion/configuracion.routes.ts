@@ -24,13 +24,5 @@ export const CONFIGURACION_ROUTES: Routes = [
       title: 'Configuración de Google Calendar',
       breadcrumb: 'Google Calendar'
     }
-  },
-  {
-    path: 'whatsapp',
-    loadComponent: () => import('./whatsapp/whatsapp-config.component').then(m => m.WhatsAppConfigComponent),
-    data: {
-      title: 'Configuración de WhatsApp',
-      breadcrumb: 'WhatsApp'
-    }
   }
 ];

@@ -71,13 +71,9 @@
           Cambiar Foto
         </button>
         <mat-divider></mat-divider>
-        <button mat-menu-item (click)="generateReport()">
-          <mat-icon>description</mat-icon>
-          Generar Reporte
-        </button>
         <button mat-menu-item (click)="exportData()">
-          <mat-icon>file_download</mat-icon>
-          Exportar Datos
+          <mat-icon>description</mat-icon>
+          Exportar Historia Clinica
         </button>
         <mat-divider></mat-divider>
         <button mat-menu-item (click)="toggleStatus()" [class.warn]="paciente()?.activo">

@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, BehaviorSubject } from 'rxjs';
+import { Observable, BehaviorSubject, forkJoin, of } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 
@@ -15,16 +15,6 @@ export interface DashboardStats {
     semana: number;
     pendientes: number;
   };
-  ventas: {
-    dia: number;
-    mes: number;
-    año: number;
-  };
-  inventario: {
-    productos_bajo_stock: number;
-    productos_vencidos: number;
-    total_productos: number;
-  };
 }
 
 export interface ChartData {
@@ -34,7 +24,7 @@ export interface ChartData {
 
 export interface RecentActivity {
   id: string;
-  tipo: 'cita' | 'venta' | 'paciente' | 'inventario';
+  tipo: 'cita' | 'paciente';
   descripcion: string;
   fecha: string;
   usuario: string;
@@ -66,26 +56,17 @@ export class DashboardService {
 
   // Estadísticas generales del dashboard
   getDashboardStats(): Observable<DashboardStats> {
-    return this.http.get<any>(`${this.API_URL}/reports/dashboard`).pipe(
-      map((response: any) => {
-        if (response.success && response.data) {
-          return this.mapBackendStatsToFrontend(response.data);
+    return forkJoin({
+      pacientes: this.http.get<any>(`${this.API_URL}/clinical/pacientes/stats`),
+      citas: this.http.get<any>(`${this.API_URL}/clinical/appointments/stats`)
+    }).pipe(
+      map(({ pacientes, citas }) => {
+        if (pacientes.success && pacientes.data && citas.success && citas.data) {
+          return this.mapBackendStatsToFrontend(pacientes.data, citas.data);
         }
         throw new Error('Error obteniendo estadísticas del dashboard');
-      })
-    );
-  }
-
-  // Datos para gráfico de ventas mensuales - usar reportes de ventas
-  getVentasMensuales(): Observable<ChartData> {
-    return this.http.get<any>(`${this.API_URL}/reports/sales`).pipe(
-      map((response: any) => {
-        if (response.success && response.data) {
-          return this.mapVentasToChartData(response.data);
-        }
-        throw new Error('Error obteniendo datos de ventas');
       }),
-      catchError(() => this.generateDefaultVentasChart())
+      catchError(() => of(this.getDefaultStats()))
     );
   }
 
@@ -124,18 +105,6 @@ export class DashboardService {
     );
   }
 
-  // Datos para gráfico de pacientes por especie - usar reportes de pacientes
-  getPacientesPorEspecie(): Observable<ChartData> {
-    return this.http.get<any>(`${this.API_URL}/reports/patients`).pipe(
-      map((response: any) => {
-        if (response.success && response.data) {
-          return this.mapPacientesToChartData(response.data);
-        }
-        throw new Error('Error obteniendo datos de pacientes');
-      }),
-      catchError(() => this.generateDefaultPacientesChart())
-    );
-  }
 
   // Actividad reciente - usar próximas citas como actividad
   getRecentActivity(limit: number = 10): Observable<RecentActivity[]> {
@@ -178,23 +147,6 @@ export class DashboardService {
     );
   }
 
-  // Alertas de inventario - usar alertas y KPIs
-  getAlertasInventario(): Observable<any[]> {
-    return this.http.get<any>(`${this.API_URL}/reports/alerts-kpis`).pipe(
-      map((response: any) => {
-        if (response.success && response.data && response.data.alertas) {
-          return response.data.alertas.filter((alerta: any) =>
-            alerta.tipo === 'stock_critico' || alerta.tipo === 'inventario'
-          );
-        }
-        return [];
-      }),
-      catchError(() => new Observable<any[]>(observer => {
-        observer.next([]);
-        observer.complete();
-      }))
-    );
-  }
 
   // Gestión de notificaciones
   getNotifications(): Notification[] {
@@ -220,74 +172,36 @@ export class DashboardService {
   }
 
   // Funciones de mapeo para convertir datos del backend al formato del frontend
-  private mapBackendStatsToFrontend(backendData: any): DashboardStats {
+  private mapBackendStatsToFrontend(pacientesData: any, citasData: any): DashboardStats {
     return {
       pacientes: {
-        total: backendData.clientes?.total_clientes || 0,
-        nuevos_mes: backendData.clientes?.clientes_nuevos || 0,
-        activos: backendData.clientes?.total_clientes || 0
+        total: pacientesData.totalPacientes || 0,
+        nuevos_mes: pacientesData.nuevosUltimoMes || 0,
+        activos: pacientesData.totalPacientes || 0
       },
       citas: {
-        hoy: backendData.kpis?.citas_hoy || 0,
-        semana: backendData.citas?.total_citas || 0,
-        pendientes: backendData.citas?.pendientes || 0
-      },
-      ventas: {
-        dia: backendData.ventas?.total_ventas || 0,
-        mes: backendData.ventas?.total_ventas || 0,
-        año: backendData.ventas?.total_ventas || 0
-      },
-      inventario: {
-        productos_bajo_stock: backendData.inventario?.productos_criticos || 0,
-        productos_vencidos: 0, // No disponible en backend
-        total_productos: backendData.inventario?.total_productos || 0
+        hoy: citasData.citas_hoy || 0,
+        semana: citasData.total_citas || 0,
+        pendientes: citasData.citas_pendientes || 0
       }
     };
   }
 
-  private mapVentasToChartData(ventasData: any): ChartData {
-    // Generar datos por defecto si no hay suficiente información
+  private getDefaultStats(): DashboardStats {
     return {
-      labels: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun'],
-      datasets: [{
-        label: 'Ventas (COP)',
-        data: [0, 0, 0, 0, 0, ventasData.total_ventas || 0],
-        borderColor: '#2e7d32',
-        backgroundColor: 'rgba(46, 125, 50, 0.1)',
-        tension: 0.4
-      }]
+      pacientes: {
+        total: 0,
+        nuevos_mes: 0,
+        activos: 0
+      },
+      citas: {
+        hoy: 0,
+        semana: 0,
+        pendientes: 0
+      }
     };
   }
 
-  private mapPacientesToChartData(pacientesData: any): ChartData {
-    if (pacientesData.distribucion_especies && pacientesData.distribucion_especies.length > 0) {
-      const especies = pacientesData.distribucion_especies;
-      return {
-        labels: especies.map((e: any) => e.especie || 'Sin especificar'),
-        datasets: [{
-          data: especies.map((e: any) => e.mascotas_atendidas || 0),
-          backgroundColor: this.generateSpeciesColors(especies.length)
-        }]
-      };
-    }
-    
-    return {
-      labels: ['Sin datos'],
-      datasets: [{
-        data: [1],
-        backgroundColor: ['#e0e0e0']
-      }]
-    };
-  }
-
-  private generateSpeciesColors(count: number): string[] {
-    const baseColors = ['#2e7d32', '#4CAF50', '#8BC34A', '#C8E6C9', '#66BB6A', '#A5D6A7'];
-    const colors = [];
-    for (let i = 0; i < count; i++) {
-      colors.push(baseColors[i % baseColors.length]);
-    }
-    return colors;
-  }
 
   private mapCitasToActivity(citasData: any[]): RecentActivity[] {
     return citasData.slice(0, 10).map((cita: any, index: number) => ({
@@ -299,35 +213,6 @@ export class DashboardService {
       icono: 'event',
       color: '#2e7d32'
     }));
-  }
-
-  private generateDefaultVentasChart(): Observable<ChartData> {
-    return new Observable(observer => {
-      observer.next({
-        labels: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun'],
-        datasets: [{
-          label: 'Ventas (COP)',
-          data: [0, 0, 0, 0, 0, 0],
-          borderColor: '#2e7d32',
-          backgroundColor: 'rgba(46, 125, 50, 0.1)',
-          tension: 0.4
-        }]
-      });
-      observer.complete();
-    });
-  }
-
-  private generateDefaultPacientesChart(): Observable<ChartData> {
-    return new Observable(observer => {
-      observer.next({
-        labels: ['Sin datos'],
-        datasets: [{
-          data: [1],
-          backgroundColor: ['#e0e0e0']
-        }]
-      });
-      observer.complete();
-    });
   }
 
   private generateDefaultCitasChart(): Observable<ChartData> {
