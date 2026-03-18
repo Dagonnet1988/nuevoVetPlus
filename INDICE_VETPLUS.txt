@@ -1,0 +1,61 @@
+# ÍNDICE DEL PROYECTO VETPLUS
+
+## ESTRUCTURA DE CARPETAS PRINCIPALES
+
+### BACKEND
+- controllers/
+- database/
+- middleware/
+- routes/
+- services/
+- utils/
+- validators/
+
+### FRONTEND
+- app/
+- environments/
+- public/
+- styles/
+
+## MÓDULOS BACKEND
+1. Autenticación (auth)
+2. Clínico (clinical)
+3. Financiero (financial)
+4. Configuraciones (config)
+5. Reportes (reports)
+6. Notificaciones (notifications)
+
+## COMPONENTES ANGULAR PRINCIPALES
+- auth/
+- cajas/
+- citas/
+- facturacion/
+- pacientes/
+- reportes/
+
+## MODELOS DE BASE DE DATOS
+- usuario
+- cliente
+- mascota
+- consulta_clinica
+- calendario_cita
+- producto
+- factura_venta
+
+## ENDPOINTS API DESTACADOS
+
+### Autenticación
+- POST /api/auth/login
+- POST /api/auth/logout
+
+### Pacientes
+- GET /api/pacientes
+- POST /api/pacientes
+
+### Citas
+- GET /api/citas
+- POST /api/citas
+
+### Facturación
+- GET /api/facturas
+- POST /api/facturas

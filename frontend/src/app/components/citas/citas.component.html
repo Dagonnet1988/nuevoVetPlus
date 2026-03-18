@@ -128,13 +128,12 @@
         </button>
       </form>
     </div>
-  </div>
 
-  <!-- Calendario a pantalla completa -->
-  <div class="fullscreen-calendar"
-       [class.compact-mode]="calendarViewMode() === 'compact'">
-    <mat-card class="calendar-card">
-      <mat-card-content class="calendar-content">
+    <!-- Calendario a pantalla completa (solo cuando se solicita) -->
+    @if (viewMode() === 'calendario') {
+      <div class="fullscreen-calendar-no-sidebar"
+           [class.compact-mode]="calendarViewMode() === 'compact'">
+        <!-- Calendario sin contenedores adicionales -->
         @if (loading()) {
           <div class="loading-container">
             <div class="loading-spinner">
@@ -146,14 +145,140 @@
             </div>
           </div>
         } @else {
-          <div class="calendar-wrapper">
+          <div class="calendar-fullscreen-wrapper">
             <full-calendar
               [options]="calendarOptions"
               #calendar>
             </full-calendar>
           </div>
         }
-      </mat-card-content>
-    </mat-card>
+      </div>
+    }
+ </div>
+
+  <!-- Vista plana de citas -->
+  <div class="citas-plana-container">
+    <!-- Botón para abrir calendario en nueva pestaña -->
+    <div class="calendar-button-section">
+      <button mat-raised-button
+              color="primary"
+              (click)="abrirCalendarioNuevaPestana()"
+              class="calendar-view-button">
+        <mat-icon>calendar_view_month</mat-icon>
+        Ver Calendario Completo
+        <mat-icon class="external-link">open_in_new</mat-icon>
+      </button>
+    </div>
+
+    <!-- Lista de citas por día -->
+    <div class="citas-lista">
+      @if (loading()) {
+        <div class="loading-container">
+          <div class="loading-spinner">
+            <mat-spinner diameter="60"></mat-spinner>
+          </div>
+          <div class="loading-text">
+            <h3>Cargando citas...</h3>
+            <p>Preparando la agenda del día</p>
+          </div>
+        </div>
+      } @else if (citas().length === 0) {
+        <div class="no-citas-container">
+          <mat-icon class="no-citas-icon">event_busy</mat-icon>
+          <h3>No hay citas programadas</h3>
+          <p>Utiliza el botón "Nueva Cita" para programar tu primera cita</p>
+        </div>
+      } @else {
+        <!-- Agrupar citas por fecha -->
+        @for (dia of citasPorDia(); track dia.fecha) {
+          <div class="dia-grupo">
+            <div class="dia-header">
+              <div class="dia-info">
+                <h3 class="dia-titulo">{{ dia.fechaFormateada }}</h3>
+                <div class="dia-estadisticas">
+                  <span class="estadistica-item">
+                    <strong>{{ dia.estadisticas.total }}</strong> cita{{ dia.estadisticas.total !== 1 ? 's' : '' }}
+                  </span>
+                  @if (dia.estadisticas.pendientes > 0) {
+                    <span class="estadistica-item pendiente">
+                      {{ dia.estadisticas.pendientes }} pendiente{{ dia.estadisticas.pendientes !== 1 ? 's' : '' }}
+                    </span>
+                  }
+                  @if (dia.estadisticas.completadas > 0) {
+                    <span class="estadistica-item completada">
+                      {{ dia.estadisticas.completadas }} completada{{ dia.estadisticas.completadas !== 1 ? 's' : '' }}
+                    </span>
+                  }
+                  @if (dia.estadisticas.canceladas > 0) {
+                    <span class="estadistica-item cancelada">
+                      {{ dia.estadisticas.canceladas }} cancelada{{ dia.estadisticas.canceladas !== 1 ? 's' : '' }}
+                    </span>
+                  }
+                </div>
+              </div>
+            </div>
+
+            <div class="citas-del-dia">
+              @for (cita of dia.citas; track cita.id_cita) {
+                <div class="cita-card"
+                     [class]="getCitaCardClasses(cita)"
+                     (click)="abrirDetalleCita(cita)">
+                  <div class="cita-header">
+                    <div class="cita-hora">
+                      <mat-icon class="hora-icon">schedule</mat-icon>
+                      <span class="hora-texto">
+                        {{ cita.fecha_inicio | date:'h:mm a' }} - {{ cita.fecha_fin | date:'h:mm a' }}
+                      </span>
+                    </div>
+                    <div class="cita-estado">
+                      <span class="estado-indicator" [class]="getEstadoClass(cita.estado)">
+                        {{ getEstadoTexto(cita.estado) }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="cita-contenido">
+                    <div class="cita-principal">
+                      <div class="mascota-info">
+                        <mat-icon class="mascota-icon">pets</mat-icon>
+                        <div class="mascota-detalles">
+                          <span class="mascota-nombre">{{ cita.mascota_nombre || 'Sin nombre' }}</span>
+                          <span class="cliente-nombre">{{ cita.cliente_nombre || 'Sin cliente' }}</span>
+                        </div>
+                      </div>
+                      <div class="tipo-cita">
+                        <span class="tipo-badge" [class]="getTipoClass(cita.tipo)">
+                          {{ getTipoTexto(cita.tipo) }}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div class="cita-secundaria">
+                      <div class="veterinario-info">
+                        <mat-icon class="vet-icon">person</mat-icon>
+                        <span class="vet-nombre">{{ cita.veterinario_nombre || 'Sin asignar' }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="cita-acciones">
+                    <button mat-icon-button
+                            (click)="$event.stopPropagation(); editarCita(cita)"
+                            matTooltip="Editar cita">
+                      <mat-icon>edit</mat-icon>
+                    </button>
+                    <button mat-icon-button
+                            (click)="$event.stopPropagation(); cambiarEstadoCita(cita)"
+                            matTooltip="Cambiar estado">
+                      <mat-icon>swap_horiz</mat-icon>
+                    </button>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+        }
+      }
+    </div>
   </div>
 </div>

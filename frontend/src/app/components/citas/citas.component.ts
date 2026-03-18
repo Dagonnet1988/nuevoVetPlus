@@ -85,6 +85,9 @@ export class CitasComponent implements OnInit, OnDestroy {
   // Signal para controlar el modo de vista del calendario
   calendarViewMode = signal<'compact' | 'expanded'>('expanded');
 
+  // Signal para controlar el modo de vista (plana vs calendario)
+  viewMode = signal<'plana' | 'calendario'>('plana');
+
   // Timestamp de cuando se carga la vista
   private viewLoadTime: number = 0;  // Formulario de filtros
   filterForm: FormGroup;
@@ -168,6 +171,14 @@ export class CitasComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     console.log('🚪 Entrando a la vista de citas');
     this.viewLoadTime = Date.now();
+
+    // Verificar si se solicita vista de calendario desde URL
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('view') === 'calendario') {
+      this.viewMode.set('calendario');
+      // Aplicar clase al body para ocultar sidebar cuando estamos en modo calendario
+      document.body.classList.add('fullscreen-calendar-mode');
+    }
 
     // Defer initial load to next tick to avoid ExpressionChangedAfterItHasBeenCheckedError
     setTimeout(() => {
@@ -750,7 +761,193 @@ export class CitasComponent implements OnInit, OnDestroy {
     } else {
       console.warn('🚫 No se pudo acceder al API del calendario');
     }
-  }  ngOnDestroy(): void {
+  }
+
+  // ===========================================
+  // NUEVAS FUNCIONES PARA VISTA PLANA
+  // ===========================================
+
+  // Abrir calendario en nueva pestaña
+  abrirCalendarioNuevaPestana(): void {
+    const url = window.location.origin + '/citas?view=calendario';
+    window.open(url, '_blank');
+  }
+
+  // Obtener citas agrupadas por día
+  citasPorDia() {
+    const citas = this.citas();
+    const citasAgrupadas = new Map<string, any>();
+    const hoy = new Date().toISOString().split('T')[0];
+
+    // Primero agregar el día actual si no tiene citas
+    if (!citasAgrupadas.has(hoy)) {
+      citasAgrupadas.set(hoy, {
+        fecha: hoy,
+        fechaFormateada: this.formatearFecha(hoy),
+        citas: [],
+        estadisticas: {
+          total: 0,
+          completadas: 0,
+          canceladas: 0,
+          pendientes: 0
+        }
+      });
+    }
+
+    citas.forEach(cita => {
+      const fecha = new Date(cita.fecha_inicio).toISOString().split('T')[0];
+
+      if (!citasAgrupadas.has(fecha)) {
+        citasAgrupadas.set(fecha, {
+          fecha,
+          fechaFormateada: this.formatearFecha(fecha),
+          citas: [],
+          estadisticas: {
+            total: 0,
+            completadas: 0,
+            canceladas: 0,
+            pendientes: 0
+          }
+        });
+      }
+
+      const grupo = citasAgrupadas.get(fecha);
+      grupo.citas.push(cita);
+      grupo.estadisticas.total++;
+
+      // Contar por estado
+      switch (cita.estado) {
+        case 'completada':
+          grupo.estadisticas.completadas++;
+          break;
+        case 'cancelada':
+        case 'no_asistio':
+          grupo.estadisticas.canceladas++;
+          break;
+        default:
+          grupo.estadisticas.pendientes++;
+          break;
+      }
+    });
+
+    // Ordenar citas dentro de cada día por hora
+    Array.from(citasAgrupadas.values()).forEach(grupo => {
+      grupo.citas.sort((a: any, b: any) =>
+        new Date(a.fecha_inicio).getTime() - new Date(b.fecha_inicio).getTime()
+      );
+    });
+
+    // Convertir a array y ordenar por fecha (solo fechas futuras o hoy)
+    return Array.from(citasAgrupadas.values())
+      .filter(grupo => new Date(grupo.fecha) >= new Date(hoy))
+      .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+  }
+
+  private formatearFecha(fechaStr: string): string {
+    const fecha = new Date(fechaStr + 'T00:00:00');
+    const hoy = new Date();
+    const manana = new Date(hoy);
+    manana.setDate(hoy.getDate() + 1);
+    const ayer = new Date(hoy);
+    ayer.setDate(hoy.getDate() - 1);
+
+    const fechaSolo = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
+    const hoySolo = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+    const mananaSolo = new Date(manana.getFullYear(), manana.getMonth(), manana.getDate());
+    const ayerSolo = new Date(ayer.getFullYear(), ayer.getMonth(), ayer.getDate());
+
+    if (fechaSolo.getTime() === hoySolo.getTime()) {
+      return 'Hoy';
+    } else if (fechaSolo.getTime() === mananaSolo.getTime()) {
+      return 'Mañana';
+    } else if (fechaSolo.getTime() === ayerSolo.getTime()) {
+      return 'Ayer';
+    } else {
+      return fecha.toLocaleDateString('es-ES', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    }
+  }
+
+  // Funciones para estilos y clases
+  getCitaCardClasses(cita: any): string {
+    return `cita-card-estado-${cita.estado} cita-card-tipo-${cita.tipo}`;
+  }
+
+  getEstadoClass(estado: string): string {
+    const clases: { [key: string]: string } = {
+      'pendiente': 'estado-pendiente',
+      'confirmada': 'estado-confirmada',
+      'en_progreso': 'estado-en-progreso',
+      'completada': 'estado-completada',
+      'cancelada': 'estado-cancelada',
+      'no_asistio': 'estado-no-asistio'
+    };
+    return clases[estado] || 'estado-desconocido';
+  }
+
+  getEstadoTexto(estado: string): string {
+    const textos: { [key: string]: string } = {
+      'pendiente': 'Pendiente',
+      'confirmada': 'Confirmada',
+      'en_progreso': 'En Progreso',
+      'completada': 'Completada',
+      'cancelada': 'Cancelada',
+      'no_asistio': 'No Asistió'
+    };
+    return textos[estado] || 'Desconocido';
+  }
+
+  getTipoClass(tipo: string): string {
+    const clases: { [key: string]: string } = {
+      'consulta': 'tipo-consulta',
+      'vacunacion': 'tipo-vacunacion',
+      'cirugia': 'tipo-cirugia',
+      'emergencia': 'tipo-emergencia',
+      'control': 'tipo-control'
+    };
+    return clases[tipo] || 'tipo-general';
+  }
+
+  getTipoTexto(tipo: string): string {
+    const textos: { [key: string]: string } = {
+      'consulta': 'Consulta',
+      'vacunacion': 'Vacunación',
+      'cirugia': 'Cirugía',
+      'emergencia': 'Emergencia',
+      'control': 'Control'
+    };
+    return textos[tipo] || 'General';
+  }
+
+  // Funciones de acciones
+  abrirDetalleCita(cita: any): void {
+    this.router.navigate(['/citas', cita.id_cita]);
+  }
+
+  editarCita(cita: any): void {
+    // TODO: Implementar edición
+    console.log('Editar cita:', cita);
+  }
+
+  cambiarEstadoCita(cita: any): void {
+    // TODO: Implementar cambio de estado
+    console.log('Cambiar estado cita:', cita);
+  }
+
+  // Volver a vista plana desde calendario
+  volverVistaPlana(): void {
+    this.viewMode.set('plana');
+    // Limpiar parámetro de URL
+    this.router.navigate(['/citas'], { replaceUrl: true });
+    // Remover clase del body
+    document.body.classList.remove('fullscreen-calendar-mode');
+  }
+
+  ngOnDestroy(): void {
     // Cleanup si es necesario
     console.log('🚪 Saliendo de la vista de citas');
   }

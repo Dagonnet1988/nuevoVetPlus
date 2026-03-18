@@ -1209,6 +1209,439 @@
   background: #999;
 }
 
+/* ===== NUEVOS ESTILOS PARA VISTA PLANA ===== */
+
+.citas-plana-container {
+  padding: 20px;
+  max-width: 100%;
+  margin: 0 auto;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  min-height: 100vh;
+}
+
+/* Botón para abrir calendario */
+.calendar-button-section {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.calendar-view-button {
+  background: linear-gradient(45deg, #1976d2, #42a5f5);
+  color: white;
+  font-weight: 500;
+  padding: 12px 24px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.calendar-view-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(25, 118, 210, 0.4);
+}
+
+.external-link {
+  font-size: 18px;
+}
+
+/* Lista de citas */
+.citas-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Grupo por día */
+.dia-grupo {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.dia-grupo:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+/* Header del día */
+.dia-header {
+  background: linear-gradient(135deg, #1976d2, #42a5f5);
+  color: white;
+  padding: 20px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dia-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dia-titulo {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.dia-estadisticas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.estadistica-item {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.estadistica-item strong {
+  color: white;
+  font-weight: 700;
+}
+
+.estadistica-item.pendiente {
+  color: #ffcc02;
+}
+
+.estadistica-item.completada {
+  color: #81c784;
+}
+
+.estadistica-item.cancelada {
+  color: #ef5350;
+}
+
+/* Citas del día */
+.citas-del-dia {
+  padding: 0;
+}
+
+/* Tarjeta de cita */
+.cita-card {
+  padding: 20px 24px;
+  border-bottom: 1px solid #f0f0f0;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.cita-card:hover {
+  background: rgba(25, 118, 210, 0.02);
+}
+
+.cita-card:last-child {
+  border-bottom: none;
+}
+
+/* Header de cita */
+.cita-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.cita-hora {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(25, 118, 210, 0.1);
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+.hora-icon {
+  color: #1976d2;
+  font-size: 18px;
+}
+
+.hora-texto {
+  font-weight: 600;
+  color: #1976d2;
+  font-size: 16px;
+}
+
+.cita-estado .estado-indicator {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+/* Estados */
+.estado-pendiente {
+  background: rgba(255, 193, 7, 0.1);
+  color: #f57c00;
+}
+
+.estado-confirmada {
+  background: rgba(33, 150, 243, 0.1);
+  color: #1976d2;
+}
+
+.estado-en-progreso {
+  background: rgba(156, 39, 176, 0.1);
+  color: #7b1fa2;
+}
+
+.estado-completada {
+  background: rgba(76, 175, 80, 0.1);
+  color: #388e3c;
+}
+
+.estado-cancelada {
+  background: rgba(97, 97, 97, 0.1);
+  color: #616161;
+}
+
+.estado-no-asistio {
+  background: rgba(244, 67, 54, 0.1);
+  color: #d32f2f;
+}
+
+/* Contenido de cita */
+.cita-contenido {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cita-principal {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mascota-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mascota-icon {
+  color: #666;
+  font-size: 24px;
+}
+
+.mascota-detalles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mascota-nombre {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.cliente-nombre {
+  font-size: 14px;
+  color: #666;
+  margin: 0;
+}
+
+.tipo-cita .tipo-badge {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+/* Tipos de cita */
+.tipo-consulta {
+  background: rgba(33, 150, 243, 0.1);
+  color: #1976d2;
+}
+
+.tipo-vacunacion {
+  background: rgba(76, 175, 80, 0.1);
+  color: #388e3c;
+}
+
+.tipo-cirugia {
+  background: rgba(244, 67, 54, 0.1);
+  color: #d32f2f;
+}
+
+.tipo-emergencia {
+  background: rgba(255, 87, 34, 0.1);
+  color: #f4511e;
+}
+
+.tipo-control {
+  background: rgba(156, 39, 176, 0.1);
+  color: #7b1fa2;
+}
+
+.tipo-general {
+  background: rgba(97, 97, 97, 0.1);
+  color: #616161;
+}
+
+/* Cita secundaria */
+.cita-secundaria {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.veterinario-info,
+.cita-notas {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vet-icon,
+.notas-icon {
+  color: #666;
+  font-size: 16px;
+}
+
+.vet-nombre,
+.notas-texto {
+  font-size: 14px;
+  color: #666;
+  margin: 0;
+}
+
+/* Acciones de cita */
+.cita-acciones {
+  display: flex;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.cita-card:hover .cita-acciones {
+  opacity: 1;
+}
+
+/* Estado vacío */
+.no-citas-container {
+  text-align: center;
+  padding: 80px 20px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+.no-citas-icon {
+  font-size: 64px;
+  color: #ccc;
+  margin-bottom: 16px;
+}
+
+.no-citas-container h3 {
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.no-citas-container p {
+  color: #999;
+}
+
+/* ===== CALENDARIO SIN SIDEBAR ===== */
+
+.fullscreen-calendar-no-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: white;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+}
+
+.calendar-fullscreen-wrapper {
+  flex: 1;
+  height: 100vh; /* Toda la altura de la pantalla */
+  width: 100%;
+}
+
+/* CSS global para ocultar sidebar en modo calendario fullscreen */
+.fullscreen-calendar-mode .mat-sidenav-container .mat-sidenav {
+  display: none !important;
+}
+
+.fullscreen-calendar-mode .mat-sidenav-container .mat-sidenav-content {
+  margin-left: 0 !important;
+}
+
+.fullscreen-calendar-mode .main-toolbar {
+  display: none !important;
+}
+
+.fullscreen-calendar-mode .mat-sidenav-container {
+  height: 100vh !important;
+}
+
+/* Ajustes para FullCalendar en modo fullscreen */
+.fullscreen-calendar-no-sidebar ::ng-deep .fc {
+  height: 100% !important;
+  font-size: 14px;
+}
+
+.fullscreen-calendar-no-sidebar ::ng-deep .fc-view-harness {
+  height: 100% !important;
+}
+
+.fullscreen-calendar-no-sidebar ::ng-deep .fc-toolbar {
+  background: white;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 16px;
+  margin-bottom: 0 !important;
+}
+
+.fullscreen-calendar-no-sidebar ::ng-deep .fc-header-toolbar {
+  justify-content: space-between;
+}
+
+.fullscreen-calendar-no-sidebar ::ng-deep .fc-toolbar-title {
+  font-size: 20px !important;
+  font-weight: 600;
+  color: #1976d2;
+}
+
+.fullscreen-calendar-no-sidebar ::ng-deep .fc-button {
+  background: #f5f5f5 !important;
+  border: 1px solid #ddd !important;
+  color: #1976d2 !important;
+  border-radius: 6px !important;
+  font-weight: 500 !important;
+  transition: all 0.2s ease !important;
+}
+
+.fullscreen-calendar-no-sidebar ::ng-deep .fc-button:hover {
+  background: #e3f2fd !important;
+  border-color: #1976d2 !important;
+}
+
+.fullscreen-calendar-no-sidebar ::ng-deep .fc-button-active {
+  background: #1976d2 !important;
+  border-color: #1976d2 !important;
+  color: white !important;
+}
+
 /* Responsive para pantallas pequeñas */
 @media (max-width: 768px) {
   .top-bar {
@@ -1242,6 +1675,47 @@
 
   :host ::ng-deep .fc-timegrid-slot {
     height: 30px;
+  }
+
+  /* Responsive para vista plana */
+  .citas-plana-container {
+    padding: 16px;
+  }
+
+  .dia-header {
+    padding: 16px;
+    flex-direction: column;
+    gap: 12px;
+    text-align: center;
+  }
+
+  .dia-titulo {
+    font-size: 20px;
+  }
+
+  .cita-card {
+    padding: 16px;
+  }
+
+  .cita-principal {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .cita-secundaria {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .mascota-nombre {
+    font-size: 16px;
+  }
+
+  /* Responsive para calendario fullscreen */
+  .calendar-fullscreen-wrapper {
+    height: 100vh;
   }
 }
 
