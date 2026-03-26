@@ -5,7 +5,7 @@ import {
   updatePacienteCompleto,
   updateMascota,
   createMascotaParaCliente,
-  deleteMascota,
+  inactivarMascota,
   getPacienteById,
   getMascotasConCliente,
   getEstadisticasPacientes,
@@ -124,14 +124,14 @@ router.put('/mascota/:id',
 );
 
 /**
- * @route   DELETE /api/clinical/pacientes/mascota/:id
- * @desc    Eliminar mascota (soft delete)
- * @access  Private (admin, vet, aux)
+ * @route   PATCH /api/clinical/pacientes/mascota/:id/inactivar
+ * @desc    Inactivar mascota (requiere motivo: Fallecida | Transferida | Error de registro | Otro)
+ * @access  Private (admin, vet)
  */
-router.delete('/mascota/:id',
+router.patch('/mascota/:id/inactivar',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
-  deleteMascota
+  authorize(['admin', 'vet']),
+  inactivarMascota
 );
 
 /**

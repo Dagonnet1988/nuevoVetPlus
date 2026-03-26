@@ -1166,32 +1166,71 @@ export async function createMascotaParaCliente(req, res) {
  * Eliminar mascota (soft delete: activo = false)
  * DELETE /api/clinical/pacientes/mascota/:id
  */
-export async function deleteMascota(req, res) {
+export async function inactivarMascota(req, res) {
   try {
     const { id } = req.params;
+    const { motivo } = req.body; // 'Fallecida', 'Transferida', 'Error de registro', 'Otro'
+
+    const motivosValidos = ['Fallecida', 'Transferida', 'Error de registro', 'Otro'];
+    if (!motivo || !motivosValidos.includes(motivo)) {
+      return res.status(400).json({
+        success: false,
+        message: `El motivo es requerido. Valores permitidos: ${motivosValidos.join(', ')}`
+      });
+    }
+
+    // Verificar si tiene consultas o citas activas
+    const relacionesResult = await query(
+      `SELECT
+        (SELECT COUNT(*) FROM clinical.consultas_clinicas WHERE id_mascota = $1) AS consultas,
+        (SELECT COUNT(*) FROM clinical.calendario_citas
+         WHERE id_mascota = $1 AND estado NOT IN ('cancelada', 'completada')) AS citas_activas`,
+      [id]
+    );
+
+    const { consultas, citas_activas } = relacionesResult.rows[0];
+
+    if (parseInt(consultas) > 0 && motivo === 'Error de registro') {
+      return res.status(409).json({
+        success: false,
+        message: `No se puede marcar como 'Error de registro' una mascota con ${consultas} consulta(s) en su historial clínico.`
+      });
+    }
+
+    if (parseInt(citas_activas) > 0) {
+      return res.status(409).json({
+        success: false,
+        message: `La mascota tiene ${citas_activas} cita(s) activa(s). Cancélalas antes de inactivarla.`
+      });
+    }
 
     const result = await query(
       `UPDATE clinical.mascotas
-       SET activo = false, updated_at = CURRENT_TIMESTAMP
+       SET activo = false,
+           notas = CASE
+             WHEN notas IS NULL OR notas = '' THEN $2
+             ELSE notas || E'\n[Inactivada: ' || $2 || ']'
+           END,
+           updated_at = CURRENT_TIMESTAMP
        WHERE id_mascota = $1 AND activo = true
        RETURNING id_mascota, nombre`,
-      [id]
+      [id, motivo]
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Mascota no encontrada o ya fue eliminada'
+        message: 'Mascota no encontrada o ya estaba inactiva'
       });
     }
 
     res.json({
       success: true,
-      message: `Mascota '${result.rows[0].nombre}' eliminada exitosamente`
+      message: `Mascota '${result.rows[0].nombre}' marcada como inactiva. Motivo: ${motivo}`
     });
 
   } catch (error) {
-    console.error('Error eliminando mascota:', error);
+    console.error('Error inactivando mascota:', error);
     res.status(500).json({
       success: false,
       message: 'Error interno del servidor',

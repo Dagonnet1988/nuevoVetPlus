@@ -103,8 +103,8 @@ export class PacientesService {
     return this.http.put<CreatePacienteResponse>(`${this.API_URL}/pacientes/${id}`, paciente);
   }
 
-  deleteMascota(id: string): Observable<any> {
-    return this.http.delete(`${this.API_URL}/pacientes/mascota/${id}`);
+  inactivarMascota(id: string, motivo: 'Fallecida' | 'Transferida' | 'Error de registro' | 'Otro'): Observable<any> {
+    return this.http.patch(`${this.API_URL}/pacientes/mascota/${id}/inactivar`, { motivo });
   }
 
   // ===============================
