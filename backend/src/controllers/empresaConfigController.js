@@ -4,7 +4,7 @@
  * @author VetPlus Development Team
  */
 
-import { query } from '../config/database.js';
+import { query, getClient } from '../config/database.js';
 import { validationResult } from 'express-validator/lib/index.js';
 import fs from 'fs/promises';
 import path from 'path';
@@ -129,16 +129,17 @@ export const updateEmpresaConfig = async (req, res) => {
             horarios
         } = req.body;
 
-        // Iniciar transacción
-        await query('BEGIN');
+        // Iniciar transacción con cliente dedicado del pool
+        const txClient = await getClient();
 
         try {
+            await txClient.query('BEGIN');
             // Preparar datos JSON para configuración
             const configGeneral = configuracion_general ? JSON.stringify(configuracion_general) : null;
             const configNumeracion = configuracion_numeracion ? JSON.stringify(configuracion_numeracion) : null;
 
             // Actualizar configuración principal
-            const updateResult = await query(`
+            const updateResult = await txClient.query(`
                 UPDATE system.configuracion_empresa
                 SET
                     nombre_empresa = $1,
@@ -177,11 +178,11 @@ export const updateEmpresaConfig = async (req, res) => {
             // Actualizar horarios si se proporcionan
             if (horarios && Array.isArray(horarios)) {
                 // Eliminar horarios existentes
-                await query('DELETE FROM system.horarios_atencion WHERE id_config = $1', [configId]);
+                await txClient.query('DELETE FROM system.horarios_atencion WHERE id_config = $1', [configId]);
 
                 // Insertar nuevos horarios
                 for (const horario of horarios) {
-                    await query(`
+                    await txClient.query(`
                         INSERT INTO system.horarios_atencion 
                         (id_config, dia_semana, hora_apertura, hora_cierre, cerrado, notas)
                         VALUES ($1, $2, $3, $4, $5, $6)
@@ -196,9 +197,9 @@ export const updateEmpresaConfig = async (req, res) => {
                 }
             }
 
-            await query('COMMIT');
+            await txClient.query('COMMIT');
 
-            // Obtener configuración actualizada
+            // Obtener configuración actualizada (fuera de la transacción — usa el pool general)
             const updatedConfig = await query(`
                 SELECT * FROM system.configuracion_empresa 
                 WHERE id_config = $1
@@ -211,8 +212,10 @@ export const updateEmpresaConfig = async (req, res) => {
             });
 
         } catch (error) {
-            await query('ROLLBACK');
+            try { await txClient.query('ROLLBACK'); } catch {}
             throw error;
+        } finally {
+            txClient.release();
         }
 
     } catch (error) {

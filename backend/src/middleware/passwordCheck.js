@@ -18,7 +18,7 @@ export const requirePasswordChange = async (req, res, next) => {
 
     // Obtener información del usuario sobre contraseña temporal
     const userResult = await query(
-      'SELECT password_temporal, debe_cambiar_password FROM auth.usuarios WHERE id_usuario = $1',
+      'SELECT password_temporal, debe_cambiar_password FROM vetplus_auth.usuarios WHERE id_usuario = $1',
       [req.user.id]
     );
 
@@ -66,7 +66,7 @@ export const checkPasswordChangeStatus = async (req, res, next) => {
     }
 
     const userResult = await query(
-      'SELECT password_temporal, debe_cambiar_password FROM auth.usuarios WHERE id_usuario = $1',
+      'SELECT password_temporal, debe_cambiar_password FROM vetplus_auth.usuarios WHERE id_usuario = $1',
       [req.user.id]
     );
 

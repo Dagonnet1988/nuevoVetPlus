@@ -1,4 +1,4 @@
-import { query } from '../config/database.js';
+import { query, getClient } from '../config/database.js';
 import { validationResult } from 'express-validator/lib/index.js';
 import { v4 as uuidv4 } from 'uuid';
 import { calculatePetAge } from '../utils/ageCalculator.js';
@@ -63,22 +63,23 @@ export async function createPacienteCompleto(req, res) {
     // Convertir sexo del frontend (M/H) al formato de base de datos (Macho/Hembra)
     const sexoDb = sexo === 'M' ? 'Macho' : sexo === 'H' ? 'Hembra' : sexo;
 
-    // Iniciar transacción
-    await query('BEGIN');
+    // Iniciar transacción con cliente dedicado del pool
+    const txClient = await getClient();
 
     try {
+      await txClient.query('BEGIN');
       let cliente;
       let id_cliente;
 
       if (id_cliente_existente) {
         // Usar cliente existente
-        const clienteResult = await query(
+        const clienteResult = await txClient.query(
           'SELECT * FROM clinical.clientes WHERE id_cliente = $1 AND activo = true',
           [id_cliente_existente]
         );
 
         if (clienteResult.rows.length === 0) {
-          await query('ROLLBACK');
+          await txClient.query('ROLLBACK');
           return res.status(404).json({
             success: false,
             message: 'Cliente no encontrado'
@@ -108,7 +109,7 @@ export async function createPacienteCompleto(req, res) {
           req.user.id
         ];
 
-        const clienteResult = await query(clienteQuery, clienteValues);
+        const clienteResult = await txClient.query(clienteQuery, clienteValues);
         cliente = clienteResult.rows[0];
       }
 
@@ -149,11 +150,11 @@ export async function createPacienteCompleto(req, res) {
         req.user.id
       ];
 
-      const mascotaResult = await query(mascotaQuery, mascotaValues);
+      const mascotaResult = await txClient.query(mascotaQuery, mascotaValues);
       const mascota = mascotaResult.rows[0];
 
       // Confirmar transacción
-      await query('COMMIT');
+      await txClient.query('COMMIT');
 
       // Convertir sexo de vuelta al formato frontend
       const mascotaFrontend = {
@@ -173,8 +174,10 @@ export async function createPacienteCompleto(req, res) {
 
     } catch (error) {
       // Rollback en caso de error
-      await query('ROLLBACK');
+      try { await txClient.query('ROLLBACK'); } catch {}
       throw error;
+    } finally {
+      txClient.release();
     }
 
   } catch (error) {
@@ -425,18 +428,20 @@ export async function updatePacienteCompleto(req, res) {
     // Convertir sexo del frontend (M/H) al formato de base de datos (Macho/Hembra)
     const sexoDb = sexo === 'M' ? 'Macho' : sexo === 'H' ? 'Hembra' : sexo;
 
-    // Iniciar transacción
-    await query('BEGIN');
+    // Iniciar transacción con cliente dedicado del pool
+    const txClient = await getClient();
 
     try {
+      await txClient.query('BEGIN');
+
       // 1. Obtener datos actuales de la mascota para obtener el id_cliente
-      const mascotaActual = await query(
+      const mascotaActual = await txClient.query(
         'SELECT id_cliente FROM clinical.mascotas WHERE id_mascota = $1 AND activo = true',
         [id]
       );
 
       if (mascotaActual.rows.length === 0) {
-        await query('ROLLBACK');
+        await txClient.query('ROLLBACK');
         return res.status(404).json({
           success: false,
           message: 'Paciente no encontrado'
@@ -470,7 +475,7 @@ export async function updatePacienteCompleto(req, res) {
         req.user.id
       ];
 
-      await query(clienteQuery, clienteValues);
+      await txClient.query(clienteQuery, clienteValues);
 
       // 3. Calcular edad si hay fecha de nacimiento
       let edad = null;
@@ -516,11 +521,11 @@ export async function updatePacienteCompleto(req, res) {
         req.user.id
       ];
 
-      const mascotaResult = await query(mascotaQuery, mascotaValues);
+      const mascotaResult = await txClient.query(mascotaQuery, mascotaValues);
       const mascotaActualizada = mascotaResult.rows[0];
 
       // Confirmar transacción
-      await query('COMMIT');
+      await txClient.query('COMMIT');
 
       // Convertir sexo de vuelta al formato frontend
       const mascotaFrontend = {
@@ -539,8 +544,10 @@ export async function updatePacienteCompleto(req, res) {
 
     } catch (error) {
       // Rollback en caso de error
-      await query('ROLLBACK');
+      try { await txClient.query('ROLLBACK'); } catch {}
       throw error;
+    } finally {
+      txClient.release();
     }
 
   } catch (error) {

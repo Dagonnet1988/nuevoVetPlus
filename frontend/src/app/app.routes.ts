@@ -36,11 +36,11 @@ export const routes: Routes = [
     ]
   },
 
-  // Rutas principales del sistema (temporalmente sin guards)
+  // Rutas principales del sistema
   {
     path: '',
     loadComponent: () => import('./layouts/main-layout/main-layout.component').then(m => m.MainLayoutComponent),
-    // canActivate: [AuthGuard], // TEMPORALMENTE DESACTIVADO
+    canActivate: [AuthGuard],
     children: [
       // Dashboard - Accesible para todos los usuarios autenticados
       {

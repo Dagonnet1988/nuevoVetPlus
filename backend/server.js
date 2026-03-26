@@ -85,14 +85,29 @@ app.use('/api/admin/empresa', empresaConfigRoutes);
 app.use('/api/appointments/export', appointmentExportRoutes);
 app.use('/api/google-calendar-webhook', googleCalendarWebhookRoutes);
 app.use('/api/system', systemStatusRoutes);
-app.use('/api/test', testRoutes);
+
+// Rutas de test — solo en desarrollo/staging, nunca en producción
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api/test', testRoutes);
+}
 
 // Rutas públicas (sin autenticación – firma de consentimiento)
 app.use('/api/public', publicRoutes);
 
-// Servir archivos estáticos de /uploads con CORS abierto
+// Servir archivos estáticos de /uploads — CORS restringido a dominios conocidos
+const _allowedUploadOrigins = [
+  process.env.FRONTEND_URL || 'http://localhost:4200',
+  'http://localhost:4201'
+].filter(Boolean);
+
 app.use('/uploads', (req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  if (origin && _allowedUploadOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else if (!origin) {
+    // Petición directa (sin header origin) — permitir (ej: acceso desde el mismo servidor)
+    res.setHeader('Access-Control-Allow-Origin', _allowedUploadOrigins[0]);
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control');
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');

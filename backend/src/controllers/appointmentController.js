@@ -1,4 +1,4 @@
-import { query } from '../config/database.js';
+import { query, getClient } from '../config/database.js';
 import { v4 as uuidv4 } from 'uuid';
 import googleCalendarService from '../services/googleCalendar.js';
 import appointmentConflictService from '../services/appointmentConflictService.js';
@@ -756,6 +756,7 @@ export const updateAppointment = async (req, res) => {
  * Actualizar estado de cita
  */
 export const updateAppointmentStatus = async (req, res) => {
+    let txClient = null;
     try {
         const { id } = req.params;
         const { estado, notas } = req.body;
@@ -819,11 +820,12 @@ export const updateAppointmentStatus = async (req, res) => {
         }
 
         // Iniciar transacción para operaciones múltiples
-        await query('BEGIN');
+        txClient = await getClient();
+        await txClient.query('BEGIN');
         console.log('🔄 Transacción iniciada');
 
         try {
-            const result = await query(`
+            const result = await txClient.query(`
                 UPDATE clinical.calendario_citas
                 SET estado = $1, notas = COALESCE($2, notas), updated_at = CURRENT_TIMESTAMP
                 WHERE id_cita = $3
@@ -832,7 +834,9 @@ export const updateAppointmentStatus = async (req, res) => {
 
             if (result.rows.length === 0) {
                 console.log('❌ Error: UPDATE no afectó ninguna fila');
-                await query('ROLLBACK');
+                await txClient.query('ROLLBACK');
+                txClient.release();
+                txClient = null;
                 return res.status(404).json({
                     success: false,
                     message: 'Cita no encontrada'
@@ -852,7 +856,7 @@ export const updateAppointmentStatus = async (req, res) => {
 
                 try {
                     // Verificar si ya existe una consulta clínica para esta cita
-                    const existingConsulta = await query(`
+                    const existingConsulta = await txClient.query(`
                         SELECT id_consulta FROM clinical.consultas_clinicas
                         WHERE id_cita = $1
                     `, [id]);
@@ -864,7 +868,7 @@ export const updateAppointmentStatus = async (req, res) => {
                         const codigoConsulta = `CON-${Date.now().toString().slice(-8)}`;
 
                         // Crear registro de consulta clínica
-                        const consultaResult = await query(`
+                        const consultaResult = await txClient.query(`
                             INSERT INTO clinical.consultas_clinicas (
                                 id_consulta,
                                 codigo_consulta,
@@ -887,7 +891,7 @@ export const updateAppointmentStatus = async (req, res) => {
                         }
 
                         // Vincular la consulta con la cita
-                        const updateResult = await query(`
+                        const updateResult = await txClient.query(`
                             UPDATE clinical.calendario_citas
                             SET id_consulta = $1
                             WHERE id_cita = $2
@@ -915,7 +919,7 @@ export const updateAppointmentStatus = async (req, res) => {
 
                 try {
                     // Verificar si ya existe una consulta clínica para esta cita
-                    const existingConsulta = await query(`
+                    const existingConsulta = await txClient.query(`
                         SELECT id_consulta FROM clinical.consultas_clinicas
                         WHERE id_cita = $1
                     `, [id]);
@@ -927,7 +931,7 @@ export const updateAppointmentStatus = async (req, res) => {
                         const codigoConsulta = `CON-${Date.now().toString().slice(-8)}`;
 
                         // Crear registro de consulta clínica
-                        const consultaResult = await query(`
+                        const consultaResult = await txClient.query(`
                             INSERT INTO clinical.consultas_clinicas (
                                 id_consulta,
                                 codigo_consulta,
@@ -950,7 +954,7 @@ export const updateAppointmentStatus = async (req, res) => {
                         }
 
                         // Vincular la consulta con la cita
-                        const updateResult = await query(`
+                        const updateResult = await txClient.query(`
                             UPDATE clinical.calendario_citas
                             SET id_consulta = $1
                             WHERE id_cita = $2
@@ -971,7 +975,9 @@ export const updateAppointmentStatus = async (req, res) => {
                 }
             }
             
-            await query('COMMIT');
+            await txClient.query('COMMIT');
+            txClient.release();
+            txClient = null;
             console.log('✅ Transacción completada exitosamente');
 
             // Obtener información completa de la cita actualizada
@@ -1074,7 +1080,11 @@ Código de cita: ${citaActualizada.codigo_cita}
                 stack: error.stack,
                 code: error.code
             });
-            await query('ROLLBACK');
+            if (txClient) {
+                try { await txClient.query('ROLLBACK'); } catch {}
+                txClient.release();
+                txClient = null;
+            }
             throw error;
         }
         
@@ -1089,11 +1099,8 @@ Código de cita: ${citaActualizada.codigo_cita}
         });
 
         // Intentar hacer rollback si hay una transacción pendiente
-        try {
-            await query('ROLLBACK');
-            console.log('✅ Rollback realizado en catch principal');
-        } catch (rollbackError) {
-            console.error('❌ Error en rollback:', rollbackError.message);
+        if (txClient) {
+            try { await txClient.query('ROLLBACK'); txClient.release(); txClient = null; } catch {}
         }
 
         res.status(500).json({

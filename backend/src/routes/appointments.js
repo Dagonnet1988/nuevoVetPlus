@@ -249,7 +249,7 @@ router.get(
                     email,
                     especialidad,
                     numero_licencia
-                FROM auth.usuarios 
+                FROM vetplus_auth.usuarios 
                 WHERE rol IN ('vet', 'admin') 
                 AND activo = true
                 ORDER BY nombre ASC

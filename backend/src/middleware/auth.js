@@ -1,11 +1,20 @@
 import jwt from 'jsonwebtoken';
 import { query } from '../config/database.js';
 
-// Configuración JWT
+// Configuración JWT — fail-fast en producción si no hay secreto configurado
+const _jwtSecret = (() => {
+  if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('[FATAL] JWT_SECRET no está configurada. El servidor no puede iniciar en producción sin esta variable de entorno.');
+  }
+  console.warn('[WARN] JWT_SECRET no configurada. Usando clave de desarrollo. NUNCA usar en producción.');
+  return 'vetplus_dev_only_secret_do_not_use_in_prod';
+})();
+
 const JWT_CONFIG = {
-  secret: process.env.JWT_SECRET || 'vetplus_super_secret_key_2024',
-  expiresIn: process.env.JWT_EXPIRES_IN || '1h', // Cambiado de 24h a 1h
-  refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '12h', // 12 horas para refresh token
+  secret: _jwtSecret,
+  expiresIn: process.env.JWT_EXPIRES_IN || '1h',
+  refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '12h',
   issuer: 'VetPlus',
   audience: 'vetplus-users'
 };
