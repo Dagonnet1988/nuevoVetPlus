@@ -56,6 +56,25 @@ class DBInit {
   }
 
   /**
+   * Ejecuta migraciones idempotentes que deben aplicarse incluso en sistemas ya inicializados.
+   */
+  async runPostInitMigrations() {
+    const migrationFiles = [
+      { file: '12_clinical_archivos_consulta.sql', desc: 'Migración adjuntos de consultas clínicas' }
+    ];
+
+    for (const { file, desc } of migrationFiles) {
+      const filePath = path.join(this.schemasPath, file);
+      try {
+        await fs.access(filePath);
+        await this.executeSQL(filePath, desc);
+      } catch (error) {
+        console.log(`⚠️  Migración opcional ${file} no encontrada, saltando...`);
+      }
+    }
+  }
+
+  /**
    * Verifica si PostgreSQL está disponible
    */
   async checkPostgreSQL() {
@@ -410,7 +429,9 @@ class DBInit {
       const isFullyInitialized = await this.isSystemFullyInitialized();
       if (isFullyInitialized) {
         console.log('✅ Sistema ya está completamente inicializado');
-        console.log('⏭️  Saltando ejecución de scripts SQL...');
+        console.log('🔁 Aplicando migraciones post-inicialización...');
+        await this.runPostInitMigrations();
+        console.log('⏭️  Saltando inicialización completa de schemas base...');
         
         // Mostrar estado del sistema
         await this.checkSystemStatus();
@@ -433,7 +454,8 @@ class DBInit {
         { file: '07_audit_tables.sql', desc: 'Tablas adicionales auditoría' },
         { file: '08_empresa_config.sql', desc: 'Configuración de empresa' },
         { file: '10_workflow_integration.sql', desc: 'Integraciones de workflow y notificaciones' },
-        { file: '11_audit_expansion.sql', desc: 'Expansión sistema auditoría' }
+        { file: '11_audit_expansion.sql', desc: 'Expansión sistema auditoría' },
+        { file: '12_clinical_archivos_consulta.sql', desc: 'Migración adjuntos de consultas clínicas' }
       ];
       
       for (const { file, desc } of schemaFiles) {

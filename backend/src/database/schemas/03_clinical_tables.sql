@@ -108,21 +108,26 @@ CREATE TRIGGER update_calendario_updated_at
     BEFORE UPDATE ON clinical.calendario_citas 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-
--- Tabla de vacunas y tratamientos preventivos
-CREATE TABLE clinical.vacunas_tratamientos (
-    id_vacuna UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    id_mascota UUID NOT NULL REFERENCES clinical.mascotas(id_mascota),
-    tipo VARCHAR(50) NOT NULL, -- Vacuna, Desparasitación, etc.
-    nombre VARCHAR(100) NOT NULL,
-    fecha_aplicacion DATE NOT NULL,
-    proxima_dosis DATE,
-    lote VARCHAR(50),
-    veterinario VARCHAR(100),
-    notas TEXT,
+-- Tabla de archivos adjuntos de consultas clínicas
+CREATE TABLE clinical.archivos_consulta (
+    id_archivo UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id_consulta UUID NOT NULL REFERENCES clinical.consultas_clinicas(id_consulta) ON DELETE CASCADE,
+    nombre_original VARCHAR(255) NOT NULL,
+    nombre_archivo VARCHAR(255) NOT NULL,
+    ruta_archivo TEXT NOT NULL,
+    tipo_archivo VARCHAR(100),
+    tamano_bytes INTEGER,
+    descripcion TEXT,
+    activo BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by UUID REFERENCES vetplus_auth.usuarios(id_usuario)
 );
+
+-- Trigger para updated_at
+CREATE TRIGGER update_archivos_consulta_updated_at
+    BEFORE UPDATE ON clinical.archivos_consulta
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Tabla de auditoría para Google Calendar
 CREATE TABLE clinical.google_calendar_audit_log (
@@ -138,7 +143,7 @@ COMMENT ON TABLE clinical.clientes IS 'Propietarios de las mascotas';
 COMMENT ON TABLE clinical.mascotas IS 'Mascotas registradas en la clínica';
 COMMENT ON TABLE clinical.consultas_clinicas IS 'Registro de consultas veterinarias';
 COMMENT ON TABLE clinical.calendario_citas IS 'Agenda de citas y terapias';
-COMMENT ON TABLE clinical.vacunas_tratamientos IS 'Historial de vacunas y tratamientos preventivos';
+COMMENT ON TABLE clinical.archivos_consulta IS 'Archivos adjuntos vinculados a las consultas clínicas';
 COMMENT ON TABLE clinical.google_calendar_audit_log IS 'Auditoría de eventos y respuestas de Google Calendar';
 
 -- =====================================================
@@ -158,7 +163,9 @@ CREATE INDEX idx_citas_mascota ON clinical.calendario_citas(id_mascota);
 CREATE INDEX idx_citas_veterinario ON clinical.calendario_citas(id_veterinario);
 CREATE INDEX idx_citas_fecha ON clinical.calendario_citas(fecha_inicio);
 CREATE INDEX idx_citas_estado ON clinical.calendario_citas(estado);
-CREATE INDEX idx_vacunas_mascota ON clinical.vacunas_tratamientos(id_mascota);
+CREATE INDEX idx_archivos_consulta_id_consulta ON clinical.archivos_consulta(id_consulta);
+CREATE INDEX idx_archivos_consulta_activo ON clinical.archivos_consulta(activo);
+CREATE INDEX idx_archivos_consulta_tipo ON clinical.archivos_consulta(tipo_archivo);
 CREATE INDEX idx_google_audit_appointment ON clinical.google_calendar_audit_log(appointment_id);
 CREATE INDEX idx_google_audit_action ON clinical.google_calendar_audit_log(action_type);
 CREATE INDEX idx_google_audit_date ON clinical.google_calendar_audit_log(created_at);

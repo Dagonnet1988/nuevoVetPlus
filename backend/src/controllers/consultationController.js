@@ -2,6 +2,53 @@ import { query } from '../config/database.js';
 import { v4 as uuidv4 } from 'uuid';
 import { handleDatabaseError } from '../utils/errorHandler.js';
 
+const getConsultationFilesSafe = async (consultaId) => {
+    try {
+        const archivosResult = await query(`
+            SELECT
+                id_archivo,
+                nombre_original,
+                nombre_archivo,
+                ruta_archivo,
+                COALESCE(to_jsonb(ac)->>'tipo_archivo', to_jsonb(ac)->>'tipo_mime') as tipo_mime,
+                COALESCE(
+                    (to_jsonb(ac)->>'tamano_bytes')::integer,
+                    (to_jsonb(ac)->>'tamaño_bytes')::integer
+                ) as tamano_bytes,
+                descripcion,
+                COALESCE(
+                    (to_jsonb(ac)->>'created_at')::timestamp,
+                    (to_jsonb(ac)->>'fecha_subida')::timestamp
+                ) as fecha_subida,
+                COALESCE(
+                    (to_jsonb(ac)->>'created_by')::uuid,
+                    (to_jsonb(ac)->>'subido_por')::uuid
+                ) as subido_por,
+                u.nombre as subido_por_nombre
+            FROM clinical.archivos_consulta ac
+            LEFT JOIN vetplus_auth.usuarios u ON u.id_usuario = COALESCE(
+                (to_jsonb(ac)->>'created_by')::uuid,
+                (to_jsonb(ac)->>'subido_por')::uuid
+            )
+            WHERE ac.id_consulta = $1
+              AND COALESCE((to_jsonb(ac)->>'activo')::boolean, true) = true
+            ORDER BY COALESCE(
+                (to_jsonb(ac)->>'created_at')::timestamp,
+                (to_jsonb(ac)->>'fecha_subida')::timestamp
+            ) DESC
+        `, [consultaId]);
+
+        return archivosResult.rows;
+    } catch (error) {
+        if (error?.code === '42P01') {
+            console.warn('⚠️ Tabla clinical.archivos_consulta no existe. Retornando historia sin adjuntos.');
+            return [];
+        }
+
+        throw error;
+    }
+};
+
 // ✅ CREAR CONSULTA CLÍNICA
 export const createConsultation = async (req, res) => {
     try {
@@ -247,25 +294,7 @@ export const getConsultationByAppointmentId = async (req, res) => {
         
         const consulta = result.rows[0];
 
-        // Obtener archivos adjuntos a la consulta
-        const archivosResult = await query(`
-            SELECT
-                id_archivo,
-                nombre_original,
-                nombre_archivo,
-                ruta_archivo,
-                tipo_mime,
-                tamaño_bytes,
-                descripcion,
-                categoria,
-                fecha_subida,
-                subido_por,
-                u.nombre as subido_por_nombre
-            FROM clinical.archivos_consulta ac
-            LEFT JOIN vetplus_auth.usuarios u ON ac.subido_por = u.id_usuario
-            WHERE ac.id_consulta = $1 AND ac.activo = true
-            ORDER BY ac.fecha_subida DESC
-        `, [id_cita]);
+        const archivos = await getConsultationFilesSafe(consulta.id_consulta);
 
         // Estructurar respuesta con relaciones
         const consultaStructured = {
@@ -306,7 +335,8 @@ export const getConsultationByAppointmentId = async (req, res) => {
                 nombre: consulta.nombre_cliente,
                 telefono: consulta.telefono,
                 email: consulta.email
-            }
+            },
+            archivos
         };
         
         res.json({
@@ -611,25 +641,7 @@ export const getConsultationById = async (req, res) => {
 
         const consulta = result.rows[0];
 
-        // Obtener archivos adjuntos a la consulta
-        const archivosResult = await query(`
-            SELECT
-                id_archivo,
-                nombre_original,
-                nombre_archivo,
-                ruta_archivo,
-                tipo_mime,
-                tamaño_bytes,
-                descripcion,
-                categoria,
-                fecha_subida,
-                subido_por,
-                u.nombre as subido_por_nombre
-            FROM clinical.archivos_consulta ac
-            LEFT JOIN vetplus_auth.usuarios u ON ac.subido_por = u.id_usuario
-            WHERE ac.id_consulta = $1 AND ac.activo = true
-            ORDER BY ac.fecha_subida DESC
-        `, [id]);
+        const archivos = await getConsultationFilesSafe(id);
 
         // Estructurar la respuesta para que coincida con la interfaz del frontend
         const consultaStructured = {
@@ -654,7 +666,7 @@ export const getConsultationById = async (req, res) => {
             updated_at: consulta.updated_at,
             recordatorio_medicamentos_enviado: consulta.recordatorio_medicamentos_enviado,
             // Archivos adjuntos
-            archivos: archivosResult.rows,
+            archivos,
             // Relaciones estructuradas
             mascota: {
                 id_mascota: consulta.id_mascota,

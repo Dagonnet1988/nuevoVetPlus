@@ -115,9 +115,9 @@ router.post('/consultations/:id/upload-files',
           const archivoResult = await dbQuery(`
             INSERT INTO clinical.archivos_consulta (
               id_consulta, nombre_original, nombre_archivo, ruta_archivo,
-              tipo_mime, tamaño_bytes, subido_por
+              tipo_archivo, tamano_bytes, created_by
             ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-            RETURNING id_archivo, fecha_subida
+            RETURNING id_archivo, created_at
           `, [
             id,
             file.originalname,
@@ -135,7 +135,7 @@ router.post('/consultations/:id/upload-files',
             ruta: `/uploads/historia-clinica/${file.filename}`,
             tipo: file.mimetype,
             tamaño: file.size,
-            fecha_subida: archivoResult.rows[0].fecha_subida
+            fecha_subida: archivoResult.rows[0].created_at
           });
         } catch (dbError) {
           console.error('Error guardando archivo en BD:', dbError);
@@ -179,7 +179,6 @@ router.get('/consultations/:id/files',
   async (req, res) => {
     try {
       const { id } = req.params;
-      const { categoria } = req.query;
 
       // Verificar que la consulta existe
       const { query } = await import('../config/database.js');
@@ -202,26 +201,36 @@ router.get('/consultations/:id/files',
           nombre_original,
           nombre_archivo,
           ruta_archivo,
-          tipo_mime,
-          tamaño_bytes,
+          COALESCE(to_jsonb(ac)->>'tipo_archivo', to_jsonb(ac)->>'tipo_mime') as tipo_mime,
+          COALESCE(
+            (to_jsonb(ac)->>'tamano_bytes')::integer,
+            (to_jsonb(ac)->>'tamaño_bytes')::integer
+          ) as tamano_bytes,
           descripcion,
-          categoria,
-          fecha_subida,
-          subido_por,
+          COALESCE(
+            (to_jsonb(ac)->>'created_at')::timestamp,
+            (to_jsonb(ac)->>'fecha_subida')::timestamp
+          ) as fecha_subida,
+          COALESCE(
+            (to_jsonb(ac)->>'created_by')::uuid,
+            (to_jsonb(ac)->>'subido_por')::uuid
+          ) as subido_por,
           u.nombre as subido_por_nombre
         FROM clinical.archivos_consulta ac
-        LEFT JOIN vetplus_auth.usuarios u ON ac.subido_por = u.id_usuario
-        WHERE ac.id_consulta = $1 AND ac.activo = true
+        LEFT JOIN vetplus_auth.usuarios u ON u.id_usuario = COALESCE(
+          (to_jsonb(ac)->>'created_by')::uuid,
+          (to_jsonb(ac)->>'subido_por')::uuid
+        )
+        WHERE ac.id_consulta = $1
+          AND COALESCE((to_jsonb(ac)->>'activo')::boolean, true) = true
       `;
 
       const params = [id];
 
-      if (categoria) {
-        sqlQuery += ' AND ac.categoria = $2';
-        params.push(categoria);
-      }
-
-      sqlQuery += ' ORDER BY ac.fecha_subida DESC';
+      sqlQuery += ` ORDER BY COALESCE(
+        (to_jsonb(ac)->>'created_at')::timestamp,
+        (to_jsonb(ac)->>'fecha_subida')::timestamp
+      ) DESC`;
 
       const archivosResult = await query(sqlQuery, params);
 
