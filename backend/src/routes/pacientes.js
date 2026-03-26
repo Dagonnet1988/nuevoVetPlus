@@ -17,6 +17,12 @@ import {
 } from '../controllers/pacientesController.js';
 import { validateCreatePacienteCompleto, validatePacienteSearch, validateUpdateMascota } from '../validators/pacientesValidators.js';
 import { uploadPacienteFoto, handleUploadError } from '../middleware/uploadMiddleware.js';
+import {
+  crearConsentimiento,
+  obtenerEstadoConsentimiento,
+  reenviarEnlaceConsentimiento,
+  descargarPDFConsentimiento
+} from '../controllers/consentimientoController.js';
 
 const router = express.Router();
 
@@ -166,6 +172,56 @@ router.delete('/:id/foto',
   authenticateToken,
   authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
   eliminarFotoPaciente
+);
+
+// ── CONSENTIMIENTO DE DATOS PERSONALES ────────────────────────────────────────
+
+/**
+ * @route   GET /api/clinical/pacientes/cliente/:idCliente/consentimiento/estado
+ * @desc    Estado del consentimiento vigente del cliente
+ * @access  Private (admin, vet, aux)
+ */
+router.get('/cliente/:idCliente/consentimiento/estado',
+  authenticateToken,
+  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  (req, res, next) => { req.params.id = req.params.idCliente; next(); },
+  obtenerEstadoConsentimiento
+);
+
+/**
+ * @route   POST /api/clinical/pacientes/cliente/:idCliente/consentimiento
+ * @desc    Crear nuevo consentimiento (genera token + QR)
+ * @access  Private (admin, vet, aux)
+ */
+router.post('/cliente/:idCliente/consentimiento',
+  authenticateToken,
+  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  (req, res, next) => { req.params.id = req.params.idCliente; next(); },
+  crearConsentimiento
+);
+
+/**
+ * @route   POST /api/clinical/pacientes/cliente/:idCliente/consentimiento/reenviar
+ * @desc    Reenviar enlace (expira el anterior y genera uno nuevo)
+ * @access  Private (admin, vet, aux)
+ */
+router.post('/cliente/:idCliente/consentimiento/reenviar',
+  authenticateToken,
+  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  (req, res, next) => { req.params.id = req.params.idCliente; next(); },
+  reenviarEnlaceConsentimiento
+);
+
+/**
+ * @route   GET /api/clinical/pacientes/cliente/:idCliente/consentimiento/pdf
+ * @desc    Descargar PDF del consentimiento firmado
+ * @access  Private (admin, vet)
+ */
+router.get('/cliente/:idCliente/consentimiento/pdf',
+  authenticateToken,
+  authorize(['admin', 'vet']),
+  (req, res, next) => { req.params.id = req.params.idCliente; next(); },
+  descargarPDFConsentimiento
 );
 
 export default router;

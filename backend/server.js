@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import fs from 'fs';
 import DBInit from './src/database/DBInit.js';
 
 // Importar rutas
@@ -15,6 +16,7 @@ import appointmentExportRoutes from './src/routes/appointmentExport.js';
 import googleCalendarWebhookRoutes from './src/routes/googleCalendarWebhook.js';
 import systemStatusRoutes from './src/routes/systemStatus.js';
 import testRoutes from './src/routes/test.js';
+import publicRoutes from './src/routes/public.js';
 
 // Importar middleware de auditoría
 import { setAuditContext, auditActivity, auditAuthActivity } from './src/middleware/auditMiddleware.js';
@@ -85,6 +87,9 @@ app.use('/api/google-calendar-webhook', googleCalendarWebhookRoutes);
 app.use('/api/system', systemStatusRoutes);
 app.use('/api/test', testRoutes);
 
+// Rutas públicas (sin autenticación – firma de consentimiento)
+app.use('/api/public', publicRoutes);
+
 // Servir archivos estáticos de /uploads con CORS abierto
 app.use('/uploads', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -125,7 +130,12 @@ async function initializeDatabase() {
   try {
     console.log('🔧 INICIALIZANDO BASE DE DATOS...');
     console.log('═'.repeat(40));
-    
+
+    // Asegurar directorios de uploads
+    ['uploads/pacientes', 'uploads/logos', 'uploads/consentimientos'].forEach(dir => {
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    });
+
     const dbInit = new DBInit();
     const success = await dbInit.initialize();
     
