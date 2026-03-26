@@ -196,7 +196,17 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
             fecha: consulta.fecha_consulta,
             profesional: consulta.veterinario?.nombre || 'Veterinario',
             descripcion: consulta.diagnostico || consulta.anamnesis || 'Sin descripción disponible',
-            medicamentos: consulta.medicamentos ? consulta.medicamentos.split(',').map((m: string) => m.trim()) : []
+            medicamentos: (() => {
+              const meds = consulta.medicamentos;
+              if (!meds) return [];
+              if (Array.isArray(meds)) {
+                return meds.map((m: any) =>
+                  typeof m === 'string' ? m : `${m.nombre}${m.dosis ? ' - ' + m.dosis : ''}`
+                );
+              }
+              // fallback: string separado por comas
+              return String(meds).split(',').map((m: string) => m.trim());
+            })()
           }));
 
           // Actualizar estadísticas del resumen

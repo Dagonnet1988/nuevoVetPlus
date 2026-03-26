@@ -486,15 +486,16 @@ export async function updatePacienteCompleto(req, res) {
           nombre = COALESCE($2, nombre),
           especie = COALESCE($3, especie),
           raza = $4,
-          edad = $5,
+          edad = COALESCE($5, edad),
           sexo = COALESCE($6, sexo),
           peso = $7,
           color = $8,
           fecha_nacimiento = $9,
           microchip = $10,
           notas = $11,
+          esterilizado = COALESCE($12, esterilizado),
           updated_at = CURRENT_TIMESTAMP,
-          updated_by = $12
+          updated_by = $13
         WHERE id_mascota = $1
         RETURNING *
       `;
@@ -511,6 +512,7 @@ export async function updatePacienteCompleto(req, res) {
         fecha_nacimiento || null,
         microchip || null,
         notas || null,
+        esterilizado !== undefined ? esterilizado : null,
         req.user.id
       ];
 
@@ -1072,6 +1074,124 @@ export async function getFotoPaciente(req, res) {
 
   } catch (error) {
     console.error('Error obteniendo foto:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor',
+      error: error.message
+    });
+  }
+}
+
+/**
+ * Crear mascota para un cliente existente
+ * POST /api/clinical/pacientes/mascota
+ */
+export async function createMascotaParaCliente(req, res) {
+  try {
+    const {
+      id_cliente,
+      nombre_mascota,
+      especie,
+      raza,
+      sexo,
+      fecha_nacimiento,
+      peso,
+      color,
+      microchip,
+      notas,
+      esterilizado
+    } = req.body;
+
+    if (!id_cliente) {
+      return res.status(400).json({ success: false, message: 'id_cliente es requerido' });
+    }
+    if (!nombre_mascota || !especie) {
+      return res.status(400).json({ success: false, message: 'nombre_mascota y especie son requeridos' });
+    }
+
+    // Verificar que el cliente existe
+    const clienteResult = await query(
+      'SELECT id_cliente FROM clinical.clientes WHERE id_cliente = $1 AND activo = true',
+      [id_cliente]
+    );
+    if (clienteResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Cliente no encontrado' });
+    }
+
+    const sexoDb = sexo === 'M' ? 'Macho' : sexo === 'H' ? 'Hembra' : sexo || null;
+    let edad = null;
+    if (fecha_nacimiento) {
+      const edadData = calculatePetAge(fecha_nacimiento);
+      edad = edadData ? edadData.años : null;
+    }
+
+    const result = await query(
+      `INSERT INTO clinical.mascotas
+        (id_cliente, nombre, especie, raza, edad, sexo, peso, color,
+         fecha_nacimiento, esterilizado, microchip, notas, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       RETURNING *`,
+      [
+        id_cliente, nombre_mascota, especie, raza || null, edad, sexoDb,
+        peso || null, color || null, fecha_nacimiento || null,
+        esterilizado !== undefined ? esterilizado : false,
+        microchip || null, notas || null, req.user.id
+      ]
+    );
+
+    const mascota = result.rows[0];
+    res.status(201).json({
+      success: true,
+      message: 'Mascota creada exitosamente',
+      data: {
+        mascota: {
+          ...mascota,
+          sexo: mascota.sexo === 'Macho' ? 'M' : mascota.sexo === 'Hembra' ? 'H' : mascota.sexo,
+          edadCompleta: calculatePetAge(mascota.fecha_nacimiento)
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error creando mascota:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor',
+      error: error.message
+    });
+  }
+}
+
+/**
+ * Eliminar mascota (soft delete: activo = false)
+ * DELETE /api/clinical/pacientes/mascota/:id
+ */
+export async function deleteMascota(req, res) {
+  try {
+    const { id } = req.params;
+
+    const result = await query(
+      `UPDATE clinical.mascotas
+       SET activo = false, updated_at = CURRENT_TIMESTAMP
+       WHERE id_mascota = $1 AND activo = true
+       RETURNING id_mascota, nombre`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Mascota no encontrada o ya fue eliminada'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Mascota '${result.rows[0].nombre}' eliminada exitosamente`
+    });
+
+  } catch (error) {
+    console.error('Error eliminando mascota:', error);
     res.status(500).json({
       success: false,
       message: 'Error interno del servidor',

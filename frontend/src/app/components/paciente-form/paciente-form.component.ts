@@ -874,7 +874,7 @@ export class PacienteFormComponent implements OnInit {
   private loadClientes(): void {
     this.pacientesService.getClientes(1, 50).subscribe({
       next: (response) => {
-        this.filteredClientes.set(response.data.clients);
+        this.filteredClientes.set(response.data.clientes);
       },
       error: (error) => {
         console.error('Error cargando clientes:', error);
@@ -892,7 +892,7 @@ export class PacienteFormComponent implements OnInit {
 
     this.pacientesService.getClientes(1, 20, searchTerm).subscribe({
       next: (response) => {
-        this.filteredClientes.set(response.data.clients);
+        this.filteredClientes.set(response.data.clientes);
       },
       error: (error) => {
         console.error('Error buscando clientes:', error);

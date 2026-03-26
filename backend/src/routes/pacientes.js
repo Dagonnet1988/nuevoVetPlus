@@ -4,6 +4,8 @@ import {
   createPacienteCompleto,
   updatePacienteCompleto,
   updateMascota,
+  createMascotaParaCliente,
+  deleteMascota,
   getPacienteById,
   getMascotasConCliente,
   getEstadisticasPacientes,
@@ -13,7 +15,7 @@ import {
   eliminarFotoPaciente,
   getFotoPaciente
 } from '../controllers/pacientesController.js';
-import { validateCreatePacienteCompleto, validatePacienteSearch } from '../validators/pacientesValidators.js';
+import { validateCreatePacienteCompleto, validatePacienteSearch, validateUpdateMascota } from '../validators/pacientesValidators.js';
 import { uploadPacienteFoto, handleUploadError } from '../middleware/uploadMiddleware.js';
 
 const router = express.Router();
@@ -99,6 +101,17 @@ router.get('/:id',
 );
 
 /**
+ * @route   POST /api/clinical/pacientes/mascota
+ * @desc    Crear mascota para un cliente existente
+ * @access  Private (admin, vet, aux)
+ */
+router.post('/mascota',
+  authenticateToken,
+  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  createMascotaParaCliente
+);
+
+/**
  * @route   PUT /api/clinical/pacientes/mascota/:id
  * @desc    Actualizar solo datos de una mascota
  * @access  Private (admin, vet, aux)
@@ -106,7 +119,19 @@ router.get('/:id',
 router.put('/mascota/:id',
   authenticateToken,
   authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  validateUpdateMascota,
   updateMascota
+);
+
+/**
+ * @route   DELETE /api/clinical/pacientes/mascota/:id
+ * @desc    Eliminar mascota (soft delete)
+ * @access  Private (admin, vet, aux)
+ */
+router.delete('/mascota/:id',
+  authenticateToken,
+  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  deleteMascota
 );
 
 /**
