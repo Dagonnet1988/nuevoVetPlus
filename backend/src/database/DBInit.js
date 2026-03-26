@@ -60,7 +60,8 @@ class DBInit {
    */
   async runPostInitMigrations() {
     const migrationFiles = [
-      { file: '12_clinical_archivos_consulta.sql', desc: 'Migración adjuntos de consultas clínicas' }
+      { file: '09_clinical_archivos_consulta.sql', desc: 'Migración adjuntos de consultas clínicas' },
+      { file: '10_consentimientos.sql', desc: 'Migración módulo de consentimiento de datos' }
     ];
 
     for (const { file, desc } of migrationFiles) {
@@ -450,12 +451,13 @@ class DBInit {
         { file: '01_create_database.sql', desc: 'Extensiones y funciones base' },
         { file: '02_auth_tables.sql', desc: 'Módulo de autenticación' },
         { file: '03_clinical_tables.sql', desc: 'Módulo clínico' },
-        { file: '05_constraints_triggers.sql', desc: 'Constraints y triggers' },
-        { file: '07_audit_tables.sql', desc: 'Tablas adicionales auditoría' },
-        { file: '08_empresa_config.sql', desc: 'Configuración de empresa' },
-        { file: '10_workflow_integration.sql', desc: 'Integraciones de workflow y notificaciones' },
-        { file: '11_audit_expansion.sql', desc: 'Expansión sistema auditoría' },
-        { file: '12_clinical_archivos_consulta.sql', desc: 'Migración adjuntos de consultas clínicas' }
+        { file: '04_constraints_triggers.sql', desc: 'Constraints y triggers' },
+        { file: '05_audit_tables.sql', desc: 'Tablas adicionales auditoría' },
+        { file: '06_empresa_config.sql', desc: 'Configuración de empresa' },
+        { file: '07_workflow_integration.sql', desc: 'Integraciones de workflow y notificaciones' },
+        { file: '08_audit_expansion.sql', desc: 'Expansión sistema auditoría' },
+        { file: '09_clinical_archivos_consulta.sql', desc: 'Migración adjuntos de consultas clínicas' },
+        { file: '10_consentimientos.sql', desc: 'Migración módulo de consentimiento de datos' }
       ];
       
       for (const { file, desc } of schemaFiles) {
