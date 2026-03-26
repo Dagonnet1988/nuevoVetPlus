@@ -61,7 +61,9 @@ class DBInit {
   async runPostInitMigrations() {
     const migrationFiles = [
       { file: '09_clinical_archivos_consulta.sql', desc: 'Migración adjuntos de consultas clínicas' },
-      { file: '10_consentimientos.sql', desc: 'Migración módulo de consentimiento de datos' }
+      { file: '10_consentimientos.sql', desc: 'Migración módulo de consentimiento de datos' },
+      { file: '11_tenants.sql', desc: 'MT1 — Tabla system.tenants (multi-tenancy)' },
+      { file: '12_tenant_columns.sql', desc: 'MT1 — Columna id_tenant en tablas core' }
     ];
 
     for (const { file, desc } of migrationFiles) {
@@ -457,7 +459,9 @@ class DBInit {
         { file: '07_workflow_integration.sql', desc: 'Integraciones de workflow y notificaciones' },
         { file: '08_audit_expansion.sql', desc: 'Expansión sistema auditoría' },
         { file: '09_clinical_archivos_consulta.sql', desc: 'Migración adjuntos de consultas clínicas' },
-        { file: '10_consentimientos.sql', desc: 'Migración módulo de consentimiento de datos' }
+        { file: '10_consentimientos.sql', desc: 'Migración módulo de consentimiento de datos' },
+        { file: '11_tenants.sql', desc: 'MT1 — Tabla system.tenants (multi-tenancy)' },
+        { file: '12_tenant_columns.sql', desc: 'MT1 — Columna id_tenant en tablas core' }
       ];
       
       for (const { file, desc } of schemaFiles) {
