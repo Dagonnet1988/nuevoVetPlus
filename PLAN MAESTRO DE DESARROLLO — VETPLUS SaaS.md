@@ -271,8 +271,8 @@ Nro. Documento: [PDF_NUMERO]
 | Fase 2 | Backend API consentimiento digital (5 archivos) | ✅ COMPLETO | df38930 |
 | Fase S | Seguridad urgente (hardening pre-producción) | ✅ COMPLETO | 0d857a2 |
 | Fase MT1 | Multi-tenancy DB (tenants + tenant_id) | ✅ COMPLETO | 063e60d |
-| Fase MT2 | Multi-tenancy Auth (JWT + middleware + frontend) | ✅ COMPLETO | — |
-| Fase MT3 | RLS — aislamiento de datos por tenant | ⏳ PENDIENTE | — |
+| Fase MT2 | Multi-tenancy Auth (JWT + middleware + frontend) | ✅ COMPLETO | 19d49d7 |
+| Fase MT3 | RLS — aislamiento de datos por tenant | ✅ COMPLETO | — |
 | Fase 3 | Frontend — página pública de firma | ⏳ PENDIENTE | — |
 | Fase 4 | Frontend — panel expediente (badge + QR modal) | ⏳ PENDIENTE | — |
 | Fase 5 | WhatsApp + Email + cron recordatorio | ⏳ PENDIENTE | — |
@@ -586,7 +586,7 @@ await client.query(`SET LOCAL app.tenant_id = '${req.tenantId}'`);
 
 ```
 COMPLETADO:
-  Fase 0 ✅ → Fase 1 ✅ → Fase 2 ✅
+  Fase 0 ✅ → Fase 1 ✅ → Fase 2 ✅ → Fase S ✅ → Fase MT1 ✅ → Fase MT2 ✅ → Fase MT3 ✅
 
 PRÓXIMAS ITERACIONES:
   Fase S → Fase MT1 → Fase MT2 → Fase MT3 → Fase 3 → Fase 4 → Fase 5 → Fase 6

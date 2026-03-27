@@ -63,10 +63,9 @@ class DBInit {
       { file: '09_clinical_archivos_consulta.sql', desc: 'Migración adjuntos de consultas clínicas' },
       { file: '10_consentimientos.sql', desc: 'Migración módulo de consentimiento de datos' },
       { file: '11_tenants.sql', desc: 'MT1 — Tabla system.tenants (multi-tenancy)' },
-      { file: '12_tenant_columns.sql', desc: 'MT1 — Columna id_tenant en tablas core' }
+      { file: '12_tenant_columns.sql', desc: 'MT1 — Columna id_tenant en tablas core' },
+      { file: '13_rls_policies.sql', desc: 'MT3 — Row Level Security por tenant' }
     ];
-
-    for (const { file, desc } of migrationFiles) {
       const filePath = path.join(this.schemasPath, file);
       try {
         await fs.access(filePath);
@@ -461,7 +460,8 @@ class DBInit {
         { file: '09_clinical_archivos_consulta.sql', desc: 'Migración adjuntos de consultas clínicas' },
         { file: '10_consentimientos.sql', desc: 'Migración módulo de consentimiento de datos' },
         { file: '11_tenants.sql', desc: 'MT1 — Tabla system.tenants (multi-tenancy)' },
-        { file: '12_tenant_columns.sql', desc: 'MT1 — Columna id_tenant en tablas core' }
+        { file: '12_tenant_columns.sql', desc: 'MT1 — Columna id_tenant en tablas core' },
+        { file: '13_rls_policies.sql', desc: 'MT3 — Row Level Security por tenant' }
       ];
       
       for (const { file, desc } of schemaFiles) {

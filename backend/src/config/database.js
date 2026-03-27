@@ -64,9 +64,39 @@ const getClient = () => {
   return pool.connect();
 };
 
+/**
+ * Ejecuta una query dentro de una transacción con contexto de tenant (MT3/RLS).
+ * Setea `app.tenant_id` via SET LOCAL antes de la query, de forma que las
+ * políticas RLS puedan leer el tenant activo con current_setting('app.tenant_id').
+ *
+ * Usar en todos los controllers autenticados en lugar de query() directa.
+ *
+ * @param {string} tenantId  - UUID del tenant (req.tenantId del middleware)
+ * @param {string} text      - SQL a ejecutar
+ * @param {Array}  params    - Parámetros de la query (opcional)
+ */
+const queryWithTenant = async (tenantId, text, params = []) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // SET LOCAL aplica solo durante esta transacción — seguro con connection pooling
+    await client.query('SELECT set_config($1, $2, true)', ['app.tenant_id', tenantId]);
+    const res = await client.query(text, params);
+    await client.query('COMMIT');
+    return res;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('❌ Error en queryWithTenant:', error.message);
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
 export {
   pool,
   query,
   getClient,
+  queryWithTenant,
   testConnection
 };
