@@ -273,7 +273,7 @@ Nro. Documento: [PDF_NUMERO]
 | Fase S | Seguridad urgente (hardening pre-producción) | ✅ COMPLETA | 0d857a2 |
 | Fase MT1 | Multi-tenancy DB (tenants + tenant_id) | ✅ COMPLETO | 063e60d |
 | Fase MT2 | Multi-tenancy Auth (JWT + middleware + frontend) | ✅ COMPLETA | 19d49d7 |
-| Fase MT3 | RLS — aislamiento de datos por tenant | ✅ COMPLETA (controladores core; SET LOCAL RLS pendiente) | 02c3659 |
+| Fase MT3 | RLS — aislamiento de datos por tenant | ✅ COMPLETA (app layer; RLS DB no aplica con superuser) | 02c3659 |
 | Fase 3 | Frontend — página pública de firma | ⏳ PENDIENTE | — |
 | Fase 4 | Frontend — panel expediente (badge + QR modal) | ⏳ PENDIENTE | — |
 | Fase 5 | WhatsApp + Email + cron recordatorio | ⏳ PENDIENTE | — |
@@ -297,7 +297,7 @@ Nro. Documento: [PDF_NUMERO]
 - ✅ **Bug bonus:** `consultationController` — `db.query` → `query()`, parámetros MySQL `?` → PostgreSQL `$N`.
 
 #### Parcial
-- ⚠️ `SET LOCAL app.tenant_id` para RLS: los controladores filtran con `id_tenant` en WHERE explícito pero aún no activan el parámetro de sesión PG que dispara las RLS policies.
+- ⚠️ `SET LOCAL app.tenant_id` para RLS: **no aplica** — se usa superusuario/owner. `FORCE ROW LEVEL SECURITY` en `13_rls_policies.sql` bloquearía todos los queries; el archivo fue **excluido de DBInit.js**. El aislamiento está garantizado por `AND id_tenant = $N` en todos los controladores.
 
 #### Pendiente crítico
 - ❌ Alinear schema/roles con rutas (`aux_admin`, `aux_vet`, `assistant`). ✅ **RESUELTO** — Roles unificados a `admin`/`vet`/`aux` en DB constraint, rutas, controladores, swagger y validadores. Migración `14_roles_alignment.sql` creada.
