@@ -17,6 +17,7 @@ import googleCalendarWebhookRoutes from './src/routes/googleCalendarWebhook.js';
 import systemStatusRoutes from './src/routes/systemStatus.js';
 import testRoutes from './src/routes/test.js';
 import publicRoutes from './src/routes/public.js';
+import { generalRateLimit, rateLimitStats } from './src/middleware/rateLimiter.js';
 
 // Importar middleware de auditoría
 import { setAuditContext, auditActivity, auditAuthActivity } from './src/middleware/auditMiddleware.js';
@@ -52,6 +53,9 @@ app.use(morgan('combined'));
 // Middleware para parsing JSON
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Rate limiting global y headers informativos para la API
+app.use('/api', rateLimitStats, generalRateLimit);
 
 // Middleware de auditoría
 app.use(setAuditContext);

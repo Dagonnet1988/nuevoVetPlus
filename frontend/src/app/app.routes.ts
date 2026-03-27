@@ -27,7 +27,7 @@ export const routes: Routes = [
   {
     path: 'change-password',
     loadComponent: () => import('./layouts/auth-layout/auth-layout.component').then(m => m.AuthLayoutComponent),
-    // canActivate: [AuthGuard], // TEMPORALMENTE DESACTIVADO
+    canActivate: [AuthGuard],
     children: [
       {
         path: '',

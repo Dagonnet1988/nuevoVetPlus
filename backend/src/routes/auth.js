@@ -1,6 +1,7 @@
 import express from 'express';
 import authController from '../controllers/authController.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { authRateLimit } from '../middleware/rateLimiter.js';
 import { 
   validateLogin, 
   validateChangePassword
@@ -14,7 +15,7 @@ const router = express.Router();
  * @desc    Login de usuario
  * @access  Public
  */
-router.post('/login', validateLogin, authController.login);
+router.post('/login', authRateLimit, validateLogin, authController.login);
 
 /**
  * @route   POST /api/auth/logout
@@ -42,7 +43,7 @@ router.get('/me', authenticateToken, authController.me);
  * @desc    Refrescar token de acceso
  * @access  Public (con refresh token válido)
  */
-router.post('/refresh', authController.refreshToken);
+router.post('/refresh', authRateLimit, authController.refreshToken);
 
 /**
  * @route   GET /api/auth/check-email
@@ -50,7 +51,7 @@ router.post('/refresh', authController.refreshToken);
  * @access  Public
  */
 // Alias para compatibilidad con frontend
-router.get('/validar-email', async (req, res) => {
+router.get('/validar-email', authRateLimit, async (req, res) => {
   try {
     const { email, exclude_id } = req.query;
     
@@ -92,7 +93,7 @@ router.get('/validar-email', async (req, res) => {
  * @desc    Verificar disponibilidad de email
  * @access  Public
  */
-router.get('/check-email', async (req, res) => {
+router.get('/check-email', authRateLimit, async (req, res) => {
   try {
     const { email, exclude_id } = req.query;
     
@@ -135,7 +136,7 @@ router.get('/check-email', async (req, res) => {
  * @access  Public
  */
 // Alias para compatibilidad con frontend
-router.get('/validar-documento', async (req, res) => {
+router.get('/validar-documento', authRateLimit, async (req, res) => {
   try {
     const { documento, exclude_id } = req.query;
     
@@ -177,7 +178,7 @@ router.get('/validar-documento', async (req, res) => {
  * @desc    Verificar disponibilidad de documento
  * @access  Public
  */
-router.get('/check-documento', async (req, res) => {
+router.get('/check-documento', authRateLimit, async (req, res) => {
   try {
     const { documento, exclude_id } = req.query;
     

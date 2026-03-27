@@ -77,10 +77,12 @@ export const createConsultation = async (req, res) => {
         console.log('Creando consulta clínica con UUID:', id_consulta);
         console.log('Código de consulta:', codigo_consulta);
 
+        const tenantId = req.tenantId;
+
         // Verificar que la mascota existe
         const mascotaExiste = await query(
-            'SELECT id_mascota FROM clinical.mascotas WHERE id_mascota = $1 AND activo = true',
-            [id_mascota]
+            'SELECT id_mascota FROM clinical.mascotas WHERE id_mascota = $1 AND id_tenant = $2 AND activo = true',
+            [id_mascota, tenantId]
         );
 
         if (mascotaExiste.rows.length === 0) {
@@ -111,10 +113,10 @@ export const createConsultation = async (req, res) => {
             INSERT INTO clinical.consultas_clinicas (
                 id_consulta, codigo_consulta, id_cita, id_mascota, id_veterinario, motivo, anamnesis,
                 examen_fisico, temperatura, peso, diagnostico, tratamiento,
-                medicamentos, recomendaciones, proxima_cita, estado, costo,
+                medicamentos, recomendaciones, proxima_cita, estado, costo, id_tenant,
                 created_at, updated_at
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING *
         `;
@@ -123,7 +125,7 @@ export const createConsultation = async (req, res) => {
             id_consulta, codigo_consulta, id_cita || null, id_mascota, id_veterinario, motivo, anamnesis,
             examen_fisico, temperatura, peso, diagnostico, tratamiento,
             medicamentos ? JSON.stringify(medicamentos) : null,
-            recomendaciones, proxima_cita, estado, costo
+            recomendaciones, proxima_cita, estado, costo, tenantId
         ];
 
         const result = await query(insertSQL, values);
@@ -134,8 +136,8 @@ export const createConsultation = async (req, res) => {
             try {
                 console.log(`⚖️ Actualizando peso de mascota ${id_mascota}: ${peso} kg`);
                 await query(
-                    'UPDATE clinical.mascotas SET peso = $1, updated_at = CURRENT_TIMESTAMP WHERE id_mascota = $2',
-                    [parseFloat(peso), id_mascota]
+                    'UPDATE clinical.mascotas SET peso = $1, updated_at = CURRENT_TIMESTAMP WHERE id_mascota = $2 AND id_tenant = $3',
+                    [parseFloat(peso), id_mascota, tenantId]
                 );
                 console.log('✅ Peso sincronizado con tabla mascotas');
             } catch (pesoError) {
@@ -174,10 +176,10 @@ export const createConsultationFromAppointment = async (req, res) => {
             FROM clinical.calendario_citas c
             LEFT JOIN clinical.mascotas m ON c.id_mascota = m.id_mascota
             LEFT JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
-            WHERE c.id_cita = $1
+            WHERE c.id_cita = $1 AND c.id_tenant = $2
         `;
         
-        const citaResult = await query(citaSQL, [id_cita]);
+        const citaResult = await query(citaSQL, [id_cita, req.tenantId]);
         
         if (citaResult.rows.length === 0) {
             return res.status(404).json({
@@ -190,8 +192,8 @@ export const createConsultationFromAppointment = async (req, res) => {
         
         // Verificar si ya existe una consulta para esta cita
         const consultaExistente = await query(
-            'SELECT id_consulta FROM clinical.consultas_clinicas WHERE id_cita = $1',
-            [id_cita]
+            'SELECT id_consulta FROM clinical.consultas_clinicas WHERE id_cita = $1 AND id_tenant = $2',
+            [id_cita, req.tenantId]
         );
         
         if (consultaExistente.rows.length > 0) {
@@ -210,9 +212,9 @@ export const createConsultationFromAppointment = async (req, res) => {
         const insertSQL = `
             INSERT INTO clinical.consultas_clinicas (
                 id_consulta, codigo_consulta, id_cita, id_mascota, id_veterinario, 
-                motivo, estado, created_at, updated_at
+                motivo, estado, id_tenant, created_at, updated_at
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                $1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING *
         `;
         
@@ -223,16 +225,17 @@ export const createConsultationFromAppointment = async (req, res) => {
             cita.id_mascota, 
             cita.id_veterinario,
             cita.motivo || 'Consulta programada',
-            'En Curso'
+            'En Curso',
+            req.tenantId
         ];
         
         const result = await query(insertSQL, values);
         const nuevaConsulta = result.rows[0];
         
         // Actualizar estado de la cita a 'en_curso'
-        await db.query(
-            'UPDATE calendario_citas SET estado = ? WHERE id_cita = ?',
-            ['en_curso', id_cita]
+        await query(
+            'UPDATE clinical.calendario_citas SET estado = $1 WHERE id_cita = $2 AND id_tenant = $3',
+            ['en_curso', id_cita, req.tenantId]
         );
         
         console.log('✅ Consulta creada exitosamente:', nuevaConsulta.id_consulta);
@@ -387,11 +390,11 @@ export const getConsultations = async (req, res) => {
             LEFT JOIN clinical.mascotas m ON c.id_mascota = m.id_mascota
             LEFT JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
             LEFT JOIN vetplus_auth.usuarios u ON c.id_veterinario = u.id_usuario
-            WHERE 1=1
+            WHERE c.id_tenant = $1
         `;
         
-        const values = [];
-        let paramCount = 0;
+        const values = [req.tenantId];
+        let paramCount = 1;
 
         // Filtros opcionales
         if (estado) {
@@ -451,9 +454,9 @@ export const getConsultations = async (req, res) => {
         const result = await query(selectSQL, values);
 
         // Contar total de consultas
-        let countSQL = 'SELECT COUNT(*) FROM clinical.consultas_clinicas c WHERE 1=1';
-        const countValues = [];
-        let countParamCount = 0;
+        let countSQL = 'SELECT COUNT(*) FROM clinical.consultas_clinicas c WHERE c.id_tenant = $1';
+        const countValues = [req.tenantId];
+        let countParamCount = 1;
 
         if (estado) {
             countParamCount++;
@@ -491,12 +494,12 @@ export const getConsultations = async (req, res) => {
                 SELECT COUNT(*) FROM clinical.consultas_clinicas c
                 LEFT JOIN clinical.mascotas m ON c.id_mascota = m.id_mascota
                 LEFT JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
-                WHERE 1=1
+                WHERE c.id_tenant = $1
             `;
             
             // Re-aplicar todos los filtros para el conteo con búsqueda
-            const newCountValues = [];
-            let newCountParamCount = 0;
+            const newCountValues = [req.tenantId];
+            let newCountParamCount = 1;
             
             if (estado) {
                 newCountParamCount++;
@@ -716,17 +719,17 @@ export const getConsultationsByPet = async (req, res) => {
                 u.nombre as nombre_veterinario
             FROM clinical.consultas_clinicas c
             LEFT JOIN vetplus_auth.usuarios u ON c.id_veterinario = u.id_usuario
-            WHERE c.id_mascota = $1
+            WHERE c.id_mascota = $1 AND c.id_tenant = $2
             ORDER BY c.fecha DESC
-            LIMIT $2 OFFSET $3
+            LIMIT $3 OFFSET $4
         `;
 
-        const result = await query(selectSQL, [id, validLimit, validOffset]);
+        const result = await query(selectSQL, [id, req.tenantId, validLimit, validOffset]);
 
         // Contar total
         const countResult = await query(
-            'SELECT COUNT(*) FROM clinical.consultas_clinicas WHERE id_mascota = $1',
-            [id]
+            'SELECT COUNT(*) FROM clinical.consultas_clinicas WHERE id_mascota = $1 AND id_tenant = $2',
+            [id, req.tenantId]
         );
         const total = parseInt(countResult.rows[0].count);
 
@@ -771,8 +774,8 @@ export const updateConsultation = async (req, res) => {
 
         // Verificar que la consulta existe
         const consultaExiste = await query(
-            'SELECT id_consulta FROM clinical.consultas_clinicas WHERE id_consulta = $1',
-            [id]
+            'SELECT id_consulta FROM clinical.consultas_clinicas WHERE id_consulta = $1 AND id_tenant = $2',
+            [id, req.tenantId]
         );
 
         if (consultaExiste.rows.length === 0) {
@@ -798,7 +801,7 @@ export const updateConsultation = async (req, res) => {
                 estado = COALESCE($11, estado),
                 costo = COALESCE($12, costo),
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id_consulta = $13
+            WHERE id_consulta = $13 AND id_tenant = $14
             RETURNING *
         `;
 
@@ -806,7 +809,7 @@ export const updateConsultation = async (req, res) => {
             motivo, anamnesis, examen_fisico, temperatura, peso,
             diagnostico, tratamiento,
             medicamentos ? JSON.stringify(medicamentos) : null,
-            recomendaciones, proxima_cita, estado, costo, id
+            recomendaciones, proxima_cita, estado, costo, id, req.tenantId
         ];
 
         const result = await query(updateSQL, values);
@@ -817,8 +820,8 @@ export const updateConsultation = async (req, res) => {
             try {
                 console.log(`⚖️ Actualizando peso de mascota ${consultaActualizada.id_mascota}: ${peso} kg`);
                 await query(
-                    'UPDATE clinical.mascotas SET peso = $1, updated_at = CURRENT_TIMESTAMP WHERE id_mascota = $2',
-                    [parseFloat(peso), consultaActualizada.id_mascota]
+                    'UPDATE clinical.mascotas SET peso = $1, updated_at = CURRENT_TIMESTAMP WHERE id_mascota = $2 AND id_tenant = $3',
+                    [parseFloat(peso), consultaActualizada.id_mascota, req.tenantId]
                 );
                 console.log('✅ Peso sincronizado con tabla mascotas');
             } catch (pesoError) {
@@ -845,6 +848,7 @@ export const updateConsultation = async (req, res) => {
 // ✅ ESTADÍSTICAS DE CONSULTAS
 export const getConsultationStats = async (req, res) => {
     try {
+        const tenantId = req.tenantId;
         const statsSQL = `
             SELECT 
                 COUNT(*) as total_consultas,
@@ -857,9 +861,10 @@ export const getConsultationStats = async (req, res) => {
                 COUNT(DISTINCT id_mascota) as mascotas_atendidas,
                 COUNT(DISTINCT id_veterinario) as veterinarios_activos
             FROM clinical.consultas_clinicas
+            WHERE id_tenant = $1
         `;
 
-        const result = await query(statsSQL);
+        const result = await query(statsSQL, [tenantId]);
         const stats = result.rows[0];
 
         res.json({

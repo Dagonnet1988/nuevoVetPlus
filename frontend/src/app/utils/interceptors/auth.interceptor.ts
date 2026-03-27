@@ -29,11 +29,15 @@ export class AuthInterceptor implements HttpInterceptor {
       });
     }
 
-    // Agregar X-Tenant-Slug resuelto desde el subdominio actual
-    const tenantSlug = window.location.hostname.split('.')[0] || 'default';
-    authReq = authReq.clone({
-      headers: authReq.headers.set('X-Tenant-Slug', tenantSlug)
-    });
+    // Agregar X-Tenant-Slug solo en entornos con subdominio real (no localhost/dev)
+    const hostname = window.location.hostname;
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || /^192\.168\.|^10\.|^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
+    if (!isLocal) {
+      const tenantSlug = hostname.split('.')[0];
+      authReq = authReq.clone({
+        headers: authReq.headers.set('X-Tenant-Slug', tenantSlug)
+      });
+    }
 
     // Agregar headers adicionales (solo para requests que no son FormData)
     const isFormData = authReq.body instanceof FormData;

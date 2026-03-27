@@ -1,7 +1,8 @@
 # PLAN MAESTRO DE DESARROLLO — VETPLUS SaaS
-**VetPlus** | Rama: `feature/calendario-mejoras` | Actualizado: Marzo 2026 v2.0
+**VetPlus** | Rama: `feature/calendario-mejoras` | Actualizado: Marzo 2026 v2.2
 
 > Plan ajustado tras la **Auditoría Técnica SaaS Multi-Tenant (26/03/2026)**.  
+> v2.2 — Sprint de implementación: Fase S completada, MT2 casi completa, MT3 controladores core completados.  
 > Integra las fases originales del módulo de pacientes/consentimiento con los  
 > requisitos obligatorios de seguridad y multi-tenancy antes de producción.
 
@@ -269,14 +270,38 @@ Nro. Documento: [PDF_NUMERO]
 | inactivarMascota | Reemplazar deleteMascota con inactivación + motivo | ✅ COMPLETO | 05b1d0f |
 | Fase 1 | DB — tablas consentimiento + renumeración schemas | ✅ COMPLETO | fcc8b0e |
 | Fase 2 | Backend API consentimiento digital (5 archivos) | ✅ COMPLETO | df38930 |
-| Fase S | Seguridad urgente (hardening pre-producción) | ✅ COMPLETO | 0d857a2 |
+| Fase S | Seguridad urgente (hardening pre-producción) | ⚠️ CASI COMPLETA (S.7.1 pendiente) | 0d857a2 |
 | Fase MT1 | Multi-tenancy DB (tenants + tenant_id) | ✅ COMPLETO | 063e60d |
-| Fase MT2 | Multi-tenancy Auth (JWT + middleware + frontend) | ✅ COMPLETO | 19d49d7 |
-| Fase MT3 | RLS — aislamiento de datos por tenant | ✅ COMPLETO | — |
+| Fase MT2 | Multi-tenancy Auth (JWT + middleware + frontend) | ✅ COMPLETA | 19d49d7 |
+| Fase MT3 | RLS — aislamiento de datos por tenant | ✅ COMPLETA (controladores core; SET LOCAL RLS pendiente) | 02c3659 |
 | Fase 3 | Frontend — página pública de firma | ⏳ PENDIENTE | — |
 | Fase 4 | Frontend — panel expediente (badge + QR modal) | ⏳ PENDIENTE | — |
 | Fase 5 | WhatsApp + Email + cron recordatorio | ⏳ PENDIENTE | — |
 | Fase 6 | Legacy + deuda técnica | ⏳ PENDIENTE | — |
+| Fase C | Cierre Auditoría SaaS (Go/No-Go producción) | ⏳ PENDIENTE | — |
+
+### 6.1 Estado validado de auditoría (real)
+
+#### Resuelto
+- ✅ `/api/test` solo fuera de producción.
+- ✅ JWT fail-fast en producción.
+- ✅ CORS de `/uploads` restringido.
+- ✅ MT1 ejecutado (tabla `tenants` + `id_tenant` en tablas core).
+- ✅ SQL de MT3 creado (RLS + policies por tenant).
+- ✅ Rate limiting aplicado: `authRateLimit` en `/api/auth/*` + `generalRateLimit` en `/api`.
+- ✅ `AuthGuard` activo en layout principal **y** en `change-password`.
+- ✅ MT2 propagado end-to-end: login/refresh incluyen `id_tenant` en JWT y en SELECT.
+- ✅ MT3 adopción en controladores: `clientes`, `mascotas`, `citas`, `consultas`, `consentimientos` — todos con `id_tenant` en WHERE e INSERT.
+- ✅ Inconsistencias de consentimiento corregidas (`id` → `id_consentimiento`, `cl.id` → `cl.id_cliente`).
+- ✅ **Bug bonus:** DBInit SyntaxError `for...of` restaurado (loop header faltaba).
+- ✅ **Bug bonus:** `consultationController` — `db.query` → `query()`, parámetros MySQL `?` → PostgreSQL `$N`.
+
+#### Parcial
+- ⚠️ Transacciones manuales: algunos controladores aún usan `pool.query()` en lugar de `getClient()` (S.7.1).
+- ⚠️ `SET LOCAL app.tenant_id` para RLS: los controladores filtran con `id_tenant` en WHERE explícito pero aún no activan el parámetro de sesión PG que dispara las RLS policies.
+
+#### Pendiente crítico
+- ❌ Alinear schema/roles con rutas (`aux_admin`, `aux_vet`, `assistant`).
 
 ---
 
@@ -335,16 +360,20 @@ Nro. Documento: [PDF_NUMERO]
 | S.1.1 | Eliminar fallback hardcodeado — lanzar error si `JWT_SECRET` no está en `.env` | `backend/src/middleware/auth.js` | `if (!process.env.JWT_SECRET) throw new Error(...)` |
 | S.1.2 | Agregar `JWT_SECRET` como requerida en `.env.example` | `.env.example` | Documentar |
 
+Estado S.1: ✅ COMPLETO (S.1.1 + S.1.2 ejecutados)
+
 #### S.2 — Rate limiting real
 **Problema:** `rateLimiter.js` — todas las funciones son `next()` sin límites reales.  
 **Riesgo:** Brute force en login, abuso de firma pública, DoS lógico.
 
 | # | Tarea | Archivo | Límite recomendado |
 |---|-------|---------|-------------------|
-| S.2.1 | Activar `authRateLimit` real | `rateLimiter.js` | 10 req/15min por IP |
-| S.2.2 | Activar `publicRateLimit` real | `rateLimiter.js` | 20 req/min por IP |
-| S.2.3 | Activar `generalRateLimit` real | `rateLimiter.js` | 200 req/min por IP |
+| S.2.1 | Activar `authRateLimit` real y aplicarlo en `/api/auth/*` | `rateLimiter.js` + `routes/auth.js` | 10 req/15min por IP |
+| S.2.2 | Activar `publicRateLimit` real | `rateLimiter.js` + `routes/public.js` | 20 req/min por IP |
+| S.2.3 | Activar `generalRateLimit` real y aplicarlo en API global | `rateLimiter.js` + `server.js` | 200 req/min por IP |
 | S.2.4 | Condicional `NODE_ENV === 'development'` para desactivar en local | `rateLimiter.js` | — |
+
+Estado S.2: ✅ COMPLETO — S.2.1 ✅ (authRateLimit en /api/auth/*) · S.2.2 ✅ (publicRateLimit en /api/public/*) · S.2.3 ✅ (generalRateLimit en /api) · S.2.4 ✅ (isProd condicional: no-op en dev)
 
 #### S.3 — Proteger `/api/test`
 **Problema:** `server.js` monta `testRoutes` sin restricción de entorno.  
@@ -354,6 +383,8 @@ Nro. Documento: [PDF_NUMERO]
 |---|-------|---------|
 | S.3.1 | Condicionar montaje: `if (process.env.NODE_ENV !== 'production')` | `backend/server.js` |
 
+Estado S.3: ✅ COMPLETO
+
 #### S.4 — Restringir CORS en uploads
 **Problema:** `/uploads` responde con `Access-Control-Allow-Origin: *`.  
 **Riesgo:** Consumo cruzado no controlado de recursos.
@@ -361,6 +392,8 @@ Nro. Documento: [PDF_NUMERO]
 | # | Tarea | Archivo |
 |---|-------|---------|
 | S.4.1 | Restringir a `FRONTEND_URL` y dominios conocidos | `backend/server.js` |
+
+Estado S.4: ✅ COMPLETO
 
 #### S.5 — Reactivar AuthGuard en frontend
 **Problema:** `app.routes.ts` tiene `canActivate: [AuthGuard]` comentado en el layout principal y en `change-password`.  
@@ -371,6 +404,8 @@ Nro. Documento: [PDF_NUMERO]
 | S.5.1 | Descomentar `canActivate: [AuthGuard]` en layout principal | `app.routes.ts` | ~44 |
 | S.5.2 | Descomentar `canActivate: [AuthGuard]` en `change-password` | `app.routes.ts` | ~31 |
 
+Estado S.5: ✅ COMPLETO (S.5.1 + S.5.2 ejecutados)
+
 #### S.6 — Corregir inconsistencia `auth.usuarios` vs `vetplus_auth.usuarios`
 **Problema:** Dos archivos usan el schema incorrecto `auth.` en lugar de `vetplus_auth.`.  
 **Riesgo:** Queries fallando en runtime de forma silenciosa o con errores 500.
@@ -380,6 +415,8 @@ Nro. Documento: [PDF_NUMERO]
 | S.6.1 | Cambiar `auth.usuarios` → `vetplus_auth.usuarios` | `backend/src/middleware/passwordCheck.js` | 21, 69 |
 | S.6.2 | Cambiar `FROM auth.usuarios` → `FROM vetplus_auth.usuarios` | `backend/src/routes/appointments.js` | 252 |
 
+Estado S.6: ✅ COMPLETO
+
 #### S.7 — Corregir transacciones con cliente dedicado
 **Problema:** Controladores que usan `BEGIN/COMMIT/ROLLBACK` llaman a `pool.query()` global, no a un cliente dedicado.  
 **Riesgo:** Inconsistencia de datos bajo concurrencia (transacciones se mezclan entre requests).  
@@ -388,6 +425,8 @@ Nro. Documento: [PDF_NUMERO]
 | # | Tarea | Archivo |
 |---|-------|---------|
 | S.7.1 | Auditar controladores con transacciones manuales y migrar a `getClient()` + `client.release()` | `controllers/*.js` |
+
+Estado S.7: ⚠️ PARCIAL (ya migrado en algunos controladores, falta cobertura total)
 
 ---
 
@@ -476,6 +515,8 @@ La consulta en `authenticateToken` debe enriquecer `req.user` con `id_tenant`:
  FROM vetplus_auth.usuarios WHERE id_usuario = $1'
 ```
 
+Estado MT2.1: ✅ COMPLETO — login/refresh propagan `id_tenant` en JWT; SELECT incluye `id_tenant` para enriquecer `req.user`
+
 #### MT2.2 — Middleware `tenantContext`
 Archivo nuevo: `backend/src/middleware/tenantContext.js`
 
@@ -490,6 +531,8 @@ export function tenantContext(req, res, next) {
 - Montar después de `authenticateToken` en todas las rutas clínicas
 - En rutas públicas (consentimiento), resolver `tenant_id` desde el consentimiento mismo (via token)
 
+Estado MT2.2: ✅ COMPLETO — middleware async con validación `X-Tenant-Slug` vs DB; montado en todas las rutas clínicas
+
 #### MT2.3 — Frontend: interceptor con tenant slug
 **Archivo:** interceptor HTTP de Angular
 
@@ -502,6 +545,8 @@ req.clone({ setHeaders: {
   'X-Tenant-Slug': tenantSlug
 }});
 ```
+
+Estado MT2.3: ✅ COMPLETO — interceptor Angular envía `X-Tenant-Slug` solo en subdominios reales (omite en localhost/IPs locales); backend lo valida opcionalmente contra DB
 
 ---
 
@@ -526,6 +571,35 @@ Activar contexto en cada query autenticada:
 ```js
 await client.query(`SET LOCAL app.tenant_id = '${req.tenantId}'`);
 ```
+
+Estado MT3: ✅ COMPLETO (app layer) — todos los controladores core usan `id_tenant` explícito en WHERE e INSERT: `clientController`, `pacientesController`, `appointmentController`, `consultationController`, `consentimientoController`, rutas `clinical.js`. Pendiente: activar `SET LOCAL app.tenant_id` para que las RLS policies de PG apliquen automáticamente.
+
+---
+
+### 🟣 FASE C — Cierre Auditoría SaaS (Go/No-Go Producción)
+
+> Esta fase define el criterio de “100% producción”. Sin esta fase no hay salida.
+
+| # | Criterio | Desarrollo | Producción |
+|---|----------|------------|------------|
+| C.1 | Todas las rutas core usan contexto tenant (queryWithTenant o equivalente) | 80% mínimo | 100% obligatorio |
+| C.2 | Todos los INSERT/UPDATE core incluyen `id_tenant` | 80% mínimo | 100% obligatorio |
+| C.3 | Auth login/refresh propaga `tenant_id` end-to-end | Parcial permitido | 100% obligatorio |
+| C.4 | Rate limiting aplicado en auth/public/general | Mínimo auth+public | 100% obligatorio |
+| C.5 | Guards frontend críticos activos | Parcial permitido | 100% obligatorio |
+| C.6 | Roles DB/rutas alineados | Puede quedar warning temporal | 100% obligatorio |
+| C.7 | Consentimiento sin mismatches de columnas | Puede convivir workaround | 100% obligatorio |
+| C.8 | Pruebas de aislamiento inter-tenant (integración) | Smoke tests | Suite completa obligatoria |
+
+#### C.9 Gate final (No-Go automático)
+
+No se permite despliegue a producción si falla cualquiera de estos checks:
+- `tenant_id` ausente en JWT de sesión válida.
+- Endpoints core funcionando con `query()` sin tenant context.
+- Inserción en tablas multi-tenant sin `id_tenant`.
+- `change-password` sin AuthGuard.
+- Rate limiting no aplicado en `/api/auth/*`.
+- Cualquier test de aislamiento inter-tenant fallando.
 
 ---
 
@@ -586,18 +660,21 @@ await client.query(`SET LOCAL app.tenant_id = '${req.tenantId}'`);
 
 ```
 COMPLETADO:
-  Fase 0 ✅ → Fase 1 ✅ → Fase 2 ✅ → Fase S ✅ → Fase MT1 ✅ → Fase MT2 ✅ → Fase MT3 ✅
+  Fase 0 ✅ → Fase 1 ✅ → Fase 2 ✅ → Fase MT1 ✅
+  Fase S ✅ (casi) → Fase MT2 ✅ (casi) → Fase MT3 ✅ (controladores core)
 
-PRÓXIMAS ITERACIONES:
-  Fase S → Fase MT1 → Fase MT2 → Fase MT3 → Fase 3 → Fase 4 → Fase 5 → Fase 6
-  (seg)    (DB MT)    (auth MT)   (RLS)      (pág pub) (panel)  (notif)  (legacy)
+PENDIENTE (próximas iteraciones):
+  S.2.2 (publicRateLimit) · S.7.1 (transacciones getClient) · MT2.3 (interceptor Angular)
+  MT3 SET LOCAL app.tenant_id (para activar RLS PG)
+  Roles alignment (aux_admin / aux_vet / assistant)
+  → Fase C (Go/No-Go) → Fase 3 → Fase 4 → Fase 5 → Fase 6
 
 ── MÍNIMO PARA PRODUCCIÓN SINGLE-TENANT (una clave clínica) ──────────────────
-   Fase S + Fase 3
+  Fase S (100%) + Fase 3
    (seguridad básica + página pública de firma funcional)
 
 ── MÍNIMO PARA PRODUCCIÓN MULTI-TENANT (varias clínicas) ────────────────────
-   Fase S + Fase MT1 + Fase MT2 + Fase MT3 + Fase 3
+  Fase S (100%) + Fase MT1 (100%) + Fase MT2 (100%) + Fase MT3 (100%) + Fase C (100%) + Fase 3
 
 ── PRODUCTO COMPLETO ─────────────────────────────────────────────────────────
    Todas las fases

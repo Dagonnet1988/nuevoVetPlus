@@ -29,7 +29,7 @@ class AuthController {
 
       // Buscar usuario por documento
       const userResult = await query(
-        'SELECT id_usuario, nombre, apellido, email, documento, password_hash, rol, activo, intentos_login, bloqueado_hasta, password_temporal, debe_cambiar_password FROM vetplus_auth.usuarios WHERE documento = $1',
+        'SELECT id_usuario, id_tenant, nombre, apellido, email, documento, password_hash, rol, activo, intentos_login, bloqueado_hasta, password_temporal, debe_cambiar_password FROM vetplus_auth.usuarios WHERE documento = $1',
         [documento]
       );
 
@@ -102,6 +102,7 @@ class AuthController {
       // Generar tokens JWT
       const token = generateToken({
         id_usuario: user.id_usuario,
+        id_tenant: user.id_tenant,
         email: user.email,
         documento: user.documento,
         nombre: user.nombre,
@@ -201,7 +202,7 @@ class AuthController {
 
        // Verificar que el usuario existe y está activo
        const userResult = await query(
-         'SELECT id_usuario, nombre, apellido, email, documento, rol, activo FROM vetplus_auth.usuarios WHERE id_usuario = $1',
+         'SELECT id_usuario, id_tenant, nombre, apellido, email, documento, rol, activo FROM vetplus_auth.usuarios WHERE id_usuario = $1',
          [decoded.id]
        );
 
@@ -226,6 +227,7 @@ class AuthController {
        // Generar nuevo token de acceso
        const newToken = generateToken({
          id_usuario: user.id_usuario,
+         id_tenant: user.id_tenant,
          email: user.email,
          documento: user.documento,
          nombre: user.nombre,

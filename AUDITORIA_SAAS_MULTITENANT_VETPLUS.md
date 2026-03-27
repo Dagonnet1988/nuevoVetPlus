@@ -1,17 +1,40 @@
 # Auditoría Técnica SaaS Multi-Tenant - VetPlus
 
-Fecha: 2026-03-26  
+Fecha inicial: 2026-03-26  
+Fecha de validación de avance: 2026-03-26 (actualización)  
 Repositorio: nuevoVetPlus  
 Branch analizada: feature/calendario-mejoras
 
 ## Resumen Ejecutivo
 
-Estado actual: la aplicación no está lista para operar como SaaS multi-tenant en producción.
+Estado actual: avance importante, pero aún no lista para operar como SaaS multi-tenant en producción.
 
-Conclusión principal:
-- La arquitectura funciona para modo single-tenant.
-- No existe aislamiento fuerte por clínica (tenant) en modelo de datos, autenticación ni autorización.
-- Existen riesgos críticos de seguridad y consistencia que deben corregirse antes de salida a producción.
+Conclusión principal actualizada:
+- Se implementó base estructural multi-tenant (tenants, tenant_id, RLS) y mejoras fuertes de seguridad.
+- Persisten brechas críticas de aplicación (uso consistente del contexto tenant en queries, propagación completa de tenant_id en auth y consistencia de modelo).
+- Riesgo residual actual: medio-alto hasta cerrar los pendientes marcados en este documento.
+
+## Estado de avance validado
+
+### Resuelto
+- Tabla de tenants creada y migración de columnas tenant_id en tablas core.
+- Policies de RLS por tenant creadas.
+- JWT fail-fast en producción (sin secreto no inicia en prod).
+- `/api/test` protegido fuera de producción.
+- CORS de `/uploads` restringido a orígenes permitidos.
+- Corrección de referencias `auth.usuarios` a `vetplus_auth.usuarios` en puntos críticos detectados.
+- Frontend ya envía `X-Tenant-Slug` en interceptor.
+
+### Parcial
+- Multi-tenancy en capa de aplicación: existe `tenantContext` y `queryWithTenant`, pero la mayoría de controladores aún usan `query()` global.
+- Guards frontend: layout principal protegido, pero `change-password` sigue con guard desactivado.
+- Rate limiting: implementado en middleware, pero aplicado solo en rutas públicas de consentimiento.
+
+### Pendiente crítico
+- Propagación completa de `tenant_id` en login/refresh y uso consistente en creación de entidades.
+- Inclusión explícita de `id_tenant` en todos los `INSERT` de tablas con `NOT NULL`.
+- Alineación final de roles entre schema y rutas (`aux_admin`/`aux_vet`/`assistant`).
+- Corrección completa de inconsistencias en consentimiento (campos `id` vs `id_cliente` / `id_consentimiento`).
 
 ---
 
@@ -36,23 +59,25 @@ Conclusión principal:
 ## 2) Multi-Tenancy: Preparación, Separación de Datos y Riesgo de Fuga
 
 ### ¿Está preparada para múltiples clínicas?
-No.
+Parcialmente.
 
 ### ¿Cómo se separan hoy los datos?
-- Actualmente no hay separación técnica por tenant.
-- No hay columnas tenant_id/id_clinica en tablas core.
-- No hay Row Level Security (RLS) ni políticas por tenant.
+- Sí existen columnas `id_tenant` en tablas core (migración MT1).
+- Sí existen policies RLS por tenant (MT3).
+- La separación en ejecución aún es incompleta porque no todas las consultas usan contexto tenant de forma consistente.
 
 ### Riesgo de fuga entre clientes
-Alto.
+Medio-alto (disminuyó, pero no está cerrado).
 
-Si una consulta o endpoint omite filtros manuales, puede exponer datos entre clínicas porque todos los datos viven en los mismos esquemas/tablas lógicas.
+Aunque hay RLS, si el contexto tenant no se aplica correctamente por request/query, pueden aparecer fallos funcionales y ventanas de inconsistencia en acceso a datos.
 
 ### Evidencia técnica
-- Modelo auth sin tenant: backend/src/database/schemas/02_auth_tables.sql
-- Modelo clínico sin tenant: backend/src/database/schemas/03_clinical_tables.sql
-- Sin políticas RLS: búsqueda en backend/src/database/**/*.sql sin resultados para `ROW LEVEL SECURITY` y `CREATE POLICY`.
-- JWT sin tenant claims: backend/src/middleware/auth.js
+- Tenants: backend/src/database/schemas/11_tenants.sql
+- Tenant_id en core: backend/src/database/schemas/12_tenant_columns.sql
+- RLS por tenant: backend/src/database/schemas/13_rls_policies.sql
+- Middleware de tenant: backend/src/middleware/tenantContext.js
+- Helper tenant-aware: backend/src/config/database.js
+- Brecha de adopción: múltiples controladores siguen con `query()` global.
 
 ---
 
@@ -100,13 +125,13 @@ Costos:
 ## 4) Autenticación y Autorización (identidad de clínica por usuario)
 
 ## Estado actual
-- JWT incluye id, email, rol, nombre.
-- JWT no incluye tenant_id.
-- Middleware de auth resuelve usuario global por id.
-- Authorization se basa en rol global (`admin`, `vet`, etc.), no en pertenencia a clínica.
+- JWT ya contempla `tenant_id` en payload.
+- Middleware auth ya carga `id_tenant` y lo expone como `req.user.tenant_id`.
+- Existe `tenantContext` que exige tenant en rutas clínicas.
+- Pendiente: login/refresh todavía no seleccionan `id_tenant` de forma consistente en todas las consultas, por lo que la propagación de tenant no está cerrada de extremo a extremo.
 
 ## Riesgo
-Un usuario válido puede consultar entidades fuera de su clínica si endpoint/query no filtra explícitamente por tenant.
+La autorización por pertenencia tenant mejoró, pero sigue habiendo riesgo de errores funcionales y de aislamiento si controladores usan `query()` sin contexto tenant o sin `id_tenant` explícito.
 
 ## Diseño recomendado
 1. Resolver tenant en entrada de request (subdominio o header interno confiable).
@@ -119,43 +144,36 @@ Un usuario válido puede consultar entidades fuera de su clínica si endpoint/qu
 
 ## 5) Seguridad: Vulnerabilidades Críticas
 
-## Hallazgos críticos
+## Hallazgos críticos y estado
 
 1. Endpoints de test expuestos
-- `/api/test` está montado en el servidor principal.
-- Evidencia: backend/server.js
-- Riesgo: manipulación operativa por rutas no productivas.
+- Estado: RESUELTO.
+- Evidencia: backend/server.js (montaje condicional fuera de producción).
 
 2. Rate limiting deshabilitado
-- Middleware retorna `next()` en todos los casos.
-- Evidencia: backend/src/middleware/rateLimiter.js
-- Riesgo: brute force, abuso de endpoints públicos y DoS lógico.
+- Estado: PARCIAL.
+- Evidencia: backend/src/middleware/rateLimiter.js (implementado), backend/src/routes/public.js (aplicado), falta aplicación general/auth/admin en resto de rutas.
 
 3. JWT secret inseguro por fallback hardcodeado
-- Usa secreto por defecto si falta variable de entorno.
-- Evidencia: backend/src/middleware/auth.js
-- Riesgo: compromiso total de autenticación en despliegues mal configurados.
+- Estado: PARCIAL-RESUELTO.
+- Evidencia: backend/src/middleware/auth.js (fail-fast en producción; fallback solo dev).
 
 4. CORS abierto en uploads
-- `Access-Control-Allow-Origin: *` para `/uploads`.
-- Evidencia: backend/server.js
-- Riesgo: exposición amplia de recursos y consumo cruzado no deseado.
+- Estado: RESUELTO.
+- Evidencia: backend/server.js (orígenes permitidos, sin wildcard abierto).
 
 5. Guards de autenticación desactivados en frontend
-- `AuthGuard` comentado en rutas principales.
-- Evidencia: frontend/src/app/app.routes.ts
-- Riesgo: superficie de acceso UI ampliada (aunque backend siga siendo la barrera real).
+- Estado: PARCIAL.
+- Evidencia: frontend/src/app/app.routes.ts (layout principal con guard activo; `change-password` aún comentado).
 
 6. Inconsistencias de esquema/código
-- Referencias mezcladas `auth.usuarios` vs `vetplus_auth.usuarios`.
-- Mismatch de columnas en consentimiento (`id` vs `id_cliente`).
-- Evidencia: backend/src/routes/appointments.js, backend/src/controllers/consentimientoController.js, backend/src/database/schemas/10_consentimientos.sql
-- Riesgo: fallos runtime y baja confiabilidad en producción.
+- Estado: PARCIAL.
+- Resuelto: referencias `auth.usuarios` críticas.
+- Pendiente: inconsistencias de columnas en consentimiento y desalineación de roles en schema/rutas.
 
 7. Manejo de transacciones con pool global
-- Uso de `BEGIN/COMMIT/ROLLBACK` a través de helper global sin cliente dedicado.
-- Evidencia: backend/src/config/database.js + múltiples controladores.
-- Riesgo: inconsistencias bajo concurrencia.
+- Estado: PARCIAL.
+- Evidencia: mejoras en controladores críticos con `getClient()`, pero no unificado en todo el backend.
 
 ---
 
@@ -179,35 +197,30 @@ Un usuario válido puede consultar entidades fuera de su clínica si endpoint/qu
 
 ## 7) Recomendaciones Concretas
 
-## Cambios urgentes (antes de producción)
+## Cambios urgentes restantes (antes de producción)
 
-1. Multi-tenancy estructural
-- Crear tabla `system.tenants`.
-- Agregar `tenant_id` a tablas auth/clinical/system de negocio.
-- Backfill de datos existentes para tenant inicial.
+1. Cerrar adopción de multi-tenancy en capa de aplicación
+- Migrar controladores para usar `queryWithTenant()` o transacciones con `SET LOCAL app.tenant_id` por request.
+- Incluir `id_tenant` explícito en todos los `INSERT` y `UPDATE` de tablas core.
 
-2. Aislamiento en base de datos
-- Habilitar RLS en tablas sensibles.
-- Crear policies `USING` y `WITH CHECK` por tenant.
+2. Corregir autenticación multi-tenant de extremo a extremo
+- Asegurar que login/refresh carguen `id_tenant` y lo propaguen al JWT siempre.
+- Validar coherencia entre tenant del token y tenant de contexto en todas las rutas internas.
 
-3. AuthN/AuthZ multi-tenant
-- Incluir `tenant_id` en JWT.
-- Validar tenant mismatch en middleware.
-- Enriquecer `req.user` con tenant context.
+3. Cerrar inconsistencias de modelo
+- Consentimiento: alinear columnas (`id_consentimiento`, `id_cliente`) con controladores.
+- Roles: alinear constraint de DB con roles reales usados por rutas (`aux_admin`, `aux_vet`, etc.).
 
-4. Seguridad de superficie
-- Eliminar o proteger `/api/test` por entorno y rol admin.
-- Reactivar rate limiting real.
-- Eliminar fallback hardcoded de JWT secret (fail-fast).
-- Restringir CORS de uploads a dominios conocidos.
+4. Cerrar hardening de seguridad pendiente
+- Aplicar rate limiting real en auth/admin/general (no solo público).
+- Reactivar guard en `change-password`.
 
-5. Confiabilidad operativa
-- Corregir inconsistencias de esquema/código (`auth` vs `vetplus_auth`, ids).
-- Corregir transacciones con `client = await pool.connect()` + `client.query(...)`.
+5. Validación final de RLS en runtime
+- Ejecutar pruebas funcionales por tenant para confirmar aislamiento y ausencia de regresiones.
 
-6. Frontend
-- Reactivar `AuthGuard`.
-- Introducir tenant context por subdominio o config centralizada.
+6. Pruebas y verificación final
+- Pruebas de integración por tenant.
+- Pruebas de regresión en consentimiento/pacientes/citas.
 
 ## Cambios opcionales (mediano plazo)
 
@@ -347,6 +360,8 @@ const req2 = req.clone({
 
 ## Veredicto Final
 
-VetPlus, en su estado actual, NO debe salir como SaaS multi-tenant a producción.
+VetPlus avanzó de forma importante y ya tiene base técnica multi-tenant en BD (tenants + tenant_id + RLS) y hardening relevante de seguridad.
 
-Sí puede evolucionar de forma segura en corto plazo si se ejecutan primero los cambios urgentes de aislamiento, autenticación multi-tenant y hardening de seguridad descritos en este documento.
+Sin embargo, todavía NO debe salir como SaaS multi-tenant a producción hasta cerrar los pendientes críticos de adopción en controladores, consistencia de auth tenant-aware y alineación final de modelo/roles.
+
+Nivel de preparación estimado actual: 65%-75%.

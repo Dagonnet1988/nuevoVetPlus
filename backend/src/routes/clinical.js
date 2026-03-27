@@ -41,6 +41,7 @@ router.get('/veterinarians',
   authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
   async (req, res) => {
     try {
+      const tenantId = req.tenantId;
       const { query } = await import('../config/database.js');
       const result = await query(`
         SELECT 
@@ -49,10 +50,11 @@ router.get('/veterinarians',
           email,
           'Medicina Veterinaria' as especialidad
         FROM vetplus_auth.usuarios 
-        WHERE rol = 'vet' 
+        WHERE rol = 'vet'
+        AND id_tenant = $1
         AND activo = true
         ORDER BY nombre ASC
-      `);
+      `, [tenantId]);
       
       res.json({
         success: true,
@@ -84,6 +86,7 @@ router.post('/consultations/:id/upload-files',
   async (req, res) => {
     try {
       const { id } = req.params;
+      const tenantId = req.tenantId;
       const archivos = req.files || [];
 
       if (!archivos || archivos.length === 0) {
@@ -96,8 +99,8 @@ router.post('/consultations/:id/upload-files',
       // Verificar que la consulta existe
       const { query } = await import('../config/database.js');
       const consultaResult = await query(
-        'SELECT id_consulta FROM clinical.consultas_clinicas WHERE id_consulta = $1',
-        [id]
+        'SELECT id_consulta FROM clinical.consultas_clinicas WHERE id_consulta = $1 AND id_tenant = $2',
+        [id, tenantId]
       );
 
       if (consultaResult.rows.length === 0) {
@@ -178,16 +181,18 @@ router.post('/consultations/:id/upload-files',
 // Ruta para obtener archivos de una consulta
 router.get('/consultations/:id/files',
   authenticateToken,
+  tenantContext,
   authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
   async (req, res) => {
     try {
       const { id } = req.params;
+      const tenantId = req.tenantId;
 
       // Verificar que la consulta existe
       const { query } = await import('../config/database.js');
       const consultaResult = await query(
-        'SELECT id_consulta FROM clinical.consultas_clinicas WHERE id_consulta = $1',
-        [id]
+        'SELECT id_consulta FROM clinical.consultas_clinicas WHERE id_consulta = $1 AND id_tenant = $2',
+        [id, tenantId]
       );
 
       if (consultaResult.rows.length === 0) {

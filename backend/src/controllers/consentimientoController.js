@@ -18,14 +18,15 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:4200';
 export async function crearConsentimiento(req, res) {
   const { id } = req.params; // id del cliente
   const userId = req.user?.id;
+  const tenantId = req.tenantId;
 
   try {
     // Verificar que el cliente existe
     const clienteResult = await query(
-      `SELECT id, nombre, email, telefono, cedula
+      `SELECT id_cliente, nombre, email, telefono, cedula
        FROM clinical.clientes
-       WHERE id = $1 AND activo = true`,
-      [id]
+       WHERE id_cliente = $1 AND id_tenant = $2 AND activo = true`,
+      [id, tenantId]
     );
     if (!clienteResult.rows.length) {
       return res.status(404).json({ message: 'Cliente no encontrado' });
@@ -58,10 +59,10 @@ export async function crearConsentimiento(req, res) {
 
     const insertResult = await query(
       `INSERT INTO clinical.consentimientos
-         (id_cliente, id_version, estado, token, token_expires_at, created_by)
-       VALUES ($1, $2, 'pendiente', $3, $4, $5)
-       RETURNING id, token`,
-      [id, version.id_version, token, expiresAt, userId]
+         (id_cliente, id_version, estado, token, token_expires_at, created_by, id_tenant)
+       VALUES ($1, $2, 'pendiente', $3, $4, $5, $6)
+       RETURNING id_consentimiento, token`,
+      [id, version.id_version, token, expiresAt, userId, tenantId]
     );
     const consentimiento = insertResult.rows[0];
 
@@ -78,12 +79,12 @@ export async function crearConsentimiento(req, res) {
 
     return res.status(201).json({
       message: 'Consentimiento creado exitosamente',
-      id: consentimiento.id,
+      id: consentimiento.id_consentimiento,
       token,
       firmaUrl,
       qrBase64,
       expiresAt,
-      cliente: { id: cliente.id, nombre: cliente.nombre },
+      cliente: { id: cliente.id_cliente, nombre: cliente.nombre },
       version: { id: version.id_version, titulo: version.titulo }
     });
   } catch (error) {
@@ -101,7 +102,7 @@ export async function obtenerEstadoConsentimiento(req, res) {
 
   try {
     const result = await query(
-      `SELECT c.id, c.estado, c.token, c.token_expires_at, c.firmado_en,
+      `SELECT c.id_consentimiento, c.estado, c.token, c.token_expires_at, c.firmado_en,
               c.pdf_path, c.pdf_numero, c.whatsapp_enviado, c.email_enviado,
               v.titulo AS version_titulo, v.id_version
        FROM clinical.consentimientos c
@@ -121,8 +122,8 @@ export async function obtenerEstadoConsentimiento(req, res) {
     // Marcar como expirado si venció sin firmar
     if (c.estado === 'pendiente' && new Date(c.token_expires_at) < new Date()) {
       await query(
-        `UPDATE clinical.consentimientos SET estado = 'expirado' WHERE id = $1`,
-        [c.id]
+        `UPDATE clinical.consentimientos SET estado = 'expirado' WHERE id_consentimiento = $1`,
+        [c.id_consentimiento]
       );
       c.estado = 'expirado';
     }
@@ -134,7 +135,7 @@ export async function obtenerEstadoConsentimiento(req, res) {
     return res.json({
       estado: c.estado,
       consentimiento: {
-        id: c.id,
+        id: c.id_consentimiento,
         estado: c.estado,
         firmaUrl,
         expiresAt: c.token_expires_at,
@@ -160,12 +161,13 @@ export async function obtenerEstadoConsentimiento(req, res) {
 export async function reenviarEnlaceConsentimiento(req, res) {
   const { id } = req.params;
   const userId = req.user?.id;
+  const tenantId = req.tenantId;
 
   try {
     // Verificar cliente
     const clienteResult = await query(
-      `SELECT id, nombre FROM clinical.clientes WHERE id = $1 AND activo = true`,
-      [id]
+      `SELECT id_cliente, nombre FROM clinical.clientes WHERE id_cliente = $1 AND id_tenant = $2 AND activo = true`,
+      [id, tenantId]
     );
     if (!clienteResult.rows.length) {
       return res.status(404).json({ message: 'Cliente no encontrado' });
@@ -192,10 +194,10 @@ export async function reenviarEnlaceConsentimiento(req, res) {
 
     const insertResult = await query(
       `INSERT INTO clinical.consentimientos
-         (id_cliente, id_version, estado, token, token_expires_at, created_by)
-       VALUES ($1, $2, 'pendiente', $3, $4, $5)
-       RETURNING id, token`,
-      [id, versionResult.rows[0].id_version, token, expiresAt, userId]
+         (id_cliente, id_version, estado, token, token_expires_at, created_by, id_tenant)
+       VALUES ($1, $2, 'pendiente', $3, $4, $5, $6)
+       RETURNING id_consentimiento, token`,
+      [id, versionResult.rows[0].id_version, token, expiresAt, userId, tenantId]
     );
 
     const firmaUrl = `${FRONTEND_URL}/consentimiento/${token}`;
@@ -207,7 +209,7 @@ export async function reenviarEnlaceConsentimiento(req, res) {
 
     return res.json({
       message: 'Enlace reenviado exitosamente',
-      id: insertResult.rows[0].id,
+      id: insertResult.rows[0].id_consentimiento,
       token,
       firmaUrl,
       qrBase64,
@@ -276,12 +278,12 @@ export async function obtenerFormularioPublico(req, res) {
 
   try {
     const result = await query(
-      `SELECT c.id, c.estado, c.token_expires_at,
-              cl.id AS id_cliente, cl.nombre AS cliente_nombre, cl.cedula,
+      `SELECT c.id_consentimiento, c.estado, c.token_expires_at,
+              cl.id_cliente AS id_cliente, cl.nombre AS cliente_nombre, cl.cedula,
               v.titulo, v.texto_legal, v.id_version,
               emp.nombre_empresa, emp.logo_url
        FROM clinical.consentimientos c
-       JOIN clinical.clientes cl ON cl.id = c.id_cliente
+       JOIN clinical.clientes cl ON cl.id_cliente = c.id_cliente
        JOIN clinical.versiones_consentimiento v ON v.id_version = c.id_version
        LEFT JOIN system.configuracion_empresa emp ON emp.activa = true
        WHERE c.token = $1`,
@@ -312,7 +314,7 @@ export async function obtenerFormularioPublico(req, res) {
     }
 
     return res.json({
-      idConsentimiento: row.id,
+      idConsentimiento: row.id_consentimiento,
       cliente: {
         nombre: row.cliente_nombre,
         cedula: row.cedula
@@ -365,11 +367,11 @@ export async function firmarConsentimiento(req, res) {
   try {
     // Cargar consentimiento con datos del cliente y versión
     const consentResult = await query(
-      `SELECT c.id, c.estado, c.token_expires_at, c.id_cliente, c.id_version,
+      `SELECT c.id_consentimiento, c.estado, c.token_expires_at, c.id_cliente, c.id_version,
               cl.nombre AS cliente_nombre, cl.cedula, cl.email, cl.telefono,
               v.texto_legal, v.id_version AS ver_id
        FROM clinical.consentimientos c
-       JOIN clinical.clientes cl ON cl.id = c.id_cliente
+       JOIN clinical.clientes cl ON cl.id_cliente = c.id_cliente
        JOIN clinical.versiones_consentimiento v ON v.id_version = c.id_version
        WHERE c.token = $1`,
       [token]
@@ -416,8 +418,8 @@ export async function firmarConsentimiento(req, res) {
     await query(
       `UPDATE clinical.consentimientos
        SET firma_imagen = $1, ip_firmante = $2, device_info = $3
-       WHERE id = $4`,
-      [firmaBase64, ipFirmante, deviceInfo, row.id]
+       WHERE id_consentimiento = $4`,
+      [firmaBase64, ipFirmante, deviceInfo, row.id_consentimiento]
     );
 
     // Generar número de documento
@@ -427,7 +429,7 @@ export async function firmarConsentimiento(req, res) {
     const pdfPath = await generarPDFConsentimiento({
       consentimiento: {
         ...row,
-        id: row.id,
+        id: row.id_consentimiento,
         firma_imagen: firmaBase64,
         firmado_en: new Date().toISOString(),
         ip_firmante: ipFirmante,
@@ -451,8 +453,8 @@ export async function firmarConsentimiento(req, res) {
            firmado_en = NOW(),
            pdf_path = $1,
            pdf_numero = $2
-       WHERE id = $3`,
-      [pdfPath, pdfNumero, row.id]
+       WHERE id_consentimiento = $3`,
+      [pdfPath, pdfNumero, row.id_consentimiento]
     );
 
     // Actualizar cliente: consentimiento_firmado = true
@@ -460,8 +462,8 @@ export async function firmarConsentimiento(req, res) {
       `UPDATE clinical.clientes
        SET consentimiento_firmado = true,
            id_consentimiento_vigente = $1
-       WHERE id = $2`,
-      [row.id, row.id_cliente]
+       WHERE id_cliente = $2`,
+      [row.id_consentimiento, row.id_cliente]
     );
 
     return res.json({

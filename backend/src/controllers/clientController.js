@@ -7,6 +7,8 @@ import { v4 as uuidv4 } from 'uuid';
  */
 export async function createClient(req, res) {
   try {
+    const tenantId = req.tenantId;
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -32,8 +34,8 @@ export async function createClient(req, res) {
     const queryText = `
       INSERT INTO clinical.clientes (
         id_cliente, nombre, telefono, email, direccion, cedula,
-        fecha_nacimiento, notas, activo, created_at, updated_at, created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $9)
+        fecha_nacimiento, notas, activo, created_at, updated_at, created_by, id_tenant
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $9, $10)
       RETURNING *
     `;
 
@@ -46,7 +48,8 @@ export async function createClient(req, res) {
       cedula || null,
       fecha_nacimiento || null,
       notas || null,
-      req.user.id
+      req.user.id,
+      tenantId
     ];
 
     const result = await query(queryText, values);
@@ -81,6 +84,8 @@ export async function createClient(req, res) {
  */
 export async function getClients(req, res) {
   try {
+    const tenantId = req.tenantId;
+
     const {
       search,
       page = 1,
@@ -104,11 +109,11 @@ export async function getClients(req, res) {
         created_at,
         (SELECT COUNT(*) FROM clinical.mascotas WHERE id_cliente = c.id_cliente) as total_mascotas
       FROM clinical.clientes c
-      WHERE 1=1
+      WHERE c.id_tenant = $1
     `;
     
-    const queryParams = [];
-    let paramCount = 0;
+    const queryParams = [tenantId];
+    let paramCount = 1;
 
     // Filtro de búsqueda
     if (search) {
@@ -141,15 +146,15 @@ export async function getClients(req, res) {
     const result = await query(queryText, queryParams);
 
     // Contar total para paginación
-    let countQuery = `SELECT COUNT(*) as total FROM clinical.clientes WHERE 1=1`;
-    const countParams = [];
+    let countQuery = `SELECT COUNT(*) as total FROM clinical.clientes WHERE id_tenant = $1`;
+    const countParams = [tenantId];
     
     if (search) {
       countQuery += ` AND (
-        LOWER(nombre) LIKE LOWER($1) OR 
-        telefono LIKE $1 OR 
-        LOWER(email) LIKE LOWER($1) OR
-        cedula LIKE $1
+        LOWER(nombre) LIKE LOWER($2) OR 
+        telefono LIKE $2 OR 
+        LOWER(email) LIKE LOWER($2) OR
+        cedula LIKE $2
       )`;
       countParams.push(`%${search}%`);
     }
@@ -187,6 +192,7 @@ export async function getClients(req, res) {
 export async function getClientById(req, res) {
   try {
     const { id } = req.params;
+    const tenantId = req.tenantId;
 
     const queryText = `
       SELECT 
@@ -209,11 +215,11 @@ export async function getClientById(req, res) {
         ) as mascotas
       FROM clinical.clientes c
       LEFT JOIN clinical.mascotas m ON c.id_cliente = m.id_cliente
-      WHERE c.id_cliente = $1
+      WHERE c.id_cliente = $1 AND c.id_tenant = $2
       GROUP BY c.id_cliente
     `;
 
-    const result = await query(queryText, [id]);
+    const result = await query(queryText, [id, tenantId]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -243,6 +249,8 @@ export async function getClientById(req, res) {
  */
 export async function updateClient(req, res) {
   try {
+    const tenantId = req.tenantId;
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -276,7 +284,7 @@ export async function updateClient(req, res) {
         activo = $8,
         updated_at = CURRENT_TIMESTAMP,
         updated_by = $9
-      WHERE id_cliente = $10
+      WHERE id_cliente = $10 AND id_tenant = $11
       RETURNING *
     `;
 
@@ -290,7 +298,8 @@ export async function updateClient(req, res) {
       notas,
       activo !== undefined ? activo : true,
       req.user.id,
-      id
+      id,
+      tenantId
     ];
 
     const result = await query(queryText, values);
@@ -332,15 +341,16 @@ export async function updateClient(req, res) {
 export async function deleteClient(req, res) {
   try {
     const { id } = req.params;
+    const tenantId = req.tenantId;
 
     // Verificar si el cliente tiene mascotas activas
     const checkPetsQuery = `
       SELECT COUNT(*) as pets_count 
       FROM clinical.mascotas 
-      WHERE id_cliente = $1 AND activo = true
+      WHERE id_cliente = $1 AND id_tenant = $2 AND activo = true
     `;
     
-    const petsResult = await query(checkPetsQuery, [id]);
+    const petsResult = await query(checkPetsQuery, [id, tenantId]);
     const activePets = parseInt(petsResult.rows[0].pets_count);
 
     if (activePets > 0) {
@@ -354,11 +364,11 @@ export async function deleteClient(req, res) {
     const queryText = `
       UPDATE clinical.clientes
       SET activo = false, updated_at = CURRENT_TIMESTAMP, updated_by = $2
-      WHERE id_cliente = $1
+      WHERE id_cliente = $1 AND id_tenant = $3
       RETURNING nombre
     `;
 
-    const result = await query(queryText, [id, req.user.id]);
+    const result = await query(queryText, [id, req.user.id, tenantId]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({

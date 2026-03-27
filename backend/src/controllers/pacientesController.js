@@ -19,6 +19,8 @@ export async function createPacienteCompleto(req, res) {
       });
     }
 
+    const tenantId = req.tenantId;
+
     const {
       // Datos del cliente
       id_cliente_existente, // Nuevo campo opcional para usar cliente existente
@@ -74,8 +76,8 @@ export async function createPacienteCompleto(req, res) {
       if (id_cliente_existente) {
         // Usar cliente existente
         const clienteResult = await txClient.query(
-          'SELECT * FROM clinical.clientes WHERE id_cliente = $1 AND activo = true',
-          [id_cliente_existente]
+          'SELECT * FROM clinical.clientes WHERE id_cliente = $1 AND id_tenant = $2 AND activo = true',
+          [id_cliente_existente, tenantId]
         );
 
         if (clienteResult.rows.length === 0) {
@@ -94,8 +96,8 @@ export async function createPacienteCompleto(req, res) {
 
         const clienteQuery = `
           INSERT INTO clinical.clientes (
-            id_cliente, nombre, cedula, telefono, email, direccion, activo, created_at, updated_at, created_by
-          ) VALUES ($1, $2, $3, $4, $5, $6, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $7)
+            id_cliente, nombre, cedula, telefono, email, direccion, activo, created_at, updated_at, created_by, id_tenant
+          ) VALUES ($1, $2, $3, $4, $5, $6, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $7, $8)
           RETURNING *
         `;
 
@@ -106,7 +108,8 @@ export async function createPacienteCompleto(req, res) {
           telefono,
           email || null,
           direccion || null,
-          req.user.id
+          req.user.id,
+          tenantId
         ];
 
         const clienteResult = await txClient.query(clienteQuery, clienteValues);
@@ -128,8 +131,8 @@ export async function createPacienteCompleto(req, res) {
         INSERT INTO clinical.mascotas (
           id_mascota, id_cliente, nombre, especie, raza, edad, sexo,
           peso, color, fecha_nacimiento, microchip, notas, foto_url, activo,
-          created_at, updated_at, created_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $14)
+          created_at, updated_at, created_by, id_tenant
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $14, $15)
         RETURNING *
       `;
 
@@ -147,7 +150,8 @@ export async function createPacienteCompleto(req, res) {
         microchip || null,
         notas || null,
         fotoDefault,
-        req.user.id
+        req.user.id,
+        tenantId
       ];
 
       const mascotaResult = await txClient.query(mascotaQuery, mascotaValues);
@@ -207,6 +211,7 @@ export async function createPacienteCompleto(req, res) {
 export async function getPacienteById(req, res) {
   try {
     const { id } = req.params;
+    const tenantId = req.tenantId;
 
     if (!id) {
       return res.status(400).json({
@@ -244,10 +249,10 @@ export async function getPacienteById(req, res) {
         c.created_at as cliente_created_at
       FROM clinical.mascotas m
       INNER JOIN clinical.clientes c ON m.id_cliente = c.id_cliente
-      WHERE m.id_mascota = $1 AND c.activo = true
+      WHERE m.id_mascota = $1 AND m.id_tenant = $2 AND c.activo = true
     `;
 
-    const result = await query(pacienteQuery, [id]);
+    const result = await query(pacienteQuery, [id, tenantId]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -330,10 +335,12 @@ export async function updateMascota(req, res) {
       });
     }
 
+    const tenantId = req.tenantId;
+
     // Verificar que la mascota existe
     const mascotaExiste = await query(
-      'SELECT id_mascota FROM clinical.mascotas WHERE id_mascota = $1',
-      [id]
+      'SELECT id_mascota FROM clinical.mascotas WHERE id_mascota = $1 AND id_tenant = $2',
+      [id, tenantId]
     );
 
     if (mascotaExiste.rows.length === 0) {
@@ -364,13 +371,14 @@ export async function updateMascota(req, res) {
       });
     }
 
-    // Agregar el ID al final
+    // Agregar el ID y tenant al final
     values.push(id);
+    values.push(tenantId);
 
     const updateQuery = `
       UPDATE clinical.mascotas 
       SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP
-      WHERE id_mascota = $${paramIndex}
+      WHERE id_mascota = $${paramIndex} AND id_tenant = $${paramIndex + 1}
       RETURNING *
     `;
 
@@ -436,8 +444,8 @@ export async function updatePacienteCompleto(req, res) {
 
       // 1. Obtener datos actuales de la mascota para obtener el id_cliente
       const mascotaActual = await txClient.query(
-        'SELECT id_cliente FROM clinical.mascotas WHERE id_mascota = $1 AND activo = true',
-        [id]
+        'SELECT id_cliente FROM clinical.mascotas WHERE id_mascota = $1 AND id_tenant = $2 AND activo = true',
+        [id, tenantId]
       );
 
       if (mascotaActual.rows.length === 0) {
@@ -461,7 +469,7 @@ export async function updatePacienteCompleto(req, res) {
           direccion = $6,
           updated_at = CURRENT_TIMESTAMP,
           updated_by = $7
-        WHERE id_cliente = $1
+        WHERE id_cliente = $1 AND id_tenant = $8
         RETURNING *
       `;
 
@@ -472,7 +480,8 @@ export async function updatePacienteCompleto(req, res) {
         telefono,
         email || null,
         direccion || null,
-        req.user.id
+        req.user.id,
+        tenantId
       ];
 
       await txClient.query(clienteQuery, clienteValues);
@@ -501,7 +510,7 @@ export async function updatePacienteCompleto(req, res) {
           esterilizado = COALESCE($12, esterilizado),
           updated_at = CURRENT_TIMESTAMP,
           updated_by = $13
-        WHERE id_mascota = $1
+        WHERE id_mascota = $1 AND id_tenant = $14
         RETURNING *
       `;
 
@@ -518,7 +527,8 @@ export async function updatePacienteCompleto(req, res) {
         microchip || null,
         notas || null,
         esterilizado !== undefined ? esterilizado : null,
-        req.user.id
+        req.user.id,
+        tenantId
       ];
 
       const mascotaResult = await txClient.query(mascotaQuery, mascotaValues);
@@ -608,11 +618,11 @@ export async function getMascotasConCliente(req, res) {
         c.cedula as cliente_cedula
       FROM clinical.mascotas m
       LEFT JOIN clinical.clientes c ON m.id_cliente = c.id_cliente
-      WHERE 1=1
+      WHERE m.id_tenant = $1
     `;
     
-    const queryParams = [];
-    let paramCount = 0;
+    const queryParams = [req.tenantId];
+    let paramCount = 1;
 
     // Filtro de búsqueda
     if (search) {
@@ -669,10 +679,10 @@ export async function getMascotasConCliente(req, res) {
       SELECT COUNT(*) as total 
       FROM clinical.mascotas m
       LEFT JOIN clinical.clientes c ON m.id_cliente = c.id_cliente
-      WHERE 1=1
+      WHERE m.id_tenant = $1
     `;
-    const countParams = [];
-    let countParamCount = 0;
+    const countParams = [req.tenantId];
+    let countParamCount = 1;
     
     if (search) {
       countParamCount++;
@@ -847,6 +857,7 @@ export async function getRazasByEspecie(req, res) {
  */
 export async function getEstadisticasPacientes(req, res) {
   try {
+    const tenantId = req.tenantId;
     const statsQuery = `
       SELECT 
         COUNT(DISTINCT m.id_mascota) as total_pacientes,
@@ -855,10 +866,10 @@ export async function getEstadisticasPacientes(req, res) {
         COUNT(CASE WHEN m.created_at >= CURRENT_DATE - INTERVAL '30 days' THEN 1 END) as nuevos_ultimo_mes
       FROM clinical.mascotas m
       LEFT JOIN clinical.clientes c ON m.id_cliente = c.id_cliente
-      WHERE m.activo = true
+      WHERE m.activo = true AND m.id_tenant = $1
     `;
 
-    const result = await query(statsQuery);
+    const result = await query(statsQuery, [tenantId]);
     const stats = result.rows[0];
 
     res.json({
@@ -1116,10 +1127,12 @@ export async function createMascotaParaCliente(req, res) {
       return res.status(400).json({ success: false, message: 'nombre_mascota y especie son requeridos' });
     }
 
+    const tenantId = req.tenantId;
+
     // Verificar que el cliente existe
     const clienteResult = await query(
-      'SELECT id_cliente FROM clinical.clientes WHERE id_cliente = $1 AND activo = true',
-      [id_cliente]
+      'SELECT id_cliente FROM clinical.clientes WHERE id_cliente = $1 AND id_tenant = $2 AND activo = true',
+      [id_cliente, tenantId]
     );
     if (clienteResult.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Cliente no encontrado' });
@@ -1135,14 +1148,14 @@ export async function createMascotaParaCliente(req, res) {
     const result = await query(
       `INSERT INTO clinical.mascotas
         (id_cliente, nombre, especie, raza, edad, sexo, peso, color,
-         fecha_nacimiento, esterilizado, microchip, notas, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+         fecha_nacimiento, esterilizado, microchip, notas, created_by, id_tenant)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        RETURNING *`,
       [
         id_cliente, nombre_mascota, especie, raza || null, edad, sexoDb,
         peso || null, color || null, fecha_nacimiento || null,
         esterilizado !== undefined ? esterilizado : false,
-        microchip || null, notas || null, req.user.id
+        microchip || null, notas || null, req.user.id, tenantId
       ]
     );
 
@@ -1178,6 +1191,7 @@ export async function inactivarMascota(req, res) {
     const { id } = req.params;
     const { motivo } = req.body; // 'Fallecida', 'Transferida', 'Error de registro', 'Otro'
 
+    const tenantId = req.tenantId;
     const motivosValidos = ['Fallecida', 'Transferida', 'Error de registro', 'Otro'];
     if (!motivo || !motivosValidos.includes(motivo)) {
       return res.status(400).json({
@@ -1189,10 +1203,10 @@ export async function inactivarMascota(req, res) {
     // Verificar si tiene consultas o citas activas
     const relacionesResult = await query(
       `SELECT
-        (SELECT COUNT(*) FROM clinical.consultas_clinicas WHERE id_mascota = $1) AS consultas,
+        (SELECT COUNT(*) FROM clinical.consultas_clinicas WHERE id_mascota = $1 AND id_tenant = $2) AS consultas,
         (SELECT COUNT(*) FROM clinical.calendario_citas
-         WHERE id_mascota = $1 AND estado NOT IN ('cancelada', 'completada')) AS citas_activas`,
-      [id]
+         WHERE id_mascota = $1 AND id_tenant = $2 AND estado NOT IN ('cancelada', 'completada')) AS citas_activas`,
+      [id, tenantId]
     );
 
     const { consultas, citas_activas } = relacionesResult.rows[0];
@@ -1219,9 +1233,9 @@ export async function inactivarMascota(req, res) {
              ELSE notas || E'\n[Inactivada: ' || $2 || ']'
            END,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id_mascota = $1 AND activo = true
+       WHERE id_mascota = $1 AND id_tenant = $3 AND activo = true
        RETURNING id_mascota, nombre`,
-      [id, motivo]
+      [id, motivo, tenantId]
     );
 
     if (result.rows.length === 0) {

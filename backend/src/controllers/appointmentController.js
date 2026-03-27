@@ -350,10 +350,11 @@ export const createAppointment = async (req, res) => {
         const codigo_cita = generateAppointmentCode();
         const created_by = req.user.id;
         
+        const tenantId = req.tenantId;
         // Verificar que la mascota existe
         const mascotaResult = await query(
-            'SELECT id_mascota, nombre FROM clinical.mascotas WHERE id_mascota = $1 AND activo = true',
-            [id_mascota]
+            'SELECT id_mascota, nombre FROM clinical.mascotas WHERE id_mascota = $1 AND id_tenant = $2 AND activo = true',
+            [id_mascota, tenantId]
         );
         
         if (mascotaResult.rows.length === 0) {
@@ -404,14 +405,14 @@ export const createAppointment = async (req, res) => {
         const insertQuery = `
             INSERT INTO clinical.calendario_citas (
                 id_cita, codigo_cita, id_mascota, id_veterinario,
-                fecha_inicio, fecha_fin, tipo, motivo, notas, created_by
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                fecha_inicio, fecha_fin, tipo, motivo, notas, created_by, id_tenant
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING *
         `;
         
         const result = await query(insertQuery, [
             id_cita, codigo_cita, id_mascota, id_veterinario,
-            fechaInicioFormato, fechaFinFormato, tipo, motivo, notas, created_by
+            fechaInicioFormato, fechaFinFormato, tipo, motivo, notas, created_by, tenantId
         ]);
         
         // Obtener información completa de la cita creada
@@ -462,9 +463,10 @@ export const getAppointments = async (req, res) => {
             limit, offset, fecha_inicio, fecha_fin, estado, tipo, id_veterinario, id_mascota
         });
         
-        let whereConditions = ['1=1']; // No excluir ningún estado por defecto
-        let queryParams = [];
-        let paramCount = 0;
+        const tenantId = req.tenantId;
+        let whereConditions = [`c.id_tenant = $1`]; // Filtrar por tenant
+        let queryParams = [tenantId];
+        let paramCount = 1;
         
         // Construir filtros dinámicos
         if (fecha_inicio) {
@@ -594,7 +596,7 @@ export const getAppointments = async (req, res) => {
 export const getAppointmentById = async (req, res) => {
     try {
         const { id } = req.params;
-        const cita = await getAppointmentWithDetails(id);
+        const cita = await getAppointmentWithDetails(id, req.tenantId);
         
         if (!cita) {
             return res.status(404).json({
@@ -629,10 +631,11 @@ export const updateAppointment = async (req, res) => {
         const { id } = req.params;
         const updateData = req.body;
         
+        const tenantId = req.tenantId;
         // Verificar que la cita existe
         const citaExistente = await query(
-            'SELECT * FROM clinical.calendario_citas WHERE id_cita = $1',
-            [id]
+            'SELECT * FROM clinical.calendario_citas WHERE id_cita = $1 AND id_tenant = $2',
+            [id, tenantId]
         );
         
         if (citaExistente.rows.length === 0) {
@@ -708,11 +711,12 @@ export const updateAppointment = async (req, res) => {
         
         updateFields.push('updated_at = CURRENT_TIMESTAMP');
         updateValues.push(id);
+        updateValues.push(tenantId);
         
         const updateQuery = `
             UPDATE clinical.calendario_citas 
             SET ${updateFields.join(', ')}
-            WHERE id_cita = $${paramCount + 1}
+            WHERE id_cita = $${paramCount + 1} AND id_tenant = $${paramCount + 2}
             RETURNING *
         `;
         
@@ -768,10 +772,11 @@ export const updateAppointmentStatus = async (req, res) => {
         const estadoDb = mapFrontendToDb(estado);
         console.log(`🔄 Mapeando estado: ${estado} -> ${estadoDb}`);
         
+        const tenantId = req.tenantId;
         // Verificar que la cita existe antes de iniciar la transacción
         const citaExistente = await query(
-            'SELECT id_cita, estado FROM clinical.calendario_citas WHERE id_cita = $1',
-            [id]
+            'SELECT id_cita, estado FROM clinical.calendario_citas WHERE id_cita = $1 AND id_tenant = $2',
+            [id, tenantId]
         );
 
         if (citaExistente.rows.length === 0) {
@@ -793,8 +798,8 @@ export const updateAppointmentStatus = async (req, res) => {
 
             // Verificar si existe consulta clínica para esta cita
             const consultaResult = await query(
-                'SELECT id_consulta, estado FROM clinical.consultas_clinicas WHERE id_cita = $1',
-                [id]
+                'SELECT id_consulta, estado FROM clinical.consultas_clinicas WHERE id_cita = $1 AND id_tenant = $2',
+                [id, tenantId]
             );
 
             if (consultaResult.rows.length === 0) {
@@ -828,9 +833,9 @@ export const updateAppointmentStatus = async (req, res) => {
             const result = await txClient.query(`
                 UPDATE clinical.calendario_citas
                 SET estado = $1, notas = COALESCE($2, notas), updated_at = CURRENT_TIMESTAMP
-                WHERE id_cita = $3
+                WHERE id_cita = $3 AND id_tenant = $4
                 RETURNING *
-            `, [estadoDb, notas, id]);
+            `, [estadoDb, notas, id, tenantId]);
 
             if (result.rows.length === 0) {
                 console.log('❌ Error: UPDATE no afectó ninguna fila');
@@ -858,8 +863,8 @@ export const updateAppointmentStatus = async (req, res) => {
                     // Verificar si ya existe una consulta clínica para esta cita
                     const existingConsulta = await txClient.query(`
                         SELECT id_consulta FROM clinical.consultas_clinicas
-                        WHERE id_cita = $1
-                    `, [id]);
+                        WHERE id_cita = $1 AND id_tenant = $2
+                    `, [id, tenantId]);
 
                     if (existingConsulta.rows.length === 0) {
                         console.log('🏥 Auto-creando historia clínica para cita en curso...');
@@ -875,15 +880,17 @@ export const updateAppointmentStatus = async (req, res) => {
                                 id_mascota,
                                 id_veterinario,
                                 motivo,
-                                estado
-                            ) VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5)
+                                estado,
+                                id_tenant
+                            ) VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6)
                             RETURNING id_consulta
                         `, [
                             codigoConsulta,
                             citaData.id_mascota,
                             citaData.id_veterinario,
                             citaData.motivo || 'Consulta programada',
-                            'En Curso'
+                            'En Curso',
+                            tenantId
                         ]);
 
                         if (consultaResult.rows.length === 0) {
@@ -921,8 +928,8 @@ export const updateAppointmentStatus = async (req, res) => {
                     // Verificar si ya existe una consulta clínica para esta cita
                     const existingConsulta = await txClient.query(`
                         SELECT id_consulta FROM clinical.consultas_clinicas
-                        WHERE id_cita = $1
-                    `, [id]);
+                        WHERE id_cita = $1 AND id_tenant = $2
+                    `, [id, tenantId]);
 
                     if (existingConsulta.rows.length === 0) {
                         console.log('🏥 Auto-creando historia clínica para cita completada...');
@@ -938,15 +945,17 @@ export const updateAppointmentStatus = async (req, res) => {
                                 id_mascota,
                                 id_veterinario,
                                 motivo,
-                                estado
-                            ) VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5)
+                                estado,
+                                id_tenant
+                            ) VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6)
                             RETURNING id_consulta
                         `, [
                             codigoConsulta,
                             citaData.id_mascota,
                             citaData.id_veterinario,
                             citaData.motivo || 'Consulta programada',
-                            'Completada'
+                            'Completada',
+                            tenantId
                         ]);
 
                         if (consultaResult.rows.length === 0) {
@@ -1994,7 +2003,8 @@ const formatearFechaColombia = (timestamp) => {
 /**
  * Función auxiliar para obtener cita con detalles completos
  */
-const getAppointmentWithDetails = async (id_cita) => {
+const getAppointmentWithDetails = async (id_cita, tenantId = null) => {
+    const tenantFilter = tenantId ? ' AND c.id_tenant = $2' : '';
     const detailQuery = `
         SELECT 
             c.*,
@@ -2021,10 +2031,10 @@ const getAppointmentWithDetails = async (id_cita) => {
         LEFT JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
         LEFT JOIN vetplus_auth.usuarios v ON c.id_veterinario = v.id_usuario
         LEFT JOIN clinical.consultas_clinicas con ON c.id_consulta = con.id_consulta
-        WHERE c.id_cita = $1
+        WHERE c.id_cita = $1${tenantFilter}
     `;
     
-    const result = await query(detailQuery, [id_cita]);
+    const result = await query(detailQuery, tenantId ? [id_cita, tenantId] : [id_cita]);
     const cita = result.rows[0];
     
     if (cita) {

@@ -66,6 +66,7 @@ class DBInit {
       { file: '12_tenant_columns.sql', desc: 'MT1 — Columna id_tenant en tablas core' },
       { file: '13_rls_policies.sql', desc: 'MT3 — Row Level Security por tenant' }
     ];
+    for (const { file, desc } of migrationFiles) {
       const filePath = path.join(this.schemasPath, file);
       try {
         await fs.access(filePath);
