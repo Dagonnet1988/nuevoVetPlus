@@ -658,9 +658,7 @@ export const getUserStats = async (req, res) => {
                 COUNT(CASE WHEN activo = false THEN 1 END) as usuarios_inactivos,
                 COUNT(CASE WHEN rol = 'admin' THEN 1 END) as administradores,
                 COUNT(CASE WHEN rol = 'vet' THEN 1 END) as veterinarios,
-                COUNT(CASE WHEN rol IN ('aux_admin', 'aux_vet') THEN 1 END) as auxiliares,
-                COUNT(CASE WHEN rol = 'aux_admin' THEN 1 END) as aux_admin,
-                COUNT(CASE WHEN rol = 'aux_vet' THEN 1 END) as aux_vet,
+                COUNT(CASE WHEN rol = 'aux' THEN 1 END) as auxiliares,
                 COUNT(CASE WHEN ultimo_login >= CURRENT_DATE - INTERVAL '7 days' THEN 1 END) as usuarios_activos_semana,
                 COUNT(CASE WHEN bloqueado_hasta > CURRENT_TIMESTAMP THEN 1 END) as usuarios_bloqueados
             FROM vetplus_auth.usuarios
@@ -678,8 +676,6 @@ export const getUserStats = async (req, res) => {
                 administradores: parseInt(stats.administradores),
                 veterinarios: parseInt(stats.veterinarios),
                 auxiliares: parseInt(stats.auxiliares),
-                aux_admin: parseInt(stats.aux_admin || 0),
-                aux_vet: parseInt(stats.aux_vet || 0),
                 usuarios_activos_semana: parseInt(stats.usuarios_activos_semana),
                 usuarios_bloqueados: parseInt(stats.usuarios_bloqueados)
             }

@@ -301,7 +301,7 @@ Nro. Documento: [PDF_NUMERO]
 - ⚠️ `SET LOCAL app.tenant_id` para RLS: los controladores filtran con `id_tenant` en WHERE explícito pero aún no activan el parámetro de sesión PG que dispara las RLS policies.
 
 #### Pendiente crítico
-- ❌ Alinear schema/roles con rutas (`aux_admin`, `aux_vet`, `assistant`).
+- ❌ Alinear schema/roles con rutas (`aux_admin`, `aux_vet`, `assistant`). ✅ **RESUELTO** — Roles unificados a `admin`/`vet`/`aux` en DB constraint, rutas, controladores, swagger y validadores. Migración `14_roles_alignment.sql` creada.
 
 ---
 

@@ -177,7 +177,7 @@ const options = {
                                         id: { type: 'string', format: 'uuid' },
                                         nombre: { type: 'string', example: 'Juan Pérez' },
                                         email: { type: 'string', example: 'admin@vetplus.com' },
-                                        rol: { type: 'string', enum: ['admin', 'vet', 'auxiliar'] }
+                                        rol: { type: 'string', enum: ['admin', 'vet', 'aux'] }
                                     }
                                 }
                             }

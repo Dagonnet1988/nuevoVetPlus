@@ -15,7 +15,7 @@ CREATE TABLE vetplus_auth.usuarios (
     telefono VARCHAR(20),
     direccion TEXT,
     password_hash VARCHAR(255) NOT NULL,
-    rol VARCHAR(20) NOT NULL CHECK (rol IN ('admin', 'vet', 'aux', 'veterinario', 'auxiliar')),
+    rol VARCHAR(20) NOT NULL CHECK (rol IN ('admin', 'vet', 'aux')),
     especialidad VARCHAR(100),
     numero_licencia VARCHAR(50),
     activo BOOLEAN DEFAULT true,

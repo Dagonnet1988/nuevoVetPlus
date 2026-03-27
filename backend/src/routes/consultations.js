@@ -36,7 +36,7 @@ router.post('/',
 // ✅ LISTAR CONSULTAS CON FILTROS Y PAGINACIÓN
 // GET /api/clinical/consultations?limit=10&offset=0&estado=Completada&veterinario=uuid&mascota=uuid&fecha_desde=2024-01-01&fecha_hasta=2024-12-31
 router.get('/',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']), // Todos los roles pueden consultar
+    authorize(['admin', 'vet', 'aux']), // Todos los roles pueden consultar
     validateConsultationFilters,
     validateRequest,
     getConsultations
@@ -59,14 +59,14 @@ router.post('/from-appointment/:id_cita',
 // ✅ OBTENER CONSULTA CLÍNICA POR ID DE CITA
 // GET /api/clinical/consultations/by-appointment/:id_cita
 router.get('/by-appointment/:id_cita',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     getConsultationByAppointmentId
 );
 
 // ✅ OBTENER CONSULTA POR ID
 // GET /api/clinical/consultations/:id
 router.get('/:id',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateConsultationId,
     validateRequest,
     getConsultationById
@@ -75,7 +75,7 @@ router.get('/:id',
 // ✅ OBTENER CONSULTAS POR MASCOTA (HISTORIAL CLÍNICO)
 // GET /api/clinical/consultations/pet/:id
 router.get('/pet/:id',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validatePetId,
     validateRequest,
     getConsultationsByPet
@@ -84,7 +84,7 @@ router.get('/pet/:id',
 // ✅ OBTENER HISTORIAL CLÍNICO COMPLETO DE UNA MASCOTA
 // GET /api/clinical/consultations/pet/:id/history
 router.get('/pet/:id/history',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validatePetId,
     validateRequest,
     getConsultationsByPet // Usa la misma función que el endpoint anterior
@@ -93,7 +93,7 @@ router.get('/pet/:id/history',
 // ✅ ALIAS PARA COMPATIBILIDAD - HISTORIAL CLÍNICO POR PACIENTE
 // GET /api/clinical/consultations/paciente/:id/history
 router.get('/paciente/:id/history',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validatePetId,
     validateRequest,
     getConsultationsByPet // Usa la misma función que el endpoint anterior

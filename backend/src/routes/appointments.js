@@ -42,7 +42,7 @@ router.use(authenticateToken);
  */
 router.post(
     '/',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateCreateAppointment,
     validateRequest,
     createAppointment
@@ -55,7 +55,7 @@ router.post(
  */
 router.get(
     '/',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateGetAppointments,
     validateRequest,
     getAppointments
@@ -68,7 +68,7 @@ router.get(
  */
 router.get(
     '/calendar',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     getCalendarView
 );
 
@@ -79,7 +79,7 @@ router.get(
  */
 router.get(
     '/stats',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     getAppointmentStats
 );
 
@@ -95,7 +95,7 @@ router.get(
     validateRequest,
     (req, res, next) => {
         // Los veterinarios solo pueden ver sus propias citas
-        if (req.user.role === 'veterinario' && req.user.id !== req.params.id) {
+        if (req.user.rol === 'vet' && req.user.id !== req.params.id) {
             return res.status(403).json({
                 success: false,
                 message: 'No tiene permisos para ver las citas de otro veterinario'
@@ -113,7 +113,7 @@ router.get(
  */
 router.get(
     '/pet/:id',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateUUIDParam,
     validateRequest,
     getAppointmentsByPet
@@ -126,7 +126,7 @@ router.get(
  */
 router.get(
     '/:id',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateUUIDParam,
     validateRequest,
     getAppointmentById
@@ -152,7 +152,7 @@ router.put(
  */
 router.patch(
     '/:id/status',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateUpdateAppointmentStatus,
     validateRequest,
     updateAppointmentStatus
@@ -191,7 +191,7 @@ router.post(
  */
 router.post(
     '/force-sync-google',
-    authorize(['admin', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'aux']),
     syncAllPendingAppointments
 );
 
@@ -202,7 +202,7 @@ router.post(
  */
 router.post(
     '/sync-all-pending',
-    authorize(['admin', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'aux']),
     syncAllPendingAppointments
 );
 
@@ -226,7 +226,7 @@ router.get(
  */
 router.get(
     '/vet/:id/suggest-slots',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateUUIDParam,
     validateRequest,
     suggestAvailableSlots
@@ -239,7 +239,7 @@ router.get(
  */
 router.get(
     '/veterinarians',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     async (req, res) => {
         try {
             const result = await query(`
@@ -278,7 +278,7 @@ router.get(
  */
 router.post(
     '/:id/sync-calendar',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateUUIDParam,
     validateRequest,
     syncAppointmentWithCalendar
@@ -291,7 +291,7 @@ router.post(
  */
 router.get(
     '/:id/consultation',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateUUIDParam,
     validateRequest,
     getAppointmentConsultation

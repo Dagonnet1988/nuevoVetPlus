@@ -38,7 +38,7 @@ router.use('/pacientes', authenticateToken, tenantContext, pacientesRoutes);
 router.get('/veterinarians',
   authenticateToken,
   tenantContext,
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  authorize(['admin', 'vet', 'aux']),
   async (req, res) => {
     try {
       const tenantId = req.tenantId;
@@ -74,7 +74,7 @@ router.get('/veterinarians',
 router.post('/consultations/:id/upload-files',
   authenticateToken,
   tenantContext,
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  authorize(['admin', 'vet', 'aux']),
   (req, res, next) => {
     uploadHistoriaClinicaArchivos(req, res, (err) => {
       if (err) {
@@ -182,7 +182,7 @@ router.post('/consultations/:id/upload-files',
 router.get('/consultations/:id/files',
   authenticateToken,
   tenantContext,
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  authorize(['admin', 'vet', 'aux']),
   async (req, res) => {
     try {
       const { id } = req.params;
@@ -262,7 +262,7 @@ router.get('/consultations/:id/files',
 // Ruta para eliminar archivo de consulta
 router.delete('/consultations/:id/files/:fileId',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux_admin']),
+  authorize(['admin', 'vet']),
   async (req, res) => {
     try {
       const { id, fileId } = req.params;
