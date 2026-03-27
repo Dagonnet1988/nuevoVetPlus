@@ -30,6 +30,7 @@ const generateToken = (user) => {
     email: user.email,
     rol: user.rol,
     nombre: user.nombre,
+    tenant_id: user.id_tenant,
     iat: Math.floor(Date.now() / 1000)
   };
 
@@ -144,7 +145,7 @@ const authenticateToken = async (req, res, next) => {
     
     // Verificar que el usuario existe y está activo
     const userResult = await query(
-      'SELECT id_usuario, email, nombre, rol, activo FROM vetplus_auth.usuarios WHERE id_usuario = $1',
+      'SELECT id_usuario, email, nombre, rol, activo, id_tenant FROM vetplus_auth.usuarios WHERE id_usuario = $1',
       [decoded.id]
     );
 
@@ -172,7 +173,8 @@ const authenticateToken = async (req, res, next) => {
       id_usuario: user.id_usuario,
       email: user.email,
       nombre: user.nombre,
-      rol: user.rol
+      rol: user.rol,
+      tenant_id: user.id_tenant
     };
 
     // Debug logging temporal
@@ -248,7 +250,7 @@ const optionalAuth = async (req, res, next) => {
         
         // Verificar que el usuario existe y está activo
         const userResult = await query(
-          'SELECT id_usuario, email, nombre, rol, activo FROM vetplus_auth.usuarios WHERE id_usuario = $1',
+          'SELECT id_usuario, email, nombre, rol, activo, id_tenant FROM vetplus_auth.usuarios WHERE id_usuario = $1',
           [decoded.id]
         );
 
@@ -258,7 +260,8 @@ const optionalAuth = async (req, res, next) => {
             id: user.id_usuario,
             email: user.email,
             nombre: user.nombre,
-            rol: user.rol
+            rol: user.rol,
+            tenant_id: user.id_tenant
           };
         }
       } catch (error) {

@@ -6,6 +6,7 @@ import consultationRoutes from './consultations.js';
 import appointmentRoutes from './appointments.js';
 import { getEspecies, getRazasByEspecie } from '../controllers/pacientesController.js';
 import { authenticateToken, authorize } from '../middleware/auth.js';
+import { tenantContext } from '../middleware/tenantContext.js';
 import { uploadHistoriaClinicaArchivos, handleUploadError } from '../middleware/uploadMiddleware.js';
 
 const router = express.Router();
@@ -22,20 +23,21 @@ router.get('/test', (req, res) => {
 });
 
 // Montar las rutas de clientes
-router.use('/clients', clientRoutes);
-router.use('/clientes', clientRoutes); // Alias en español
+router.use('/clients', authenticateToken, tenantContext, clientRoutes);
+router.use('/clientes', authenticateToken, tenantContext, clientRoutes); // Alias en español
 
 // Montar las rutas de mascotas
-router.use('/pets', petRoutes);
+router.use('/pets', authenticateToken, tenantContext, petRoutes);
 
 // Montar las rutas de pacientes (combinadas)
-router.use('/pacientes', pacientesRoutes);
+router.use('/pacientes', authenticateToken, tenantContext, pacientesRoutes);
 
 // Las rutas de especies están ahora en /pacientes/especies
 
 // Ruta directa para obtener veterinarios
 router.get('/veterinarians',
   authenticateToken,
+  tenantContext,
   authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
   async (req, res) => {
     try {
@@ -69,6 +71,7 @@ router.get('/veterinarians',
 // Ruta para subir archivos de historia clínica
 router.post('/consultations/:id/upload-files',
   authenticateToken,
+  tenantContext,
   authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
   (req, res, next) => {
     uploadHistoriaClinicaArchivos(req, res, (err) => {

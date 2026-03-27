@@ -270,8 +270,8 @@ Nro. Documento: [PDF_NUMERO]
 | Fase 1 | DB — tablas consentimiento + renumeración schemas | ✅ COMPLETO | fcc8b0e |
 | Fase 2 | Backend API consentimiento digital (5 archivos) | ✅ COMPLETO | df38930 |
 | Fase S | Seguridad urgente (hardening pre-producción) | ✅ COMPLETO | 0d857a2 |
-| Fase MT1 | Multi-tenancy DB (tenants + tenant_id) | ✅ COMPLETO | — |
-| Fase MT2 | Multi-tenancy Auth (JWT + middleware + frontend) | ⏳ PENDIENTE | — |
+| Fase MT1 | Multi-tenancy DB (tenants + tenant_id) | ✅ COMPLETO | 063e60d |
+| Fase MT2 | Multi-tenancy Auth (JWT + middleware + frontend) | ✅ COMPLETO | — |
 | Fase MT3 | RLS — aislamiento de datos por tenant | ⏳ PENDIENTE | — |
 | Fase 3 | Frontend — página pública de firma | ⏳ PENDIENTE | — |
 | Fase 4 | Frontend — panel expediente (badge + QR modal) | ⏳ PENDIENTE | — |

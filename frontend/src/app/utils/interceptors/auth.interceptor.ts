@@ -29,6 +29,12 @@ export class AuthInterceptor implements HttpInterceptor {
       });
     }
 
+    // Agregar X-Tenant-Slug resuelto desde el subdominio actual
+    const tenantSlug = window.location.hostname.split('.')[0] || 'default';
+    authReq = authReq.clone({
+      headers: authReq.headers.set('X-Tenant-Slug', tenantSlug)
+    });
+
     // Agregar headers adicionales (solo para requests que no son FormData)
     const isFormData = authReq.body instanceof FormData;
 
