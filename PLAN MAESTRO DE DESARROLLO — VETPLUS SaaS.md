@@ -287,8 +287,8 @@ Nro. Documento: [PDF_NUMERO]
 | Fase MT2 | Multi-tenancy Auth (JWT + middleware + frontend) | ✅ COMPLETA | efc2fb7 |
 | Fase MT3 | RLS — aislamiento de datos por tenant | ✅ COMPLETA (app layer; RLS PG desactivado, superuser) | 64d3704 |
 | Roles | Alineación roles admin/vet/aux | ✅ COMPLETO | efc2fb7 |
-| Fase 3 | Frontend — página pública de firma | ⏳ PENDIENTE | — |
-| Fase 4 | Frontend — panel expediente (badge + QR modal) | ⏳ PENDIENTE | — |
+| Fase 3 | Frontend — página pública de firma | ✅ COMPLETA | 1b90e9d |
+| Fase 4 | Frontend — panel expediente (badge + QR modal) + editor texto consentimiento | ⏳ PENDIENTE | — |
 | Fase 5 | WhatsApp + Email + cron recordatorio | ⏳ PENDIENTE | — |
 | Fase 6 | Legacy + deuda técnica | ⏳ PENDIENTE | — |
 | Fase C | Cierre Auditoría SaaS (Go/No-Go, C.1–C.8 ✅) | ✅ COMPLETA | — |
@@ -637,7 +637,7 @@ No se permite despliegue a producción si falla cualquiera de estos checks:
 
 ---
 
-### 🔵 FASE 3 — Frontend: página pública de firma
+### ✅ FASE 3 — Frontend: página pública de firma — COMPLETA
 
 > Sin dependencias de MT (las rutas públicas trabajan con token, no con tenant JWT).  
 > Puede desarrollarse en paralelo a las fases MT si se desea.
@@ -653,7 +653,7 @@ No se permite despliegue a producción si falla cualquiera de estos checks:
 
 ---
 
-### 🔵 FASE 4 — Frontend: panel de consentimiento en expediente
+### 🔵 FASE 4 — Frontend: panel de consentimiento en expediente + editor texto
 
 | # | Tarea | Archivo |
 | - | ----- | ------- |
@@ -662,6 +662,8 @@ No se permite despliegue a producción si falla cualquiera de estos checks:
 | 4.3 | Integrar `ConsentimientoStatusComponent` en `paciente-details.component.ts`, sección propietario | `paciente-details.component.ts` |
 | 4.4 | `QRModalComponent` — muestra QR generado + polling `/estado` cada 5s + cierre automático al firmar | `components/qr-modal/` |
 | 4.5 | Abrir `QRModalComponent` automáticamente al crear nuevo paciente (post `createPacienteCompleto`) | `paciente-form.component.ts` |
+| 4.6 | Backend: `GET/PUT /api/config/consentimiento/texto` — leer y actualizar versión activa (solo admin) | `consentimientoController.js` + `routes/` |
+| 4.7 | Frontend: panel `ConsentimientoTextoComponent` en Configuración — textarea + guardar nueva versión | `configuracion/consentimiento-texto/` |
 
 ---
 

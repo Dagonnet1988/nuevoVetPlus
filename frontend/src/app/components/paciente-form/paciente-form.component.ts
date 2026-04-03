@@ -17,8 +17,11 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatStepperModule } from '@angular/material/stepper';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 
 import { PacientesService } from '../../services/pacientes.service';
+import { ConsentimientosService } from '../../services/consentimientos.service';
+import { QRModalComponent, QRModalData } from '../qr-modal/qr-modal.component';
 import { Cliente, Mascota, PacienteFormData, CreatePacienteResponse } from '../../models/paciente.interface';
 import { sexoDbToFrontend, sexoFrontendToDb, processBackendResponse } from '../../utils/paciente.utils';
 import { environment } from '../../../environments/environment';
@@ -43,7 +46,8 @@ import { environment } from '../../../environments/environment';
     MatSnackBarModule,
     MatStepperModule,
     MatDividerModule,
-    MatChipsModule
+    MatChipsModule,
+    MatDialogModule
   ],
   template: `
     <div class="form-container">
@@ -708,6 +712,8 @@ export class PacienteFormComponent implements OnInit {
   constructor(
     private fb: FormBuilder,
     private pacientesService: PacientesService,
+    private consentimientosService: ConsentimientosService,
+    private dialog: MatDialog,
     private router: Router,
     private route: ActivatedRoute,
     private snackBar: MatSnackBar
@@ -1130,6 +1136,26 @@ export class PacienteFormComponent implements OnInit {
                 'Cerrar',
                 { duration: 3000, panelClass: ['success-snackbar'] }
               );
+
+              // Abrir QR de consentimiento automáticamente
+              const idCliente = response.data?.cliente?.id_cliente;
+              const nombreCliente = response.data?.cliente?.nombre;
+              if (idCliente) {
+                this.consentimientosService.crear(idCliente).subscribe({
+                  next: (resp) => {
+                    const data: QRModalData = {
+                      qrBase64: resp.qrBase64,
+                      firmaUrl: resp.firmaUrl,
+                      expiresAt: resp.expiresAt,
+                      idCliente,
+                      clienteNombre: nombreCliente ?? ''
+                    };
+                    this.dialog.open(QRModalComponent, { data, width: '420px' });
+                  },
+                  error: () => {} // no interrumpir el flujo si falla el consentimiento
+                });
+              }
+
               this.router.navigate(['/pacientes']);
             } catch (photoError) {
               this.loading.set(false);

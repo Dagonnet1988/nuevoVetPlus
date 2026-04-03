@@ -212,6 +212,21 @@
   font-size: 16px;
 }
 
+/* Consentimiento */
+.consent-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.consent-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
 /* Stats */
 .stats-card {
   height: fit-content;

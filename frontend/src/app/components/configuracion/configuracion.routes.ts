@@ -24,5 +24,13 @@ export const CONFIGURACION_ROUTES: Routes = [
       title: 'Configuración de Google Calendar',
       breadcrumb: 'Google Calendar'
     }
+  },
+  {
+    path: 'consentimiento-texto',
+    loadComponent: () => import('./consentimiento-texto/consentimiento-texto.component').then(m => m.ConsentimientoTextoComponent),
+    data: {
+      title: 'Texto de Consentimiento',
+      breadcrumb: 'Consentimiento'
+    }
   }
 ];

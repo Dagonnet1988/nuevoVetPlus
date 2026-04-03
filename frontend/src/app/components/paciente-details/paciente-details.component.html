@@ -229,6 +229,19 @@
                   }
                 </div>
               </div>
+
+              <!-- Consentimiento de datos personales -->
+              @if (paciente()?.cliente?.id_cliente) {
+                <mat-divider style="margin: 12px 0"></mat-divider>
+                <div class="consent-section">
+                  <span class="consent-label">Consentimiento de datos:</span>
+                  <app-consentimiento-status
+                    [idCliente]="paciente()!.cliente!.id_cliente!"
+                    [clienteNombre]="paciente()!.cliente!.nombre!"
+                  />
+                </div>
+              }
+
             </mat-card-content>
           </mat-card>
 

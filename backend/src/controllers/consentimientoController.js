@@ -260,6 +260,80 @@ export async function descargarPDFConsentimiento(req, res) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CONFIGURACIÓN — TEXTO LEGAL (solo admin)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/config/consentimiento/texto
+ * Devuelve la versión activa del texto legal (título + texto).
+ */
+export async function getTextoConsentimiento(req, res) {
+  try {
+    const result = await query(
+      `SELECT id_version, titulo, texto_legal, activa, created_at
+       FROM clinical.versiones_consentimiento
+       WHERE activa = true
+       LIMIT 1`
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ message: 'No hay versión activa del consentimiento' });
+    }
+
+    return res.json({ version: result.rows[0] });
+  } catch (error) {
+    console.error('Error en getTextoConsentimiento:', error);
+    return res.status(500).json({ message: 'Error al obtener el texto del consentimiento' });
+  }
+}
+
+/**
+ * PUT /api/config/consentimiento/texto
+ * Crea una nueva versión del texto y la activa (desactiva la anterior).
+ * Body: { titulo: string, textoLegal: string }
+ */
+export async function updateTextoConsentimiento(req, res) {
+  const { titulo, textoLegal } = req.body;
+  const userId = req.user?.id;
+
+  if (!titulo || typeof titulo !== 'string' || titulo.trim().length < 3) {
+    return res.status(400).json({ message: 'El título es requerido (mínimo 3 caracteres)' });
+  }
+  if (!textoLegal || typeof textoLegal !== 'string' || textoLegal.trim().length < 20) {
+    return res.status(400).json({ message: 'El texto legal es requerido (mínimo 20 caracteres)' });
+  }
+
+  try {
+    // Obtener el id_version máximo actual
+    const maxResult = await query(
+      `SELECT COALESCE(MAX(id_version), 0) AS max_id FROM clinical.versiones_consentimiento`
+    );
+    const newId = maxResult.rows[0].max_id + 1;
+
+    // Desactivar versión actual
+    await query(
+      `UPDATE clinical.versiones_consentimiento SET activa = false WHERE activa = true`
+    );
+
+    // Insertar nueva versión activa
+    const insertResult = await query(
+      `INSERT INTO clinical.versiones_consentimiento (id_version, titulo, texto_legal, activa, created_by)
+       VALUES ($1, $2, $3, true, $4)
+       RETURNING id_version, titulo, texto_legal, activa, created_at`,
+      [newId, titulo.trim(), textoLegal.trim(), userId]
+    );
+
+    return res.json({
+      message: 'Texto del consentimiento actualizado correctamente',
+      version: insertResult.rows[0]
+    });
+  } catch (error) {
+    console.error('Error en updateTextoConsentimiento:', error);
+    return res.status(500).json({ message: 'Error al actualizar el texto del consentimiento' });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // RUTAS PÚBLICAS (sin autenticación — token de un solo uso)
 // ─────────────────────────────────────────────────────────────────────────────
 

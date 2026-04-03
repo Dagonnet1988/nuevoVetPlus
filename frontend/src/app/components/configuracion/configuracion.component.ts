@@ -59,6 +59,15 @@ export class ConfiguracionComponent implements OnInit {
       status: 'loading'
     },
     {
+      title: 'Texto de Consentimiento',
+      description: 'Editar el texto legal que firman los propietarios de mascotas',
+      icon: 'gavel',
+      route: '/configuracion/consentimiento-texto',
+      color: '#6a1b9a',
+      adminOnly: true,
+      status: 'active'
+    },
+    {
       title: 'Sistema',
       description: 'Configuraciones generales del sistema',
       icon: 'settings',

@@ -1,0 +1,96 @@
+<!-- Cargando -->
+@if (cargando()) {
+  <div class="cs-loading">
+    <mat-spinner diameter="20"></mat-spinner>
+    <span>Verificando consentimiento…</span>
+  </div>
+}
+
+@if (!cargando() && estado()) {
+
+  <!-- Badge de estado -->
+  <div class="cs-badge-row">
+    <div class="cs-badge" [ngClass]="estado()!.estado">
+      @switch (estado()!.estado) {
+        @case ('firmado') {
+          <mat-icon>verified</mat-icon>
+          <span>Consentimiento firmado</span>
+        }
+        @case ('pendiente') {
+          <mat-icon>pending</mat-icon>
+          <span>Pendiente de firma</span>
+        }
+        @case ('expirado') {
+          <mat-icon>schedule</mat-icon>
+          <span>Enlace expirado</span>
+        }
+        @default {
+          <mat-icon>assignment_late</mat-icon>
+          <span>Sin consentimiento</span>
+        }
+      }
+    </div>
+
+    @if (estado()!.estado === 'firmado' && estado()!.consentimiento?.firmado_en) {
+      <span class="cs-date">{{ estado()!.consentimiento!.firmado_en | date:'dd/MM/yyyy' }}</span>
+    }
+  </div>
+
+  <!-- Acciones -->
+  <div class="cs-actions">
+
+    <!-- Sin consentimiento o expirado → Enviar -->
+    @if (estado()!.estado === 'sin_consentimiento' || estado()!.estado === 'expirado') {
+      <button
+        mat-stroked-button
+        color="primary"
+        [disabled]="actuando()"
+        (click)="enviarConsentimiento()"
+        matTooltip="Generar enlace de firma y mostrar QR"
+      >
+        <ng-container>
+          @if (actuando()) { <mat-spinner diameter="18" class="btn-spinner"></mat-spinner> }
+          @if (!actuando()) { <mat-icon>send</mat-icon> }
+          Pedir consentimiento
+        </ng-container>
+      </button>
+    }
+
+    <!-- Pendiente → Reenviar + Ver QR -->
+    @if (estado()!.estado === 'pendiente') {
+      <button
+        mat-stroked-button
+        [disabled]="actuando()"
+        (click)="reenviarConsentimiento()"
+        matTooltip="Generar nuevo enlace y mostrar QR"
+      >
+        <ng-container>
+          @if (actuando()) { <mat-spinner diameter="18" class="btn-spinner"></mat-spinner> }
+          @if (!actuando()) { <mat-icon>refresh</mat-icon> }
+          Reenviar
+        </ng-container>
+      </button>
+      <button mat-icon-button (click)="verQR()" matTooltip="Copiar enlace de firma">
+        <mat-icon>link</mat-icon>
+      </button>
+    }
+
+    <!-- Firmado → Descargar PDF -->
+    @if (estado()!.estado === 'firmado' && estado()!.consentimiento?.pdf_path) {
+      <button
+        mat-stroked-button
+        [disabled]="actuando()"
+        (click)="descargarPDF()"
+        matTooltip="Descargar PDF del consentimiento firmado"
+      >
+        <ng-container>
+          @if (actuando()) { <mat-spinner diameter="18" class="btn-spinner"></mat-spinner> }
+          @if (!actuando()) { <mat-icon>picture_as_pdf</mat-icon> }
+          Ver PDF
+        </ng-container>
+      </button>
+    }
+
+  </div>
+
+}

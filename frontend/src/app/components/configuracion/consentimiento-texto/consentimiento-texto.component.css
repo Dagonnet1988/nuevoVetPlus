@@ -1,0 +1,138 @@
+.ct-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  gap: 16px;
+  color: #888;
+}
+
+.ct-container {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Header */
+.ct-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.back-btn {
+  margin-top: 4px;
+}
+
+.ct-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin: 0 0 4px;
+  color: #1a1a2e;
+}
+
+.ct-title-icon {
+  color: #1976d2;
+}
+
+.ct-subtitle {
+  margin: 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+/* Badge versión */
+.ct-version-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #e3f2fd;
+  color: #1565c0;
+  border-radius: 20px;
+  padding: 4px 14px 4px 10px;
+  font-size: 0.85rem;
+
+  mat-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+  }
+}
+
+.ct-version-date {
+  color: #888;
+  font-size: 0.8rem;
+}
+
+/* Aviso */
+.ct-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #fff8e1;
+  border-left: 4px solid #f9a825;
+  border-radius: 4px;
+  padding: 10px 14px;
+
+  mat-icon {
+    color: #f57f17;
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+    margin-top: 1px;
+  }
+
+  p {
+    margin: 0;
+    font-size: 0.88rem;
+    color: #555;
+    line-height: 1.5;
+  }
+}
+
+/* Card formulario */
+.ct-card {
+  border-radius: 10px;
+}
+
+.ct-full {
+  width: 100%;
+  display: block;
+  margin-bottom: 16px;
+}
+
+.ct-textarea {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  resize: vertical;
+  min-height: 320px;
+}
+
+/* Acciones */
+.ct-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+
+  button {
+    min-width: 180px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+}
+
+.btn-spinner {
+  display: inline-flex;
+}

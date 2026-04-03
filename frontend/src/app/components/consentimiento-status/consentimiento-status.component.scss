@@ -1,0 +1,89 @@
+:host {
+  display: block;
+}
+
+.cs-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #888;
+  font-size: 0.85rem;
+  padding: 4px 0;
+}
+
+// ── Badge ────────────────────────────────────────────────────────────────────
+.cs-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.cs-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 20px;
+  padding: 3px 12px 3px 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+
+  mat-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+  }
+
+  &.firmado {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  &.pendiente {
+    background: #fff8e1;
+    color: #f57f17;
+  }
+
+  &.expirado {
+    background: #fbe9e7;
+    color: #bf360c;
+  }
+
+  &.sin_consentimiento {
+    background: #f5f5f5;
+    color: #757575;
+  }
+}
+
+.cs-date {
+  font-size: 0.8rem;
+  color: #888;
+}
+
+// ── Acciones ─────────────────────────────────────────────────────────────────
+.cs-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  button {
+    font-size: 0.82rem;
+    height: 34px;
+    line-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+
+    mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+  }
+}
+
+.btn-spinner {
+  display: inline-flex;
+}

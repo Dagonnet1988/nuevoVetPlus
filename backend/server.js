@@ -13,6 +13,7 @@ import auditRoutes from './src/routes/audit.js';
 import googleCalendarRoutes from './src/routes/googleCalendar.js';
 import empresaConfigRoutes from './src/routes/empresaConfigRoutes.js';
 import appointmentExportRoutes from './src/routes/appointmentExport.js';
+import configConsentimientoRoutes from './src/routes/configConsentimientoRoutes.js';
 import googleCalendarWebhookRoutes from './src/routes/googleCalendarWebhook.js';
 import systemStatusRoutes from './src/routes/systemStatus.js';
 import testRoutes from './src/routes/test.js';
@@ -87,6 +88,7 @@ app.use('/api/audit', auditRoutes);
 app.use('/api/google-calendar', googleCalendarRoutes);
 app.use('/api/admin/empresa', empresaConfigRoutes);
 app.use('/api/appointments/export', appointmentExportRoutes);
+app.use('/api/config/consentimiento', configConsentimientoRoutes);
 app.use('/api/google-calendar-webhook', googleCalendarWebhookRoutes);
 app.use('/api/system', systemStatusRoutes);
 

@@ -18,6 +18,7 @@ import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angu
 import { PacientesService } from '../../services/pacientes.service';
 import { CitasService } from '../../services/citas.service';
 import { ConsultasService } from '../../services/consultas.service';
+import { ConsentimientoStatusComponent } from '../consentimiento-status/consentimiento-status.component';
 import { Mascota, Cliente } from '../../models/paciente.interface';
 import { environment } from '../../../environments/environment';
 import { Subscription } from 'rxjs';
@@ -39,7 +40,8 @@ import { Subscription } from 'rxjs';
     MatSnackBarModule,
     MatTooltipModule,
     MatExpansionModule,
-    MatDialogModule
+    MatDialogModule,
+    ConsentimientoStatusComponent
   ],
   templateUrl: './paciente-details.component.html',
   styleUrls: ['./paciente-details.component.css']

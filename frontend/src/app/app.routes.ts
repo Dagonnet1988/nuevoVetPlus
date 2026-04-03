@@ -36,6 +36,13 @@ export const routes: Routes = [
     ]
   },
 
+  // Ruta pública de firma de consentimiento (sin autenticación)
+  {
+    path: 'consentimiento/:token',
+    loadComponent: () => import('./components/consentimiento-publico/consentimiento-publico.component')
+      .then(m => m.ConsentimientoPublicoComponent)
+  },
+
   // Rutas principales del sistema
   {
     path: '',

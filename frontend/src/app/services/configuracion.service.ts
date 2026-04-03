@@ -504,4 +504,16 @@ export class ConfiguracionService {
     const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
     return days[dayIndex] || '';
   }
+
+  // ===============================
+  // TEXTO DE CONSENTIMIENTO
+  // ===============================
+
+  getTextoConsentimiento(): Observable<{ version: { id_version: number; titulo: string; texto_legal: string; activa: boolean; created_at: string } }> {
+    return this.http.get<any>(`${this.API_URL}/config/consentimiento/texto`);
+  }
+
+  updateTextoConsentimiento(titulo: string, textoLegal: string): Observable<{ message: string; version: any }> {
+    return this.http.put<any>(`${this.API_URL}/config/consentimiento/texto`, { titulo, textoLegal });
+  }
 }
