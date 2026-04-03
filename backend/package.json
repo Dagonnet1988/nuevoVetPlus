@@ -14,6 +14,7 @@
     "test": "NODE_ENV=test jest",
     "test:watch": "NODE_ENV=test jest --watch",
     "test:coverage": "NODE_ENV=test jest --coverage",
+    "test:isolation": "NODE_ENV=test node --test tests/c8-tenant-isolation.test.js",
     "lint": "eslint src/ --ext .js",
     "lint:fix": "eslint src/ --ext .js --fix",
     "validate:config": "node -e \"import('./src/config/production.js').then(({validateConfig}) => validateConfig())\"",

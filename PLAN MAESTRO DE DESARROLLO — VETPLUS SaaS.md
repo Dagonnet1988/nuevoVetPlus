@@ -1,8 +1,8 @@
 # PLAN MAESTRO DE DESARROLLO — VETPLUS SaaS
-**VetPlus** | Rama: `feature/calendario-mejoras` | Actualizado: Marzo 2026 v2.2
+
+**VetPlus** | Rama: `feature/calendario-mejoras` | Actualizado: Marzo 2026 v2.1
 
 > Plan ajustado tras la **Auditoría Técnica SaaS Multi-Tenant (26/03/2026)**.  
-> v2.2 — Sprint de implementación: Fase S completada, MT2 casi completa, MT3 controladores core completados.  
 > Integra las fases originales del módulo de pacientes/consentimiento con los  
 > requisitos obligatorios de seguridad y multi-tenancy antes de producción.
 
@@ -12,7 +12,7 @@
 
 ### 1.1 Diagrama de flujo
 
-```
+```text
 RECEPCIÓN (Sistema VetPlus)                   PROPIETARIO (Su celular)
 ══════════════════════════                    ══════════════════════════
 
@@ -89,10 +89,12 @@ RECEPCIÓN (Sistema VetPlus)                   PROPIETARIO (Su celular)
     - Fecha y hora de firma
 ```
 
+---
+
 ### 1.2 Casos especiales
 
 | Caso | Comportamiento |
-|------|---------------|
+| ---- | -------------- |
 | Token expirado (>48h) | Página muestra "Enlace expirado. Solicite uno nuevo a la clínica" |
 | Token ya usado | Página muestra "Este documento ya fue firmado el [fecha]" |
 | Sin teléfono ni email | Staff imprime el QR y se lo da al propietario para escanear |
@@ -104,6 +106,7 @@ RECEPCIÓN (Sistema VetPlus)                   PROPIETARIO (Su celular)
 ## 2. NUEVAS TABLAS DE BASE DE DATOS
 
 ### 2.1 `clinical.consentimientos`
+
 ```sql
 CREATE TABLE clinical.consentimientos (
     id_consentimiento  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -147,7 +150,9 @@ CREATE INDEX idx_consentimientos_estado  ON clinical.consentimientos(estado);
 ```
 
 ### 2.2 `clinical.versiones_consentimiento`
+
 Guarda el texto legal completo de cada versión, para que el PDF siempre refleje el exacto texto que firmó el propietario.
+
 ```sql
 CREATE TABLE clinical.versiones_consentimiento (
     id_version    INTEGER PRIMARY KEY,
@@ -169,6 +174,7 @@ true);
 ```
 
 ### 2.3 Columna nueva en `clinical.clientes`
+
 ```sql
 ALTER TABLE clinical.clientes 
     ADD COLUMN consentimiento_firmado BOOLEAN DEFAULT false,
@@ -182,17 +188,17 @@ ALTER TABLE clinical.clientes
 ### 3.1 Rutas autenticadas (staff) — `/api/clinical/pacientes/:id/consentimiento`
 
 | Método | Ruta | Descripción |
-|--------|------|-------------|
+| ------ | ---- | ----------- |
 | `POST` | `/api/clinical/pacientes/:id/consentimiento` | Genera token y envía enlace al propietario |
-| `GET`  | `/api/clinical/pacientes/:id/consentimiento` | Estado actual + URL del PDF si está firmado |
+| `GET` | `/api/clinical/pacientes/:id/consentimiento` | Estado actual + URL del PDF si está firmado |
 | `POST` | `/api/clinical/pacientes/:id/consentimiento/reenviar` | Reenvía el enlace (genera nuevo token) |
-| `GET`  | `/api/clinical/pacientes/:id/consentimiento/pdf` | Descarga el PDF desde el expediente |
+| `GET` | `/api/clinical/pacientes/:id/consentimiento/pdf` | Descarga el PDF desde el expediente |
 
 ### 3.2 Rutas públicas (sin autenticación) — `/api/public/consentimiento`
 
 | Método | Ruta | Descripción |
-|--------|------|-------------|
-| `GET`  | `/api/public/consentimiento/:token` | Devuelve datos del formulario para mostrar (valida token) |
+| ------ | ---- | ----------- |
+| `GET` | `/api/public/consentimiento/:token` | Devuelve datos del formulario para mostrar (valida token) |
 | `POST` | `/api/public/consentimiento/:token/firmar` | Recibe la firma, genera PDF, actualiza estado |
 
 > ⚠️ Las rutas públicas tienen rate limiting estricto (10 req/min por IP) y validación de token en cada request.
@@ -202,23 +208,29 @@ ALTER TABLE clinical.clientes
 ## 4. COMPONENTES FRONTEND NUEVOS
 
 ### 4.1 Página pública de consentimiento
-```
+
+```text
 /consentimiento/:token  →  ConsentimientoPublicoComponent
 ```
+
 - **No requiere login** — está fuera del `AuthGuard`
 - Responsive mobile-first (se firma desde el celular)
 - Incluye canvas con `signature_pad` (npm: `signature_pad`)
 - En caso de error muestra mensaje claro (expirado, ya firmado, inválido)
 
 ### 4.2 Badge + panel en expediente del propietario
+
 En `paciente-details.component.ts` y en el formulario:
+
 - Badge `Consentimiento: ✅ Firmado` / `⏳ Pendiente` / `❌ Expirado`
 - Botón "Reenviar enlace"
 - Botón "Ver PDF"
 - Botón "Mostrar QR" (para dueños presentes)
 
 ### 4.3 QR modal en recepción
+
 Modal que aparece al crear un propietario si el dueño está presente:
+
 - Muestra el QR generado con `qrcode`
 - Instrucción: "Pida al propietario que escanee este código"
 - Automáticamente verifica si fue firmado (polling cada 5s)
@@ -228,9 +240,9 @@ Modal que aparece al crear un propietario si el dueño está presente:
 
 ## 5. TEXTO LEGAL DEL DOCUMENTO DE CONSENTIMIENTO
 
-*(Personalizable desde la configuración de empresa)*
+Personalizable desde la configuración de empresa.
 
-```
+```text
 AUTORIZACIÓN DE TRATAMIENTO DE DATOS PERSONALES
 
 En cumplimiento de la Ley 1581 de 2012 y el Decreto 1377 de 2013 
@@ -265,42 +277,49 @@ Nro. Documento: [PDF_NUMERO]
 ## 6. ESTADO ACTUAL DE IMPLEMENTACIÓN
 
 | Fase | Descripción | Estado | Commit |
-|------|-------------|--------|--------|
+| ---- | ----------- | ------ | ------ |
 | Fase 0 | 7 bug fixes críticos módulo pacientes | ✅ COMPLETO | aa24872 |
 | inactivarMascota | Reemplazar deleteMascota con inactivación + motivo | ✅ COMPLETO | 05b1d0f |
 | Fase 1 | DB — tablas consentimiento + renumeración schemas | ✅ COMPLETO | fcc8b0e |
 | Fase 2 | Backend API consentimiento digital (5 archivos) | ✅ COMPLETO | df38930 |
-| Fase S | Seguridad urgente (hardening pre-producción) | ✅ COMPLETA | 0d857a2 |
+| Fase S | Seguridad urgente (hardening pre-producción) | ✅ COMPLETA | b418968 |
 | Fase MT1 | Multi-tenancy DB (tenants + tenant_id) | ✅ COMPLETO | 063e60d |
-| Fase MT2 | Multi-tenancy Auth (JWT + middleware + frontend) | ✅ COMPLETA | 19d49d7 |
-| Fase MT3 | RLS — aislamiento de datos por tenant | ✅ COMPLETA (app layer; RLS DB no aplica con superuser) | 02c3659 |
+| Fase MT2 | Multi-tenancy Auth (JWT + middleware + frontend) | ✅ COMPLETA | efc2fb7 |
+| Fase MT3 | RLS — aislamiento de datos por tenant | ✅ COMPLETA (app layer; RLS PG desactivado, superuser) | 64d3704 |
+| Roles | Alineación roles admin/vet/aux | ✅ COMPLETO | efc2fb7 |
 | Fase 3 | Frontend — página pública de firma | ⏳ PENDIENTE | — |
 | Fase 4 | Frontend — panel expediente (badge + QR modal) | ⏳ PENDIENTE | — |
 | Fase 5 | WhatsApp + Email + cron recordatorio | ⏳ PENDIENTE | — |
 | Fase 6 | Legacy + deuda técnica | ⏳ PENDIENTE | — |
-| Fase C | Cierre Auditoría SaaS (Go/No-Go producción) | ⏳ PENDIENTE | — |
+| Fase C | Cierre Auditoría SaaS (Go/No-Go, C.1–C.8 ✅) | ✅ COMPLETA | — |
 
 ### 6.1 Estado validado de auditoría (real)
 
 #### Resuelto
+
 - ✅ `/api/test` solo fuera de producción.
 - ✅ JWT fail-fast en producción.
 - ✅ CORS de `/uploads` restringido.
 - ✅ MT1 ejecutado (tabla `tenants` + `id_tenant` en tablas core).
-- ✅ SQL de MT3 creado (RLS + policies por tenant).
-- ✅ Rate limiting aplicado: `authRateLimit` en `/api/auth/*` + `generalRateLimit` en `/api`.
+- ✅ Rate limiting: `authRateLimit` en `/api/auth/*`, `publicRateLimit` en `/api/public/*`, `generalRateLimit` en `/api`. No-op en dev.
 - ✅ `AuthGuard` activo en layout principal **y** en `change-password`.
-- ✅ MT2 propagado end-to-end: login/refresh incluyen `id_tenant` en JWT y en SELECT.
-- ✅ MT3 adopción en controladores: `clientes`, `mascotas`, `citas`, `consultas`, `consentimientos` — todos con `id_tenant` en WHERE e INSERT.
-- ✅ Inconsistencias de consentimiento corregidas (`id` → `id_consentimiento`, `cl.id` → `cl.id_cliente`).
-- ✅ **Bug bonus:** DBInit SyntaxError `for...of` restaurado (loop header faltaba).
-- ✅ **Bug bonus:** `consultationController` — `db.query` → `query()`, parámetros MySQL `?` → PostgreSQL `$N`.
+- ✅ MT2 propagado end-to-end: login/refresh incluyen `id_tenant` en JWT y SELECT.
+- ✅ `tenantContext` middleware: async + validación `X-Tenant-Slug` vs DB.
+- ✅ Interceptor Angular: `X-Tenant-Slug` solo en subdominios reales (omitido en localhost/IPs privadas).
+- ✅ MT3 app layer: todos los controladores core con `AND id_tenant` en WHERE e `id_tenant` en INSERT (`clientController`, `pacientesController`, `appointmentController`, `consultationController`, `consentimientoController`).
+- ✅ RLS PG (`13_rls_policies.sql`) excluido de DBInit: `FORCE ROW LEVEL SECURITY` incompatible con superuser. Revertido en DB de dev.
+- ✅ Roles unificados a `admin`/`vet`/`aux` en DB constraint, rutas, controladores, swagger y validadores.
+- ✅ Inconsistencias de consentimiento corregidas (`id` → `id_consentimiento`, `cl.id` → `id_cliente`).
+- ✅ Transacciones: todos los `BEGIN/COMMIT` usan `getClient()` — cero `pool.query()` directo.
+- ✅ **Bug fix:** DBInit SyntaxError `for...of` restaurado.
+- ✅ **Bug fix:** `consultationController` — `db.query` → `query()`, parámetros `?` → `$N`.
+- ✅ **Bug fix:** `appointments.js` — `req.user.role` → `req.user.rol`, `'veterinario'` → `'vet'`.
 
-#### Parcial
-- ⚠️ `SET LOCAL app.tenant_id` para RLS: **no aplica** — se usa superusuario/owner. `FORCE ROW LEVEL SECURITY` en `13_rls_policies.sql` bloquearía todos los queries; el archivo fue **excluido de DBInit.js**. El aislamiento está garantizado por `AND id_tenant = $N` en todos los controladores.
+#### Pendiente
 
-#### Pendiente crítico
-- ❌ Alinear schema/roles con rutas (`aux_admin`, `aux_vet`, `assistant`). ✅ **RESUELTO** — Roles unificados a `admin`/`vet`/`aux` en DB constraint, rutas, controladores, swagger y validadores. Migración `14_roles_alignment.sql` creada.
+- ✅ C.8 — Suite de pruebas de aislamiento inter-tenant: 16/16 tests pasan (`npm run test:isolation`). Tablas: usuarios, clientes, mascotas, consultas, citas. SELECT/UPDATE/DELETE cross-tenant verificados.
+- ⏳ Fase 3 — Frontend: página pública de firma de consentimiento.
+- ⏳ Fases 4, 5, 6 — Frontend panel, WhatsApp/Email, deuda técnica.
 
 ---
 
@@ -311,7 +330,7 @@ Nro. Documento: [PDF_NUMERO]
 ### ✅ FASE 0 — Bug fixes críticos módulo pacientes  *(COMPLETO)*
 
 | # | Bug | Archivo | Estado |
-|---|-----|---------|--------|
+| - | --- | ------- | ------ |
 | 0.1 | `esterilizado` no se guarda en update | `pacientesController.js` | ✅ |
 | 0.2 | `edad` se pone NULL sin `fecha_nacimiento` | `pacientesController.js` | ✅ |
 | 0.3 | `DELETE /mascota/:id` no existía → `PATCH inactivar` | `pacientes.js` routes | ✅ |
@@ -325,7 +344,7 @@ Nro. Documento: [PDF_NUMERO]
 ### ✅ FASE 1 — Migración de base de datos  *(COMPLETO)*
 
 | # | Tarea | Archivo | Estado |
-|---|-------|---------|--------|
+| - | ----- | ------- | ------ |
 | 1.1 | Tabla `clinical.versiones_consentimiento` | `10_consentimientos.sql` | ✅ |
 | 1.2 | Tabla `clinical.consentimientos` | `10_consentimientos.sql` | ✅ |
 | 1.3 | Columnas `consentimiento_firmado` + `id_consentimiento_vigente` en `clientes` | `10_consentimientos.sql` | ✅ |
@@ -336,7 +355,7 @@ Nro. Documento: [PDF_NUMERO]
 ### ✅ FASE 2 — Backend API consentimiento digital  *(COMPLETO)*
 
 | # | Tarea | Archivo | Estado |
-|---|-------|---------|--------|
+| - | ----- | ------- | ------ |
 | 2.1 | `consentimientoPDFService.js` — genera PDF con firma embebida | `services/` | ✅ |
 | 2.2 | `consentimientoController.js` — 6 funciones auth + públicas | `controllers/` | ✅ |
 | 2.3 | `routes/public.js` — GET/POST `/api/public/consentimiento/:token` | `routes/` | ✅ |
@@ -345,28 +364,29 @@ Nro. Documento: [PDF_NUMERO]
 
 ---
 
-### 🔴 FASE S — Seguridad urgente  *(BLOQUEO DE PRODUCCIÓN)*
+### ✅ FASE S — Seguridad urgente  *(COMPLETA)*
 
-> Todos los ítems de esta fase son **obligatorios antes de cualquier despliegue** con usuarios reales.  
-> Tiempo estimado: 1 día de trabajo.
+> Todos los ítems ejecutados y validados.
 
 #### S.1 — JWT secret fail-fast
+
 **Problema:** `auth.js:6` usa `'vetplus_secret_key_2024'` como fallback si `JWT_SECRET` no está definida.  
 **Riesgo:** Despliegue mal configurado compromete toda la autenticación.
 
 | # | Tarea | Archivo | Cambio |
-|---|-------|---------|--------|
+| - | ----- | ------- | ------ |
 | S.1.1 | Eliminar fallback hardcodeado — lanzar error si `JWT_SECRET` no está en `.env` | `backend/src/middleware/auth.js` | `if (!process.env.JWT_SECRET) throw new Error(...)` |
 | S.1.2 | Agregar `JWT_SECRET` como requerida en `.env.example` | `.env.example` | Documentar |
 
 Estado S.1: ✅ COMPLETO (S.1.1 + S.1.2 ejecutados)
 
 #### S.2 — Rate limiting real
+
 **Problema:** `rateLimiter.js` — todas las funciones son `next()` sin límites reales.  
 **Riesgo:** Brute force en login, abuso de firma pública, DoS lógico.
 
 | # | Tarea | Archivo | Límite recomendado |
-|---|-------|---------|-------------------|
+| - | ----- | ------- | ------------------ |
 | S.2.1 | Activar `authRateLimit` real y aplicarlo en `/api/auth/*` | `rateLimiter.js` + `routes/auth.js` | 10 req/15min por IP |
 | S.2.2 | Activar `publicRateLimit` real | `rateLimiter.js` + `routes/public.js` | 20 req/min por IP |
 | S.2.3 | Activar `generalRateLimit` real y aplicarlo en API global | `rateLimiter.js` + `server.js` | 200 req/min por IP |
@@ -375,57 +395,62 @@ Estado S.1: ✅ COMPLETO (S.1.1 + S.1.2 ejecutados)
 Estado S.2: ✅ COMPLETO — S.2.1 ✅ (authRateLimit en /api/auth/*) · S.2.2 ✅ (publicRateLimit en /api/public/*) · S.2.3 ✅ (generalRateLimit en /api) · S.2.4 ✅ (isProd condicional: no-op en dev)
 
 #### S.3 — Proteger `/api/test`
+
 **Problema:** `server.js` monta `testRoutes` sin restricción de entorno.  
 **Riesgo:** Rutas operativas expuestas en producción.
 
 | # | Tarea | Archivo |
-|---|-------|---------|
+| - | ----- | ------- |
 | S.3.1 | Condicionar montaje: `if (process.env.NODE_ENV !== 'production')` | `backend/server.js` |
 
 Estado S.3: ✅ COMPLETO
 
 #### S.4 — Restringir CORS en uploads
+
 **Problema:** `/uploads` responde con `Access-Control-Allow-Origin: *`.  
 **Riesgo:** Consumo cruzado no controlado de recursos.
 
 | # | Tarea | Archivo |
-|---|-------|---------|
+| - | ----- | ------- |
 | S.4.1 | Restringir a `FRONTEND_URL` y dominios conocidos | `backend/server.js` |
 
 Estado S.4: ✅ COMPLETO
 
 #### S.5 — Reactivar AuthGuard en frontend
+
 **Problema:** `app.routes.ts` tiene `canActivate: [AuthGuard]` comentado en el layout principal y en `change-password`.  
 **Riesgo:** Toda la UI accesible sin sesión activa.
 
 | # | Tarea | Archivo | Líneas |
-|---|-------|---------|--------|
+| - | ----- | ------- | ------ |
 | S.5.1 | Descomentar `canActivate: [AuthGuard]` en layout principal | `app.routes.ts` | ~44 |
 | S.5.2 | Descomentar `canActivate: [AuthGuard]` en `change-password` | `app.routes.ts` | ~31 |
 
 Estado S.5: ✅ COMPLETO (S.5.1 + S.5.2 ejecutados)
 
 #### S.6 — Corregir inconsistencia `auth.usuarios` vs `vetplus_auth.usuarios`
+
 **Problema:** Dos archivos usan el schema incorrecto `auth.` en lugar de `vetplus_auth.`.  
 **Riesgo:** Queries fallando en runtime de forma silenciosa o con errores 500.
 
 | # | Tarea | Archivo | Líneas |
-|---|-------|---------|--------|
+| - | ----- | ------- | ------ |
 | S.6.1 | Cambiar `auth.usuarios` → `vetplus_auth.usuarios` | `backend/src/middleware/passwordCheck.js` | 21, 69 |
 | S.6.2 | Cambiar `FROM auth.usuarios` → `FROM vetplus_auth.usuarios` | `backend/src/routes/appointments.js` | 252 |
 
 Estado S.6: ✅ COMPLETO
 
 #### S.7 — Corregir transacciones con cliente dedicado
+
 **Problema:** Controladores que usan `BEGIN/COMMIT/ROLLBACK` llaman a `pool.query()` global, no a un cliente dedicado.  
 **Riesgo:** Inconsistencia de datos bajo concurrencia (transacciones se mezclan entre requests).  
 **Nota:** `getClient()` ya existe en `database.js` — solo falta usarlo consistentemente.
 
 | # | Tarea | Archivo |
-|---|-------|---------|
+| - | ----- | ------- |
 | S.7.1 | Auditar controladores con transacciones manuales y migrar a `getClient()` + `client.release()` | `controllers/*.js` |
 
-Estado S.7: ⚠️ PARCIAL (ya migrado en algunos controladores, falta cobertura total)
+Estado S.7: ✅ COMPLETO — auditoría confirmó que todos los controladores con BEGIN/COMMIT usan `getClient()`. Cero `pool.query()` directo encontrado.
 
 ---
 
@@ -434,11 +459,12 @@ Estado S.7: ⚠️ PARCIAL (ya migrado en algunos controladores, falta cobertura
 > Primer pilar del SaaS. Sin esto, todos los datos de todas las clínicas son accesibles transversalmente.
 
 #### MT1.1 — Tabla `system.tenants`
+
 Archivo nuevo: `backend/src/database/schemas/11_tenants.sql`
 
 ```sql
 CREATE TABLE IF NOT EXISTS system.tenants (
-  id_tenant  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id_tenant UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   slug       TEXT UNIQUE NOT NULL,        -- ej: 'vetplus-norte', usado en subdominio
   nombre     TEXT NOT NULL,
   estado     TEXT NOT NULL DEFAULT 'active'
@@ -456,12 +482,13 @@ ON CONFLICT (slug) DO NOTHING;
 ```
 
 #### MT1.2 — Columna `id_tenant` en tablas core
+
 Archivo nuevo: `backend/src/database/schemas/12_tenant_columns.sql`
 
 Tablas que requieren `id_tenant`:
 
 | Tabla | Schema |
-|-------|--------|
+| ----- | ------ |
 | `vetplus_auth.usuarios` | auth |
 | `clinical.clientes` | clinical |
 | `clinical.mascotas` | clinical |
@@ -488,6 +515,7 @@ ALTER TABLE <schema>.<tabla>
 ```
 
 #### MT1.3 — Registrar en DBInit.js
+
 - Agregar `11_tenants.sql` y `12_tenant_columns.sql` a `migrationFiles` y `schemaFiles`
 
 ---
@@ -495,6 +523,7 @@ ALTER TABLE <schema>.<tabla>
 ### 🟠 FASE MT2 — Multi-tenancy: autenticación y contexto
 
 #### MT2.1 — JWT con `tenant_id`
+
 **Archivo:** `backend/src/middleware/auth.js`
 
 ```js
@@ -509,6 +538,7 @@ const payload = {
 ```
 
 La consulta en `authenticateToken` debe enriquecer `req.user` con `id_tenant`:
+
 ```js
 'SELECT id_usuario, email, nombre, rol, activo, id_tenant
  FROM vetplus_auth.usuarios WHERE id_usuario = $1'
@@ -517,6 +547,7 @@ La consulta en `authenticateToken` debe enriquecer `req.user` con `id_tenant`:
 Estado MT2.1: ✅ COMPLETO — login/refresh propagan `id_tenant` en JWT; SELECT incluye `id_tenant` para enriquecer `req.user`
 
 #### MT2.2 — Middleware `tenantContext`
+
 Archivo nuevo: `backend/src/middleware/tenantContext.js`
 
 ```js
@@ -527,12 +558,14 @@ export function tenantContext(req, res, next) {
   next();
 }
 ```
+
 - Montar después de `authenticateToken` en todas las rutas clínicas
 - En rutas públicas (consentimiento), resolver `tenant_id` desde el consentimiento mismo (via token)
 
 Estado MT2.2: ✅ COMPLETO — middleware async con validación `X-Tenant-Slug` vs DB; montado en todas las rutas clínicas
 
 #### MT2.3 — Frontend: interceptor con tenant slug
+
 **Archivo:** interceptor HTTP de Angular
 
 ```ts
@@ -542,7 +575,7 @@ const tenantSlug = window.location.hostname.split('.')[0];
 req.clone({ setHeaders: {
   Authorization: `Bearer ${token}`,
   'X-Tenant-Slug': tenantSlug
-}});
+} });
 ```
 
 Estado MT2.3: ✅ COMPLETO — interceptor Angular envía `X-Tenant-Slug` solo en subdominios reales (omite en localhost/IPs locales); backend lo valida opcionalmente contra DB
@@ -567,11 +600,12 @@ CREATE POLICY tenant_isolation_clientes ON clinical.clientes
 Tablas a proteger: `clientes`, `mascotas`, `consultas_clinicas`, `calendario_citas`, `consentimientos`
 
 Activar contexto en cada query autenticada:
+
 ```js
 await client.query(`SET LOCAL app.tenant_id = '${req.tenantId}'`);
 ```
 
-Estado MT3: ✅ COMPLETO (app layer) — todos los controladores core usan `id_tenant` explícito en WHERE e INSERT: `clientController`, `pacientesController`, `appointmentController`, `consultationController`, `consentimientoController`, rutas `clinical.js`. Pendiente: activar `SET LOCAL app.tenant_id` para que las RLS policies de PG apliquen automáticamente.
+Estado MT3: ✅ COMPLETO — todos los controladores core usan `id_tenant` explícito en WHERE e INSERT. RLS PG (`13_rls_policies.sql`) excluido de DBInit: `FORCE ROW LEVEL SECURITY` incompatible con superuser/owner. Aislamiento garantizado por Capa 2 (app layer).
 
 ---
 
@@ -580,7 +614,7 @@ Estado MT3: ✅ COMPLETO (app layer) — todos los controladores core usan `id_t
 > Esta fase define el criterio de “100% producción”. Sin esta fase no hay salida.
 
 | # | Criterio | Desarrollo | Producción |
-|---|----------|------------|------------|
+| - | -------- | ---------- | ---------- |
 | C.1 | Todas las rutas core usan contexto tenant (queryWithTenant o equivalente) | 80% mínimo | 100% obligatorio |
 | C.2 | Todos los INSERT/UPDATE core incluyen `id_tenant` | 80% mínimo | 100% obligatorio |
 | C.3 | Auth login/refresh propaga `tenant_id` end-to-end | Parcial permitido | 100% obligatorio |
@@ -588,11 +622,12 @@ Estado MT3: ✅ COMPLETO (app layer) — todos los controladores core usan `id_t
 | C.5 | Guards frontend críticos activos | Parcial permitido | 100% obligatorio |
 | C.6 | Roles DB/rutas alineados | Puede quedar warning temporal | 100% obligatorio |
 | C.7 | Consentimiento sin mismatches de columnas | Puede convivir workaround | 100% obligatorio |
-| C.8 | Pruebas de aislamiento inter-tenant (integración) | Smoke tests | Suite completa obligatoria |
+| C.8 | Pruebas de aislamiento inter-tenant (integración) | ✅ 16/16 tests pasan | ✅ |
 
 #### C.9 Gate final (No-Go automático)
 
 No se permite despliegue a producción si falla cualquiera de estos checks:
+
 - `tenant_id` ausente en JWT de sesión válida.
 - Endpoints core funcionando con `query()` sin tenant context.
 - Inserción en tablas multi-tenant sin `id_tenant`.
@@ -608,7 +643,7 @@ No se permite despliegue a producción si falla cualquiera de estos checks:
 > Puede desarrollarse en paralelo a las fases MT si se desea.
 
 | # | Tarea | Archivo |
-|---|-------|---------|
+| - | ----- | ------- |
 | 3.1 | `npm install signature_pad --prefix frontend` | — |
 | 3.2 | Crear `ConsentimientoPublicoComponent` — mobile-first, fuera del `AuthGuard` | `frontend/src/app/components/consentimiento-publico/` |
 | 3.3 | Ruta pública en `app.routes.ts`: `/consentimiento/:token` | `app.routes.ts` |
@@ -621,7 +656,7 @@ No se permite despliegue a producción si falla cualquiera de estos checks:
 ### 🔵 FASE 4 — Frontend: panel de consentimiento en expediente
 
 | # | Tarea | Archivo |
-|---|-------|---------|
+| - | ----- | ------- |
 | 4.1 | `ConsentimientosService` — métodos HTTP (crear, estado, reenviar, descargar PDF) | `frontend/src/app/services/consentimientos.service.ts` |
 | 4.2 | `ConsentimientoStatusComponent` — badge + botones (Enviar/Reenviar/Ver QR/Descargar PDF) | `components/consentimiento-status/` |
 | 4.3 | Integrar `ConsentimientoStatusComponent` en `paciente-details.component.ts`, sección propietario | `paciente-details.component.ts` |
@@ -635,7 +670,7 @@ No se permite despliegue a producción si falla cualquiera de estos checks:
 *Depende de que el servicio de WhatsApp esté configurado en el tenant.*
 
 | # | Tarea | Archivo |
-|---|-------|---------|
+| - | ----- | ------- |
 | 5.1 | Enviar enlace de firma por WhatsApp al crear consentimiento | `consentimientoController.js → crearConsentimiento()` |
 | 5.2 | Enviar PDF firmado por WhatsApp al procesar firma | `consentimientoController.js → firmarConsentimiento()` |
 | 5.3 | Enviar PDF firmado por email si `cliente.email` existe | `consentimientoController.js → firmarConsentimiento()` |
@@ -646,7 +681,7 @@ No se permite despliegue a producción si falla cualquiera de estos checks:
 ### 🟢 FASE 6 — Deuda técnica y legacy
 
 | # | Tarea | Riesgo |
-|---|-------|--------|
+| - | ----- | ------ |
 | 6.1 | Unificar `sexo` a `'Macho'`/`'Hembra'` en DB + migration de filas existentes | Medio |
 | 6.2 | Deprecar y eliminar rutas `/api/clinical/pets` (legacy petController) | Alto — coordinar con frontend |
 | 6.3 | Agregar validación UUID en `GET /:id` y `PUT /:id` en pacientes routes | Bajo |
@@ -657,16 +692,15 @@ No se permite despliegue a producción si falla cualquiera de estos checks:
 
 ## 8. ORDEN DE EJECUCIÓN Y MÍNIMOS POR ETAPA
 
-```
+```text
 COMPLETADO:
   Fase 0 ✅ → Fase 1 ✅ → Fase 2 ✅ → Fase MT1 ✅
-  Fase S ✅ (casi) → Fase MT2 ✅ (casi) → Fase MT3 ✅ (controladores core)
+  Fase S ⚠️ → Fase MT2 ⚠️ → Fase MT3 ⚠️
 
-PENDIENTE (próximas iteraciones):
-  S.2.2 (publicRateLimit) · S.7.1 (transacciones getClient) · MT2.3 (interceptor Angular)
-  MT3 SET LOCAL app.tenant_id (para activar RLS PG)
-  Roles alignment (aux_admin / aux_vet / assistant)
-  → Fase C (Go/No-Go) → Fase 3 → Fase 4 → Fase 5 → Fase 6
+PRÓXIMAS ITERACIONES:
+  Fase S (cierres) → Fase MT2 (cierres) → Fase MT3 (adopción app) → Fase C
+  Fase 3 → Fase 4 → Fase 5 → Fase 6
+  (seg)             (auth)              (tenant runtime)           (go/no-go)
 
 ── MÍNIMO PARA PRODUCCIÓN SINGLE-TENANT (una clave clínica) ──────────────────
   Fase S (100%) + Fase 3
@@ -695,7 +729,7 @@ npm install signature_pad --prefix frontend
 
 ## 10. ARQUITECTURA OBJETIVO (SaaS multi-tenant)
 
-```
+```text
 Request HTTP
     │
     ├─ [AuthGuard Frontend] ← Fase S (reactivar)
@@ -716,4 +750,3 @@ PostgreSQL + RLS
 ---
 
 *Este documento es la fuente de verdad. Actualizar estado de cada fase al completarla.*
-
