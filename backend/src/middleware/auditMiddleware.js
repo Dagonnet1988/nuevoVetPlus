@@ -17,11 +17,10 @@ const EXCLUDED_ROUTES = [
 const AUDITABLE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
 // Lista de rutas de alta sensibilidad (siempre auditar, incluso GET)
+// Solo estas rutas guardan response_data en BD
 const HIGH_SENSITIVITY_ROUTES = [
   '/api/auth/admin/reset-password',
   '/api/auth/admin/generate-temp-password',
-  '/api/auth/users',
-  '/api/clinical/consultas',
 ];
 
 /**
@@ -63,13 +62,14 @@ export const auditActivity = async (req, res, next) => {
     return next();
   }
   
-  // Datos básicos de la request
+  // Datos básicos de la request (userId y tenantId se capturan al responder,
+  // cuando authenticateToken ya los habrá poblado en req)
   const requestData = {
     url: originalUrl,
     method: method,
     userAgent: req.get('User-Agent'),
     ip: req.ip || req.connection.remoteAddress,
-    userId: req.user ? req.user.id : null,
+    entityId: extractEntityIdFromUrl(originalUrl),
     timestamp: new Date(),
     body: sanitizeRequestBody(req.body),
     query: req.query
@@ -82,6 +82,10 @@ export const auditActivity = async (req, res, next) => {
   
   res.send = function(data) {
     statusCode = res.statusCode;
+
+    // Capturar userId y tenantId aquí: authenticateToken ya los pobló en req
+    requestData.userId   = req.user ? req.user.id : null;
+    requestData.tenantId = req.tenantId || null;
     
     // Solo capturar respuesta para requests críticas
     if (isHighSensitivityRoute(originalUrl)) {
@@ -97,12 +101,24 @@ export const auditActivity = async (req, res, next) => {
     // Llamar al send original
     originalSend.call(this, data);
     
-    // Registrar auditoría después de la respuesta
-    logActivity(requestData, statusCode, responseData, Date.now() - startTime);
+    // Registrar auditoría DESPUÉS de enviar la respuesta (no bloquea al cliente)
+    setImmediate(() => {
+      logActivity(requestData, statusCode, responseData, Date.now() - startTime);
+    });
   };
   
   next();
 };
+
+/**
+ * Extraer el UUID de la entidad afectada desde la URL
+ * Ej: /api/clinical/pacientes/a1556b25-32b1-4040-9bcc-65a3fe7e82c6 → a1556b25-...
+ */
+function extractEntityIdFromUrl(url) {
+  const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+  const match = url.match(uuidRegex);
+  return match ? match[0] : null;
+}
 
 /**
  * Determinar si una request debe ser auditada
@@ -182,8 +198,8 @@ function sanitizeResponseData(data) {
     sanitized.token = '[REDACTED]';
   }
   
-  if (sanitized.data && sensitiveData.password) {
-    sanitized.data.password = '[REDACTED]';
+  if (sanitized.data && sanitized.data.password) {
+    sanitized.data = { ...sanitized.data, password: '[REDACTED]' };
   }
   
   return sanitized;
@@ -210,10 +226,12 @@ async function logActivity(requestData, statusCode, responseData, duration) {
         ip_address,
         user_agent,
         request_data,
-        response_data
+        response_data,
+        id_tenant,
+        id_entidad_afectada
       ) VALUES (
         uuid_generate_v4(),
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
       )
     `, [
       requestData.userId,
@@ -226,7 +244,9 @@ async function logActivity(requestData, statusCode, responseData, duration) {
       requestData.ip,
       requestData.userAgent,
       JSON.stringify(requestData.body),
-      responseData ? JSON.stringify(responseData) : null
+      responseData ? JSON.stringify(responseData) : null,
+      requestData.tenantId,
+      requestData.entityId
     ]);
     
   } catch (error) {
@@ -256,25 +276,41 @@ function determineActivityType(url, method, statusCode) {
 }
 
 /**
- * Generar descripción de actividad
+ * Generar descripción legible de la actividad (en español)
  */
 function generateActivityDescription(requestData, statusCode) {
   const { url, method } = requestData;
-  const status = statusCode >= 400 ? 'FAILED' : 'SUCCESS';
-  
-  let action = 'Accessed';
-  if (method === 'POST') action = 'Created';
-  if (method === 'PUT' || method === 'PATCH') action = 'Updated';
-  if (method === 'DELETE') action = 'Deleted';
-  
-  // Descripciones específicas por ruta
-  if (url.includes('/auth/login')) return `${status}: User login attempt`;
-  if (url.includes('/auth/logout')) return `${status}: User logout`;
-  if (url.includes('/api/clinical/consultas')) return `${status}: ${action} medical consultation`;
-  if (url.includes('/api/clinical/clientes')) return `${status}: ${action} client record`;
-  if (url.includes('/api/clinical/mascotas')) return `${status}: ${action} pet record`;
-  
-  return `${status}: ${action} ${url}`;
+  const ok = statusCode < 400;
+  const estado = ok ? 'Exitoso' : 'Fallido';
+
+  // Auth
+  if (url.includes('/auth/login'))                   return `${estado}: Inicio de sesión`;
+  if (url.includes('/auth/logout'))                  return `${estado}: Cierre de sesión`;
+  if (url.includes('/auth/admin/reset-password'))    return `${estado}: Restablecimiento de contraseña`;
+  if (url.includes('/auth/admin/generate-temp'))     return `${estado}: Contraseña temporal generada`;
+  if (url.includes('/auth/change-password'))         return `${estado}: Cambio de contraseña`;
+
+  // Recursos clínicos
+  const acciones = {
+    POST: 'Creado', PUT: 'Actualizado', PATCH: 'Actualizado',
+    DELETE: 'Eliminado', GET: 'Consultado'
+  };
+  const accion = acciones[method] ?? 'Accedido';
+
+  if (url.includes('/clinical/consultas'))    return `${estado}: ${accion} consulta clínica`;
+  if (url.includes('/clinical/pacientes'))    return `${estado}: ${accion} paciente (historia clínica)`;
+  if (url.includes('/clinical/clientes'))     return `${estado}: ${accion} registro de propietario`;
+  if (url.includes('/clinical/mascotas'))     return `${estado}: ${accion} registro de mascota`;
+  if (url.includes('/clinical/citas'))        return `${estado}: ${accion} cita`;
+  if (url.includes('/clinical/consentim'))    return `${estado}: ${accion} consentimiento`;
+  if (url.includes('/clinical/archivos'))     return `${estado}: ${accion} archivo adjunto`;
+
+  // Administración
+  if (url.includes('/auth/users'))            return `${estado}: ${accion} usuario del sistema`;
+  if (url.includes('/empresa'))               return `${estado}: ${accion} configuración de empresa`;
+  if (url.includes('/audit'))                 return `${estado}: Consulta de auditoría`;
+
+  return `${estado}: ${accion} ${url.split('?')[0]}`;
 }
 
 /**
@@ -286,11 +322,11 @@ export const auditAuthActivity = async (req, res, next) => {
   res.send = function(data) {
     originalSend.call(this, data);
     
-    // Log específico de autenticación
+    // Log específico de autenticación (asíncrono, no bloquea respuesta)
     if (req.originalUrl.includes('/auth/login')) {
-      logAuthActivity('LOGIN', req, res.statusCode, data);
+      setImmediate(() => logAuthActivity('LOGIN', req, res.statusCode, data));
     } else if (req.originalUrl.includes('/auth/logout')) {
-      logAuthActivity('LOGOUT', req, res.statusCode, data);
+      setImmediate(() => logAuthActivity('LOGOUT', req, res.statusCode, data));
     }
   };
   

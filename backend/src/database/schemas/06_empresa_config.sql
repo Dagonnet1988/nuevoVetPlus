@@ -32,6 +32,9 @@ CREATE TABLE IF NOT EXISTS system.configuracion_empresa (
 
     -- Metadatos
     activa BOOLEAN DEFAULT true,
+    -- Multi-tenancy
+    id_tenant UUID NOT NULL DEFAULT system.get_default_tenant()
+        REFERENCES system.tenants(id_tenant) ON DELETE RESTRICT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     created_by UUID REFERENCES vetplus_auth.usuarios(id_usuario),

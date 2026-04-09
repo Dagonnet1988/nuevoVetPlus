@@ -125,6 +125,22 @@
   }
 }
 
+.expiry-notice {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.82rem !important;
+  color: #e65100 !important;
+  margin-top: 4px !important;
+}
+
+.expiry-icon {
+  font-size: 1rem;
+  width: 1rem;
+  height: 1rem;
+  color: #e65100;
+}
+
 // ── Texto legal ──────────────────────────────────────────────────────────────
 .texto-legal-section {
   max-height: 280px;

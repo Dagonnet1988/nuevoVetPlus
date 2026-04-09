@@ -27,6 +27,9 @@ CREATE TABLE vetplus_auth.usuarios (
     debe_cambiar_password BOOLEAN DEFAULT false,
     password_reset_date TIMESTAMP,
     password_reset_by UUID,
+    -- Multi-tenancy
+    id_tenant UUID NOT NULL DEFAULT system.get_default_tenant()
+        REFERENCES system.tenants(id_tenant) ON DELETE RESTRICT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -158,6 +161,7 @@ CREATE INDEX idx_usuarios_email ON vetplus_auth.usuarios(email);
 CREATE INDEX idx_usuarios_rol ON vetplus_auth.usuarios(rol);
 CREATE INDEX idx_usuarios_activo ON vetplus_auth.usuarios(activo);
 CREATE INDEX idx_usuarios_password_temporal ON vetplus_auth.usuarios(password_temporal);
+CREATE INDEX idx_usuarios_tenant ON vetplus_auth.usuarios(id_tenant);
 CREATE INDEX idx_sesiones_usuario ON vetplus_auth.sesiones(id_usuario);
 CREATE INDEX idx_sesiones_token ON vetplus_auth.sesiones(token_jti);
 CREATE INDEX idx_password_resets_admin ON vetplus_auth.password_resets(realizado_por);

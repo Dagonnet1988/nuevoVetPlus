@@ -1,0 +1,139 @@
+<div class="sa-page">
+  <header class="sa-page-header">
+    <a mat-icon-button routerLink="/superadmin/dashboard">
+      <mat-icon>arrow_back</mat-icon>
+    </a>
+    @if (tenant()) {
+      <div>
+        <h2>{{ tenant()!.nombre }}</h2>
+        <p><code>{{ tenant()!.slug }}</code> · creada {{ tenant()!.created_at | date:'dd/MM/yyyy' }}</p>
+      </div>
+    }
+  </header>
+
+  @if (loading()) {
+    <div class="sa-center"><mat-spinner diameter="40" /></div>
+  } @else if (error()) {
+    <p class="sa-error">{{ error() }}</p>
+  } @else if (tenant()) {
+    <div class="sa-grid">
+
+      <!-- Stats rápidos -->
+      <div class="sa-quick-stats">
+        <div class="sa-qs-item">
+          <mat-icon>group</mat-icon>
+          <span>{{ tenant()!.total_usuarios }}</span>
+          <small>Usuarios</small>
+        </div>
+        <div class="sa-qs-item">
+          <mat-icon>people</mat-icon>
+          <span>{{ tenant()!.total_clientes }}</span>
+          <small>Clientes</small>
+        </div>
+        <div class="sa-qs-item">
+          <mat-icon>pets</mat-icon>
+          <span>{{ tenant()!.total_mascotas }}</span>
+          <small>Mascotas</small>
+        </div>
+        <div class="sa-qs-item">
+          <mat-icon>event</mat-icon>
+          <span>{{ tenant()!.total_citas }}</span>
+          <small>Citas</small>
+        </div>
+      </div>
+
+      <!-- Editar datos -->
+      <mat-card class="sa-section">
+        <h3><mat-icon>edit</mat-icon> Datos de la clínica</h3>
+        <mat-divider />
+
+        <div class="sa-fields">
+          <mat-form-field appearance="outline">
+            <mat-label>Nombre</mat-label>
+            <input matInput [(ngModel)]="editNombre" />
+          </mat-form-field>
+
+          <div class="sa-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Plan</mat-label>
+              <mat-select [(ngModel)]="editPlan">
+                <mat-option value="standard">Standard</mat-option>
+                <mat-option value="pro">Pro</mat-option>
+                <mat-option value="enterprise">Enterprise</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Estado</mat-label>
+              <mat-select [(ngModel)]="editEstado">
+                <mat-option value="active">Activa</mat-option>
+                <mat-option value="suspended">Suspendida</mat-option>
+                <mat-option value="inactive">Inactiva</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Máx. usuarios</mat-label>
+              <input matInput type="number" [(ngModel)]="editMaxUsuarios" min="1" />
+            </mat-form-field>
+          </div>
+
+          @if (saveError()) { <p class="sa-error">{{ saveError() }}</p> }
+          @if (saveOk())    { <p class="sa-ok">{{ saveOk() }}</p> }
+
+          <div class="sa-row-end">
+            <button mat-flat-button class="sa-save-btn" (click)="saveChanges()" [disabled]="saving()">
+              @if (saving()) { <mat-spinner diameter="18" /> }
+              @else { <ng-container><mat-icon>save</mat-icon> Guardar cambios</ng-container> }
+            </button>
+
+            <button mat-stroked-button
+                    [class]="tenant()!.estado === 'active' ? 'sa-suspend-btn' : 'sa-activate-btn'"
+                    (click)="toggleEstado()"
+                    [disabled]="saving()">
+              <mat-icon>{{ tenant()!.estado === 'active' ? 'pause_circle' : 'play_circle' }}</mat-icon>
+              {{ tenant()!.estado === 'active' ? 'Suspender' : 'Activar' }}
+            </button>
+          </div>
+        </div>
+      </mat-card>
+
+      <!-- Lista de usuarios -->
+      <mat-card class="sa-section">
+        <h3><mat-icon>group</mat-icon> Usuarios de la clínica</h3>
+        <mat-divider />
+
+        @if (tenant()!.usuarios.length === 0) {
+          <p class="sa-empty-text">Sin usuarios registrados.</p>
+        } @else {
+          <table class="sa-table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Email</th>
+                <th>Rol</th>
+                <th>Estado</th>
+                <th>Último login</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (u of tenant()!.usuarios; track u.id_usuario) {
+                <tr>
+                  <td>{{ u.nombre }} {{ u.apellido }}</td>
+                  <td>{{ u.email }}</td>
+                  <td><span class="sa-badge rol-{{ u.rol }}">{{ u.rol }}</span></td>
+                  <td>
+                    <span [class]="u.activo ? 'sa-badge estado-active' : 'sa-badge estado-suspended'">
+                      {{ u.activo ? 'Activo' : 'Inactivo' }}
+                    </span>
+                  </td>
+                  <td class="sa-date">{{ u.ultimo_login ? (u.ultimo_login | date:'dd/MM/yy HH:mm') : '—' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      </mat-card>
+    </div>
+  }
+</div>

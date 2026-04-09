@@ -1,7 +1,7 @@
 import { Component, signal, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
-import { MatSidenavModule } from '@angular/material/sidenav';
+import { MatSidenavModule, MatSidenavContainer } from '@angular/material/sidenav';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatListModule } from '@angular/material/list';
 import { MatIconModule } from '@angular/material/icon';
@@ -17,9 +17,11 @@ interface MenuItem {
   label: string;
   icon: string;
   route: string;
-  roles: ('admin' | 'vet' | 'aux_admin' | 'aux_vet')[];
+  roles: ('admin' | 'vet' | 'aux')[];
   badge?: number;
 }
+
+const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
 
 @Component({
   selector: 'app-main-layout',
@@ -45,29 +47,48 @@ interface MenuItem {
       <mat-sidenav
         #drawer
         class="sidenav"
+        [class.collapsed]="collapsed() && !isMobile()"
         fixedInViewport="true"
         [attr.role]="'navigation'"
         [mode]="isMobile() ? 'over' : 'side'"
         [opened]="!isMobile()">
 
-        <!-- Logo y nombre de la app -->
+        <!-- Header: logo + toggle -->
         <div class="sidebar-header">
           <div class="logo-section">
             <mat-icon class="logo-icon">pets</mat-icon>
-            <h2 class="app-name">VetPlus</h2>
+            @if (!collapsed() || isMobile()) {
+              <h2 class="app-name">VetPlus</h2>
+            }
           </div>
+          @if (!isMobile()) {
+            <button mat-icon-button
+                    class="collapse-btn"
+                    (click)="toggleCollapse()"
+                    [matTooltip]="collapsed() ? 'Expandir menú' : 'Colapsar menú'">
+              <mat-icon>{{ collapsed() ? 'chevron_right' : 'chevron_left' }}</mat-icon>
+            </button>
+          }
         </div>
 
-        <!-- Información del usuario -->
-        <div class="user-info">
-          <div class="user-avatar">
-            <mat-icon>person</mat-icon>
+        <!-- Info de usuario -->
+        @if (!collapsed() || isMobile()) {
+          <div class="user-info">
+            <div class="user-avatar">
+              <mat-icon>person</mat-icon>
+            </div>
+            <div class="user-details">
+              <p class="user-name">{{ authService.getCurrentUserName() }}</p>
+              <p class="user-role">{{ authService.getCurrentUserRole() }}</p>
+            </div>
           </div>
-          <div class="user-details">
-            <p class="user-name">{{ authService.getCurrentUserName() }}</p>
-            <p class="user-role">{{ authService.getCurrentUserRole() }}</p>
+        } @else {
+          <div class="user-info-collapsed">
+            <div class="user-avatar" [matTooltip]="authService.getCurrentUserName()">
+              <mat-icon>person</mat-icon>
+            </div>
           </div>
-        </div>
+        }
 
         <!-- Menú de navegación -->
         <mat-nav-list class="nav-list">
@@ -75,10 +96,15 @@ interface MenuItem {
             <a mat-list-item
                [routerLink]="item.route"
                routerLinkActive="active-link"
-               class="nav-item">
+               class="nav-item"
+               [class.nav-item-collapsed]="collapsed() && !isMobile()"
+               [matTooltip]="collapsed() && !isMobile() ? item.label : ''"
+               matTooltipPosition="right">
               <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
-              <span matListItemTitle>{{ item.label }}</span>
-              @if (item.badge && item.badge > 0) {
+              @if (!collapsed() || isMobile()) {
+                <span matListItemTitle>{{ item.label }}</span>
+              }
+              @if ((!collapsed() || isMobile()) && item.badge && item.badge > 0) {
                 <span matListItemMeta>
                   <span matBadge="{{ item.badge }}" matBadgeColor="warn" matBadgeSize="small"></span>
                 </span>
@@ -88,11 +114,17 @@ interface MenuItem {
         </mat-nav-list>
 
         <!-- Footer del sidebar -->
-        <div class="sidebar-footer">
-          <button mat-button (click)="authService.toggleTheme()" class="theme-button">
+        <div class="sidebar-footer" [class.footer-collapsed]="collapsed() && !isMobile()">
+          <button mat-icon-button
+                  (click)="authService.toggleTheme()"
+                  [matTooltip]="collapsed() && !isMobile() ? 'Cambiar tema' : ''"
+                  matTooltipPosition="right"
+                  class="theme-btn-icon">
             <mat-icon>palette</mat-icon>
-            <span>Cambiar tema</span>
           </button>
+          @if (!collapsed() || isMobile()) {
+            <span class="theme-label">Cambiar tema</span>
+          }
         </div>
       </mat-sidenav>
 
@@ -101,24 +133,17 @@ interface MenuItem {
         <!-- Toolbar superior -->
         <mat-toolbar color="primary" class="main-toolbar">
           <!-- Botón de menú para móvil -->
-          <button
-            type="button"
-            aria-label="Toggle sidenav"
-            mat-icon-button
-            (click)="drawer.toggle()"
-            *ngIf="isMobile()">
-            <mat-icon>menu</mat-icon>
-          </button>
+          @if (isMobile()) {
+            <button type="button" aria-label="Toggle sidenav" mat-icon-button (click)="drawer.toggle()">
+              <mat-icon>menu</mat-icon>
+            </button>
+          }
 
-          <!-- Breadcrumb o título de página -->
           <span class="page-title">{{ getCurrentPageTitle() }}</span>
-
           <span class="spacer"></span>
 
-          <!-- Notificaciones -->
           <app-notifications></app-notifications>
 
-          <!-- Menú de usuario -->
           <button mat-icon-button
                   [matMenuTriggerFor]="userMenu"
                   [matTooltip]="'Opciones de usuario'"
@@ -152,7 +177,6 @@ interface MenuItem {
           </mat-menu>
         </mat-toolbar>
 
-        <!-- Contenido de la página -->
         <main class="main-content">
           <router-outlet></router-outlet>
         </main>
@@ -160,89 +184,125 @@ interface MenuItem {
     </mat-sidenav-container>
   `,
   styles: [`
-    .sidenav-container {
-      height: 100%;
-    }
+    .sidenav-container { height: 100%; }
 
+    /* Animar el contenido cuando el sidebar cambia de tamaño */
+    mat-sidenav-content { transition: margin-left 0.25s ease !important; }
+
+    /* ── Sidebar base ── */
     .sidenav {
       width: 280px;
       background: #fafafa;
       border-right: 1px solid #e0e0e0;
+      transition: width 0.25s ease;
+      overflow-x: hidden;
     }
 
+    .sidenav.collapsed {
+      width: 64px;
+    }
+
+    /* ── Header ── */
     .sidebar-header {
-      padding: 24px 16px 16px;
+      padding: 16px 12px;
       border-bottom: 1px solid #e0e0e0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 64px;
     }
 
     .logo-section {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
+      overflow: hidden;
+      flex: 1;
     }
 
     .logo-icon {
-      font-size: 32px;
-      width: 32px;
-      height: 32px;
+      font-size: 28px;
+      width: 28px;
+      height: 28px;
       color: #2e7d32;
+      flex-shrink: 0;
     }
 
     .app-name {
       margin: 0;
-      font-size: 20px;
-      font-weight: 500;
+      font-size: 18px;
+      font-weight: 600;
       color: #2e7d32;
+      white-space: nowrap;
     }
 
+    .collapse-btn {
+      flex-shrink: 0;
+      color: #666;
+    }
+
+    /* ── User info expanded ── */
     .user-info {
-      padding: 16px;
+      padding: 14px 16px;
       border-bottom: 1px solid #e0e0e0;
       display: flex;
       align-items: center;
       gap: 12px;
     }
 
+    .user-info-collapsed {
+      padding: 12px 0;
+      border-bottom: 1px solid #e0e0e0;
+      display: flex;
+      justify-content: center;
+    }
+
     .user-avatar {
-      width: 40px;
-      height: 40px;
+      width: 36px;
+      height: 36px;
       border-radius: 50%;
       background: #2e7d32;
       display: flex;
       align-items: center;
       justify-content: center;
       color: white;
+      flex-shrink: 0;
+      cursor: default;
     }
 
-    .user-details {
-      flex: 1;
-    }
+    .user-details { flex: 1; overflow: hidden; }
 
     .user-name {
       margin: 0;
       font-weight: 500;
-      font-size: 14px;
+      font-size: 13px;
       color: #333;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .user-role {
       margin: 0;
-      font-size: 12px;
+      font-size: 11px;
       color: #666;
+      white-space: nowrap;
     }
 
-    .nav-list {
-      padding: 8px 0;
-    }
+    /* ── Nav list ── */
+    .nav-list { padding: 8px 0; }
 
     .nav-item {
-      margin: 4px 16px;
+      margin: 2px 8px;
       border-radius: 8px;
-      transition: all 0.2s ease;
+      transition: background 0.2s;
     }
 
-    .nav-item:hover {
-      background-color: rgba(46, 125, 50, 0.1);
+    .nav-item:hover { background-color: rgba(46, 125, 50, 0.1); }
+
+    .nav-item-collapsed {
+      margin: 2px 4px;
+      justify-content: center;
     }
 
     .active-link {
@@ -250,21 +310,33 @@ interface MenuItem {
       color: #2e7d32 !important;
     }
 
+    /* ── Footer ── */
     .sidebar-footer {
       position: absolute;
       bottom: 0;
       left: 0;
       right: 0;
-      padding: 16px;
+      padding: 12px 16px;
       border-top: 1px solid #e0e0e0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
 
-    .theme-button {
-      width: 100%;
-      justify-content: flex-start;
-      gap: 12px;
+    .footer-collapsed {
+      justify-content: center;
+      padding: 12px 0;
     }
 
+    .theme-btn-icon { color: #666; flex-shrink: 0; }
+
+    .theme-label {
+      font-size: 13px;
+      color: #666;
+      white-space: nowrap;
+    }
+
+    /* ── Toolbar ── */
     .main-toolbar {
       position: sticky;
       top: 0;
@@ -272,14 +344,8 @@ interface MenuItem {
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
 
-    .page-title {
-      font-size: 18px;
-      font-weight: 500;
-    }
-
-    .spacer {
-      flex: 1 1 auto;
-    }
+    .page-title { font-size: 18px; font-weight: 500; }
+    .spacer { flex: 1 1 auto; }
 
     .main-content {
       padding: 24px;
@@ -287,95 +353,68 @@ interface MenuItem {
       background: #f5f5f5;
     }
 
+    /* ── Menú usuario ── */
     .user-menu-header {
       padding: 16px;
       border-bottom: 1px solid #e0e0e0;
     }
 
-    .user-menu-name {
-      margin: 0;
-      font-weight: 500;
-      font-size: 14px;
-    }
+    .user-menu-name { margin: 0; font-weight: 500; font-size: 14px; }
+    .user-menu-email { margin: 4px 0 0 0; font-size: 12px; color: #666; }
+    .logout-item { color: #f44336 !important; }
 
-    .user-menu-email {
-      margin: 4px 0 0 0;
-      font-size: 12px;
-      color: #666;
-    }
+    ::ng-deep .user-dropdown-menu { z-index: 9999 !important; }
+    ::ng-deep .cdk-overlay-pane { z-index: 9999 !important; }
 
-    .logout-item {
-      color: #f44336 !important;
-    }
-
-    ::ng-deep .user-dropdown-menu {
-      z-index: 9999 !important;
-    }
-
-    ::ng-deep .cdk-overlay-pane {
-      z-index: 9999 !important;
-    }
-
-    /* Responsive */
+    /* ── Responsive ── */
     @media (max-width: 768px) {
-      .sidenav {
-        width: 100%;
-      }
-
-      .main-content {
-        padding: 16px;
-      }
-
-      .page-title {
-        font-size: 16px;
-      }
+      .sidenav { width: 100%; }
+      .main-content { padding: 16px; }
+      .page-title { font-size: 16px; }
     }
 
-    /* Dark theme */
-    .dark-theme .sidenav {
-      background: #1e1e1e;
-      border-right-color: #333;
-    }
-
+    /* ── Dark theme ── */
+    .dark-theme .sidenav { background: #1e1e1e; border-right-color: #333; }
     .dark-theme .user-info,
+    .dark-theme .user-info-collapsed,
     .dark-theme .sidebar-header,
-    .dark-theme .sidebar-footer {
-      border-color: #333;
-    }
-
-    .dark-theme .user-name {
-      color: #fff;
-    }
-
-    .dark-theme .main-content {
-      background: #121212;
-    }
+    .dark-theme .sidebar-footer { border-color: #333; }
+    .dark-theme .user-name { color: #fff; }
+    .dark-theme .main-content { background: #121212; }
   `]
 })
 export class MainLayoutComponent {
   @ViewChild(MatMenuTrigger) userMenuTrigger!: MatMenuTrigger;
+  @ViewChild(MatSidenavContainer) sidenavContainer!: MatSidenavContainer;
 
   isMobile = signal(false);
   notificationCount = signal(3);
+  collapsed = signal<boolean>(localStorage.getItem(SIDEBAR_KEY) === 'true');
 
   private readonly menuItems: MenuItem[] = [
     {
       label: 'Dashboard',
       icon: 'dashboard',
       route: '/dashboard',
-      roles: ['admin', 'vet', 'aux_admin', 'aux_vet']
+      roles: ['admin', 'vet', 'aux']
     },
     {
       label: 'Pacientes',
       icon: 'pets',
       route: '/pacientes',
-      roles: ['admin', 'vet', 'aux_admin', 'aux_vet']
+      roles: ['admin', 'vet', 'aux']
+    },
+    {
+      label: 'Propietarios',
+      icon: 'people',
+      route: '/propietarios',
+      roles: ['admin', 'vet', 'aux']
     },
     {
       label: 'Citas',
       icon: 'event',
       route: '/citas',
-      roles: ['admin', 'vet', 'aux_admin', 'aux_vet'],
+      roles: ['admin', 'vet', 'aux'],
       badge: 5
     },
     {
@@ -395,6 +434,12 @@ export class MainLayoutComponent {
       icon: 'settings',
       route: '/configuracion',
       roles: ['admin']
+    },
+    {
+      label: 'Auditoría',
+      icon: 'security',
+      route: '/auditoria',
+      roles: ['admin']
     }
   ];
 
@@ -404,6 +449,15 @@ export class MainLayoutComponent {
   ) {
     this.checkScreenSize();
     window.addEventListener('resize', () => this.checkScreenSize());
+  }
+
+  toggleCollapse(): void {
+    const next = !this.collapsed();
+    this.collapsed.set(next);
+    localStorage.setItem(SIDEBAR_KEY, String(next));
+    // Notificar a mat-sidenav-container para que recalcule el margen del contenido
+    // Esperar a que termine la transición CSS (250ms) y luego recalcular márgenes
+    setTimeout(() => this.sidenavContainer?.updateContentMargins(), 260);
   }
 
   filteredMenuItems() {
@@ -420,28 +474,16 @@ export class MainLayoutComponent {
     return menuItem?.label || 'VetPlus';
   }
 
-  goToProfile(): void {
-    this.router.navigate(['/perfil']);
-  }
-
-  goToSettings(): void {
-    this.router.navigate(['/configuracion']);
-  }
-
-  logout(): void {
-    this.authService.logout();
-  }
+  goToProfile(): void { this.router.navigate(['/perfil']); }
+  goToSettings(): void { this.router.navigate(['/configuracion']); }
+  logout(): void { this.authService.logout(); }
 
   openUserMenu(): void {
-    console.log('Intentando abrir menú de usuario...');
-    if (this.userMenuTrigger) {
-      this.userMenuTrigger.openMenu();
-    } else {
-      console.warn('UserMenuTrigger no está disponible');
-    }
+    if (this.userMenuTrigger) this.userMenuTrigger.openMenu();
   }
 
   private checkScreenSize(): void {
     this.isMobile.set(window.innerWidth < 768);
   }
 }
+

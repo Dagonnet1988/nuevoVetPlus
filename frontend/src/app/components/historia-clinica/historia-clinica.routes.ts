@@ -26,7 +26,7 @@ export const historiaClinicaRoutes: Routes = [
     loadComponent: () => import('./components/historia-clinica-details.component').then(c => c.HistoriaClinicaDetailsComponent),
     canActivate: [AuthGuard, RoleGuard],
     data: {
-      roles: ['admin', 'vet', 'assistant'],
+      roles: ['admin', 'vet', 'aux'],
       title: 'Detalles de Historia Clínica'
     }
   },

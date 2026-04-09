@@ -49,11 +49,12 @@ const upload = multer({
         fileSize: 5 * 1024 * 1024 // 5MB máximo
     },
     fileFilter: (req, file, cb) => {
-        const allowedTypes = ['image/jpeg', 'image/png', 'image/svg+xml'];
+        // Solo PNG y JPEG — son los únicos formatos que PDFKit soporta para incrustar en el PDF
+        const allowedTypes = ['image/jpeg', 'image/png'];
         if (allowedTypes.includes(file.mimetype)) {
             cb(null, true);
         } else {
-            cb(new Error('Tipo de archivo no permitido. Solo JPG, PNG y SVG.'));
+            cb(new Error('Formato no permitido. El logo debe ser PNG o JPG/JPEG.'));
         }
     }
 });

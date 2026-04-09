@@ -106,8 +106,9 @@ export async function getClients(req, res) {
         cedula,
         fecha_nacimiento,
         activo,
+        consentimiento_firmado,
         created_at,
-        (SELECT COUNT(*) FROM clinical.mascotas WHERE id_cliente = c.id_cliente) as total_mascotas
+        (SELECT COUNT(*) FROM clinical.mascotas WHERE id_cliente = c.id_cliente AND activo = true) as total_mascotas
       FROM clinical.clientes c
       WHERE c.id_tenant = $1
     `;
@@ -166,7 +167,7 @@ export async function getClients(req, res) {
       success: true,
       message: 'Clientes obtenidos exitosamente',
       data: {
-        clients: result.rows,
+        clientes: result.rows,
         pagination: {
           currentPage: parseInt(page),
           limit: parseInt(limit),
@@ -282,9 +283,8 @@ export async function updateClient(req, res) {
         fecha_nacimiento = $6,
         notas = $7,
         activo = $8,
-        updated_at = CURRENT_TIMESTAMP,
-        updated_by = $9
-      WHERE id_cliente = $10 AND id_tenant = $11
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id_cliente = $9 AND id_tenant = $10
       RETURNING *
     `;
 
@@ -297,7 +297,6 @@ export async function updateClient(req, res) {
       fecha_nacimiento,
       notas,
       activo !== undefined ? activo : true,
-      req.user.id,
       id,
       tenantId
     ];

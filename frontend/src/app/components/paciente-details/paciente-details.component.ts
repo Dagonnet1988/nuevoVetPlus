@@ -1,3 +1,4 @@
+import { extractError } from '../../utils/error.utils';
 import { Component, OnInit, OnDestroy, signal, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -13,6 +14,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatExpansionModule } from '@angular/material/expansion';
+import { sexoDbToFrontend } from '../../utils/paciente.utils';
 import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 
 import { PacientesService } from '../../services/pacientes.service';
@@ -123,7 +125,7 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
             nombre: rawData.nombre,
             especie: rawData.especie,
             raza: rawData.raza,
-            sexo: rawData.sexo,
+            sexo: (sexoDbToFrontend(rawData.sexo) || 'M') as 'M' | 'H',
             fecha_nacimiento: rawData.fecha_nacimiento,
             peso: rawData.peso,
             color: rawData.color,
@@ -440,9 +442,9 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
             { duration: 3000 }
           );
         },
-        error: () => {
+        error: (err) => {
           this.snackBar.open(
-            'Error al actualizar el estado del paciente',
+            extractError(err, 'Error al actualizar el estado del paciente'),
             'Cerrar',
             { duration: 3000 }
           );

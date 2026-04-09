@@ -19,6 +19,9 @@ export class AuthInterceptor implements HttpInterceptor {
   ) {}
 
   intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    // Las rutas del panel de superadmin usan su propio interceptor
+    if (req.url.includes('/superadmin/')) return next.handle(req);
+
     // Agregar token JWT a todas las requests (excepto login)
     let authReq = req;
     const token = this.authService.getToken();

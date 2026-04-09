@@ -97,7 +97,7 @@
               }
 
               <div class="logo-upload">
-                <input type="file" #fileInput (change)="onLogoSelected($event)" accept="image/*" style="display: none;">
+                <input type="file" #fileInput (change)="onLogoSelected($event)" accept="image/png,image/jpeg,image/jpg" style="display: none;">
                 <button mat-raised-button color="accent" (click)="fileInput.click()">
                   <mat-icon>cloud_upload</mat-icon>
                   {{ empresaConfig()?.logo_url ? 'Cambiar Logo' : 'Subir Logo' }}

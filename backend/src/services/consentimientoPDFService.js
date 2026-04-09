@@ -69,15 +69,14 @@ async function generarNumeroPDF() {
 
 /**
  * Genera el PDF de consentimiento firmado.
- * @param {Object} params
- * @param {Object} params.consentimiento - Fila de clinical.consentimientos
- * @param {Object} params.cliente        - Fila de clinical.clientes
- * @param {Object} params.mascota        - Fila de clinical.mascotas (primera mascota activa)
- * @param {string} params.textoLegal     - Texto de clinical.versiones_consentimiento
- * @param {string} params.pdfNumero      - Número único del documento
+ * @param {Object}   params
+ * @param {Object}   params.consentimiento - Fila de clinical.consentimientos
+ * @param {Object}   params.cliente        - Fila de clinical.clientes
+ * @param {string}   params.textoLegal     - Texto de clinical.versiones_consentimiento
+ * @param {string}   params.pdfNumero      - Número único del documento
  * @returns {Promise<string>} Ruta relativa del PDF guardado
  */
-export async function generarPDFConsentimiento({ consentimiento, cliente, mascota, textoLegal, pdfNumero }) {
+export async function generarPDFConsentimiento({ consentimiento, cliente, textoLegal, pdfNumero }) {
   ensurePDFDir();
 
   const empresa = await getEmpresaData();
@@ -91,12 +90,18 @@ export async function generarPDFConsentimiento({ consentimiento, cliente, mascot
     doc.pipe(stream);
 
     // ── ENCABEZADO ────────────────────────────────────────────────
-    // Logo si existe
+    // Logo si existe y es un formato soportado por PDFKit (PNG o JPEG)
     if (empresa.logo_url) {
       const logoPath = path.join(__dirname, '../../', empresa.logo_url);
-      if (fs.existsSync(logoPath)) {
-        doc.image(logoPath, 50, 40, { width: 80 });
-        doc.moveDown(0.5);
+      const ext = path.extname(logoPath).toLowerCase();
+      const soportado = ['.png', '.jpg', '.jpeg'].includes(ext);
+      if (soportado && fs.existsSync(logoPath)) {
+        try {
+          doc.image(logoPath, 50, 40, { width: 80 });
+          doc.moveDown(0.5);
+        } catch (logoErr) {
+          console.warn('No se pudo incluir el logo en el PDF:', logoErr.message);
+        }
       }
     }
 
@@ -130,15 +135,6 @@ export async function generarPDFConsentimiento({ consentimiento, cliente, mascot
       .text(`Email:    ${cliente.email || 'No registrado'}`);
     doc.moveDown(0.5);
 
-    // ── DATOS DE LA MASCOTA ───────────────────────────────────────
-    if (mascota) {
-      doc.fontSize(11).font('Helvetica-Bold').text('DATOS DE LA MASCOTA');
-      doc.fontSize(10).font('Helvetica')
-        .text(`Nombre:  ${mascota.nombre}`)
-        .text(`Especie: ${mascota.especie}${mascota.raza ? ' - ' + mascota.raza : ''}`);
-      doc.moveDown(0.5);
-    }
-
     // ── TEXTO LEGAL ───────────────────────────────────────────────
     doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke();
     doc.moveDown(0.5);
@@ -146,9 +142,9 @@ export async function generarPDFConsentimiento({ consentimiento, cliente, mascot
     // Reemplazar placeholders del texto con datos reales
     const textoFinal = textoLegal
       .replace(/\[NOMBRE_CLINICA\]/g, empresa.nombre_empresa)
-      .replace(/\[NIT\]/g, empresa.nit)
-      .replace(/\[DIRECCION\]/g, empresa.direccion)
-      .replace(/\[EMAIL_CLINICA\]/g, empresa.email || 'soporte@vetplus.com');
+      .replace(/\[NIT\]/g,            empresa.nit)
+      .replace(/\[DIRECCION\]/g,      empresa.direccion)
+      .replace(/\[EMAIL_CLINICA\]/g,  empresa.email || 'soporte@vetplus.com')
 
     doc.fontSize(10).font('Helvetica').text(textoFinal, { align: 'justify', lineGap: 2 });
     doc.moveDown(1);

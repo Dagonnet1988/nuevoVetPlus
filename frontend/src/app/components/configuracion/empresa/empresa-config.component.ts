@@ -195,6 +195,13 @@ export class EmpresaConfigComponent implements OnInit {
   onLogoSelected(event: any): void {
     const file = event.target.files[0];
     if (file) {
+      const allowedTypes = ['image/png', 'image/jpeg'];
+      if (!allowedTypes.includes(file.type)) {
+        this.snackBar.open('Formato no permitido. El logo debe ser PNG o JPG/JPEG.', 'Cerrar', { duration: 4000 });
+        event.target.value = '';
+        return;
+      }
+
       if (file.size > 2 * 1024 * 1024) {
         this.snackBar.open('El archivo es muy grande. Máximo 2MB', 'Cerrar', { duration: 3000 });
         return;

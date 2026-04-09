@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS system.activity_log (
     user_agent TEXT,
     request_data JSONB, -- Datos del request (sanitizados)
     response_data JSONB, -- Datos de respuesta (solo para requests críticas)
+    id_tenant UUID,      -- Tenant al que pertenece la acción
+    id_entidad_afectada UUID, -- UUID del recurso afectado (mascota, cita, cliente, etc.)
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -63,6 +65,8 @@ CREATE INDEX IF NOT EXISTS idx_activity_log_usuario_timestamp ON system.activity
 CREATE INDEX IF NOT EXISTS idx_activity_log_tipo_timestamp ON system.activity_log(tipo_actividad, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_activity_log_url ON system.activity_log(url);
 CREATE INDEX IF NOT EXISTS idx_activity_log_status ON system.activity_log(status_code, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_log_tenant ON system.activity_log(id_tenant, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_log_entidad ON system.activity_log(id_entidad_afectada, timestamp DESC);
 
 CREATE INDEX IF NOT EXISTS idx_session_audit_usuario ON system.session_audit(id_usuario, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_session_audit_tipo ON system.session_audit(tipo_evento, timestamp DESC);
@@ -77,6 +81,7 @@ CREATE INDEX IF NOT EXISTS idx_sensitive_access_tipo ON system.sensitive_access_
 CREATE OR REPLACE VIEW system.v_user_activities AS
 SELECT 
     al.id_log,
+    al.id_usuario,
     al.tipo_actividad,
     al.descripcion,
     al.url,
@@ -95,8 +100,7 @@ SELECT
         ELSE 'UNKNOWN'
     END as resultado
 FROM system.activity_log al
-LEFT JOIN vetplus_auth.usuarios u ON al.id_usuario = u.id_usuario
-ORDER BY al.timestamp DESC;
+LEFT JOIN vetplus_auth.usuarios u ON al.id_usuario = u.id_usuario;
 
 -- Vista de actividades sospechosas
 CREATE OR REPLACE VIEW system.v_suspicious_activities AS
@@ -107,32 +111,25 @@ SELECT
 FROM system.activity_log al
 LEFT JOIN vetplus_auth.usuarios u ON al.id_usuario = u.id_usuario
 WHERE 
-    al.status_code >= 400 -- Requests fallidas
-    OR al.tipo_actividad IN ('PASSWORD_RESET', 'FORCE_LOGOUT')
-    OR (al.timestamp >= CURRENT_TIMESTAMP - INTERVAL '1 hour' 
-        AND al.ip_address IN (
-            SELECT ip_address 
-            FROM system.activity_log 
-            WHERE timestamp >= CURRENT_TIMESTAMP - INTERVAL '1 hour'
-            GROUP BY ip_address 
-            HAVING COUNT(*) > 100 -- Más de 100 requests por hora
-        ))
-ORDER BY al.timestamp DESC;
+    al.status_code >= 400
+    OR al.tipo_actividad IN ('PASSWORD_RESET', 'FORCE_LOGOUT');
 
 -- Vista de sesiones de usuarios
 CREATE OR REPLACE VIEW system.v_user_sessions AS
 SELECT 
     sa.id_session,
+    sa.id_usuario,
     sa.tipo_evento,
     sa.exito,
     sa.ip_address,
+    sa.user_agent,
     sa.timestamp,
-    u.email as usuario_email,
-    u.rol as usuario_rol,
-    u.activo as usuario_activo
+    u.email    AS usuario_email,
+    u.nombre   AS usuario_nombre,
+    u.rol      AS usuario_rol,
+    u.activo   AS usuario_activo
 FROM system.session_audit sa
-LEFT JOIN vetplus_auth.usuarios u ON sa.id_usuario = u.id_usuario
-ORDER BY sa.timestamp DESC;
+LEFT JOIN vetplus_auth.usuarios u ON sa.id_usuario = u.id_usuario;
 
 -- Vista de accesos a datos médicos
 CREATE OR REPLACE VIEW system.v_medical_data_access AS
@@ -181,67 +178,66 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Función para generar reporte de auditoría
+-- Un solo scan por tabla usando COUNT(*) FILTER en lugar de 6 subqueries independientes
 CREATE OR REPLACE FUNCTION system.generate_audit_report(
     start_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP - INTERVAL '30 days',
     end_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     user_id UUID DEFAULT NULL
 )
 RETURNS TABLE(
-    total_activities BIGINT,
+    total_activities      BIGINT,
     successful_activities BIGINT,
-    failed_activities BIGINT,
-    login_attempts BIGINT,
-    successful_logins BIGINT,
-    medical_accesses BIGINT,
-    top_user_email TEXT,
-    top_user_activities BIGINT
+    failed_activities     BIGINT,
+    login_attempts        BIGINT,
+    successful_logins     BIGINT,
+    medical_accesses      BIGINT,
+    top_user_email        TEXT,
+    top_user_activities   BIGINT
 ) AS $$
+DECLARE
+    v_top_email TEXT;
+    v_top_count BIGINT;
 BEGIN
+    -- Un único scan sobre activity_log para todas las métricas
     RETURN QUERY
-    SELECT 
-        (SELECT COUNT(*) FROM system.activity_log al 
-         WHERE al.timestamp BETWEEN start_date AND end_date 
-         AND (user_id IS NULL OR al.id_usuario = user_id))::BIGINT,
-        
-        (SELECT COUNT(*) FROM system.activity_log al 
-         WHERE al.timestamp BETWEEN start_date AND end_date 
-         AND al.status_code < 400
-         AND (user_id IS NULL OR al.id_usuario = user_id))::BIGINT,
-        
-        (SELECT COUNT(*) FROM system.activity_log al 
-         WHERE al.timestamp BETWEEN start_date AND end_date 
-         AND al.status_code >= 400
-         AND (user_id IS NULL OR al.id_usuario = user_id))::BIGINT,
-        
-        (SELECT COUNT(*) FROM system.session_audit sa 
-         WHERE sa.timestamp BETWEEN start_date AND end_date 
-         AND sa.tipo_evento = 'LOGIN'
-         AND (user_id IS NULL OR sa.id_usuario = user_id))::BIGINT,
-        
-        (SELECT COUNT(*) FROM system.session_audit sa 
-         WHERE sa.timestamp BETWEEN start_date AND end_date 
-         AND sa.tipo_evento = 'LOGIN' AND sa.exito = true
-         AND (user_id IS NULL OR sa.id_usuario = user_id))::BIGINT,
-        
-        (SELECT COUNT(*) FROM system.activity_log al 
-         WHERE al.timestamp BETWEEN start_date AND end_date 
-         AND al.tipo_actividad = 'MEDICAL_ACCESS'
-         AND (user_id IS NULL OR al.id_usuario = user_id))::BIGINT,
-        
-        (SELECT u.email FROM system.activity_log al 
-         JOIN vetplus_auth.usuarios u ON al.id_usuario = u.id_usuario
-         WHERE al.timestamp BETWEEN start_date AND end_date
-         AND (user_id IS NULL OR al.id_usuario = user_id)
-         GROUP BY u.email 
-         ORDER BY COUNT(*) DESC 
-         LIMIT 1)::TEXT,
-        
-        (SELECT COUNT(*) FROM system.activity_log al 
-         JOIN vetplus_auth.usuarios u ON al.id_usuario = u.id_usuario
-         WHERE al.timestamp BETWEEN start_date AND end_date
-         AND (user_id IS NULL OR al.id_usuario = user_id)
-         GROUP BY u.email 
-         ORDER BY COUNT(*) DESC 
-         LIMIT 1)::BIGINT;
+    WITH activity_stats AS (
+        SELECT
+            COUNT(*)                                                        AS total_activities,
+            COUNT(*) FILTER (WHERE status_code < 400)                      AS successful_activities,
+            COUNT(*) FILTER (WHERE status_code >= 400)                     AS failed_activities,
+            COUNT(*) FILTER (WHERE tipo_actividad = 'MEDICAL_ACCESS')      AS medical_accesses
+        FROM system.activity_log
+        WHERE timestamp BETWEEN start_date AND end_date
+          AND (user_id IS NULL OR id_usuario = user_id)
+    ),
+    session_stats AS (
+        SELECT
+            COUNT(*) FILTER (WHERE tipo_evento = 'LOGIN')                  AS login_attempts,
+            COUNT(*) FILTER (WHERE tipo_evento = 'LOGIN' AND exito = true) AS successful_logins
+        FROM system.session_audit
+        WHERE timestamp BETWEEN start_date AND end_date
+          AND (user_id IS NULL OR id_usuario = user_id)
+    ),
+    top_user AS (
+        SELECT u.email, COUNT(*) AS cnt
+        FROM system.activity_log al
+        JOIN vetplus_auth.usuarios u ON al.id_usuario = u.id_usuario
+        WHERE al.timestamp BETWEEN start_date AND end_date
+          AND (user_id IS NULL OR al.id_usuario = user_id)
+        GROUP BY u.email
+        ORDER BY cnt DESC
+        LIMIT 1
+    )
+    SELECT
+        a.total_activities,
+        a.successful_activities,
+        a.failed_activities,
+        s.login_attempts,
+        s.successful_logins,
+        a.medical_accesses,
+        t.email::TEXT,
+        t.cnt
+    FROM activity_stats a, session_stats s
+    LEFT JOIN top_user t ON true;
 END;
 $$ LANGUAGE plpgsql;

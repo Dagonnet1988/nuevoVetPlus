@@ -12,6 +12,7 @@ import { MatNativeDateModule } from '@angular/material/core';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatDividerModule } from '@angular/material/divider';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -57,6 +58,7 @@ import {
     MatTabsModule,
     MatChipsModule,
     MatMenuModule,
+    MatDividerModule,
     MatDialogModule,
     MatSnackBarModule,
     MatProgressSpinnerModule,
@@ -106,6 +108,8 @@ export class CitasComponent implements OnInit, OnDestroy {
       center: 'title',
       right: 'dayGridMonth,timeGridWeek,timeGridDay'
     },
+    // El día actual siempre es el 2do día visible: la semana arranca desde ayer
+    firstDay: (new Date().getDay() - 1 + 7) % 7,
     height: 'auto', // Cambiar a auto para que se ajuste automáticamente
     contentHeight: 'auto',
     aspectRatio: 1.35, // Ratio más amplio para mejor visualización
@@ -116,11 +120,11 @@ export class CitasComponent implements OnInit, OnDestroy {
     weekends: true,
     businessHours: {
       daysOfWeek: [1, 2, 3, 4, 5, 6], // Lunes a Sábado
-      startTime: '08:00',
+      startTime: '07:00',
       endTime: '18:00'
     },
-    slotMinTime: '06:00', // Mostrar desde las 6 AM (día completo)
-    slotMaxTime: '22:00', // Hasta las 10 PM (día completo)
+    slotMinTime: '07:00:00', // Rango base: 7 AM
+    slotMaxTime: '18:00:00', // Rango base: 6 PM
     slotDuration: '00:30:00',
     slotLabelInterval: '01:00:00', // Mostrar etiquetas cada hora
     slotLabelFormat: {
@@ -131,7 +135,7 @@ export class CitasComponent implements OnInit, OnDestroy {
     },
     nowIndicator: true,
     now: new Date(),
-    scrollTime: '08:00:00', // Scroll automático a las 8 AM al cargar
+    scrollTime: '07:00:00', // Scroll automático a las 7 AM al cargar
     allDaySlot: false, // Ocultar slot de "todo el día" para ahorrar espacio
     expandRows: true, // Expandir filas para usar todo el espacio
     stickyHeaderDates: true, // Mantener fechas fijas al hacer scroll
@@ -333,10 +337,15 @@ export class CitasComponent implements OnInit, OnDestroy {
 
         const events = this.transformCitasToEvents(citasArray);
 
+        // Calcular rango horario dinámico (base 07:00-18:00, ampliar si hay citas fuera)
+        const { slotMinTime, slotMaxTime } = this.calcularRangoHorario(citasArray);
+
         // Actualizar eventos
         this.calendarOptions = {
           ...this.calendarOptions,
-          events: events
+          events: events,
+          slotMinTime,
+          slotMaxTime
         };
 
         this.citas.set(citasArray);
@@ -439,10 +448,30 @@ export class CitasComponent implements OnInit, OnDestroy {
   }
 
   private parseLocalDate(fechaStr: string): Date {
-
     const fecha = new Date(fechaStr);
-
     return fecha;
+  }
+
+  /** Calcula slotMinTime/slotMaxTime: fijo 07:00-18:00, se amplía si hay citas fuera */
+  private calcularRangoHorario(citas: Cita[]): { slotMinTime: string; slotMaxTime: string } {
+    const BASE_MIN = 7;   // 7:00 AM
+    const BASE_MAX = 18;  // 6:00 PM
+
+    let minHour = BASE_MIN;
+    let maxHour = BASE_MAX;
+
+    for (const cita of citas) {
+      const inicio = new Date(cita.fecha_inicio);
+      const fin = new Date(cita.fecha_fin);
+      const hInicio = inicio.getHours();
+      const hFin = fin.getHours() + (fin.getMinutes() > 0 ? 1 : 0); // redondear hacia arriba
+
+      if (hInicio < minHour) minHour = Math.max(0, hInicio);
+      if (hFin > maxHour) maxHour = Math.min(24, hFin);
+    }
+
+    const pad = (h: number) => `${String(h).padStart(2, '0')}:00:00`;
+    return { slotMinTime: pad(minHour), slotMaxTime: pad(maxHour) };
   }
 
   private formatLocalDateForBackend(date: Date): string {
@@ -767,17 +796,29 @@ export class CitasComponent implements OnInit, OnDestroy {
   // NUEVAS FUNCIONES PARA VISTA PLANA
   // ===========================================
 
-  // Abrir calendario en nueva pestaña
+  // Abrir calendario en nueva pestaña (legacy — ahora usamos toggle inline)
   abrirCalendarioNuevaPestana(): void {
-    const url = window.location.origin + '/citas?view=calendario';
-    window.open(url, '_blank');
+    this.setViewMode('calendario');
+  }
+
+  setViewMode(mode: 'plana' | 'calendario'): void {
+    this.viewMode.set(mode);
+    if (mode === 'calendario') {
+      // Re-render el calendario luego de que el DOM aparezca
+      setTimeout(() => {
+        if (this.calendarComponent?.getApi) {
+          this.calendarComponent.getApi().updateSize();
+        }
+      }, 150);
+    }
   }
 
   // Obtener citas agrupadas por día
   citasPorDia() {
     const citas = this.citas();
     const citasAgrupadas = new Map<string, any>();
-    const hoy = new Date().toISOString().split('T')[0];
+    // Usar hora LOCAL, no UTC — evita el bug de zona horaria a partir de las 7pm
+    const hoy = this.getLocalDateString(new Date());
 
     // Primero agregar el día actual si no tiene citas
     if (!citasAgrupadas.has(hoy)) {
@@ -795,7 +836,8 @@ export class CitasComponent implements OnInit, OnDestroy {
     }
 
     citas.forEach(cita => {
-      const fecha = new Date(cita.fecha_inicio).toISOString().split('T')[0];
+      // Usar hora local para agrupar por día correcto
+      const fecha = this.getLocalDateString(new Date(cita.fecha_inicio));
 
       if (!citasAgrupadas.has(fecha)) {
         citasAgrupadas.set(fecha, {
@@ -838,9 +880,18 @@ export class CitasComponent implements OnInit, OnDestroy {
     });
 
     // Convertir a array y ordenar por fecha (solo fechas futuras o hoy)
+    // Comparar strings YYYY-MM-DD directamente — funciona correctamente con hora local
     return Array.from(citasAgrupadas.values())
-      .filter(grupo => new Date(grupo.fecha) >= new Date(hoy))
+      .filter(grupo => grupo.fecha >= hoy)
       .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+  }
+
+  /** Devuelve la fecha local como string YYYY-MM-DD sin conversión a UTC */
+  private getLocalDateString(date: Date): string {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   }
 
   private formatearFecha(fechaStr: string): string {
@@ -879,11 +930,11 @@ export class CitasComponent implements OnInit, OnDestroy {
 
   getEstadoClass(estado: string): string {
     const clases: { [key: string]: string } = {
-      'pendiente': 'estado-pendiente',
+      'pendiente':  'estado-pendiente',
       'confirmada': 'estado-confirmada',
-      'en_progreso': 'estado-en-progreso',
+      'en_curso':   'estado-en-progreso',
       'completada': 'estado-completada',
-      'cancelada': 'estado-cancelada',
+      'cancelada':  'estado-cancelada',
       'no_asistio': 'estado-no-asistio'
     };
     return clases[estado] || 'estado-desconocido';
@@ -891,12 +942,12 @@ export class CitasComponent implements OnInit, OnDestroy {
 
   getEstadoTexto(estado: string): string {
     const textos: { [key: string]: string } = {
-      'pendiente': 'Pendiente',
+      'pendiente':  'Pendiente',
       'confirmada': 'Confirmada',
-      'en_progreso': 'En Progreso',
+      'en_curso':   'En curso',
       'completada': 'Completada',
-      'cancelada': 'Cancelada',
-      'no_asistio': 'No Asistió'
+      'cancelada':  'Cancelada',
+      'no_asistio': 'No asistió'
     };
     return textos[estado] || 'Desconocido';
   }
@@ -933,9 +984,39 @@ export class CitasComponent implements OnInit, OnDestroy {
     console.log('Editar cita:', cita);
   }
 
-  cambiarEstadoCita(cita: any): void {
-    // TODO: Implementar cambio de estado
-    console.log('Cambiar estado cita:', cita);
+  // Mapa de transiciones válidas entre estados de cita
+  private readonly TRANSICIONES_VALIDAS: Record<string, string[]> = {
+    pendiente:  ['confirmada', 'no_asistio', 'cancelada'],
+    confirmada: ['en_curso', 'no_asistio', 'cancelada'],
+    en_curso:   ['completada', 'no_asistio'],
+    completada: [],
+    no_asistio: [],
+    cancelada:  ['pendiente']
+  };
+
+  puedeTransicionar(estadoActual: string, estadoDestino: string): boolean {
+    return this.TRANSICIONES_VALIDAS[estadoActual]?.includes(estadoDestino) ?? false;
+  }
+
+  cambiarEstadoCita(cita: any, nuevoEstado: string): void {
+    this.citasService.updateEstadoCita(cita.id_cita, nuevoEstado).subscribe({
+      next: () => {
+        const etiquetas: Record<string, string> = {
+          pendiente: 'Pendiente',
+          confirmada: 'Confirmada',
+          en_curso: 'En curso',
+          completada: 'Completada',
+          no_asistio: 'No asistió',
+          cancelada: 'Cancelada'
+        };
+        this.snackBar.open(`Estado actualizado: ${etiquetas[nuevoEstado] ?? nuevoEstado}`, 'Cerrar', { duration: 3000 });
+        this.loadCalendarEvents(); // Recargar para reflejar el cambio
+      },
+      error: (err) => {
+        console.error('Error cambiando estado:', err);
+        this.snackBar.open(err.error?.message ?? 'Error al cambiar estado', 'Cerrar', { duration: 4000 });
+      }
+    });
   }
 
   // Volver a vista plana desde calendario

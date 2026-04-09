@@ -61,11 +61,8 @@ class DBInit {
   async runPostInitMigrations() {
     const migrationFiles = [
       { file: '09_clinical_archivos_consulta.sql', desc: 'Migración adjuntos de consultas clínicas' },
-      { file: '10_consentimientos.sql', desc: 'Migración módulo de consentimiento de datos' },
-      { file: '11_tenants.sql', desc: 'MT1 — Tabla system.tenants (multi-tenancy)' },
-      { file: '12_tenant_columns.sql', desc: 'MT1 — Columna id_tenant en tablas core' }
-      // MT3: aislamiento por tenant garantizado mediante AND id_tenant = $N en todos
-      // los controladores (app layer). RLS PG no activo (superuser/owner connection).
+      { file: '10_consentimientos.sql', desc: 'Migración módulo de consentimiento de datos' }
+      // 11 y 12 eliminados: system.tenants e id_tenant están integrados en 01/02/03/06/10.
     ];
     for (const { file, desc } of migrationFiles) {
       const filePath = path.join(this.schemasPath, file);
@@ -459,12 +456,9 @@ class DBInit {
         { file: '06_empresa_config.sql', desc: 'Configuración de empresa' },
         { file: '07_workflow_integration.sql', desc: 'Integraciones de workflow y notificaciones' },
         { file: '08_audit_expansion.sql', desc: 'Expansión sistema auditoría' },
-        { file: '09_clinical_archivos_consulta.sql', desc: 'Migración adjuntos de consultas clínicas' },
-        { file: '10_consentimientos.sql', desc: 'Migración módulo de consentimiento de datos' },
-        { file: '11_tenants.sql', desc: 'MT1 — Tabla system.tenants (multi-tenancy)' },
-        { file: '12_tenant_columns.sql', desc: 'MT1 — Columna id_tenant en tablas core' }
-        // MT3: aislamiento por tenant garantizado mediante AND id_tenant = $N en todos
-        // los controladores (app layer). RLS PG no activo (superuser/owner connection).
+        { file: '09_clinical_archivos_consulta.sql', desc: 'Adjuntos de consultas clínicas' },
+        { file: '10_consentimientos.sql', desc: 'Módulo de consentimiento de datos' }
+        // 11 y 12 eliminados: system.tenants e id_tenant ya están en 01/02/03/06/10
       ];
       
       for (const { file, desc } of schemaFiles) {

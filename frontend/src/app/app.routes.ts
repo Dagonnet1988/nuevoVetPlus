@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { AuthGuard } from './utils/guards/auth.guard';
 import { NoAuthGuard } from './utils/guards/no-auth.guard';
 import { RoleGuard } from './utils/guards/role.guard';
+import { SuperadminGuard } from './utils/guards/superadmin.guard';
 
 export const routes: Routes = [
   // Ruta raíz - redirigir al login temporalmente
@@ -55,20 +56,28 @@ export const routes: Routes = [
         loadComponent: () => import('./components/dashboard/dashboard.component').then(m => m.DashboardComponent)
       },
 
-      // Pacientes - Accesible para admin, vet, aux_admin, aux_vet
+      // Pacientes - Accesible para admin, vet, aux
       {
         path: 'pacientes',
         loadChildren: () => import('./components/pacientes/pacientes.routes').then(m => m.PACIENTES_ROUTES),
         canActivate: [RoleGuard],
-        data: { roles: ['admin', 'vet', 'aux_admin', 'aux_vet'] }
+        data: { roles: ['admin', 'vet', 'aux'] }
       },
 
-      // Citas - Accesible para admin, vet, aux_admin, aux_vet
+      // Propietarios - Accesible para admin, vet, aux
+      {
+        path: 'propietarios',
+        loadChildren: () => import('./components/propietarios/propietarios.routes').then(m => m.PROPIETARIOS_ROUTES),
+        canActivate: [RoleGuard],
+        data: { roles: ['admin', 'vet', 'aux'] }
+      },
+
+      // Citas - Accesible para admin, vet, aux
       {
         path: 'citas',
         loadChildren: () => import('./components/citas/citas.routes').then(m => m.CITAS_ROUTES),
         canActivate: [RoleGuard],
-        data: { roles: ['admin', 'vet', 'aux_admin', 'aux_vet'] }
+        data: { roles: ['admin', 'vet', 'aux'] }
       },
 
       // Historia Clínica - Accesible para admin, vet
@@ -88,6 +97,14 @@ export const routes: Routes = [
         data: { roles: ['admin'] }
       },
 
+      // Auditoría - Solo admin
+      {
+        path: 'auditoria',
+        loadComponent: () => import('./components/auditoria/auditoria.component').then(m => m.AuditoriaComponent),
+        canActivate: [RoleGuard],
+        data: { roles: ['admin'] }
+      },
+
       // Configuración - Solo admin
       {
         path: 'configuracion',
@@ -101,6 +118,37 @@ export const routes: Routes = [
         path: 'perfil',
         redirectTo: '/dashboard',
         pathMatch: 'full'
+      }
+    ]
+  },
+
+  // ── Panel Superadmin (plataforma) ─────────────────────────────────────────
+  {
+    path: 'superadmin/login',
+    loadComponent: () => import('./components/superadmin/login/superadmin-login.component')
+      .then(m => m.SuperadminLoginComponent)
+  },
+  {
+    path: 'superadmin',
+    loadComponent: () => import('./layouts/superadmin-layout/superadmin-layout.component')
+      .then(m => m.SuperadminLayoutComponent),
+    canActivate: [SuperadminGuard],
+    children: [
+      { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
+      {
+        path: 'dashboard',
+        loadComponent: () => import('./components/superadmin/dashboard/superadmin-dashboard.component')
+          .then(m => m.SuperadminDashboardComponent)
+      },
+      {
+        path: 'clinicas/nueva',
+        loadComponent: () => import('./components/superadmin/nueva-clinica/nueva-clinica.component')
+          .then(m => m.NuevaClinicaComponent)
+      },
+      {
+        path: 'clinicas/:id',
+        loadComponent: () => import('./components/superadmin/detalle-clinica/detalle-clinica.component')
+          .then(m => m.DetalleClinicaComponent)
       }
     ]
   },

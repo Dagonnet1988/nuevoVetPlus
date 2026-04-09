@@ -68,11 +68,16 @@
         @if (datos.cliente.cedula) {
           <p><span class="label">Cédula:</span> {{ datos.cliente.cedula }}</p>
         }
+        <p class="expiry-notice">
+          <mat-icon class="expiry-icon">schedule</mat-icon>
+          Este enlace vence el <strong>{{ datos.expiresAt | date:'dd/MM/yyyy HH:mm' }}</strong>
+          (válido {{ datos.tokenDurationHours }}h desde su envío)
+        </p>
       </section>
 
       <!-- Texto legal (scroll) -->
       <section class="texto-legal-section">
-        <div class="texto-legal" [innerHTML]="datos.version.textoLegal"></div>
+        <div class="texto-legal">{{ datos.version.textoLegal }}</div>
       </section>
 
       <!-- Área de firma -->

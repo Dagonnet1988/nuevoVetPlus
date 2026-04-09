@@ -14,6 +14,17 @@
         <p class="page-subtitle">Calendario integrado con Google Calendar</p>
       </div>
       <div class="actions-section">
+        <!-- Toggle de vista -->
+        <mat-button-toggle-group [value]="viewMode()" (change)="setViewMode($event.value)" class="view-toggle">
+          <mat-button-toggle value="plana">
+            <mat-icon>view_list</mat-icon>
+            Lista
+          </mat-button-toggle>
+          <mat-button-toggle value="calendario">
+            <mat-icon>calendar_month</mat-icon>
+            Calendario
+          </mat-button-toggle>
+        </mat-button-toggle-group>
         <button mat-raised-button
                 color="primary"
                 (click)="openCreateDialog()"
@@ -128,48 +139,30 @@
         </button>
       </form>
     </div>
+  </div>
 
-    <!-- Calendario a pantalla completa (solo cuando se solicita) -->
-    @if (viewMode() === 'calendario') {
-      <div class="fullscreen-calendar-no-sidebar"
-           [class.compact-mode]="calendarViewMode() === 'compact'">
-        <!-- Calendario sin contenedores adicionales -->
-        @if (loading()) {
-          <div class="loading-container">
-            <div class="loading-spinner">
-              <mat-spinner diameter="60"></mat-spinner>
-            </div>
-            <div class="loading-text">
-              <h3>Cargando calendario...</h3>
-              <p>Preparando las citas programadas</p>
-            </div>
+  <!-- Vista Calendario -->
+  @if (viewMode() === 'calendario') {
+    <div class="calendar-section" [class.compact-mode]="calendarViewMode() === 'compact'">
+      @if (loading()) {
+        <div class="loading-container">
+          <div class="loading-spinner">
+            <mat-spinner diameter="60"></mat-spinner>
           </div>
-        } @else {
-          <div class="calendar-fullscreen-wrapper">
-            <full-calendar
-              [options]="calendarOptions"
-              #calendar>
-            </full-calendar>
+          <div class="loading-text">
+            <h3>Cargando calendario...</h3>
+            <p>Preparando las citas programadas</p>
           </div>
-        }
-      </div>
-    }
- </div>
-
-  <!-- Vista plana de citas -->
-  <div class="citas-plana-container">
-    <!-- Botón para abrir calendario en nueva pestaña -->
-    <div class="calendar-button-section">
-      <button mat-raised-button
-              color="primary"
-              (click)="abrirCalendarioNuevaPestana()"
-              class="calendar-view-button">
-        <mat-icon>calendar_view_month</mat-icon>
-        Ver Calendario Completo
-        <mat-icon class="external-link">open_in_new</mat-icon>
-      </button>
+        </div>
+      } @else {
+        <full-calendar [options]="calendarOptions" #calendar></full-calendar>
+      }
     </div>
+  }
 
+  <!-- Vista Lista -->
+  @if (viewMode() === 'plana') {
+  <div class="citas-plana-container">
     <!-- Lista de citas por día -->
     <div class="citas-lista">
       @if (loading()) {
@@ -268,7 +261,9 @@
                       <mat-icon>edit</mat-icon>
                     </button>
                     <button mat-icon-button
-                            (click)="$event.stopPropagation(); cambiarEstadoCita(cita)"
+                            [matMenuTriggerFor]="menuEstado"
+                            [matMenuTriggerData]="{cita: cita}"
+                            (click)="$event.stopPropagation()"
                             matTooltip="Cambiar estado">
                       <mat-icon>swap_horiz</mat-icon>
                     </button>
@@ -281,4 +276,36 @@
       }
     </div>
   </div>
+  }
 </div>
+
+<!-- Menú de cambio de estado (compartido para todas las citas) -->
+<mat-menu #menuEstado="matMenu">
+  <ng-template matMenuContent let-cita="cita">
+    <button mat-menu-item (click)="cambiarEstadoCita(cita, 'pendiente')" [disabled]="!puedeTransicionar(cita.estado, 'pendiente')">
+      <mat-icon style="color:#ff9800">schedule</mat-icon>
+      <span>Pendiente</span>
+    </button>
+    <button mat-menu-item (click)="cambiarEstadoCita(cita, 'confirmada')" [disabled]="!puedeTransicionar(cita.estado, 'confirmada')">
+      <mat-icon style="color:#2196f3">check_circle</mat-icon>
+      <span>Confirmada</span>
+    </button>
+    <button mat-menu-item (click)="cambiarEstadoCita(cita, 'en_curso')" [disabled]="!puedeTransicionar(cita.estado, 'en_curso')">
+      <mat-icon style="color:#9c27b0">play_circle</mat-icon>
+      <span>En curso</span>
+    </button>
+    <button mat-menu-item (click)="cambiarEstadoCita(cita, 'completada')" [disabled]="!puedeTransicionar(cita.estado, 'completada')">
+      <mat-icon style="color:#4caf50">task_alt</mat-icon>
+      <span>Completada</span>
+    </button>
+    <mat-divider></mat-divider>
+    <button mat-menu-item (click)="cambiarEstadoCita(cita, 'no_asistio')" [disabled]="!puedeTransicionar(cita.estado, 'no_asistio')">
+      <mat-icon style="color:#f44336">person_off</mat-icon>
+      <span>No asistió</span>
+    </button>
+    <button mat-menu-item (click)="cambiarEstadoCita(cita, 'cancelada')" [disabled]="!puedeTransicionar(cita.estado, 'cancelada')">
+      <mat-icon style="color:#607d8b">cancel</mat-icon>
+      <span>Cancelada</span>
+    </button>
+  </ng-template>
+</mat-menu>

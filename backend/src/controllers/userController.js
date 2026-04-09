@@ -136,6 +136,8 @@ export const getUsers = async (req, res) => {
             search
         } = req.query;
 
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+
         // Validar límites de paginación
         const maxLimit = 100;
         const validLimit = Math.min(parseInt(limit), maxLimit);
@@ -145,8 +147,14 @@ export const getUsers = async (req, res) => {
             SELECT 
                 id_usuario,
                 nombre,
+                apellido,
                 email,
+                documento,
+                tipo_documento,
+                telefono,
                 rol,
+                especialidad,
+                numero_licencia,
                 activo,
                 ultimo_login,
                 intentos_login,
@@ -157,8 +165,9 @@ export const getUsers = async (req, res) => {
             WHERE 1=1
         `;
 
-        const values = [];
-        let paramCount = 0;
+        const values = [tenantId];
+        let paramCount = 1;
+        selectSQL += ` AND id_tenant = $1`;
 
         // Filtros opcionales
         if (rol) {
@@ -175,7 +184,7 @@ export const getUsers = async (req, res) => {
 
         if (search) {
             paramCount++;
-            selectSQL += ` AND (nombre ILIKE $${paramCount} OR email ILIKE $${paramCount})`;
+            selectSQL += ` AND (nombre ILIKE $${paramCount} OR apellido ILIKE $${paramCount} OR email ILIKE $${paramCount})`;
             values.push(`%${search}%`);
         }
 
@@ -193,9 +202,9 @@ export const getUsers = async (req, res) => {
         const result = await query(selectSQL, values);
 
         // Contar total de registros
-        let countSQL = 'SELECT COUNT(*) FROM vetplus_auth.usuarios WHERE 1=1';
-        const countValues = [];
-        let countParamCount = 0;
+        let countSQL = 'SELECT COUNT(*) FROM vetplus_auth.usuarios WHERE id_tenant = $1';
+        const countValues = [tenantId];
+        let countParamCount = 1;
 
         if (rol) {
             countParamCount++;
@@ -211,7 +220,7 @@ export const getUsers = async (req, res) => {
 
         if (search) {
             countParamCount++;
-            countSQL += ` AND (nombre ILIKE $${countParamCount} OR email ILIKE $${countParamCount})`;
+            countSQL += ` AND (nombre ILIKE $${countParamCount} OR apellido ILIKE $${countParamCount} OR email ILIKE $${countParamCount})`;
             countValues.push(`%${search}%`);
         }
 
@@ -651,6 +660,7 @@ export const reactivateUser = async (req, res) => {
  */
 export const getUserStats = async (req, res) => {
     try {
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
         const result = await query(`
             SELECT 
                 COUNT(*) as total_usuarios,
@@ -662,7 +672,8 @@ export const getUserStats = async (req, res) => {
                 COUNT(CASE WHEN ultimo_login >= CURRENT_DATE - INTERVAL '7 days' THEN 1 END) as usuarios_activos_semana,
                 COUNT(CASE WHEN bloqueado_hasta > CURRENT_TIMESTAMP THEN 1 END) as usuarios_bloqueados
             FROM vetplus_auth.usuarios
-        `);
+            WHERE id_tenant = $1
+        `, [tenantId]);
 
         const stats = result.rows[0];
 

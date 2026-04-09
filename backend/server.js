@@ -18,6 +18,7 @@ import googleCalendarWebhookRoutes from './src/routes/googleCalendarWebhook.js';
 import systemStatusRoutes from './src/routes/systemStatus.js';
 import testRoutes from './src/routes/test.js';
 import publicRoutes from './src/routes/public.js';
+import superadminRoutes from './src/routes/superadmin.js';
 import { generalRateLimit, rateLimitStats } from './src/middleware/rateLimiter.js';
 
 // Importar middleware de auditoría
@@ -91,6 +92,7 @@ app.use('/api/appointments/export', appointmentExportRoutes);
 app.use('/api/config/consentimiento', configConsentimientoRoutes);
 app.use('/api/google-calendar-webhook', googleCalendarWebhookRoutes);
 app.use('/api/system', systemStatusRoutes);
+app.use('/api/superadmin', superadminRoutes);
 
 // Rutas de test — solo en desarrollo/staging, nunca en producción
 if (process.env.NODE_ENV !== 'production') {

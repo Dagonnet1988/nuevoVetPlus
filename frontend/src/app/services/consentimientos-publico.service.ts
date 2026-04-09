@@ -19,6 +19,7 @@ export interface ConsentimientoPublicoData {
     logoUrl: string | null;
   };
   expiresAt: string;
+  tokenDurationHours: number;
 }
 
 export interface FirmarResponse {

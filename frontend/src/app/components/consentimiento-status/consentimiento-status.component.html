@@ -16,6 +16,10 @@
           <mat-icon>verified</mat-icon>
           <span>Consentimiento firmado</span>
         }
+        @case ('desactualizado') {
+          <mat-icon>update</mat-icon>
+          <span>Versión desactualizada — requiere nueva firma</span>
+        }
         @case ('pendiente') {
           <mat-icon>pending</mat-icon>
           <span>Pendiente de firma</span>
@@ -24,6 +28,10 @@
           <mat-icon>schedule</mat-icon>
           <span>Enlace expirado</span>
         }
+        @case ('revocado') {
+          <mat-icon>block</mat-icon>
+          <span>Consentimiento revocado</span>
+        }
         @default {
           <mat-icon>assignment_late</mat-icon>
           <span>Sin consentimiento</span>
@@ -31,16 +39,16 @@
       }
     </div>
 
-    @if (estado()!.estado === 'firmado' && estado()!.consentimiento?.firmado_en) {
-      <span class="cs-date">{{ estado()!.consentimiento!.firmado_en | date:'dd/MM/yyyy' }}</span>
+    @if ((estado()!.estado === 'firmado' || estado()!.estado === 'desactualizado') && estado()!.consentimiento?.firmadoEn) {
+      <span class="cs-date">Firmado {{ estado()!.consentimiento!.firmadoEn | date:'dd/MM/yyyy' }}</span>
     }
   </div>
 
   <!-- Acciones -->
   <div class="cs-actions">
 
-    <!-- Sin consentimiento o expirado → Enviar -->
-    @if (estado()!.estado === 'sin_consentimiento' || estado()!.estado === 'expirado') {
+    <!-- Sin consentimiento, expirado, desactualizado o revocado → Enviar -->
+    @if (['sin_consentimiento', 'expirado', 'desactualizado', 'revocado'].includes(estado()!.estado)) {
       <button
         mat-stroked-button
         color="primary"
@@ -56,7 +64,7 @@
       </button>
     }
 
-    <!-- Pendiente → Reenviar + Ver QR -->
+    <!-- Pendiente → Reenviar + Ver QR (si el token no ha expirado aún) -->
     @if (estado()!.estado === 'pendiente') {
       <button
         mat-stroked-button
@@ -70,24 +78,51 @@
           Reenviar
         </ng-container>
       </button>
-      <button mat-icon-button (click)="verQR()" matTooltip="Copiar enlace de firma">
-        <mat-icon>link</mat-icon>
+      @if (estado()!.consentimiento?.expiresAt && isLinkVigente(estado()!.consentimiento!.expiresAt!)) {
+        <button mat-icon-button (click)="verQR()" matTooltip="Copiar enlace de firma">
+          <mat-icon>link</mat-icon>
+        </button>
+      }
+    }
+
+    <!-- Firmado → Ver PDF + Revocar -->
+    @if (estado()!.estado === 'firmado') {
+      @if (estado()!.consentimiento?.pdfDisponible) {
+        <button
+          mat-stroked-button
+          [disabled]="actuando()"
+          (click)="descargarPDF()"
+          matTooltip="Ver PDF del consentimiento firmado"
+        >
+          <ng-container>
+            @if (actuando()) { <mat-spinner diameter="18" class="btn-spinner"></mat-spinner> }
+            @if (!actuando()) { <mat-icon>open_in_new</mat-icon> }
+            Ver PDF
+          </ng-container>
+        </button>
+      }
+      <button
+        mat-stroked-button
+        color="warn"
+        [disabled]="actuando()"
+        (click)="solicitarRevocacion()"
+        matTooltip="Revocar consentimiento a solicitud del propietario"
+      >
+        <mat-icon>block</mat-icon>
+        Revocar
       </button>
     }
 
-    <!-- Firmado → Descargar PDF -->
-    @if (estado()!.estado === 'firmado' && estado()!.consentimiento?.pdf_path) {
+    <!-- Desactualizado → Ver PDF del anterior (si existe) + pedir nueva firma ya agregado arriba -->
+    @if (estado()!.estado === 'desactualizado' && estado()!.consentimiento?.pdfDisponible) {
       <button
         mat-stroked-button
         [disabled]="actuando()"
         (click)="descargarPDF()"
-        matTooltip="Descargar PDF del consentimiento firmado"
+        matTooltip="Ver PDF de la versión anterior firmada"
       >
-        <ng-container>
-          @if (actuando()) { <mat-spinner diameter="18" class="btn-spinner"></mat-spinner> }
-          @if (!actuando()) { <mat-icon>picture_as_pdf</mat-icon> }
-          Ver PDF
-        </ng-container>
+        <mat-icon>open_in_new</mat-icon>
+        Ver PDF anterior
       </button>
     }
 

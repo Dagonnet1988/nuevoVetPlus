@@ -8,11 +8,11 @@ const router = express.Router();
 /**
  * @route   POST /api/clinical/clients
  * @desc    Crear nuevo cliente
- * @access  Private (admin, vet, assistant)
+ * @access  Private (admin, vet, aux)
  */
 router.post('/',
   authenticateToken,
-  authorize(['admin', 'vet', 'assistant']),
+  authorize(['admin', 'vet', 'aux']),
   clientValidators.validateCreateClient,
   clientController.createClient
 );
@@ -20,11 +20,11 @@ router.post('/',
 /**
  * @route   GET /api/clinical/clients
  * @desc    Obtener lista de clientes con filtros y paginación
- * @access  Private (admin, vet, assistant)
+ * @access  Private (admin, vet, aux)
  */
 router.get('/',
   authenticateToken,
-  authorize(['admin', 'vet', 'assistant']),
+  authorize(['admin', 'vet', 'aux']),
   clientValidators.validateClientSearch,
   clientController.getClients
 );
@@ -32,11 +32,11 @@ router.get('/',
 /**
  * @route   GET /api/clinical/clients/:id
  * @desc    Obtener cliente por ID con sus mascotas
- * @access  Private (admin, vet, assistant)
+ * @access  Private (admin, vet, aux)
  */
 router.get('/:id',
   authenticateToken,
-  authorize(['admin', 'vet', 'assistant']),
+  authorize(['admin', 'vet', 'aux']),
   clientValidators.validateClientId,
   clientController.getClientById
 );

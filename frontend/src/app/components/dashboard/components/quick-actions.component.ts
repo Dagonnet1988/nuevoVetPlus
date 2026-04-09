@@ -12,7 +12,7 @@ export interface QuickAction {
   icon: string;
   route: string;
   color: string;
-  roles: ('admin' | 'vet' | 'aux_admin' | 'aux_vet')[];
+  roles: ('admin' | 'vet' | 'aux')[];
   description?: string;
 }
 
@@ -39,7 +39,7 @@ export class QuickActionsComponent {
       icon: 'event_available',
       route: '/citas/nueva',
       color: 'primary',
-      roles: ['admin', 'vet', 'aux_admin', 'aux_vet'],
+      roles: ['admin', 'vet', 'aux'],
       description: 'Agendar cita'
     },
     {
@@ -47,7 +47,7 @@ export class QuickActionsComponent {
       icon: 'pets',
       route: '/pacientes/nuevo',
       color: 'success',
-      roles: ['admin', 'vet', 'aux_admin', 'aux_vet'],
+      roles: ['admin', 'vet', 'aux'],
       description: 'Registrar mascota'
     },
     {

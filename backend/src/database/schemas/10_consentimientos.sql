@@ -10,24 +10,35 @@
 -- para auditoría (el propietario firmó ESTE texto)
 -- -----------------------------------------------
 CREATE TABLE IF NOT EXISTS clinical.versiones_consentimiento (
-    id_version          INTEGER PRIMARY KEY,
+    id_version          INTEGER,
     titulo              VARCHAR(200) NOT NULL,
     texto_legal         TEXT NOT NULL,
     activa              BOOLEAN DEFAULT false,
+    -- 'menor': corrección de redacción, no invalida firmas anteriores
+    -- 'mayor': nueva finalidad o dato nuevo, requiere nueva firma
+    tipo_cambio         VARCHAR(10) NOT NULL DEFAULT 'menor'
+                        CHECK (tipo_cambio IN ('menor', 'mayor')),
     created_at          TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    created_by          UUID REFERENCES vetplus_auth.usuarios(id_usuario)
+    created_by          UUID REFERENCES vetplus_auth.usuarios(id_usuario),
+    -- Multi-tenancy: cada clínica tiene su propio texto de consentimiento
+    id_tenant           UUID NOT NULL DEFAULT system.get_default_tenant()
+                        REFERENCES system.tenants(id_tenant) ON DELETE RESTRICT,
+    PRIMARY KEY (id_version, id_tenant)
 );
 
--- Solo puede haber una versión activa a la vez
-CREATE UNIQUE INDEX IF NOT EXISTS idx_version_consentimiento_activa
-    ON clinical.versiones_consentimiento(activa)
+-- Una sola versión activa por tenant
+CREATE UNIQUE INDEX IF NOT EXISTS idx_version_consentimiento_activa_tenant
+    ON clinical.versiones_consentimiento(id_tenant)
     WHERE activa = true;
+
+CREATE INDEX IF NOT EXISTS idx_versiones_consentimiento_tenant
+    ON clinical.versiones_consentimiento(id_tenant);
 
 COMMENT ON TABLE clinical.versiones_consentimiento IS
     'Versiones históricas del texto legal de consentimiento. Permite auditar qué texto exacto firmó cada propietario.';
 
--- Insertar versión 1 solo si no existe
-INSERT INTO clinical.versiones_consentimiento (id_version, titulo, texto_legal, activa)
+-- Insertar versión 1 solo si no existe (para el tenant por defecto)
+INSERT INTO clinical.versiones_consentimiento (id_version, titulo, texto_legal, activa, id_tenant)
 VALUES (
     1,
     'Autorización de Tratamiento de Datos Personales',
@@ -51,9 +62,10 @@ VALUES (
     'expreso, salvo obligación legal.\n\n'
     'Al firmar este documento, declaro que he leído, entiendo y acepto '
     'los términos descritos anteriormente.',
-    true
+    true,
+    system.get_default_tenant()
 )
-ON CONFLICT (id_version) DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 
 -- -----------------------------------------------
@@ -68,13 +80,13 @@ CREATE TABLE IF NOT EXISTS clinical.consentimientos (
     id_cliente              UUID NOT NULL
                             REFERENCES clinical.clientes(id_cliente) ON DELETE CASCADE,
 
-    -- Versión del texto legal que se está firmando
-    id_version              INTEGER NOT NULL DEFAULT 1
-                            REFERENCES clinical.versiones_consentimiento(id_version),
+    -- Versión del texto legal que se está firmando (FK compuesta con id_tenant)
+    id_version              INTEGER NOT NULL DEFAULT 1,
+    FOREIGN KEY (id_version, id_tenant) REFERENCES clinical.versiones_consentimiento(id_version, id_tenant),
 
     -- Estado del flujo
     estado                  VARCHAR(20) NOT NULL DEFAULT 'pendiente'
-                            CHECK (estado IN ('pendiente', 'firmado', 'expirado', 'revocado')),
+                            CHECK (estado IN ('pendiente', 'firmado', 'expirado', 'revocado', 'desactualizado')),
 
     -- Token único para el enlace público (expira en 48h por defecto)
     token                   VARCHAR(100) UNIQUE NOT NULL,
@@ -98,6 +110,9 @@ CREATE TABLE IF NOT EXISTS clinical.consentimientos (
 
     -- Auditoría
     created_by              UUID REFERENCES vetplus_auth.usuarios(id_usuario),
+    -- Multi-tenancy
+    id_tenant               UUID NOT NULL DEFAULT system.get_default_tenant()
+                            REFERENCES system.tenants(id_tenant) ON DELETE RESTRICT,
     created_at              TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at              TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -111,6 +126,9 @@ CREATE INDEX IF NOT EXISTS idx_consentimientos_token
 
 CREATE INDEX IF NOT EXISTS idx_consentimientos_estado
     ON clinical.consentimientos(estado);
+
+CREATE INDEX IF NOT EXISTS idx_consentimientos_tenant
+    ON clinical.consentimientos(id_tenant);
 
 CREATE INDEX IF NOT EXISTS idx_consentimientos_expires
     ON clinical.consentimientos(token_expires_at)
@@ -169,3 +187,50 @@ COMMENT ON COLUMN clinical.clientes.id_consentimiento_vigente IS
 -- El servidor crea este directorio en el arranque.
 -- Ruta: backend/uploads/consentimientos/
 -- -----------------------------------------------
+
+-- -----------------------------------------------
+-- 6. MIGRACIONES IDEMPOTENTES PARA BD EXISTENTE
+-- Agregan columna/estado nuevos sin romper datos
+-- -----------------------------------------------
+
+-- 6a. Columna tipo_cambio en versiones_consentimiento
+ALTER TABLE clinical.versiones_consentimiento
+    ADD COLUMN IF NOT EXISTS tipo_cambio VARCHAR(10) NOT NULL DEFAULT 'menor';
+
+-- Agregar CHECK solo si no existe ya
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.check_constraints
+        WHERE constraint_name = 'versiones_consentimiento_tipo_cambio_check'
+          AND constraint_schema = 'clinical'
+    ) THEN
+        ALTER TABLE clinical.versiones_consentimiento
+            ADD CONSTRAINT versiones_consentimiento_tipo_cambio_check
+            CHECK (tipo_cambio IN ('menor', 'mayor'));
+    END IF;
+END $$;
+
+-- 6b. Ampliar CHECK de estado en consentimientos para incluir 'desactualizado'
+-- Primero eliminar el constraint antiguo y recrearlo (DROP IF EXISTS + ADD)
+DO $$ BEGIN
+    -- Eliminar constraint anterior si existe con el nombre antiguo
+    IF EXISTS (
+        SELECT 1 FROM information_schema.check_constraints
+        WHERE constraint_schema = 'clinical'
+          AND constraint_name = 'consentimientos_estado_check'
+    ) THEN
+        ALTER TABLE clinical.consentimientos
+            DROP CONSTRAINT consentimientos_estado_check;
+    END IF;
+
+    -- Recrear con los 5 estados (idempotente gracias al IF EXISTS anterior)
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.check_constraints
+        WHERE constraint_schema = 'clinical'
+          AND constraint_name = 'consentimientos_estado_check_v2'
+    ) THEN
+        ALTER TABLE clinical.consentimientos
+            ADD CONSTRAINT consentimientos_estado_check_v2
+            CHECK (estado IN ('pendiente', 'firmado', 'expirado', 'revocado', 'desactualizado'));
+    END IF;
+END $$;

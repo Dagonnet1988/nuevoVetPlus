@@ -13,6 +13,9 @@ CREATE TABLE clinical.clientes (
     fecha_nacimiento DATE,
     notas TEXT,
     activo BOOLEAN DEFAULT true,
+    -- Multi-tenancy
+    id_tenant UUID NOT NULL DEFAULT system.get_default_tenant()
+        REFERENCES system.tenants(id_tenant) ON DELETE RESTRICT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by UUID REFERENCES vetplus_auth.usuarios(id_usuario)
@@ -40,6 +43,9 @@ CREATE TABLE clinical.mascotas (
     notas TEXT,
     foto_url TEXT,
     activo BOOLEAN DEFAULT true,
+    -- Multi-tenancy
+    id_tenant UUID NOT NULL DEFAULT system.get_default_tenant()
+        REFERENCES system.tenants(id_tenant) ON DELETE RESTRICT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by UUID REFERENCES vetplus_auth.usuarios(id_usuario)
@@ -70,6 +76,9 @@ CREATE TABLE clinical.consultas_clinicas (
     estado VARCHAR(20) DEFAULT 'Completada' CHECK (estado IN ('Programada', 'En Curso', 'Completada', 'Cancelada')),
     costo DECIMAL(10,2),
     recordatorio_medicamentos_enviado BOOLEAN DEFAULT false,
+    -- Multi-tenancy
+    id_tenant UUID NOT NULL DEFAULT system.get_default_tenant()
+        REFERENCES system.tenants(id_tenant) ON DELETE RESTRICT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -98,6 +107,9 @@ CREATE TABLE clinical.calendario_citas (
     google_sync_error TEXT,
     last_google_sync TIMESTAMPTZ,
     fecha_recordatorio TIMESTAMP WITH TIME ZONE,
+    -- Multi-tenancy
+    id_tenant UUID NOT NULL DEFAULT system.get_default_tenant()
+        REFERENCES system.tenants(id_tenant) ON DELETE RESTRICT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by UUID REFERENCES vetplus_auth.usuarios(id_usuario)
@@ -163,6 +175,10 @@ CREATE INDEX idx_citas_mascota ON clinical.calendario_citas(id_mascota);
 CREATE INDEX idx_citas_veterinario ON clinical.calendario_citas(id_veterinario);
 CREATE INDEX idx_citas_fecha ON clinical.calendario_citas(fecha_inicio);
 CREATE INDEX idx_citas_estado ON clinical.calendario_citas(estado);
+CREATE INDEX idx_clientes_tenant        ON clinical.clientes(id_tenant);
+CREATE INDEX idx_mascotas_tenant        ON clinical.mascotas(id_tenant);
+CREATE INDEX idx_consultas_tenant       ON clinical.consultas_clinicas(id_tenant);
+CREATE INDEX idx_citas_tenant           ON clinical.calendario_citas(id_tenant);
 CREATE INDEX idx_archivos_consulta_id_consulta ON clinical.archivos_consulta(id_consulta);
 CREATE INDEX idx_archivos_consulta_activo ON clinical.archivos_consulta(activo);
 CREATE INDEX idx_archivos_consulta_tipo ON clinical.archivos_consulta(tipo_archivo);

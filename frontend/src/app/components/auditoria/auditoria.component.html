@@ -1,0 +1,324 @@
+<div class="auditoria-container">
+
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-title">
+      <mat-icon>security</mat-icon>
+      <div>
+        <h1>Auditoría del sistema</h1>
+        <p>Registro de actividades, accesos y sesiones de usuarios</p>
+      </div>
+    </div>
+    <button mat-stroked-button (click)="refrescar()">
+      <mat-icon>refresh</mat-icon>
+      Refrescar
+    </button>
+  </div>
+
+  <!-- Stats cards -->
+  <div class="stats-grid">
+    @if (loadingStats()) {
+      <div class="stats-loading">
+        <mat-spinner diameter="32"></mat-spinner>
+        <span>Cargando estadísticas…</span>
+      </div>
+    } @else {
+      @for (card of statsCards(); track card.label) {
+        <mat-card class="stat-card" [class.active]="card.active"
+                  (click)="onStatCardClick(card.clickAction)"
+                  [matTooltip]="card.tooltip" matTooltipPosition="above">
+          <mat-icon [style.color]="card.color">{{ card.icon }}</mat-icon>
+          <div>
+            <span class="stat-value">{{ card.value }}</span>
+            <span class="stat-label">{{ card.label }}</span>
+          </div>
+        </mat-card>
+      }
+    }
+  </div>
+
+  <!-- Tabs -->
+  <mat-tab-group animationDuration="200ms"
+                 [selectedIndex]="selectedTab()"
+                 (selectedIndexChange)="selectedTab.set($event)">
+
+    <!-- ── Tab Actividades ─────────────────── -->
+    <mat-tab>
+      <ng-template mat-tab-label>
+        <mat-icon class="tab-icon">bolt</mat-icon>
+        Actividades
+      </ng-template>
+
+      <!-- Filtros -->
+      <div class="filters-bar">
+        <mat-form-field appearance="outline" class="filter-field">
+          <mat-label>Tipo de actividad</mat-label>
+          <mat-select [ngModel]="filtroTipo()"
+                      (ngModelChange)="filtroTipo.set($event); onActivityFilterChange()">
+            @for (t of tiposActividad; track t.value) {
+              <mat-option [value]="t.value">{{ t.label }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="filter-field">
+          <mat-label>Resultado</mat-label>
+          <mat-select [ngModel]="filtroResultado()"
+                      (ngModelChange)="filtroResultado.set($event); onActivityFilterChange()">
+            <mat-option value="">Todos</mat-option>
+            <mat-option value="SUCCESS">Exitosos</mat-option>
+            <mat-option value="ERROR">Con errores</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="filter-field">
+          <mat-label>Usuario</mat-label>
+          <mat-icon matPrefix>search</mat-icon>
+          <input matInput [ngModel]="filtroUsuario()"
+                 (ngModelChange)="onUsuarioInput($event)"
+                 placeholder="Buscar por email…">
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="filter-field">
+          <mat-label>Desde</mat-label>
+          <input matInput type="date" [ngModel]="filtroFechaIni()"
+                 (ngModelChange)="filtroFechaIni.set($event); onActivityFilterChange()">
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="filter-field">
+          <mat-label>Hasta</mat-label>
+          <input matInput type="date" [ngModel]="filtroFechaFin()"
+                 (ngModelChange)="filtroFechaFin.set($event); onActivityFilterChange()">
+        </mat-form-field>
+
+        <div class="filter-actions">
+          <button mat-stroked-button (click)="limpiarFiltros()">
+            <mat-icon>clear</mat-icon> Limpiar
+          </button>
+        </div>
+      </div>
+
+      <!-- Tabla -->
+      @if (loadingActivities()) {
+        <div class="loading-center"><mat-spinner diameter="40"></mat-spinner></div>
+      } @else {
+        <div class="table-wrapper">
+          <table mat-table [dataSource]="activities()" class="audit-table">
+
+            <!-- Timestamp -->
+            <ng-container matColumnDef="timestamp">
+              <th mat-header-cell *matHeaderCellDef>Fecha / Hora</th>
+              <td mat-cell *matCellDef="let row">
+                <span class="timestamp">{{ row.timestamp | date:'dd/MM/yy HH:mm:ss' }}</span>
+              </td>
+            </ng-container>
+
+            <!-- Usuario -->
+            <ng-container matColumnDef="usuario">
+              <th mat-header-cell *matHeaderCellDef>Usuario</th>
+              <td mat-cell *matCellDef="let row">
+                <div class="user-cell">
+                  <span class="user-name">{{ row.usuario_nombre ?? '—' }}</span>
+                  <span class="user-email">{{ row.usuario_email ?? 'Sin sesión' }}</span>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Tipo -->
+            <ng-container matColumnDef="tipo">
+              <th mat-header-cell *matHeaderCellDef>Tipo</th>
+              <td mat-cell *matCellDef="let row">
+                <div class="tipo-cell">
+                  <mat-icon [style.color]="getStatusColor(row.status_code)" class="tipo-icon">
+                    {{ getTipoIcon(row.tipo_actividad) }}
+                  </mat-icon>
+                  <span class="tipo-badge">{{ row.tipo_actividad }}</span>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Descripción -->
+            <ng-container matColumnDef="descripcion">
+              <th mat-header-cell *matHeaderCellDef>Descripción</th>
+              <td mat-cell *matCellDef="let row">
+                <span [matTooltip]="row.url" class="descripcion">{{ row.descripcion }}</span>
+              </td>
+            </ng-container>
+
+            <!-- Método HTTP -->
+            <ng-container matColumnDef="metodo">
+              <th mat-header-cell *matHeaderCellDef>Método</th>
+              <td mat-cell *matCellDef="let row">
+                <span class="metodo-chip" [style.background]="getMetodoColor(row.metodo_http)">
+                  {{ row.metodo_http }}
+                </span>
+              </td>
+            </ng-container>
+
+            <!-- Status -->
+            <ng-container matColumnDef="status">
+              <th mat-header-cell *matHeaderCellDef>Status</th>
+              <td mat-cell *matCellDef="let row">
+                <span class="status-chip" [style.color]="getStatusColor(row.status_code)">
+                  {{ row.status_code }}
+                </span>
+              </td>
+            </ng-container>
+
+            <!-- Duración -->
+            <ng-container matColumnDef="duracion">
+              <th mat-header-cell *matHeaderCellDef>Duración</th>
+              <td mat-cell *matCellDef="let row" class="duracion">
+                {{ formatDuration(row.duracion_ms) }}
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="activityColumns; sticky: true"></tr>
+            <tr mat-row *matRowDef="let row; columns: activityColumns;"
+                [class.row-error]="row.status_code >= 400"></tr>
+          </table>
+
+          @if (activities().length === 0) {
+            <div class="empty-state">
+              <mat-icon>search_off</mat-icon>
+              <p>No hay actividades con los filtros seleccionados</p>
+            </div>
+          }
+        </div>
+
+        <mat-paginator
+          [length]="totalActivities()"
+          [pageSize]="pageSize()"
+          [pageSizeOptions]="[10, 25, 50, 100]"
+          (page)="onPageActivities($event)"
+          showFirstLastButtons>
+        </mat-paginator>
+      }
+    </mat-tab>
+
+    <!-- ── Tab Sesiones ────────────────────── -->
+    <mat-tab>
+      <ng-template mat-tab-label>
+        <mat-icon class="tab-icon">manage_accounts</mat-icon>
+        Sesiones
+      </ng-template>
+      <!-- Filtros sesiones -->
+      <div class="filters-bar">
+        <mat-form-field appearance="outline" class="filter-field">
+          <mat-label>Evento</mat-label>
+          <mat-select [ngModel]="filtroEvento()"
+                      (ngModelChange)="filtroEvento.set($event); onSessionFilterChange()">
+            <mat-option value="">Todos</mat-option>
+            <mat-option value="LOGIN">Login</mat-option>
+            <mat-option value="LOGOUT">Logout</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="filter-field">
+          <mat-label>Resultado</mat-label>
+          <mat-select [ngModel]="filtroSesionExito()"
+                      (ngModelChange)="filtroSesionExito.set($event); onSessionFilterChange()">
+            <mat-option value="">Todos</mat-option>
+            <mat-option value="true">Exitoso</mat-option>
+            <mat-option value="false">Fallido</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="filter-field">
+          <mat-label>Desde</mat-label>
+          <input matInput type="date" [ngModel]="filtroSesionFechaIni()"
+                 (ngModelChange)="filtroSesionFechaIni.set($event); onSessionFilterChange()">
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="filter-field">
+          <mat-label>Hasta</mat-label>
+          <input matInput type="date" [ngModel]="filtroSesionFechaFin()"
+                 (ngModelChange)="filtroSesionFechaFin.set($event); onSessionFilterChange()">
+        </mat-form-field>
+
+        <div class="filter-actions">
+          <button mat-stroked-button (click)="limpiarFiltrosSesiones()">
+            <mat-icon>clear</mat-icon> Limpiar
+          </button>
+        </div>
+      </div>
+      @if (loadingSessions()) {
+        <div class="loading-center"><mat-spinner diameter="40"></mat-spinner></div>
+      } @else {
+        <div class="table-wrapper">
+          <table mat-table [dataSource]="sessions()" class="audit-table">
+
+            <ng-container matColumnDef="timestamp">
+              <th mat-header-cell *matHeaderCellDef>Fecha / Hora</th>
+              <td mat-cell *matCellDef="let row">
+                <span class="timestamp">{{ row.timestamp | date:'dd/MM/yy HH:mm:ss' }}</span>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="usuario">
+              <th mat-header-cell *matHeaderCellDef>Usuario</th>
+              <td mat-cell *matCellDef="let row">
+                <div class="user-cell">
+                  <span class="user-name">{{ row.usuario_nombre ?? '—' }}</span>
+                  <span class="user-email">{{ row.usuario_email ?? row.id_usuario }}</span>
+                </div>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="evento">
+              <th mat-header-cell *matHeaderCellDef>Evento</th>
+              <td mat-cell *matCellDef="let row">
+                <span class="evento-chip" [class.login]="row.tipo_evento === 'LOGIN'"
+                      [class.logout]="row.tipo_evento === 'LOGOUT'">
+                  <mat-icon>{{ row.tipo_evento === 'LOGIN' ? 'login' : 'logout' }}</mat-icon>
+                  {{ row.tipo_evento }}
+                </span>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="resultado">
+              <th mat-header-cell *matHeaderCellDef>Resultado</th>
+              <td mat-cell *matCellDef="let row">
+                @if (row.exito) {
+                  <span class="resultado-ok"><mat-icon>check_circle</mat-icon> Exitoso</span>
+                } @else {
+                  <span class="resultado-fail"><mat-icon>cancel</mat-icon> Fallido</span>
+                }
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="ip">
+              <th mat-header-cell *matHeaderCellDef>IP</th>
+              <td mat-cell *matCellDef="let row" class="mono">{{ row.ip_address ?? '—' }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="agente">
+              <th mat-header-cell *matHeaderCellDef>Navegador</th>
+              <td mat-cell *matCellDef="let row">{{ formatUserAgent(row.user_agent) }}</td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="sessionColumns; sticky: true"></tr>
+            <tr mat-row *matRowDef="let row; columns: sessionColumns;"
+                [class.row-error]="!row.exito"></tr>
+          </table>
+
+          @if (sessions().length === 0) {
+            <div class="empty-state">
+              <mat-icon>search_off</mat-icon>
+              <p>No hay sesiones registradas</p>
+            </div>
+          }
+        </div>
+
+        <mat-paginator
+          [length]="totalSessions()"
+          [pageSize]="pageSizeSessions()"
+          [pageSizeOptions]="[10, 25, 50]"
+          (page)="onPageSessions($event)"
+          showFirstLastButtons>
+        </mat-paginator>
+      }
+    </mat-tab>
+
+  </mat-tab-group>
+</div>

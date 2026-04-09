@@ -1,10 +1,18 @@
 import { v4 as uuidv4 } from 'uuid';
 import QRCode from 'qrcode';
+import { fileURLToPath } from 'url';
+import path from 'path';
 import { query } from '../config/database.js';
 import { generarPDFConsentimiento, generarNumeroPDF } from '../services/consentimientoPDFService.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // URL base del frontend (donde se servirá la página pública de firma)
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:4200';
+
+// Duración del token de firma en horas (configurable aquí o por variable de entorno)
+const TOKEN_DURATION_HOURS = parseInt(process.env.CONSENT_TOKEN_HOURS ?? '48', 10);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RUTAS AUTENTICADAS (personal de la clínica)
@@ -37,8 +45,9 @@ export async function crearConsentimiento(req, res) {
     const versionResult = await query(
       `SELECT id_version, titulo, texto_legal
        FROM clinical.versiones_consentimiento
-       WHERE activa = true
-       LIMIT 1`
+       WHERE activa = true AND id_tenant = $1
+       LIMIT 1`,
+      [tenantId]
     );
     if (!versionResult.rows.length) {
       return res.status(422).json({ message: 'No hay versión activa del consentimiento configurada' });
@@ -55,7 +64,7 @@ export async function crearConsentimiento(req, res) {
 
     // Crear el nuevo consentimiento
     const token = uuidv4();
-    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 horas
+    const expiresAt = new Date(Date.now() + TOKEN_DURATION_HOURS * 60 * 60 * 1000);
 
     const insertResult = await query(
       `INSERT INTO clinical.consentimientos
@@ -99,6 +108,7 @@ export async function crearConsentimiento(req, res) {
  */
 export async function obtenerEstadoConsentimiento(req, res) {
   const { id } = req.params;
+  const tenantId = req.tenantId ?? req.user?.tenant_id;
 
   try {
     const result = await query(
@@ -107,10 +117,10 @@ export async function obtenerEstadoConsentimiento(req, res) {
               v.titulo AS version_titulo, v.id_version
        FROM clinical.consentimientos c
        JOIN clinical.versiones_consentimiento v ON v.id_version = c.id_version
-       WHERE c.id_cliente = $1
+       WHERE c.id_cliente = $1 AND c.id_tenant = $2
        ORDER BY c.created_at DESC
        LIMIT 1`,
-      [id]
+      [id, tenantId]
     );
 
     if (!result.rows.length) {
@@ -175,7 +185,8 @@ export async function reenviarEnlaceConsentimiento(req, res) {
 
     // Verificar versión activa
     const versionResult = await query(
-      `SELECT id_version, titulo FROM clinical.versiones_consentimiento WHERE activa = true LIMIT 1`
+      `SELECT id_version, titulo FROM clinical.versiones_consentimiento WHERE activa = true AND id_tenant = $1 LIMIT 1`,
+      [tenantId]
     );
     if (!versionResult.rows.length) {
       return res.status(422).json({ message: 'No hay versión activa del consentimiento configurada' });
@@ -190,7 +201,7 @@ export async function reenviarEnlaceConsentimiento(req, res) {
 
     // Crear nuevo token
     const token = uuidv4();
-    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + TOKEN_DURATION_HOURS * 60 * 60 * 1000);
 
     const insertResult = await query(
       `INSERT INTO clinical.consentimientos
@@ -227,15 +238,16 @@ export async function reenviarEnlaceConsentimiento(req, res) {
  */
 export async function descargarPDFConsentimiento(req, res) {
   const { id } = req.params;
+  const tenantId = req.tenantId ?? req.user?.tenant_id;
 
   try {
     const result = await query(
       `SELECT c.pdf_path, c.pdf_numero, c.estado
        FROM clinical.consentimientos c
-       WHERE c.id_cliente = $1 AND c.estado = 'firmado'
+       WHERE c.id_cliente = $1 AND c.id_tenant = $2 AND c.estado = 'firmado'
        ORDER BY c.firmado_en DESC
        LIMIT 1`,
-      [id]
+      [id, tenantId]
     );
 
     if (!result.rows.length || !result.rows[0].pdf_path) {
@@ -244,13 +256,16 @@ export async function descargarPDFConsentimiento(req, res) {
 
     const { pdf_path, pdf_numero } = result.rows[0];
 
-    // pdf_path es relativo a la raíz del backend
-    const absolutePath = new URL(`../../${pdf_path}`, import.meta.url).pathname;
+    // pdf_path es relativo a la raíz del backend (ej: uploads/consentimientos/CONS-xxx.pdf)
+    const absolutePath = path.join(__dirname, '../../', pdf_path);
 
-    return res.download(absolutePath, `consentimiento-${pdf_numero}.pdf`, (err) => {
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="consentimiento-${pdf_numero}.pdf"`);
+
+    return res.sendFile(absolutePath, (err) => {
       if (err && !res.headersSent) {
         console.error('Error al enviar PDF:', err);
-        res.status(500).json({ message: 'Error al descargar el PDF' });
+        res.status(500).json({ message: 'Error al mostrar el PDF' });
       }
     });
   } catch (error) {
@@ -268,12 +283,14 @@ export async function descargarPDFConsentimiento(req, res) {
  * Devuelve la versión activa del texto legal (título + texto).
  */
 export async function getTextoConsentimiento(req, res) {
+  const tenantId = req.tenantId ?? req.user?.tenant_id;
   try {
     const result = await query(
       `SELECT id_version, titulo, texto_legal, activa, created_at
        FROM clinical.versiones_consentimiento
-       WHERE activa = true
-       LIMIT 1`
+       WHERE activa = true AND id_tenant = $1
+       LIMIT 1`,
+      [tenantId]
     );
 
     if (!result.rows.length) {
@@ -290,11 +307,14 @@ export async function getTextoConsentimiento(req, res) {
 /**
  * PUT /api/config/consentimiento/texto
  * Crea una nueva versión del texto y la activa (desactiva la anterior).
- * Body: { titulo: string, textoLegal: string }
+ * Body: { titulo: string, textoLegal: string, tipoCambio: 'menor'|'mayor' }
+ * tipoCambio 'mayor' marca como 'desactualizado' todos los consentimientos firmados
+ * con la versión anterior, requiriendo nueva firma del propietario.
  */
 export async function updateTextoConsentimiento(req, res) {
-  const { titulo, textoLegal } = req.body;
+  const { titulo, textoLegal, tipoCambio = 'menor' } = req.body;
   const userId = req.user?.id;
+  const tenantId = req.tenantId ?? req.user?.tenant_id;
 
   if (!titulo || typeof titulo !== 'string' || titulo.trim().length < 3) {
     return res.status(400).json({ message: 'El título es requerido (mínimo 3 caracteres)' });
@@ -302,34 +322,123 @@ export async function updateTextoConsentimiento(req, res) {
   if (!textoLegal || typeof textoLegal !== 'string' || textoLegal.trim().length < 20) {
     return res.status(400).json({ message: 'El texto legal es requerido (mínimo 20 caracteres)' });
   }
+  if (!['menor', 'mayor'].includes(tipoCambio)) {
+    return res.status(400).json({ message: 'tipoCambio debe ser \'menor\' o \'mayor\'.' });
+  }
 
   try {
-    // Obtener el id_version máximo actual
+    // Obtener el id_version máximo actual para este tenant
     const maxResult = await query(
-      `SELECT COALESCE(MAX(id_version), 0) AS max_id FROM clinical.versiones_consentimiento`
+      `SELECT COALESCE(MAX(id_version), 0) AS max_id FROM clinical.versiones_consentimiento WHERE id_tenant = $1`,
+      [tenantId]
     );
     const newId = maxResult.rows[0].max_id + 1;
 
-    // Desactivar versión actual
+    // Desactivar versión actual de este tenant
     await query(
-      `UPDATE clinical.versiones_consentimiento SET activa = false WHERE activa = true`
+      `UPDATE clinical.versiones_consentimiento SET activa = false WHERE activa = true AND id_tenant = $1`,
+      [tenantId]
     );
 
-    // Insertar nueva versión activa
+    // Insertar nueva versión activa para este tenant
     const insertResult = await query(
-      `INSERT INTO clinical.versiones_consentimiento (id_version, titulo, texto_legal, activa, created_by)
-       VALUES ($1, $2, $3, true, $4)
-       RETURNING id_version, titulo, texto_legal, activa, created_at`,
-      [newId, titulo.trim(), textoLegal.trim(), userId]
+      `INSERT INTO clinical.versiones_consentimiento (id_version, titulo, texto_legal, activa, tipo_cambio, created_by, id_tenant)
+       VALUES ($1, $2, $3, true, $4, $5, $6)
+       RETURNING id_version, titulo, activa, tipo_cambio, created_at`,
+      [newId, titulo.trim(), textoLegal.trim(), tipoCambio, userId, tenantId]
     );
+
+    let desactualizados = 0;
+
+    // Si el cambio es mayor: marcar como 'desactualizado' todos los consentimientos
+    // firmados con versiones anteriores y limpiar el flag del cliente
+    if (tipoCambio === 'mayor') {
+      const updateResult = await query(
+        `UPDATE clinical.consentimientos
+         SET estado = 'desactualizado', updated_at = NOW()
+         WHERE estado = 'firmado' AND id_version < $1
+         RETURNING id_cliente`,
+        [newId]
+      );
+      desactualizados = updateResult.rows.length;
+
+      // Limpiar flag consentimiento_firmado en los clientes afectados (solo del tenant del usuario)
+      if (desactualizados > 0) {
+        const idsClientes = [...new Set(updateResult.rows.map(r => r.id_cliente))];
+        await query(
+          `UPDATE clinical.clientes
+           SET consentimiento_firmado = false,
+               id_consentimiento_vigente = NULL
+           WHERE id_cliente = ANY($1::uuid[])
+             AND id_tenant = $2`,
+          [idsClientes, req.tenantId ?? req.user?.tenant_id]
+        );
+      }
+    }
 
     return res.json({
-      message: 'Texto del consentimiento actualizado correctamente',
-      version: insertResult.rows[0]
+      message: tipoCambio === 'mayor'
+        ? `Texto actualizado (cambio mayor). ${desactualizados} consentimiento(s) marcado(s) como desactualizados.`
+        : 'Texto del consentimiento actualizado correctamente (cambio menor, firmas anteriores siguen vigentes).',
+      version: insertResult.rows[0],
+      desactualizados
     });
   } catch (error) {
     console.error('Error en updateTextoConsentimiento:', error);
     return res.status(500).json({ message: 'Error al actualizar el texto del consentimiento' });
+  }
+}
+
+/**
+ * PUT /api/clinical/pacientes/cliente/:idCliente/consentimiento/revocar
+ * Revoca manualmente el consentimiento firmado vigente del cliente.
+ * Solo admin o vet. Requiere { motivo: string } en el body.
+ */
+export async function revocarConsentimiento(req, res) {
+  const { id } = req.params; // idCliente
+  const { motivo } = req.body;
+  const tenantId = req.tenantId ?? req.user?.tenant_id;
+
+  if (!motivo || typeof motivo !== 'string' || motivo.trim().length < 5) {
+    return res.status(400).json({ message: 'Se requiere un motivo de revocación (mínimo 5 caracteres).' });
+  }
+
+  try {
+    // Buscar el consentimiento firmado vigente del cliente (filtrado por tenant)
+    const result = await query(
+      `SELECT id_consentimiento FROM clinical.consentimientos
+       WHERE id_cliente = $1 AND id_tenant = $2 AND estado IN ('firmado', 'desactualizado')
+       ORDER BY firmado_en DESC
+       LIMIT 1`,
+      [id, tenantId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ message: 'No hay consentimiento vigente para revocar.' });
+    }
+
+    const idConsentimiento = result.rows[0].id_consentimiento;
+
+    await query(
+      `UPDATE clinical.consentimientos
+       SET estado = 'revocado', updated_at = NOW()
+       WHERE id_consentimiento = $1`,
+      [idConsentimiento]
+    );
+
+    // Limpiar flag del cliente
+    await query(
+      `UPDATE clinical.clientes
+       SET consentimiento_firmado = false,
+           id_consentimiento_vigente = NULL
+       WHERE id_cliente = $1`,
+      [id]
+    );
+
+    return res.json({ message: 'Consentimiento revocado correctamente.' });
+  } catch (error) {
+    console.error('Error en revocarConsentimiento:', error);
+    return res.status(500).json({ message: 'Error al revocar el consentimiento.' });
   }
 }
 
@@ -355,11 +464,11 @@ export async function obtenerFormularioPublico(req, res) {
       `SELECT c.id_consentimiento, c.estado, c.token_expires_at,
               cl.id_cliente AS id_cliente, cl.nombre AS cliente_nombre, cl.cedula,
               v.titulo, v.texto_legal, v.id_version,
-              emp.nombre_empresa, emp.logo_url
+              emp.nombre_empresa, emp.nit, emp.direccion, emp.email AS email_empresa, emp.logo_url
        FROM clinical.consentimientos c
        JOIN clinical.clientes cl ON cl.id_cliente = c.id_cliente
        JOIN clinical.versiones_consentimiento v ON v.id_version = c.id_version
-       LEFT JOIN system.configuracion_empresa emp ON emp.activa = true
+       LEFT JOIN system.configuracion_empresa emp ON emp.activa = true AND emp.id_tenant = c.id_tenant
        WHERE c.token = $1`,
       [token]
     );
@@ -387,6 +496,14 @@ export async function obtenerFormularioPublico(req, res) {
       return res.status(410).json({ message: 'Este enlace ha expirado', estado: 'expirado' });
     }
 
+    // Aplicar los mismos placeholders que se usan al generar el PDF,
+    // para que el propietario lea exactamente el texto que quedará en el documento firmado
+    const textoResuelto = (row.texto_legal || '')
+      .replace(/\[NOMBRE_CLINICA\]/g, row.nombre_empresa  || '')
+      .replace(/\[NIT\]/g,            row.nit             || '')
+      .replace(/\[DIRECCION\]/g,      row.direccion       || '')
+      .replace(/\[EMAIL_CLINICA\]/g,  row.email_empresa   || '');
+
     return res.json({
       idConsentimiento: row.id_consentimiento,
       cliente: {
@@ -396,13 +513,14 @@ export async function obtenerFormularioPublico(req, res) {
       version: {
         id: row.id_version,
         titulo: row.titulo,
-        textoLegal: row.texto_legal
+        textoLegal: textoResuelto
       },
       empresa: {
         nombre: row.nombre_empresa,
         logoUrl: row.logo_url
       },
-      expiresAt: row.token_expires_at
+      expiresAt: row.token_expires_at,
+      tokenDurationHours: TOKEN_DURATION_HOURS
     });
   } catch (error) {
     console.error('Error en obtenerFormularioPublico:', error);
@@ -474,16 +592,6 @@ export async function firmarConsentimiento(req, res) {
       return res.status(410).json({ message: 'Este enlace ha expirado', estado: 'expirado' });
     }
 
-    // Obtener mascota activa del cliente (para el PDF)
-    const mascotaResult = await query(
-      `SELECT m.nombre, m.especie, m.raza
-       FROM clinical.mascotas m
-       WHERE m.id_cliente = $1 AND m.activo = true
-       ORDER BY m.created_at ASC
-       LIMIT 1`,
-      [row.id_cliente]
-    );
-
     // IP y device del firmante
     const ipFirmante = req.ip || req.connection?.remoteAddress || null;
     const deviceInfo = req.headers['user-agent'] || null;
@@ -515,7 +623,6 @@ export async function firmarConsentimiento(req, res) {
         email: row.email,
         telefono: row.telefono
       },
-      mascota: mascotaResult.rows[0] || null,
       textoLegal: row.texto_legal,
       pdfNumero
     });

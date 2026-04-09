@@ -1,4 +1,5 @@
 import { Component, OnInit, signal } from '@angular/core';
+import { extractError } from '../../../utils/error.utils';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -60,9 +61,9 @@ export class ConsentimientoTextoComponent implements OnInit {
         this.form.patchValue({ titulo: version.titulo, textoLegal: version.texto_legal });
         this.cargando.set(false);
       },
-      error: () => {
+      error: (err) => {
         this.cargando.set(false);
-        this.snackBar.open('Error al cargar el texto del consentimiento', 'Cerrar', { duration: 3000 });
+        this.snackBar.open(extractError(err, 'Error al cargar el texto del consentimiento'), 'Cerrar', { duration: 3000 });
       }
     });
   }

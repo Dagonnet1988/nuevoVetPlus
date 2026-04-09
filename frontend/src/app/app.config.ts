@@ -5,6 +5,7 @@ import { provideHttpClient, withInterceptorsFromDi, HTTP_INTERCEPTORS } from '@a
 import { provideNativeDateAdapter } from '@angular/material/core';
 import { routes } from './app.routes';
 import { AuthInterceptor } from './utils/interceptors/auth.interceptor';
+import { SuperadminInterceptor } from './utils/interceptors/superadmin.interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -17,6 +18,11 @@ export const appConfig: ApplicationConfig = {
     {
       provide: HTTP_INTERCEPTORS,
       useClass: AuthInterceptor,
+      multi: true
+    },
+    {
+      provide: HTTP_INTERCEPTORS,
+      useClass: SuperadminInterceptor,
       multi: true
     }
   ]

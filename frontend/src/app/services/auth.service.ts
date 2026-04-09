@@ -259,7 +259,7 @@ export class AuthService {
   // VERIFICACIÓN DE ROLES
   // ===============================
 
-  hasRole(role: 'admin' | 'vet' | 'aux_admin' | 'aux_vet'): boolean {
+  hasRole(role: 'admin' | 'vet' | 'aux'): boolean {
     const user = this.currentUser();
     return user?.rol === role;
   }
@@ -273,19 +273,19 @@ export class AuthService {
   }
 
   isAuxAdmin(): boolean {
-    return this.hasRole('aux_admin');
+    return this.hasRole('aux');
   }
 
   isAuxVet(): boolean {
-    return this.hasRole('aux_vet');
+    return this.hasRole('aux');
   }
 
   isAux(): boolean {
-    return this.hasRole('aux_admin') || this.hasRole('aux_vet');
+    return this.hasRole('aux');
   }
 
   // Verificar múltiples roles
-  hasAnyRole(roles: ('admin' | 'vet' | 'aux_admin' | 'aux_vet')[]): boolean {
+  hasAnyRole(roles: ('admin' | 'vet' | 'aux')[]): boolean {
     const user = this.currentUser();
     return roles.includes(user?.rol as any);
   }
@@ -345,9 +345,7 @@ export class AuthService {
     switch (role) {
       case 'admin': return 'Administrador';
       case 'vet': return 'Veterinario';
-      case 'aux_admin': return 'Auxiliar Administrativo';
-      case 'aux_vet': return 'Auxiliar Veterinario';
-      case 'aux': return 'Auxiliar'; // For backward compatibility
+      case 'aux': return 'Auxiliar';
       default: return 'Usuario';
     }
   }

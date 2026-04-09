@@ -31,11 +31,12 @@ export const getEmpresaConfig = async (req, res) => {
         }
 
         // Obtener configuración de empresa
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
         const configResult = await query(`
             SELECT * FROM system.configuracion_empresa
-            WHERE activa = true
+            WHERE activa = true AND id_tenant = $1
             LIMIT 1
-        `);
+        `, [tenantId]);
 
         if (configResult.rows.length === 0) {
             return res.status(404).json({
@@ -160,13 +161,13 @@ export const updateEmpresaConfig = async (req, res) => {
                     configuracion_numeracion = $16,
                     updated_at = CURRENT_TIMESTAMP,
                     updated_by = $17
-                WHERE activa = true
+                WHERE activa = true AND id_tenant = $18
                 RETURNING id_config
             `, [
                 nombre_empresa, nit, direccion, telefono, email, sitio_web, eslogan,
                 ciudad, departamento, codigo_postal, website, regimen_tributario,
                 representante_legal, cedula_representante, configGeneral, configNumeracion,
-                req.user.id_usuario
+                req.user.id_usuario, req.tenantId ?? req.user?.tenant_id
             ]);
 
             if (updateResult.rows.length === 0) {
@@ -272,9 +273,9 @@ export const uploadLogo = async (req, res) => {
                 logo_filename = $2,
                 updated_at = CURRENT_TIMESTAMP,
                 updated_by = $3
-            WHERE activa = true
+            WHERE activa = true AND id_tenant = $4
             RETURNING logo_url, logo_filename
-        `, [logoUrl, file.originalname, req.user.id_usuario]);
+        `, [logoUrl, file.originalname, req.user.id_usuario, req.tenantId ?? req.user?.tenant_id]);
 
         if (result.rows.length === 0) {
             return res.status(404).json({
@@ -322,10 +323,10 @@ export const getDiasEspeciales = async (req, res) => {
                 de.hora_cierre
             FROM system.dias_especiales de
             JOIN system.configuracion_empresa ce ON de.id_config = ce.id_config
-            WHERE ce.activa = true 
+            WHERE ce.activa = true AND ce.id_tenant = $2
             AND EXTRACT(YEAR FROM de.fecha) = $1
             ORDER BY de.fecha
-        `, [year]);
+        `, [year, req.tenantId ?? req.user?.tenant_id]);
 
         res.json({
             success: true,
@@ -369,8 +370,9 @@ export const addDiaEspecial = async (req, res) => {
 
         // Obtener ID de configuración activa
         const configResult = await query(`
-            SELECT id_config FROM system.configuracion_empresa WHERE activa = true LIMIT 1
-        `);
+            SELECT id_config FROM system.configuracion_empresa
+            WHERE activa = true AND id_tenant = $1 LIMIT 1
+        `, [req.tenantId ?? req.user?.tenant_id]);
 
         if (configResult.rows.length === 0) {
             return res.status(404).json({

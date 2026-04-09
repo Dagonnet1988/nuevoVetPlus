@@ -27,7 +27,7 @@
     <div class="section-content">
       <div class="content-row">
         <!-- Calendario de citas -->
-        @if (authService.hasAnyRole(['admin', 'vet', 'aux_admin', 'aux_vet'])) {
+        @if (authService.hasAnyRole(['admin', 'vet', 'aux'])) {
           <div class="content-item">
             <app-appointments-calendar [appointments]="todayAppointments"></app-appointments-calendar>
           </div>

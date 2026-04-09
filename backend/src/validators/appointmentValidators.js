@@ -92,38 +92,7 @@ export const validateUpdateAppointment = [
     body('fecha_inicio')
         .optional()
         .isISO8601()
-        .withMessage('La fecha de inicio debe ser una fecha válida (ISO 8601)')
-        .custom((value, { req }) => {
-            if (value) {
-                const fechaInicio = new Date(value);
-                const ahora = new Date();
-                
-                // Agregar margen de tolerancia de 5 minutos para evitar problemas de precisión
-                const margenTolerancia = 5 * 60 * 1000; // 5 minutos en milisegundos
-                const tiempoMinimo = new Date(ahora.getTime() - margenTolerancia);
-                
-                console.log('🕐 Validación de fecha:', {
-                    fechaRecibida: value,
-                    fechaParseada: fechaInicio.toISOString(),
-                    fechaActual: ahora.toISOString(),
-                    tiempoMinimo: tiempoMinimo.toISOString(),
-                    estado: req.body.estado,
-                    diferenciaMilisegundos: fechaInicio.getTime() - ahora.getTime()
-                });
-                
-                // Solo validar fecha futura si el estado no es completada o cancelada
-                if (req.body.estado && ['completada', 'cancelada', 'Completada', 'Cancelada'].includes(req.body.estado)) {
-                    console.log('✅ Cita con estado final, omitiendo validación de fecha futura');
-                    return true;
-                }
-                
-                // Usar el tiempo mínimo con margen de tolerancia
-                if (fechaInicio <= tiempoMinimo) {
-                    throw new Error('La fecha de inicio debe ser posterior a la fecha actual para citas activas');
-                }
-            }
-            return true;
-        }),
+        .withMessage('La fecha de inicio debe ser una fecha válida (ISO 8601)'),
     
     body('fecha_fin')
         .optional()

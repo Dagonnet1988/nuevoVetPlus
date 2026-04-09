@@ -21,7 +21,8 @@ import {
   crearConsentimiento,
   obtenerEstadoConsentimiento,
   reenviarEnlaceConsentimiento,
-  descargarPDFConsentimiento
+  descargarPDFConsentimiento,
+  revocarConsentimiento
 } from '../controllers/consentimientoController.js';
 
 const router = express.Router();
@@ -222,6 +223,18 @@ router.get('/cliente/:idCliente/consentimiento/pdf',
   authorize(['admin', 'vet']),
   (req, res, next) => { req.params.id = req.params.idCliente; next(); },
   descargarPDFConsentimiento
+);
+
+/**
+ * @route   PUT /api/clinical/pacientes/cliente/:idCliente/consentimiento/revocar
+ * @desc    Revocar el consentimiento firmado vigente de un cliente
+ * @access  Private (admin)
+ */
+router.put('/cliente/:idCliente/consentimiento/revocar',
+  authenticateToken,
+  authorize(['admin']),
+  (req, res, next) => { req.params.id = req.params.idCliente; next(); },
+  revocarConsentimiento
 );
 
 export default router;

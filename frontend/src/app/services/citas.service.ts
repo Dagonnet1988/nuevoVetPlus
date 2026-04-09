@@ -26,9 +26,10 @@ export class CitasService {
   // ===============================
 
   getCitas(page: number = 1, limit: number = 10, filters?: CitaFilter): Observable<any> {
+    const offset = (page - 1) * limit;
     let params = new HttpParams()
-      .set('page', page.toString())
-      .set('limit', limit.toString());
+      .set('limit', limit.toString())
+      .set('offset', offset.toString());
 
     if (filters) {
       if (filters.fecha_inicio) params = params.set('fecha_inicio', filters.fecha_inicio);
@@ -106,7 +107,7 @@ export class CitasService {
     if (fechaInicio) params = params.set('fecha_inicio', fechaInicio);
     if (fechaFin) params = params.set('fecha_fin', fechaFin);
 
-    return this.http.get<any>(`${this.API_URL}/appointments/veterinarian/${vetId}`, { params });
+    return this.http.get<any>(`${this.API_URL}/appointments/vet/${vetId}`, { params });
   }
 
   getCitasByPaciente(petId: string): Observable<any> {
@@ -122,7 +123,7 @@ export class CitasService {
       .set('fecha', fecha);
 
     return this.http.get<VeterinarioDisponibilidad>(
-      `${this.API_URL}/appointments/veterinarian/${vetId}/availability`,
+      `${this.API_URL}/appointments/vet/${vetId}/availability`,
       { params }
     );
   }
@@ -344,7 +345,8 @@ export class CitasService {
     const mapeoEstados: { [key: string]: string } = {
       'pendiente': 'pendiente',
       'confirmada': 'confirmada',
-      'en_progreso': 'en_progreso',
+      'en_curso': 'en_curso',
+      'en_progreso': 'en_curso',   // alias incorrecto anterior → corregido
       'completada': 'completada',
       'cancelada': 'cancelada',
       'no_asistio': 'no_asistio'

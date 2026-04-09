@@ -1,6 +1,6 @@
 import express from 'express';
 import authController from '../controllers/authController.js';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticateToken, authorize } from '../middleware/auth.js';
 import { authRateLimit } from '../middleware/rateLimiter.js';
 import { 
   validateLogin, 
@@ -250,6 +250,193 @@ router.post('/admin/generate-temp-password',
         
         // Llamar al método del controlador
         passwordResetController.default.generateTempPassword(req, res);
+    }
+);
+
+// ===============================
+// SESIONES ACTIVAS
+// ===============================
+
+function parseDevice(userAgent) {
+    if (!userAgent) return 'Desconocido';
+    if (/mobile|android|iphone|ipad/i.test(userAgent)) return 'Móvil';
+    if (/tablet/i.test(userAgent)) return 'Tablet';
+    return 'Escritorio';
+}
+
+function parseBrowser(userAgent) {
+    if (!userAgent) return 'Desconocido';
+    if (/edg\//i.test(userAgent)) return 'Edge';
+    if (/chrome/i.test(userAgent)) return 'Chrome';
+    if (/firefox/i.test(userAgent)) return 'Firefox';
+    if (/safari/i.test(userAgent)) return 'Safari';
+    if (/opera|opr\//i.test(userAgent)) return 'Opera';
+    return 'Otro';
+}
+
+/**
+ * @route   GET /api/auth/sesiones-activas
+ * @desc    Obtener sesiones activas (historial de logins recientes)
+ * @access  Private (solo admin)
+ */
+router.get('/sesiones-activas',
+    authenticateToken,
+    authorize(['admin']),
+    async (req, res) => {
+        try {
+            const tenantId = req.tenantId ?? req.user?.tenant_id;
+            const { id_usuario } = req.query;
+            const { query: dbQuery } = await import('../config/database.js');
+
+            let sql = `
+                SELECT
+                    sa.id_session AS id_sesion,
+                    sa.id_usuario,
+                    u.nombre || ' ' || COALESCE(u.apellido, '') AS usuario_nombre,
+                    sa.ip_address::text AS ip_address,
+                    sa.user_agent,
+                    sa.timestamp AS fecha_inicio,
+                    sa.timestamp AS ultima_actividad
+                FROM system.session_audit sa
+                JOIN vetplus_auth.usuarios u ON sa.id_usuario = u.id_usuario
+                WHERE u.id_tenant = $1
+                  AND sa.tipo_evento = 'LOGIN'
+                  AND sa.exito = true
+            `;
+            const values = [tenantId];
+
+            if (id_usuario) {
+                sql += ` AND sa.id_usuario = $2`;
+                values.push(id_usuario);
+            }
+
+            sql += ` ORDER BY sa.timestamp DESC LIMIT 100`;
+
+            const result = await dbQuery(sql, values);
+
+            const sessions = result.rows.map(row => ({
+                id_sesion: row.id_sesion,
+                id_usuario: row.id_usuario,
+                usuario_nombre: row.usuario_nombre.trim(),
+                ip_address: row.ip_address || 'Desconocida',
+                user_agent: row.user_agent || '',
+                ubicacion: null,
+                fecha_inicio: row.fecha_inicio,
+                ultima_actividad: row.ultima_actividad,
+                dispositivo: parseDevice(row.user_agent),
+                navegador: parseBrowser(row.user_agent),
+                activa: true
+            }));
+
+            res.json({ success: true, data: sessions });
+        } catch (error) {
+            console.error('Error obteniendo sesiones activas:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor',
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
+        }
+    }
+);
+
+/**
+ * @route   DELETE /api/auth/sesiones/:id
+ * @desc    Cerrar una sesión específica
+ * @access  Private (solo admin)
+ */
+router.delete('/sesiones/:id',
+    authenticateToken,
+    authorize(['admin']),
+    async (req, res) => {
+        try {
+            const tenantId = req.tenantId ?? req.user?.tenant_id;
+            const { id } = req.params;
+            const { query: dbQuery } = await import('../config/database.js');
+
+            // Verify the session belongs to a user of this tenant
+            const check = await dbQuery(`
+                SELECT sa.id_usuario
+                FROM system.session_audit sa
+                JOIN vetplus_auth.usuarios u ON sa.id_usuario = u.id_usuario
+                WHERE sa.id_session = $1 AND u.id_tenant = $2
+            `, [id, tenantId]);
+
+            if (check.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Sesión no encontrada'
+                });
+            }
+
+            // Insert FORCE_LOGOUT event to mark the session as closed
+            await dbQuery(`
+                INSERT INTO system.session_audit (id_usuario, tipo_evento, exito, ip_address, detalles)
+                VALUES ($1, 'FORCE_LOGOUT', true, $2::inet, $3)
+            `, [
+                check.rows[0].id_usuario,
+                req.ip || '0.0.0.0',
+                JSON.stringify({ closed_by: req.user.id, original_session: id })
+            ]);
+
+            res.json({ success: true, message: 'Sesión cerrada exitosamente' });
+        } catch (error) {
+            console.error('Error cerrando sesión:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor',
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
+        }
+    }
+);
+
+/**
+ * @route   DELETE /api/auth/usuarios/:id/sesiones
+ * @desc    Cerrar todas las sesiones de un usuario
+ * @access  Private (solo admin)
+ */
+router.delete('/usuarios/:id/sesiones',
+    authenticateToken,
+    authorize(['admin']),
+    async (req, res) => {
+        try {
+            const tenantId = req.tenantId ?? req.user?.tenant_id;
+            const { id } = req.params;
+            const { query: dbQuery } = await import('../config/database.js');
+
+            // Verify user belongs to this tenant
+            const check = await dbQuery(
+                'SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_usuario = $1 AND id_tenant = $2',
+                [id, tenantId]
+            );
+
+            if (check.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Usuario no encontrado'
+                });
+            }
+
+            // Insert FORCE_LOGOUT event for all sessions
+            await dbQuery(`
+                INSERT INTO system.session_audit (id_usuario, tipo_evento, exito, ip_address, detalles)
+                VALUES ($1, 'FORCE_LOGOUT', true, $2::inet, $3)
+            `, [
+                id,
+                req.ip || '0.0.0.0',
+                JSON.stringify({ closed_by: req.user.id, closed_all: true, timestamp: new Date() })
+            ]);
+
+            res.json({ success: true, message: 'Todas las sesiones han sido cerradas' });
+        } catch (error) {
+            console.error('Error cerrando sesiones:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor',
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
+        }
     }
 );
 

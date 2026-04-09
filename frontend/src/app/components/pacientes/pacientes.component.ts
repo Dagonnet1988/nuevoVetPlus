@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy, signal, ViewChild } from '@angular/core';
+import { extractError } from '../../utils/error.utils';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { MatTableModule, MatTableDataSource } from '@angular/material/table';
@@ -148,7 +149,7 @@ export class PacientesComponent implements OnInit, OnDestroy {
           this.dataSource.data = [];
           this.totalRecords.set(0);
           this.loading.set(false);
-          this.snackBar.open('Error cargando pacientes', 'Cerrar', { duration: 3000 });
+          this.snackBar.open(extractError(error, 'Error cargando pacientes'), 'Cerrar', { duration: 3000 });
         }
       });
   }
@@ -259,7 +260,7 @@ export class PacientesComponent implements OnInit, OnDestroy {
         },
         error: (error) => {
           this.snackBar.open(
-            'Error al actualizar el estado del paciente',
+            extractError(error, 'Error al actualizar el estado del paciente'),
             'Cerrar',
             { duration: 3000 }
           );

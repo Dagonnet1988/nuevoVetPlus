@@ -70,7 +70,13 @@
               placeholder="Escriba aquí el texto completo del consentimiento…"
               class="ct-textarea"
             ></textarea>
-            <mat-hint>Este texto se mostrará al propietario antes de firmar</mat-hint>
+            <mat-hint>
+              Placeholders disponibles:
+              <strong>[NOMBRE_CLINICA]</strong>,
+              <strong>[NIT]</strong>,
+              <strong>[DIRECCION]</strong>,
+              <strong>[EMAIL_CLINICA]</strong>
+            </mat-hint>
             @if (form.get('textoLegal')!.invalid && form.get('textoLegal')!.touched) {
               <mat-error>
                 @if (form.get('textoLegal')!.hasError('required')) { El texto es requerido }

@@ -16,7 +16,7 @@ export interface User {
   documento: string;
   nombre: string;
   apellido?: string;
-  rol: 'admin' | 'vet' | 'aux_admin' | 'aux_vet' | 'aux' | 'veterinario' | 'auxiliar';  // Roles ajustados
+  rol: 'admin' | 'vet' | 'aux';
   activo: boolean;
   primer_acceso: boolean; // Para forzar cambio de contraseña
   created_at: string;

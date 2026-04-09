@@ -4,17 +4,19 @@ import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 
 export interface ConsentimientoEstado {
-  estado: 'sin_consentimiento' | 'pendiente' | 'firmado' | 'expirado';
+  estado: 'sin_consentimiento' | 'pendiente' | 'firmado' | 'expirado' | 'desactualizado' | 'revocado';
   consentimiento: {
-    id_consentimiento: string;
-    token?: string;
-    firmado_en?: string;
-    token_expires_at?: string;
-    pdf_path?: string;
-    pdf_numero?: string;
-    whatsapp_enviado?: boolean;
-    email_enviado?: boolean;
-    version_titulo?: string;
+    id: string;
+    estado: string;
+    firmaUrl?: string;
+    expiresAt?: string;
+    firmadoEn?: string;
+    pdfDisponible?: boolean;
+    pdfNumero?: string;
+    versionTitulo?: string;
+    idVersion?: string;
+    whatsappEnviado?: boolean;
+    emailEnviado?: boolean;
   } | null;
 }
 
@@ -50,5 +52,9 @@ export class ConsentimientosService {
 
   descargarPDF(idCliente: string): Observable<Blob> {
     return this.http.get(`${this.BASE}/${idCliente}/consentimiento/pdf`, { responseType: 'blob' });
+  }
+
+  revocar(idCliente: string, motivo: string): Observable<{ message: string }> {
+    return this.http.put<{ message: string }>(`${this.BASE}/${idCliente}/consentimiento/revocar`, { motivo });
   }
 }

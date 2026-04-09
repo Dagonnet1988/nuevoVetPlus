@@ -10,6 +10,7 @@ class GoogleCalendarSimpleController {
   // Obtener configuración actual
   async getConfig(req, res) {
     try {
+      const tenantId = req.tenantId ?? req.user?.tenant_id;
       const result = await query(`
         SELECT
           is_active as activo,
@@ -23,9 +24,10 @@ class GoogleCalendarSimpleController {
           updated_at
         FROM vetplus_auth.google_calendar_config
         WHERE is_active = true
+          AND configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)
         ORDER BY created_at DESC
         LIMIT 1
-      `);
+      `, [tenantId]);
 
       if (result.rows.length === 0) {
         return res.json({
@@ -69,9 +71,13 @@ class GoogleCalendarSimpleController {
       }
 
       const redirect_uri = `${process.env.BACKEND_URL || 'http://localhost:3000'}/api/google-calendar/callback`;
+      const tenantId = req.tenantId ?? req.user?.tenant_id;
 
-      // Desactivar configuración anterior
-      await query(`UPDATE vetplus_auth.google_calendar_config SET is_active = false WHERE is_active = true`);
+      // Desactivar configuración anterior de este tenant
+      await query(
+        `UPDATE vetplus_auth.google_calendar_config SET is_active = false WHERE configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)`,
+        [tenantId]
+      );
 
       // Insertar nueva configuración (adaptando a las columnas existentes)
       const result = await query(`
@@ -119,13 +125,15 @@ class GoogleCalendarSimpleController {
   // Obtener URL de autorización
   async getAuthUrl(req, res) {
     try {
+      const tenantId = req.tenantId ?? req.user?.tenant_id;
       const configResult = await query(`
         SELECT client_id, redirect_uri
         FROM vetplus_auth.google_calendar_config
         WHERE is_active = true
+          AND configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)
         ORDER BY created_at DESC
         LIMIT 1
-      `);
+      `, [tenantId]);
 
       if (configResult.rows.length === 0) {
         return res.status(400).json({
@@ -469,6 +477,7 @@ class GoogleCalendarSimpleController {
   // Obtener estado de conexión
   async getStatus(req, res) {
     try {
+      const tenantId = req.tenantId ?? req.user?.tenant_id;
       const result = await query(`
         SELECT
           is_active as activo,
@@ -479,9 +488,10 @@ class GoogleCalendarSimpleController {
           updated_at
         FROM vetplus_auth.google_calendar_config
         WHERE is_active = true
+          AND configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)
         ORDER BY created_at DESC
         LIMIT 1
-      `);
+      `, [tenantId]);
 
       if (result.rows.length === 0) {
         return res.json({
@@ -530,12 +540,14 @@ class GoogleCalendarSimpleController {
   // Probar conexión
   async testConnection(req, res) {
     try {
+      const tenantId = req.tenantId ?? req.user?.tenant_id;
       const configResult = await query(`
         SELECT * FROM vetplus_auth.google_calendar_config
         WHERE is_active = true
+          AND configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)
         ORDER BY created_at DESC
         LIMIT 1
-      `);
+      `, [tenantId]);
 
       if (configResult.rows.length === 0) {
         return res.status(400).json({
@@ -592,6 +604,7 @@ class GoogleCalendarSimpleController {
   // Desconectar
   async disconnect(req, res) {
     try {
+      const tenantId = req.tenantId ?? req.user?.tenant_id;
       await query(`
         UPDATE vetplus_auth.google_calendar_config
         SET
@@ -601,7 +614,8 @@ class GoogleCalendarSimpleController {
           token_expiry = NULL,
           updated_at = CURRENT_TIMESTAMP
         WHERE is_active = true
-      `);
+          AND configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)
+      `, [tenantId]);
 
       res.json({
         success: true,
@@ -632,6 +646,8 @@ export const getGoogleCalendarConfig = async (req, res) => {
             });
         }
 
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+
         const result = await query(`
             SELECT 
                 id_config,
@@ -653,9 +669,10 @@ export const getGoogleCalendarConfig = async (req, res) => {
                 END as has_refresh_token
             FROM vetplus_auth.google_calendar_config 
             WHERE is_active = true
+              AND configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)
             ORDER BY created_at DESC 
             LIMIT 1
-        `);
+        `, [tenantId]);
 
         if (result.rows.length === 0) {
             return res.json({
@@ -726,10 +743,11 @@ export const configureGoogleCalendar = async (req, res) => {
 
         const id_config = uuidv4();
         const configured_by = req.user.id_usuario;
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
 
         console.log('🗃️ Desactivando configuración anterior...');
         // Desactivar configuración anterior si existe
-        await query('UPDATE vetplus_auth.google_calendar_config SET is_active = false');
+        await query(`UPDATE vetplus_auth.google_calendar_config SET is_active = false WHERE configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)`, [tenantId]);
 
         console.log('💾 Guardando nueva configuración...');
         // Crear nueva configuración
@@ -807,6 +825,8 @@ export const completeGoogleAuth = async (req, res) => {
             });
         }
 
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+
         // Actualizar configuración con los tokens
         const updateResult = await query(`
             UPDATE vetplus_auth.google_calendar_config 
@@ -816,11 +836,13 @@ export const completeGoogleAuth = async (req, res) => {
                 token_expiry = $3,
                 updated_at = CURRENT_TIMESTAMP
             WHERE is_active = true
+              AND configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $4)
             RETURNING *
         `, [
             tokenResult.tokens.refresh_token,
             tokenResult.tokens.access_token,
-            tokenResult.tokens.expiry_date ? new Date(tokenResult.tokens.expiry_date) : null
+            tokenResult.tokens.expiry_date ? new Date(tokenResult.tokens.expiry_date) : null,
+            tenantId
         ]);
 
         if (updateResult.rows.length === 0) {
@@ -899,7 +921,8 @@ export const disableGoogleCalendar = async (req, res) => {
             });
         }
 
-        await query('UPDATE vetplus_auth.google_calendar_config SET is_active = false');
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+        await query(`UPDATE vetplus_auth.google_calendar_config SET is_active = false WHERE configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)`, [tenantId]);
 
         res.json({
             success: true,
@@ -1028,14 +1051,17 @@ export const getSyncStatus = async (req, res) => {
             });
         }
 
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+
         const statsResult = await query(`
             SELECT
                 google_sync_status,
                 COUNT(*) as cantidad
             FROM clinical.calendario_citas
             WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
+              AND id_tenant = $1
             GROUP BY google_sync_status
-        `);
+        `, [tenantId]);
 
         const recentErrorsResult = await query(`
             SELECT
@@ -1048,10 +1074,11 @@ export const getSyncStatus = async (req, res) => {
             LEFT JOIN clinical.mascotas m ON c.id_mascota = m.id_mascota
             LEFT JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
             WHERE c.google_sync_status = 'failed'
+            AND c.id_tenant = $1
             AND c.created_at >= CURRENT_DATE - INTERVAL '7 days'
             ORDER BY c.last_google_sync DESC
             LIMIT 10
-        `);
+        `, [tenantId]);
 
         res.json({
             success: true,
@@ -1086,6 +1113,8 @@ export const diagnoseGoogleCalendarSync = async (req, res) => {
 
         console.log('🔍 Iniciando diagnóstico de sincronización con Google Calendar...');
 
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+
         const diagnostic = {
             connection_status: null,
             calendar_events: null,
@@ -1119,8 +1148,9 @@ export const diagnoseGoogleCalendarSync = async (req, res) => {
                 updated_at
             FROM vetplus_auth.google_calendar_config
             WHERE is_active = true
+              AND configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)
             LIMIT 1
-        `);
+        `, [tenantId]);
         diagnostic.configuration = configResult.rows[0] || null;
 
         // 3. Obtener información de última sincronización
@@ -1131,8 +1161,9 @@ export const diagnoseGoogleCalendarSync = async (req, res) => {
                 COUNT(*) as total_citas_sync,
                 COUNT(CASE WHEN google_event_id IS NOT NULL THEN 1 END) as citas_con_event_id
             FROM clinical.calendario_citas
-            WHERE google_event_id IS NOT NULL OR created_at >= CURRENT_DATE - INTERVAL '7 days'
-        `);
+            WHERE (google_event_id IS NOT NULL OR created_at >= CURRENT_DATE - INTERVAL '7 days')
+              AND id_tenant = $1
+        `, [tenantId]);
         diagnostic.last_sync_info = lastSyncResult.rows[0];
 
         // 4. Listar eventos recientes de Google Calendar (últimos 7 días)

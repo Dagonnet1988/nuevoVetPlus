@@ -265,6 +265,9 @@ export const createAppointment = async (req, res) => {
             observaciones,
             precio
         } = req.body;
+
+        // El frontend puede enviar "observaciones" en lugar de "notas" — normalizar
+        const notasFinales = notas || observaciones;
         
         console.log('📝 Campos extraídos:', {
             id_mascota,
@@ -350,7 +353,7 @@ export const createAppointment = async (req, res) => {
         const codigo_cita = generateAppointmentCode();
         const created_by = req.user.id;
         
-        const tenantId = req.tenantId;
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
         // Verificar que la mascota existe
         const mascotaResult = await query(
             'SELECT id_mascota, nombre FROM clinical.mascotas WHERE id_mascota = $1 AND id_tenant = $2 AND activo = true',
@@ -412,7 +415,7 @@ export const createAppointment = async (req, res) => {
         
         const result = await query(insertQuery, [
             id_cita, codigo_cita, id_mascota, id_veterinario,
-            fechaInicioFormato, fechaFinFormato, tipo, motivo, notas, created_by, tenantId
+            fechaInicioFormato, fechaFinFormato, tipo, motivo, notasFinales, created_by, tenantId
         ]);
         
         // Obtener información completa de la cita creada
@@ -463,7 +466,7 @@ export const getAppointments = async (req, res) => {
             limit, offset, fecha_inicio, fecha_fin, estado, tipo, id_veterinario, id_mascota
         });
         
-        const tenantId = req.tenantId;
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
         let whereConditions = [`c.id_tenant = $1`]; // Filtrar por tenant
         let queryParams = [tenantId];
         let paramCount = 1;
@@ -596,7 +599,7 @@ export const getAppointments = async (req, res) => {
 export const getAppointmentById = async (req, res) => {
     try {
         const { id } = req.params;
-        const cita = await getAppointmentWithDetails(id, req.tenantId);
+        const cita = await getAppointmentWithDetails(id, req.tenantId ?? req.user?.tenant_id);
         
         if (!cita) {
             return res.status(404).json({
@@ -631,7 +634,7 @@ export const updateAppointment = async (req, res) => {
         const { id } = req.params;
         const updateData = req.body;
         
-        const tenantId = req.tenantId;
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
         // Verificar que la cita existe
         const citaExistente = await query(
             'SELECT * FROM clinical.calendario_citas WHERE id_cita = $1 AND id_tenant = $2',
@@ -693,6 +696,12 @@ export const updateAppointment = async (req, res) => {
             'id_mascota', 'id_veterinario', 'fecha_inicio', 'fecha_fin',
             'tipo', 'estado', 'motivo', 'notas', 'id_consulta', 'recordatorio_enviado'
         ];
+
+        // El frontend envía "observaciones" pero la columna en DB se llama "notas"
+        if (updateData.observaciones !== undefined && updateData.notas === undefined) {
+            updateData.notas = updateData.observaciones;
+        }
+        delete updateData.observaciones;
         
         allowedFields.forEach(field => {
             if (updateData[field] !== undefined) {
@@ -772,7 +781,7 @@ export const updateAppointmentStatus = async (req, res) => {
         const estadoDb = mapFrontendToDb(estado);
         console.log(`🔄 Mapeando estado: ${estado} -> ${estadoDb}`);
         
-        const tenantId = req.tenantId;
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
         // Verificar que la cita existe antes de iniciar la transacción
         const citaExistente = await query(
             'SELECT id_cita, estado FROM clinical.calendario_citas WHERE id_cita = $1 AND id_tenant = $2',
@@ -1649,6 +1658,7 @@ export const suggestAvailableSlots = async (req, res) => {
 export const getAppointmentStats = async (req, res) => {
     try {
         const { fecha_inicio, fecha_fin } = req.query;
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
         
         // Si no se proporcionan fechas, usar el mes actual
         const startDate = fecha_inicio || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
@@ -1658,29 +1668,29 @@ export const getAppointmentStats = async (req, res) => {
             // Total de citas
             `SELECT COUNT(*) as total_citas 
              FROM clinical.calendario_citas 
-             WHERE fecha_inicio >= $1 AND fecha_inicio <= $2`,
+             WHERE id_tenant = $3 AND fecha_inicio >= $1 AND fecha_inicio <= $2`,
             
             // Citas de hoy
             `SELECT COUNT(*) as citas_hoy 
              FROM clinical.calendario_citas 
-             WHERE DATE(fecha_inicio) = CURRENT_DATE`,
+             WHERE id_tenant = $1 AND DATE(fecha_inicio) = CURRENT_DATE`,
              
             // Citas pendientes
             `SELECT COUNT(*) as citas_pendientes 
              FROM clinical.calendario_citas 
-             WHERE estado = 'pendiente' AND fecha_inicio >= CURRENT_DATE`,
+             WHERE id_tenant = $1 AND estado = 'pendiente' AND fecha_inicio >= CURRENT_DATE`,
              
             // Citas completadas en el período
             `SELECT COUNT(*) as citas_completadas 
              FROM clinical.calendario_citas 
-             WHERE estado = 'completada' AND fecha_inicio >= $1 AND fecha_inicio <= $2`
+             WHERE id_tenant = $3 AND estado = 'completada' AND fecha_inicio >= $1 AND fecha_inicio <= $2`
         ];
         
         const results = await Promise.all([
-            query(statsQueries[0], [startDate, endDate]),
-            query(statsQueries[1]),
-            query(statsQueries[2]),
-            query(statsQueries[3], [startDate, endDate])
+            query(statsQueries[0], [startDate, endDate, tenantId]),
+            query(statsQueries[1], [tenantId]),
+            query(statsQueries[2], [tenantId]),
+            query(statsQueries[3], [startDate, endDate, tenantId])
         ]);
         
         const totalCitas = parseInt(results[0].rows[0].total_citas);
@@ -1691,10 +1701,11 @@ export const getAppointmentStats = async (req, res) => {
         const estadosQuery = `
             SELECT estado, COUNT(*) as cantidad 
             FROM clinical.calendario_citas 
+            WHERE id_tenant = $1
             GROUP BY estado 
             ORDER BY cantidad DESC
         `;
-        const estadosResult = await query(estadosQuery);
+        const estadosResult = await query(estadosQuery, [tenantId]);
         
         const stats = {
             total_citas: totalCitas,

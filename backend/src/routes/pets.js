@@ -28,7 +28,7 @@ router.use(authenticateToken);
 // ✅ CREAR MASCOTA
 // POST /api/clinical/pets
 router.post('/',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateCreatePet,
     validateRequest,
     createPet
@@ -37,7 +37,7 @@ router.post('/',
 // ✅ OBTENER TODAS LAS MASCOTAS (con filtros y paginación)
 // GET /api/clinical/pets?limit=20&offset=0&especie=Perro&cliente=uuid
 router.get('/',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validatePetSearch,
     validateRequest,
     getPets
@@ -53,7 +53,7 @@ router.get('/stats',
 // ✅ OBTENER MASCOTAS POR CLIENTE
 // GET /api/clinical/pets/client/:id
 router.get('/client/:id',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateClientId,
     validateRequest,
     getPetsByClient
@@ -62,7 +62,7 @@ router.get('/client/:id',
 // ✅ OBTENER MASCOTA POR ID
 // GET /api/clinical/pets/:id
 router.get('/:id',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validatePetId,
     validateRequest,
     getPetById
@@ -71,7 +71,7 @@ router.get('/:id',
 // ✅ ACTUALIZAR MASCOTA
 // PUT /api/clinical/pets/:id
 router.put('/:id',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateUpdatePet,
     validateRequest,
     updatePet

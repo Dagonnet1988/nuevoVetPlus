@@ -132,7 +132,7 @@ export class DashboardComponent implements OnInit {
   shouldShowChart(chartType: string): boolean {
     switch (chartType) {
       case 'citas':
-        return this.authService.hasAnyRole(['admin', 'vet', 'aux_admin', 'aux_vet']);
+        return this.authService.hasAnyRole(['admin', 'vet', 'aux']);
       default:
         return true;
     }

@@ -1,0 +1,35 @@
+<div class="sa-shell">
+  <!-- Sidebar -->
+  <aside class="sa-sidebar">
+    <div class="sa-logo">
+      <mat-icon>pets</mat-icon>
+      <span>VetPlus<br><small>Platform Admin</small></span>
+    </div>
+
+    <nav class="sa-nav">
+      <a routerLink="/superadmin/dashboard" routerLinkActive="active" class="sa-nav-item">
+        <mat-icon>dashboard</mat-icon>
+        <span>Dashboard</span>
+      </a>
+      <a routerLink="/superadmin/dashboard" routerLinkActive="active" class="sa-nav-item">
+        <mat-icon>business</mat-icon>
+        <span>Clínicas</span>
+      </a>
+    </nav>
+
+    <div class="sa-footer">
+      <div class="sa-profile">
+        <mat-icon>account_circle</mat-icon>
+        <span class="sa-profile-name">{{ svc.profile()?.nombre }}</span>
+      </div>
+      <button mat-icon-button (click)="logout()" matTooltip="Cerrar sesión" class="sa-logout">
+        <mat-icon>logout</mat-icon>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Content -->
+  <main class="sa-content">
+    <router-outlet />
+  </main>
+</div>

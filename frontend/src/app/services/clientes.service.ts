@@ -8,10 +8,13 @@ export interface Cliente {
   id_cliente: string;
   nombre: string;
   documento: string;
+  cedula?: string;
   telefono?: string;
   email?: string;
   direccion?: string;
   activo: boolean;
+  consentimiento_firmado?: boolean;
+  total_mascotas?: number;
   created_at: string;
   updated_at: string;
 }
@@ -36,9 +39,9 @@ export class ClientesService {
     return this.http.get<any>(this.API_URL, { params }).pipe(
       map((response: any) => {
         if (response.success && response.data) {
-          // El backend devuelve { clients: [...], pagination: {...} }
+          // El backend devuelve { clientes: [...], pagination: {...} }
           return {
-            data: response.data.clients || [],
+            data: response.data.clientes || [],
             pagination: response.data.pagination || {}
           };
         }

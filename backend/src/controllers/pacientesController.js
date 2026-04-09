@@ -413,6 +413,7 @@ export async function updateMascota(req, res) {
 export async function updatePacienteCompleto(req, res) {
   try {
     const { id } = req.params; // ID de la mascota
+    const tenantId = req.tenantId;
     const {
       // Datos del cliente
       nombre_cliente,
@@ -430,7 +431,8 @@ export async function updatePacienteCompleto(req, res) {
       peso,
       color,
       microchip,
-      notas
+      notas,
+      esterilizado
     } = req.body;
 
     // Convertir sexo del frontend (M/H) al formato de base de datos (Macho/Hembra)
@@ -467,9 +469,8 @@ export async function updatePacienteCompleto(req, res) {
           telefono = COALESCE($4, telefono),
           email = $5,
           direccion = $6,
-          updated_at = CURRENT_TIMESTAMP,
-          updated_by = $7
-        WHERE id_cliente = $1 AND id_tenant = $8
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id_cliente = $1 AND id_tenant = $7
         RETURNING *
       `;
 
@@ -480,7 +481,6 @@ export async function updatePacienteCompleto(req, res) {
         telefono,
         email || null,
         direccion || null,
-        req.user.id,
         tenantId
       ];
 
@@ -508,9 +508,8 @@ export async function updatePacienteCompleto(req, res) {
           microchip = $10,
           notas = $11,
           esterilizado = COALESCE($12, esterilizado),
-          updated_at = CURRENT_TIMESTAMP,
-          updated_by = $13
-        WHERE id_mascota = $1 AND id_tenant = $14
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id_mascota = $1 AND id_tenant = $13
         RETURNING *
       `;
 
@@ -527,7 +526,6 @@ export async function updatePacienteCompleto(req, res) {
         microchip || null,
         notas || null,
         esterilizado !== undefined ? esterilizado : null,
-        req.user.id,
         tenantId
       ];
 

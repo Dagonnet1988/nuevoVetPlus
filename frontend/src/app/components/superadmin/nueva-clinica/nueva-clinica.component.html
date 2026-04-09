@@ -1,0 +1,109 @@
+<div class="sa-page">
+  <header class="sa-page-header">
+    <a mat-icon-button routerLink="/superadmin/dashboard">
+      <mat-icon>arrow_back</mat-icon>
+    </a>
+    <div>
+      <h2>Nueva clínica</h2>
+      <p>Crea un tenant con su usuario administrador inicial.</p>
+    </div>
+  </header>
+
+  <form (ngSubmit)="submit()" #f="ngForm" novalidate>
+    <div class="sa-form-grid">
+
+      <!-- Datos de la clínica -->
+      <mat-card class="sa-section">
+        <h3><mat-icon>business</mat-icon> Datos de la clínica</h3>
+        <mat-divider />
+
+        <div class="sa-fields">
+          <mat-form-field appearance="outline">
+            <mat-label>Nombre de la clínica *</mat-label>
+            <input matInput [(ngModel)]="nombre" name="nombre"
+                   (ngModelChange)="onNombreChange()" required />
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Slug (identificador único) *</mat-label>
+            <input matInput [(ngModel)]="slug" name="slug"
+                   (focus)="slugTouched = true"
+                   pattern="^[a-z0-9-]+$" required />
+            <mat-hint>Solo minúsculas, números y guiones. Ej: clinica-san-pablo</mat-hint>
+          </mat-form-field>
+
+          <div class="sa-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Plan *</mat-label>
+              <mat-select [(ngModel)]="plan" name="plan" required>
+                <mat-option value="standard">Standard</mat-option>
+                <mat-option value="pro">Pro</mat-option>
+                <mat-option value="enterprise">Enterprise</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Máx. usuarios *</mat-label>
+              <input matInput type="number" [(ngModel)]="max_usuarios"
+                     name="max_usuarios" min="1" max="500" required />
+            </mat-form-field>
+          </div>
+        </div>
+      </mat-card>
+
+      <!-- Datos del admin -->
+      <mat-card class="sa-section">
+        <h3><mat-icon>manage_accounts</mat-icon> Usuario administrador inicial</h3>
+        <mat-divider />
+
+        <div class="sa-fields">
+          <div class="sa-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Nombre *</mat-label>
+              <input matInput [(ngModel)]="adminNombre" name="adminNombre" required />
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Apellido *</mat-label>
+              <input matInput [(ngModel)]="adminApellido" name="adminApellido" required />
+            </mat-form-field>
+          </div>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Email del admin *</mat-label>
+            <input matInput type="email" [(ngModel)]="adminEmail"
+                   name="adminEmail" autocomplete="off" required />
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Documento (cédula) *</mat-label>
+            <input matInput [(ngModel)]="adminDocumento" name="adminDocumento" required />
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Contraseña inicial *</mat-label>
+            <input matInput [type]="showPassword ? 'text' : 'password'"
+                   [(ngModel)]="adminPassword" name="adminPassword"
+                   autocomplete="new-password" minlength="8" required />
+            <button mat-icon-button matSuffix type="button"
+                    (click)="showPassword = !showPassword">
+              <mat-icon>{{ showPassword ? 'visibility_off' : 'visibility' }}</mat-icon>
+            </button>
+            <mat-hint>Mínimo 8 caracteres</mat-hint>
+          </mat-form-field>
+        </div>
+      </mat-card>
+    </div>
+
+    @if (error()) {
+      <p class="sa-error">{{ error() }}</p>
+    }
+
+    <div class="sa-actions">
+      <a mat-stroked-button routerLink="/superadmin/dashboard">Cancelar</a>
+      <button mat-flat-button type="submit" class="sa-submit-btn" [disabled]="loading()">
+        @if (loading()) { <mat-spinner diameter="20" /> }
+        @else { <ng-container><mat-icon>add_business</mat-icon> Crear clínica</ng-container> }
+      </button>
+    </div>
+  </form>
+</div>
