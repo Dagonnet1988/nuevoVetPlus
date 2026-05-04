@@ -1,5 +1,6 @@
 .login-container {
-  height: 100vh;
+  min-height: 100%;
+  height: auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -61,33 +62,6 @@
   border-radius: 8px !important;
   font-size: 16px;
   font-weight: 500;
-}
-
-.login-footer {
-  text-align: center;
-  margin-top: 24px;
-}
-
-.text-muted {
-  color: #666;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  margin: 0;
-}
-
-.info-icon {
-  font-size: 16px;
-  width: 16px;
-  height: 16px;
-}
-
-.version-info {
-  color: #999;
-  font-size: 11px;
-  margin: 8px 0 0 0;
 }
 
 .theme-selector {

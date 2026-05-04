@@ -16,6 +16,7 @@ export interface User {
   documento: string;
   nombre: string;
   apellido?: string;
+  avatar_url?: string;
   rol: 'admin' | 'vet' | 'aux';
   activo: boolean;
   primer_acceso: boolean; // Para forzar cambio de contraseña
@@ -23,7 +24,7 @@ export interface User {
 }
 
 export interface PasswordChangeRequest {
-  currentPassword: string;
+  currentPassword?: string;
   newPassword: string;
   confirmPassword: string;
 }

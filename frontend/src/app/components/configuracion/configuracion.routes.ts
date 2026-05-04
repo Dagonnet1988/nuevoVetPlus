@@ -26,6 +26,14 @@ export const CONFIGURACION_ROUTES: Routes = [
     }
   },
   {
+    path: 'correo',
+    loadComponent: () => import('./email/email-config.component').then(m => m.EmailConfigComponent),
+    data: {
+      title: 'Configuración de Correo',
+      breadcrumb: 'Correo'
+    }
+  },
+  {
     path: 'consentimiento-texto',
     loadComponent: () => import('./consentimiento-texto/consentimiento-texto.component').then(m => m.ConsentimientoTextoComponent),
     data: {

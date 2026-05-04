@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import dotenv from 'dotenv';
+import bcrypt from 'bcryptjs';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -60,8 +61,8 @@ class DBInit {
    */
   async runPostInitMigrations() {
     const migrationFiles = [
-      { file: '09_clinical_archivos_consulta.sql', desc: 'Migración adjuntos de consultas clínicas' },
       { file: '10_consentimientos.sql', desc: 'Migración módulo de consentimiento de datos' }
+      // 09 eliminado: archivos_consulta fue reemplazada por archivos_historia en 03_clinical_tables.sql
       // 11 y 12 eliminados: system.tenants e id_tenant están integrados en 01/02/03/06/10.
     ];
     for (const { file, desc } of migrationFiles) {
@@ -72,6 +73,82 @@ class DBInit {
       } catch (error) {
         console.log(`⚠️  Migración opcional ${file} no encontrada, saltando...`);
       }
+    }
+
+    // Migración inline: columnas de facturación en system.tenants
+    await this.migrateTenantsAddBillingColumns();
+    await this.migrateHistoriasAddModificacion();
+    await this.migrateUsuariosAddAvatarColumn();
+    await this.migrateClientesAddUpdatedByColumn();
+  }
+
+  /**
+   * Agrega columnas de periodicidad y fechas de pago a system.tenants (idempotente).
+   */
+  async migrateTenantsAddBillingColumns() {
+    const client = new Client(this.config);
+    try {
+      await client.connect();
+      await client.query(`
+        ALTER TABLE system.tenants
+          ADD COLUMN IF NOT EXISTS periodicidad_pago      VARCHAR(20) DEFAULT 'monthly'
+            CHECK (periodicidad_pago IN ('monthly','quarterly','semiannual','annual')),
+          ADD COLUMN IF NOT EXISTS fecha_inicio_suscripcion DATE,
+          ADD COLUMN IF NOT EXISTS fecha_proximo_pago       DATE
+      `);
+      console.log('✅ Migración billing: columnas de pago en system.tenants verificadas');
+    } catch (error) {
+      console.warn('⚠️  Migración billing parcial:', error.message);
+    } finally {
+      await client.end();
+    }
+  }
+
+  async migrateHistoriasAddModificacion() {
+    const client = new Client(this.config);
+    try {
+      await client.connect();
+      await client.query(`
+        ALTER TABLE clinical.historias_clinicas
+          ADD COLUMN IF NOT EXISTS motivo_modificacion TEXT
+      `);
+      console.log('✅ Migración historias: columna motivo_modificacion verificada');
+    } catch (error) {
+      console.warn('⚠️  Migración historias parcial:', error.message);
+    } finally {
+      await client.end();
+    }
+  }
+
+  async migrateUsuariosAddAvatarColumn() {
+    const client = new Client(this.config);
+    try {
+      await client.connect();
+      await client.query(`
+        ALTER TABLE vetplus_auth.usuarios
+          ADD COLUMN IF NOT EXISTS avatar_url TEXT
+      `);
+      console.log('✅ Migración usuarios: columna avatar_url verificada');
+    } catch (error) {
+      console.warn('⚠️  Migración usuarios/avatar parcial:', error.message);
+    } finally {
+      await client.end();
+    }
+  }
+
+  async migrateClientesAddUpdatedByColumn() {
+    const client = new Client(this.config);
+    try {
+      await client.connect();
+      await client.query(`
+        ALTER TABLE clinical.clientes
+          ADD COLUMN IF NOT EXISTS updated_by UUID REFERENCES vetplus_auth.usuarios(id_usuario)
+      `);
+      console.log('✅ Migración clientes: columna updated_by verificada');
+    } catch (error) {
+      console.warn('⚠️  Migración clientes/updated_by parcial:', error.message);
+    } finally {
+      await client.end();
     }
   }
 
@@ -389,6 +466,8 @@ class DBInit {
       { name: 'usuarios', schema: 'vetplus_auth' },
       { name: 'clientes', schema: 'clinical' },
       { name: 'mascotas', schema: 'clinical' },
+      { name: 'historias_clinicas', schema: 'clinical' },
+      { name: 'calendario_citas', schema: 'clinical' },
       { name: 'configuracion_empresa', schema: 'system' },
       { name: 'log_auditoria', schema: 'system' }
     ];
@@ -432,6 +511,8 @@ class DBInit {
         console.log('✅ Sistema ya está completamente inicializado');
         console.log('🔁 Aplicando migraciones post-inicialización...');
         await this.runPostInitMigrations();
+        // Crear superadmin si aún no existe (upgrade desde versión anterior)
+        await this.createInitialSuperadmin();
         console.log('⏭️  Saltando inicialización completa de schemas base...');
         
         // Mostrar estado del sistema
@@ -456,9 +537,8 @@ class DBInit {
         { file: '06_empresa_config.sql', desc: 'Configuración de empresa' },
         { file: '07_workflow_integration.sql', desc: 'Integraciones de workflow y notificaciones' },
         { file: '08_audit_expansion.sql', desc: 'Expansión sistema auditoría' },
-        { file: '09_clinical_archivos_consulta.sql', desc: 'Adjuntos de consultas clínicas' },
+        { file: '09_clinical_archivos_consulta.sql', desc: 'Placeholder (obsoleto, no-op)' },
         { file: '10_consentimientos.sql', desc: 'Módulo de consentimiento de datos' }
-        // 11 y 12 eliminados: system.tenants e id_tenant ya están en 01/02/03/06/10
       ];
       
       for (const { file, desc } of schemaFiles) {
@@ -471,27 +551,17 @@ class DBInit {
         }
       }
       
-      // 5. Verificar si necesita datos iniciales
-      const hasUsers = await this.tableExists('usuarios', 'vetplus_auth');
-      if (hasUsers) {
-        const client = new Client(this.config);
-        await client.connect();
-        const result = await client.query('SELECT COUNT(*) FROM vetplus_auth.usuarios');
-        await client.end();
-        
-        if (result.rows[0].count === '0') {
-          console.log('📦 Insertando datos iniciales...');
-          const seedFile = path.join(this.seedsPath, '01_initial_data.sql');
-          try {
-            await fs.access(seedFile);
-            await this.executeSQL(seedFile, 'Datos iniciales');
-          } catch (error) {
-            console.log('⚠️  Archivo de seeds no encontrado');
-          }
-        } else {
-          console.log('✅ Datos iniciales ya existen');
-        }
+      // 5. Insertar log de inicialización
+      const seedFile = path.join(this.seedsPath, '01_initial_data.sql');
+      try {
+        await fs.access(seedFile);
+        await this.executeSQL(seedFile, 'Log de inicialización');
+      } catch (error) {
+        console.log('⚠️  Archivo de seeds no encontrado');
       }
+
+      // 6. Crear superadmin automáticamente desde variables de entorno
+      await this.createInitialSuperadmin();
       
       // 6. Mostrar estado final
       await this.checkSystemStatus();
@@ -505,6 +575,52 @@ class DBInit {
     } catch (error) {
       console.error('\n❌ ERROR EN INICIALIZACIÓN:', error.message);
       return false;
+    }
+  }
+
+  /**
+   * Crea el superadmin inicial con credenciales por defecto.
+   * Solo actúa si la tabla system.superadmins está vacía.
+   * Puede sobreescribirse con SUPERADMIN_EMAIL/PASSWORD/NOMBRE en .env.
+   */
+  async createInitialSuperadmin() {
+    try {
+      const tableExists = await this.tableExists('superadmins', 'system');
+      if (!tableExists) {
+        console.log('⚠️  Tabla system.superadmins no existe, saltando creación de superadmin.');
+        return;
+      }
+
+      const client = new Client(this.config);
+      await client.connect();
+      const countResult = await client.query('SELECT COUNT(*) FROM system.superadmins');
+      const count = parseInt(countResult.rows[0].count);
+      await client.end();
+
+      if (count > 0) {
+        console.log('✅ Superadmin ya existe, saltando...');
+        return;
+      }
+
+      const email    = process.env.SUPERADMIN_EMAIL    || 'admin@vetplus.com';
+      const password = process.env.SUPERADMIN_PASSWORD || 'superadmin123';
+      const nombre   = process.env.SUPERADMIN_NOMBRE   || 'Super Admin';
+
+      const passwordHash = await bcrypt.hash(password, 12);
+
+      const insertClient = new Client(this.config);
+      await insertClient.connect();
+      await insertClient.query(
+        `INSERT INTO system.superadmins (nombre, email, password_hash)
+         VALUES ($1, $2, $3)`,
+        [nombre, email, passwordHash]
+      );
+      await insertClient.end();
+
+      console.log(`✅ Superadmin creado automáticamente: ${email}`);
+      console.log('   Puedes iniciar sesión en /superadmin/login');
+    } catch (error) {
+      console.error('❌ Error creando superadmin inicial:', error.message);
     }
   }
 

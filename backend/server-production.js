@@ -13,6 +13,8 @@ import authRoutes from './src/routes/auth.js';
 import clinicalRoutes from './src/routes/clinical.js';
 import auditRoutes from './src/routes/audit.js';
 import googleCalendarRoutes from './src/routes/googleCalendar.js';
+import emailConfigRoutes from './src/routes/emailConfigRoutes.js';
+import documentEmailRoutes from './src/routes/documentEmailRoutes.js';
 
 // Importar middleware de auditoría
 import { setAuditContext, auditActivity, auditAuthActivity } from './src/middleware/auditMiddleware.js';
@@ -210,6 +212,16 @@ app.use('/api/audit',
 app.use('/api/google-calendar', 
     adminRateLimit,
     googleCalendarRoutes
+);
+
+app.use('/api/admin/email',
+    adminRateLimit,
+    emailConfigRoutes
+);
+
+app.use('/api/clinical/notificaciones',
+    endpointRateLimit('clinical.*'),
+    documentEmailRoutes
 );
 
 // ============ MIDDLEWARE DE MANEJO DE ERRORES ============

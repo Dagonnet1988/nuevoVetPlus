@@ -13,8 +13,8 @@ CREATE TRIGGER audit_mascotas
     AFTER INSERT OR UPDATE OR DELETE ON clinical.mascotas
     FOR EACH ROW EXECUTE FUNCTION create_audit_log();
 
-CREATE TRIGGER audit_consultas
-    AFTER INSERT OR UPDATE OR DELETE ON clinical.consultas_clinicas
+CREATE TRIGGER audit_historias
+    AFTER INSERT OR UPDATE OR DELETE ON clinical.historias_clinicas
     FOR EACH ROW EXECUTE FUNCTION create_audit_log();
 
 CREATE TRIGGER audit_citas
@@ -57,7 +57,7 @@ BEGIN
             WHEN 'usuarios' THEN entity_id := COALESCE(NEW.id_usuario, OLD.id_usuario)::TEXT;
             WHEN 'clientes' THEN entity_id := COALESCE(NEW.id_cliente, OLD.id_cliente)::TEXT;
             WHEN 'mascotas' THEN entity_id := COALESCE(NEW.id_mascota, OLD.id_mascota)::TEXT;
-            WHEN 'consultas_clinicas' THEN entity_id := COALESCE(NEW.id_consulta, OLD.id_consulta)::TEXT;
+            WHEN 'historias_clinicas' THEN entity_id := COALESCE(NEW.id_historia, OLD.id_historia)::TEXT;
             WHEN 'calendario_citas' THEN entity_id := COALESCE(NEW.id_cita, OLD.id_cita)::TEXT;
             ELSE entity_id := 'unknown';
         END CASE;

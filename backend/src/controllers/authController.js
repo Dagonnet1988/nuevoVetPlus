@@ -29,7 +29,7 @@ class AuthController {
 
       // Buscar usuario por documento
       const userResult = await query(
-        'SELECT id_usuario, id_tenant, nombre, apellido, email, documento, password_hash, rol, activo, intentos_login, bloqueado_hasta, password_temporal, debe_cambiar_password FROM vetplus_auth.usuarios WHERE documento = $1',
+        'SELECT id_usuario, id_tenant, nombre, apellido, email, documento, password_hash, rol, activo, intentos_login, bloqueado_hasta, password_temporal, debe_cambiar_password, avatar_url FROM vetplus_auth.usuarios WHERE documento = $1',
         [documento]
       );
 
@@ -130,7 +130,8 @@ class AuthController {
             apellido: user.apellido,
             email: user.email,
             documento: user.documento,
-            rol: user.rol
+            rol: user.rol,
+            avatar_url: user.avatar_url
           },
           must_change_password: needsPasswordChange
         }
@@ -286,7 +287,21 @@ class AuthController {
 
       // Obtener información actualizada del usuario
       const userResult = await query(
-        'SELECT id_usuario, nombre, email, rol, activo, ultimo_login, created_at FROM vetplus_auth.usuarios WHERE id_usuario = $1',
+        `SELECT
+          id_usuario,
+          nombre,
+          apellido,
+          email,
+          documento,
+          rol,
+          activo,
+          ultimo_login,
+          created_at,
+          password_temporal,
+          debe_cambiar_password,
+          avatar_url
+        FROM vetplus_auth.usuarios
+        WHERE id_usuario = $1`,
         [req.user.id_usuario]
       );
 
@@ -303,11 +318,15 @@ class AuthController {
       res.json({
         success: true,
         data: {
-          id: user.id_usuario,
+          id_usuario: user.id_usuario,
           nombre: user.nombre,
+          apellido: user.apellido,
           email: user.email,
+          documento: user.documento,
           rol: user.rol,
           activo: user.activo,
+          primer_acceso: Boolean(user.password_temporal || user.debe_cambiar_password),
+          avatar_url: user.avatar_url,
           ultimo_login: user.ultimo_login,
           created_at: user.created_at
         }
@@ -355,15 +374,27 @@ class AuthController {
 
       const user = userResult.rows[0];
 
-      // Verificar contraseña actual
-      const isValidPassword = await bcrypt.compare(currentPassword, user.password_hash);
+      const isTemporaryFlow = user.password_temporal || user.debe_cambiar_password;
 
-      if (!isValidPassword) {
-        return res.status(400).json({
-          success: false,
-          message: 'Contraseña actual incorrecta',
-          error: 'INVALID_CURRENT_PASSWORD'
-        });
+      // Solo exigir contraseña actual cuando no es flujo de primer acceso.
+      if (!isTemporaryFlow) {
+        if (!currentPassword) {
+          return res.status(400).json({
+            success: false,
+            message: 'Contraseña actual es requerida',
+            error: 'CURRENT_PASSWORD_REQUIRED'
+          });
+        }
+
+        const isValidPassword = await bcrypt.compare(currentPassword, user.password_hash);
+
+        if (!isValidPassword) {
+          return res.status(400).json({
+            success: false,
+            message: 'Contraseña actual incorrecta',
+            error: 'INVALID_CURRENT_PASSWORD'
+          });
+        }
       }
 
       // Hashear nueva contraseña
@@ -384,7 +415,7 @@ class AuthController {
       );
 
       // Registrar el cambio en el historial si era una contraseña temporal
-      if (user.password_temporal || user.debe_cambiar_password) {
+      if (isTemporaryFlow) {
         await query(
           `INSERT INTO vetplus_auth.password_resets 
            (id_usuario, tipo_reset, realizado_por, motivo, completado, completed_at) 

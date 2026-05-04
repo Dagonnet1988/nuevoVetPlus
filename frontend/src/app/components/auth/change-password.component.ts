@@ -31,7 +31,6 @@ import { PasswordChangeRequest } from '../../models/auth.interface';
 })
 export class ChangePasswordComponent {
   passwordForm: FormGroup;
-  hideCurrentPassword = signal(true);
   hideNewPassword = signal(true);
   hideConfirmPassword = signal(true);
 
@@ -42,11 +41,10 @@ export class ChangePasswordComponent {
     private snackBar: MatSnackBar
   ) {
     this.passwordForm = this.fb.group({
-      currentPassword: ['', [Validators.required]],
       newPassword: ['', [
         Validators.required,
         Validators.minLength(8),
-        Validators.pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
+        Validators.pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/)
       ]],
       confirmPassword: ['', [Validators.required]]
     }, { validators: this.passwordMatchValidator });
@@ -60,7 +58,6 @@ export class ChangePasswordComponent {
   onChangePassword() {
     if (this.passwordForm.valid) {
       const passwordData: PasswordChangeRequest = {
-        currentPassword: this.passwordForm.value.currentPassword,
         newPassword: this.passwordForm.value.newPassword,
         confirmPassword: this.passwordForm.value.confirmPassword
       };
@@ -99,10 +96,6 @@ export class ChangePasswordComponent {
     }
   }
 
-  toggleCurrentPasswordVisibility() {
-    this.hideCurrentPassword.set(!this.hideCurrentPassword());
-  }
-
   toggleNewPasswordVisibility() {
     this.hideNewPassword.set(!this.hideNewPassword());
   }
@@ -130,11 +123,6 @@ export class ChangePasswordComponent {
   hasNumber(): boolean {
     const password = this.passwordForm.get('newPassword')?.value || '';
     return /\d/.test(password);
-  }
-
-  hasSpecialChar(): boolean {
-    const password = this.passwordForm.get('newPassword')?.value || '';
-    return /[@$!%*?&]/.test(password);
   }
 
   private passwordMatchValidator(control: AbstractControl) {

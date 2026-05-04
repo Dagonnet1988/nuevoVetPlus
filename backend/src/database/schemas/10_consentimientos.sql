@@ -210,6 +210,43 @@ DO $$ BEGIN
     END IF;
 END $$;
 
+-- -----------------------------------------------
+-- 7. TRAZABILIDAD DE ENVIOS DE DOCUMENTOS
+-- Se crea aquí porque depende de clinical.consentimientos
+-- -----------------------------------------------
+
+CREATE TABLE IF NOT EXISTS clinical.envios_documentos (
+    id_envio UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tipo_documento VARCHAR(40) NOT NULL
+        CHECK (tipo_documento IN ('consentimiento_link', 'consentimiento_pdf', 'historia_pdf')),
+    canal VARCHAR(20) NOT NULL DEFAULT 'email'
+        CHECK (canal IN ('email')),
+    id_cliente UUID REFERENCES clinical.clientes(id_cliente) ON DELETE SET NULL,
+    id_historia UUID REFERENCES clinical.historias_clinicas(id_historia) ON DELETE SET NULL,
+    id_consentimiento UUID REFERENCES clinical.consentimientos(id_consentimiento) ON DELETE SET NULL,
+    destinatario_email VARCHAR(150) NOT NULL,
+    asunto VARCHAR(255) NOT NULL,
+    estado VARCHAR(20) NOT NULL
+        CHECK (estado IN ('enviado', 'fallido')),
+    provider_message_id VARCHAR(255),
+    detalle_error TEXT,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    id_tenant UUID NOT NULL DEFAULT system.get_default_tenant()
+        REFERENCES system.tenants(id_tenant) ON DELETE RESTRICT,
+    created_by UUID REFERENCES vetplus_auth.usuarios(id_usuario),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    sent_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_envios_documentos_tenant ON clinical.envios_documentos(id_tenant);
+CREATE INDEX IF NOT EXISTS idx_envios_documentos_tipo ON clinical.envios_documentos(tipo_documento);
+CREATE INDEX IF NOT EXISTS idx_envios_documentos_fecha ON clinical.envios_documentos(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_envios_documentos_cliente ON clinical.envios_documentos(id_cliente);
+CREATE INDEX IF NOT EXISTS idx_envios_documentos_historia ON clinical.envios_documentos(id_historia);
+
+COMMENT ON TABLE clinical.envios_documentos IS
+    'Trazabilidad de envios de consentimiento e historias por correo';
+
 -- 6b. Ampliar CHECK de estado en consentimientos para incluir 'desactualizado'
 -- Primero eliminar el constraint antiguo y recrearlo (DROP IF EXISTS + ADD)
 DO $$ BEGIN

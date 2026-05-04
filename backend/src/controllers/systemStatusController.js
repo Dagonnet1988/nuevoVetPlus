@@ -30,6 +30,7 @@ export const getSystemStatus = async (req, res) => {
         const status = {
             empresa: await checkEmpresaStatus(),
             google_calendar: await checkGoogleCalendarStatus(),
+          correo: await checkCorreoStatus(),
             sistema: await checkSistemaStatus()
         };
 
@@ -122,6 +123,62 @@ async function checkGoogleCalendarStatus() {
     };
   }
 }/**
+ * Verificar estado de configuración de correo SMTP
+ */
+async function checkCorreoStatus() {
+  try {
+    const result = await query(`
+      SELECT
+        auth_mode,
+        oauth_refresh_token
+      FROM system.configuracion_correo
+      WHERE activa = true
+      ORDER BY created_at DESC
+      LIMIT 1
+    `);
+
+    const row = result.rows[0] || null;
+
+    if (!row) {
+      return {
+        estado: 'Pendiente',
+        configurado: false,
+        mensaje: 'Configuración de correo pendiente'
+      };
+    }
+
+    // Caso 2: Gmail OAuth solo cuenta como configurado si existe refresh token.
+    const isGmailOAuth = (row.auth_mode || 'smtp') === 'gmail_oauth';
+    const isConnected = Boolean(row.oauth_refresh_token);
+
+    const configurado = isGmailOAuth ? isConnected : true;
+
+    return {
+      estado: configurado ? 'Configurado' : 'Pendiente',
+      configurado,
+      mensaje: configurado
+        ? 'Correo configurado correctamente'
+        : 'Google OAuth de correo no está conectado'
+    };
+  } catch (error) {
+    // Si la tabla aún no existe, mostrar pendiente en vez de romper el endpoint.
+    if (error?.code === '42P01') {
+      return {
+        estado: 'Pendiente',
+        configurado: false,
+        mensaje: 'Módulo de correo pendiente de migración'
+      };
+    }
+
+    console.error('Error verificando estado de Correo SMTP:', error);
+    return {
+      estado: 'Error',
+      configurado: false,
+      mensaje: 'Error al verificar configuración de correo SMTP'
+    };
+  }
+}
+/**
  * Verificar estado general del sistema
  */
 async function checkSistemaStatus() {
@@ -178,10 +235,11 @@ export const getConfigSummary = async (req, res) => {
         const status = {
             empresa: await checkEmpresaStatus(),
             google_calendar: await checkGoogleCalendarStatus(),
+            correo: await checkCorreoStatus(),
             sistema: await checkSistemaStatus()
         };
 
-        const totalModules = 3;
+        const totalModules = 4;
         const configuredModules = Object.values(status).filter(
           module => module.estado === 'Configurado' || module.estado === 'Conectado' || module.estado === 'Operativo'
         ).length;

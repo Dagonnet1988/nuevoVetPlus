@@ -14,9 +14,7 @@ import { authenticateToken, authorize } from '../middleware/auth.js';
 import {
     getEmpresaConfig,
     updateEmpresaConfig,
-    uploadLogo,
-    getDiasEspeciales,
-    addDiaEspecial
+    uploadLogo
 } from '../controllers/empresaConfigController.js';
 
 const router = express.Router();
@@ -70,8 +68,8 @@ const validateEmpresaConfig = [
     body('nit')
         .notEmpty()
         .withMessage('El NIT es requerido')
-        .matches(/^[0-9]{9,12}-[0-9]{1}$/)
-        .withMessage('Formato de NIT inválido (ej: 900123456-1)'),
+        .isLength({ min: 3, max: 30 })
+        .withMessage('El NIT no puede exceder 30 caracteres'),
     
     body('direccion')
         .notEmpty()
@@ -89,74 +87,20 @@ const validateEmpresaConfig = [
         .isEmail()
         .withMessage('Formato de email inválido'),
     
-    body('horarios')
-        .optional()
-        .isArray({ max: 7 })
-        .withMessage('Los horarios deben ser un array de máximo 7 elementos'),
-    
-    body('horarios.*.dia_semana')
-        .if(body('horarios').exists())
-        .isInt({ min: 0, max: 6 })
-        .withMessage('Día de semana inválido (0-6)'),
-    
-    body('horarios.*.hora_apertura')
-        .if(body('horarios').exists())
-        .optional()
-        .matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)
-        .withMessage('Formato de hora inválido (HH:MM)'),
-    
-    body('horarios.*.hora_cierre')
-        .if(body('horarios').exists())
-        .optional()
-        .matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)
-        .withMessage('Formato de hora inválido (HH:MM)'),
+    body('eslogan')
+        .optional({ nullable: true })
+        .isLength({ max: 200 })
+        .withMessage('El eslogan no puede exceder 200 caracteres'),
 
-    // Validación personalizada: verificar días únicos
-    body('horarios').custom((horarios) => {
-        if (horarios && Array.isArray(horarios)) {
-            const diasVistos = new Set();
-            for (const horario of horarios) {
-                if (diasVistos.has(horario.dia_semana)) {
-                    throw new Error(`Día de semana ${horario.dia_semana} duplicado en horarios`);
-                }
-                diasVistos.add(horario.dia_semana);
-            }
-        }
-        return true;
-    })
-];
-
-const validateDiaEspecial = [
-    body('fecha')
-        .notEmpty()
-        .withMessage('La fecha es requerida')
-        .isISO8601()
-        .withMessage('Formato de fecha inválido'),
-    
-    body('motivo')
-        .notEmpty()
-        .withMessage('El motivo es requerido')
-        .isLength({ min: 3, max: 200 })
-        .withMessage('El motivo debe tener entre 3 y 200 caracteres'),
-    
-    body('cerrado')
-        .optional()
-        .isBoolean()
-        .withMessage('El campo cerrado debe ser booleano'),
-    
-    body('hora_apertura')
-        .optional()
-        .matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)
-        .withMessage('Formato de hora inválido (HH:MM)'),
-    
-    body('hora_cierre')
-        .optional()
-        .matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)
-        .withMessage('Formato de hora inválido (HH:MM)')
+    body('sitio_web')
+        .optional({ nullable: true })
+        .isLength({ max: 200 })
+        .withMessage('El sitio web no puede exceder 200 caracteres')
 ];
 
 // Middleware para verificar permisos de administrador
 const requireAdmin = authorize(['admin']);
+const requireAuthenticatedTenantUser = authorize(['admin', 'vet', 'aux']);
 
 /**
  * @swagger
@@ -174,7 +118,7 @@ const requireAdmin = authorize(['admin']);
  *       404:
  *         description: Configuración no encontrada
  */
-router.get('/config', authenticateToken, requireAdmin, getEmpresaConfig);
+router.get('/config', authenticateToken, requireAuthenticatedTenantUser, getEmpresaConfig);
 
 /**
  * @swagger
@@ -242,64 +186,6 @@ router.put('/config', authenticateToken, requireAdmin, validateEmpresaConfig, up
  *         description: Acceso denegado
  */
 router.post('/logo', authenticateToken, requireAdmin, upload.single('logo'), uploadLogo);
-
-/**
- * @swagger
- * /api/admin/empresa/dias-especiales:
- *   get:
- *     summary: Obtener días especiales y festivos
- *     tags: [Configuración Empresa]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: year
- *         schema:
- *           type: integer
- *         description: Año a consultar
- *     responses:
- *       200:
- *         description: Lista de días especiales
- */
-router.get('/dias-especiales', authenticateToken, getDiasEspeciales);
-
-/**
- * @swagger
- * /api/admin/empresa/dias-especiales:
- *   post:
- *     summary: Agregar día especial
- *     tags: [Configuración Empresa]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - fecha
- *               - motivo
- *             properties:
- *               fecha:
- *                 type: string
- *                 format: date
- *                 example: "2024-12-25"
- *               motivo:
- *                 type: string
- *                 example: "Navidad"
- *               cerrado:
- *                 type: boolean
- *                 example: true
- *     responses:
- *       201:
- *         description: Día especial agregado
- *       400:
- *         description: Datos inválidos
- *       403:
- *         description: Acceso denegado
- */
-router.post('/dias-especiales', authenticateToken, requireAdmin, validateDiaEspecial, addDiaEspecial);
 
 // Middleware de manejo de errores para multer
 router.use((error, req, res, next) => {

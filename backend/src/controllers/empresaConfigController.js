@@ -22,14 +22,6 @@ import path from 'path';
  */
 export const getEmpresaConfig = async (req, res) => {
     try {
-        // Solo administradores pueden acceder
-        if (req.user.rol !== 'admin') {
-            return res.status(403).json({
-                success: false,
-                message: 'Solo los administradores pueden acceder a esta configuración'
-            });
-        }
-
         // Obtener configuración de empresa
         const tenantId = req.tenantId ?? req.user?.tenant_id;
         const configResult = await query(`
@@ -38,39 +30,30 @@ export const getEmpresaConfig = async (req, res) => {
             LIMIT 1
         `, [tenantId]);
 
-        if (configResult.rows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'No hay configuración de empresa definida'
-            });
+        let empresaConfig = configResult.rows[0];
+        if (!empresaConfig) {
+            const defaultConfig = await query(`
+                INSERT INTO system.configuracion_empresa (
+                    nombre_empresa, nit, direccion, telefono, email, ciudad, sitio_web, eslogan,
+                    id_tenant, created_by, updated_by, activa
+                ) VALUES (
+                    'Mi Clínica Veterinaria',
+                    'POR-DEFINIR',
+                    'Por definir',
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    $1,
+                    $2,
+                    $2,
+                    true
+                )
+                RETURNING *
+            `, [tenantId, req.user?.id_usuario || null]);
+            empresaConfig = defaultConfig.rows[0];
         }
-
-        const empresaConfig = configResult.rows[0];
-
-        // Obtener horarios de atención de manera controlada
-        const horariosResult = await query(`
-            SELECT DISTINCT ON (dia_semana)
-                dia_semana,
-                CASE dia_semana
-                    WHEN 0 THEN 'Domingo'
-                    WHEN 1 THEN 'Lunes'
-                    WHEN 2 THEN 'Martes'
-                    WHEN 3 THEN 'Miércoles'
-                    WHEN 4 THEN 'Jueves'
-                    WHEN 5 THEN 'Viernes'
-                    WHEN 6 THEN 'Sábado'
-                END as nombre_dia,
-                hora_apertura,
-                hora_cierre,
-                cerrado,
-                notas
-            FROM system.horarios_atencion
-            WHERE id_config = $1
-            ORDER BY dia_semana, id_horario DESC
-        `, [empresaConfig.id_config]);
-
-        // Asignar horarios a la configuración
-        empresaConfig.horarios = horariosResult.rows;
 
         res.json({
             success: true,
@@ -119,15 +102,8 @@ export const updateEmpresaConfig = async (req, res) => {
             sitio_web,
             eslogan,
             ciudad,
-            departamento,
-            codigo_postal,
-            website,
-            regimen_tributario,
-            representante_legal,
-            cedula_representante,
             configuracion_numeracion,
-            configuracion_general,
-            horarios
+            configuracion_general
         } = req.body;
 
         // Iniciar transacción con cliente dedicado del pool
@@ -136,10 +112,23 @@ export const updateEmpresaConfig = async (req, res) => {
         try {
             await txClient.query('BEGIN');
             // Preparar datos JSON para configuración
-            const configGeneral = configuracion_general ? JSON.stringify(configuracion_general) : null;
-            const configNumeracion = configuracion_numeracion ? JSON.stringify(configuracion_numeracion) : null;
-
-            // Actualizar configuración principal
+            const configGeneral = JSON.stringify(
+                configuracion_general || {
+                    moneda: 'COP',
+                    zona_horaria: 'America/Bogota',
+                    idioma: 'es',
+                    formato_fecha: 'DD/MM/YYYY',
+                    formato_hora: 'HH:mm'
+                }
+            );
+            const configNumeracion = JSON.stringify(
+                configuracion_numeracion || {
+                    cita_prefijo: 'CIT',
+                    cita_siguiente: 1,
+                    cita_digitos: 6
+                }
+            );
+            const tenantId = req.tenantId ?? req.user?.tenant_id;
             const updateResult = await txClient.query(`
                 UPDATE system.configuracion_empresa
                 SET
@@ -151,51 +140,64 @@ export const updateEmpresaConfig = async (req, res) => {
                     sitio_web = $6,
                     eslogan = $7,
                     ciudad = $8,
-                    departamento = $9,
-                    codigo_postal = $10,
-                    website = $11,
-                    regimen_tributario = $12,
-                    representante_legal = $13,
-                    cedula_representante = $14,
-                    configuracion_general = $15,
-                    configuracion_numeracion = $16,
+                    configuracion_general = $9,
+                    configuracion_numeracion = $10,
                     updated_at = CURRENT_TIMESTAMP,
-                    updated_by = $17
-                WHERE activa = true AND id_tenant = $18
+                    updated_by = $11
+                WHERE activa = true AND id_tenant = $12
                 RETURNING id_config
             `, [
-                nombre_empresa, nit, direccion, telefono, email, sitio_web, eslogan,
-                ciudad, departamento, codigo_postal, website, regimen_tributario,
-                representante_legal, cedula_representante, configGeneral, configNumeracion,
-                req.user.id_usuario, req.tenantId ?? req.user?.tenant_id
+                nombre_empresa,
+                nit,
+                direccion,
+                telefono,
+                email,
+                sitio_web || null,
+                eslogan || null,
+                ciudad || null,
+                configGeneral,
+                configNumeracion,
+                req.user.id_usuario,
+                tenantId
             ]);
 
-            if (updateResult.rows.length === 0) {
-                throw new Error('No se encontró configuración activa para actualizar');
-            }
-
-            const configId = updateResult.rows[0].id_config;
-
-            // Actualizar horarios si se proporcionan
-            if (horarios && Array.isArray(horarios)) {
-                // Eliminar horarios existentes
-                await txClient.query('DELETE FROM system.horarios_atencion WHERE id_config = $1', [configId]);
-
-                // Insertar nuevos horarios
-                for (const horario of horarios) {
-                    await txClient.query(`
-                        INSERT INTO system.horarios_atencion 
-                        (id_config, dia_semana, hora_apertura, hora_cierre, cerrado, notas)
-                        VALUES ($1, $2, $3, $4, $5, $6)
-                    `, [
-                        configId,
-                        horario.dia_semana,
-                        horario.cerrado ? null : horario.hora_apertura,
-                        horario.cerrado ? null : horario.hora_cierre,
-                        horario.cerrado || false,
-                        horario.notas || null
-                    ]);
-                }
+            let configId = updateResult.rows[0]?.id_config;
+            if (!configId) {
+                const insertResult = await txClient.query(`
+                    INSERT INTO system.configuracion_empresa (
+                        nombre_empresa,
+                        nit,
+                        direccion,
+                        telefono,
+                        email,
+                        sitio_web,
+                        eslogan,
+                        ciudad,
+                        configuracion_general,
+                        configuracion_numeracion,
+                        activa,
+                        id_tenant,
+                        created_by,
+                        updated_by
+                    ) VALUES (
+                        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true,$11,$12,$12
+                    )
+                    RETURNING id_config
+                `, [
+                    nombre_empresa,
+                    nit,
+                    direccion,
+                    telefono,
+                    email,
+                    sitio_web || null,
+                    eslogan || null,
+                    ciudad || null,
+                    configGeneral,
+                    configNumeracion,
+                    tenantId,
+                    req.user.id_usuario
+                ]);
+                configId = insertResult.rows[0].id_config;
             }
 
             await txClient.query('COMMIT');
@@ -305,108 +307,3 @@ export const uploadLogo = async (req, res) => {
     }
 };
 
-/**
- * Obtener días especiales y festivos
- * @route GET /api/admin/empresa/dias-especiales
- */
-export const getDiasEspeciales = async (req, res) => {
-    try {
-        const { year = new Date().getFullYear() } = req.query;
-
-        const result = await query(`
-            SELECT 
-                de.id_dia,
-                de.fecha,
-                de.motivo,
-                de.cerrado,
-                de.hora_apertura,
-                de.hora_cierre
-            FROM system.dias_especiales de
-            JOIN system.configuracion_empresa ce ON de.id_config = ce.id_config
-            WHERE ce.activa = true AND ce.id_tenant = $2
-            AND EXTRACT(YEAR FROM de.fecha) = $1
-            ORDER BY de.fecha
-        `, [year, req.tenantId ?? req.user?.tenant_id]);
-
-        res.json({
-            success: true,
-            data: result.rows
-        });
-
-    } catch (error) {
-        console.error('Error al obtener días especiales:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error interno del servidor',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
-    }
-};
-
-/**
- * Agregar día especial
- * @route POST /api/admin/empresa/dias-especiales
- */
-export const addDiaEspecial = async (req, res) => {
-    try {
-        // Solo administradores pueden agregar días especiales
-        if (req.user.rol !== 'admin') {
-            return res.status(403).json({
-                success: false,
-                message: 'Solo los administradores pueden gestionar días especiales'
-            });
-        }
-
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            return res.status(400).json({
-                success: false,
-                message: 'Datos de entrada inválidos',
-                errors: errors.array()
-            });
-        }
-
-        const { fecha, motivo, cerrado, hora_apertura, hora_cierre } = req.body;
-
-        // Obtener ID de configuración activa
-        const configResult = await query(`
-            SELECT id_config FROM system.configuracion_empresa
-            WHERE activa = true AND id_tenant = $1 LIMIT 1
-        `, [req.tenantId ?? req.user?.tenant_id]);
-
-        if (configResult.rows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'No hay configuración de empresa activa'
-            });
-        }
-
-        const result = await query(`
-            INSERT INTO system.dias_especiales 
-            (id_config, fecha, motivo, cerrado, hora_apertura, hora_cierre)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING *
-        `, [
-            configResult.rows[0].id_config,
-            fecha,
-            motivo,
-            cerrado,
-            cerrado ? null : hora_apertura,
-            cerrado ? null : hora_cierre
-        ]);
-
-        res.status(201).json({
-            success: true,
-            message: 'Día especial agregado exitosamente',
-            data: result.rows[0]
-        });
-
-    } catch (error) {
-        console.error('Error al agregar día especial:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error interno del servidor',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
-    }
-};

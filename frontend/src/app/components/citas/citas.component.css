@@ -1,6 +1,6 @@
 /* Container principal */
 .citas-container {
-  padding: 20px;
+  padding: 12px;
   max-width: 100%;
   margin: 0 auto;
   background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
@@ -11,9 +11,9 @@
 .calendar-section {
   background: white;
   border-radius: 12px;
-  padding: 16px;
+  padding: 10px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  min-height: 700px;
+  min-height: 620px;
 }
 
 /* === TOGGLE LISTA/CALENDARIO === */
@@ -54,8 +54,8 @@
 .stats-bar {
   background: white;
   border-radius: 12px;
-  padding: 16px 24px;
-  margin-bottom: 12px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
@@ -63,11 +63,11 @@
 .filters-bar {
   background: white;
   border-radius: 12px;
-  padding: 16px 24px;
-  margin-bottom: 20px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   position: sticky;
-  top: 80px; /* Dejar espacio para el header principal */
+  top: 64px; /* Más compacto y con mayor área de trabajo */
   z-index: 90; /* Menor que el header pero mayor que el calendario */
   transition: all 0.3s ease;
 }
@@ -82,7 +82,7 @@
 
 .stat-group {
   display: flex;
-  gap: 40px;
+  gap: 22px;
   align-items: center;
   justify-content: center;
 }
@@ -114,14 +114,14 @@
 }
 
 .stat-number {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 700;
   color: #1976d2;
   line-height: 1;
 }
 
 .stat-label {
-  font-size: 11px;
+  font-size: 10px;
   color: #666;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -168,7 +168,7 @@
 }
 
 .filter-field {
-  width: 140px;
+  width: 128px;
 }
 
 .clear-filters-btn {
@@ -669,6 +669,75 @@
   gap: 12px;
 }
 
+.primary-actions,
+.secondary-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.quick-overview-bar {
+  background: white;
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  position: sticky;
+  top: 64px;
+  z-index: 90;
+}
+
+.quick-overview-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.overview-stats {
+  min-width: 280px;
+}
+
+.overview-filters {
+  flex: 1;
+}
+
+.overview-create {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.quick-create-button {
+  white-space: nowrap;
+  border-radius: 999px;
+  padding: 0 16px;
+}
+
+.overview-filter-form {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+}
+
+.overview-field {
+  width: 126px;
+}
+
+.overview-clear-btn {
+  min-width: 40px;
+  width: 40px;
+  height: 40px;
+  background: rgba(220, 53, 69, 0.1);
+  color: #dc3545;
+  border-color: rgba(220, 53, 69, 0.3);
+}
+
+.overview-clear-btn:hover {
+  background: rgba(220, 53, 69, 0.2);
+}
+
 .create-button {
   background: linear-gradient(45deg, #1976d2, #42a5f5);
   color: white;
@@ -965,6 +1034,31 @@
 
   .actions-section {
     justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .quick-overview-content {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .overview-create {
+    justify-content: center;
+  }
+
+  .overview-filter-form {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .overview-field {
+    width: 108px;
+  }
+
+  .primary-actions,
+  .secondary-actions {
+    flex-wrap: wrap;
+    justify-content: center;
   }
 
   .stats-row {
@@ -1242,11 +1336,11 @@
 /* ===== NUEVOS ESTILOS PARA VISTA PLANA ===== */
 
 .citas-plana-container {
-  padding: 20px;
+  padding: 8px;
   max-width: 100%;
   margin: 0 auto;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-  min-height: 100vh;
+  background: transparent;
+  min-height: auto;
 }
 
 /* Botón para abrir calendario */
@@ -1285,6 +1379,54 @@
   gap: 24px;
 }
 
+.agenda-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.agenda-sidebar {
+  position: sticky;
+  top: 72px;
+}
+
+.mini-calendar-card {
+  border-radius: 14px;
+}
+
+.btn-hoy {
+  margin-top: 12px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.agenda-dia {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.day-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toggle-completadas-btn {
+  border-color: rgba(255, 255, 255, 0.75) !important;
+  color: white !important;
+  margin-right: 8px;
+}
+
+.toggle-completadas-btn:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
 /* Grupo por día */
 .dia-grupo {
   background: white;
@@ -1303,7 +1445,7 @@
 .dia-header {
   background: linear-gradient(135deg, #1976d2, #42a5f5);
   color: white;
-  padding: 20px 24px;
+  padding: 14px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1316,7 +1458,7 @@
 }
 
 .dia-titulo {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 600;
   margin: 0;
 }
@@ -1358,9 +1500,101 @@
   padding: 0;
 }
 
+.day-calendar-wrapper {
+  padding: 8px;
+}
+
+.day-calendar {
+  display: block;
+  border: 1px solid #e8edf3;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+/* Calendario diario embebido en vista lista */
+:host ::ng-deep .day-calendar .fc {
+  font-size: 13px;
+}
+
+:host ::ng-deep .day-calendar .fc-timegrid-slot {
+  height: 40px !important;
+}
+
+:host ::ng-deep .day-calendar .fc-timegrid-slot-label-cushion {
+  font-size: 12px;
+  font-weight: 600;
+  color: #486178;
+}
+
+:host ::ng-deep .day-calendar .fc-timegrid-axis {
+  background: #f7f9fc;
+}
+
+:host ::ng-deep .day-calendar .fc-timegrid-col {
+  background: #fcfdff;
+}
+
+.hora-row {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  gap: 8px;
+  align-items: start;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e9eef3;
+}
+
+.hora-row:last-child {
+  border-bottom: none;
+}
+
+.hora-lateral {
+  position: sticky;
+  top: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  padding-top: 6px;
+}
+
+.hora-lateral-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #245d90;
+  text-transform: lowercase;
+}
+
+.hora-lateral-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #e6eef7;
+  color: #46607a;
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hora-contenido {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hora-contenido .cita-card {
+  border-radius: 10px;
+  border: 1px solid #edf1f5;
+  border-left-width: 4px;
+}
+
 /* Tarjeta de cita */
 .cita-card {
-  padding: 20px 24px;
+  padding: 10px 12px;
   border-bottom: 1px solid #f0f0f0;
   transition: all 0.2s ease;
   cursor: pointer;
@@ -1371,7 +1605,7 @@
 }
 
 .cita-card:last-child {
-  border-bottom: none;
+  border-bottom: 1px solid #f0f0f0;
 }
 
 /* Header de cita */
@@ -1379,7 +1613,9 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 6px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .cita-hora {
@@ -1387,7 +1623,7 @@
   align-items: center;
   gap: 8px;
   background: rgba(25, 118, 210, 0.1);
-  padding: 8px 12px;
+  padding: 5px 9px;
   border-radius: 8px;
 }
 
@@ -1399,7 +1635,7 @@
 .hora-texto {
   font-weight: 600;
   color: #1976d2;
-  font-size: 16px;
+  font-size: 13px;
 }
 
 .cita-estado .estado-indicator {
@@ -1445,7 +1681,7 @@
 .cita-contenido {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 4px;
 }
 
 .cita-principal {
@@ -1457,12 +1693,12 @@
 .mascota-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .mascota-icon {
   color: #666;
-  font-size: 24px;
+  font-size: 20px;
 }
 
 .mascota-detalles {
@@ -1472,14 +1708,14 @@
 }
 
 .mascota-nombre {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 600;
   color: #333;
   margin: 0;
 }
 
 .cliente-nombre {
-  font-size: 14px;
+  font-size: 12px;
   color: #666;
   margin: 0;
 }
@@ -1493,19 +1729,19 @@
 }
 
 /* Tipos de cita */
-.tipo-consulta {
-  background: rgba(33, 150, 243, 0.1);
-  color: #1976d2;
+.tipo-valoracion {
+  background: rgba(251, 215, 91, 0.2);
+  color: #8a6d00;
 }
 
-.tipo-vacunacion {
-  background: rgba(76, 175, 80, 0.1);
-  color: #388e3c;
+.tipo-hidroterapia {
+  background: rgba(84, 132, 237, 0.15);
+  color: #2f4ea8;
 }
 
-.tipo-cirugia {
-  background: rgba(244, 67, 54, 0.1);
-  color: #d32f2f;
+.tipo-terapia {
+  background: rgba(70, 214, 219, 0.18);
+  color: #0d6f73;
 }
 
 .tipo-emergencia {
@@ -1513,9 +1749,9 @@
   color: #f4511e;
 }
 
-.tipo-control {
-  background: rgba(156, 39, 176, 0.1);
-  color: #7b1fa2;
+.tipo-domicilio {
+  background: rgba(81, 183, 73, 0.16);
+  color: #2f7f28;
 }
 
 .tipo-general {
@@ -1539,6 +1775,10 @@
   gap: 8px;
 }
 
+.cita-header-vet {
+  margin-left: auto;
+}
+
 .vet-icon,
 .notas-icon {
   color: #666;
@@ -1555,7 +1795,7 @@
 /* Acciones de cita */
 .cita-acciones {
   display: flex;
-  gap: 8px;
+  gap: 4px;
   opacity: 0;
   transition: opacity 0.2s ease;
 }
@@ -1685,13 +1925,18 @@
     width: 100%;
   }
 
+  .stat-group {
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
   .compact-filters .filter-form {
     flex-wrap: wrap;
     justify-content: center;
   }
 
   .filter-field {
-    width: 120px;
+    width: 108px;
   }
 
   .fullscreen-calendar {
@@ -1709,7 +1954,15 @@
 
   /* Responsive para vista plana */
   .citas-plana-container {
-    padding: 16px;
+    padding: 6px;
+  }
+
+  .agenda-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .agenda-sidebar {
+    position: static;
   }
 
   .dia-header {
@@ -1725,6 +1978,25 @@
 
   .cita-card {
     padding: 16px;
+  }
+
+  .day-calendar-wrapper {
+    padding: 6px;
+  }
+
+  .hora-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .hora-lateral {
+    position: static;
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 8px;
+    padding-top: 0;
   }
 
   .cita-principal {
@@ -1765,4 +2037,491 @@
   .filter-field {
     width: 100px;
   }
+}
+
+/* ===== AJUSTES COMPACTOS + COLORES POR TIPO (CALENDARIO Y LISTA) ===== */
+
+/* Calendar events: más delgados por defecto para reducir saturación vertical */
+:host ::ng-deep .fc-timegrid-event {
+  min-height: 20px !important;
+  border-radius: 7px !important;
+}
+
+:host ::ng-deep .fc-timegrid-event-harness {
+  margin: 1px !important;
+}
+
+.event-simple {
+  border-radius: 6px;
+  padding: 2px 6px;
+  margin: 0;
+  min-height: 18px;
+  box-shadow: none;
+  border: 1px solid #d6dde5;
+}
+
+.event-simple .event-header-simple {
+  margin-bottom: 2px;
+  gap: 6px;
+}
+
+.event-simple .event-time {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 4px;
+  background: rgba(0, 0, 0, 0.05);
+  color: #1f2937;
+}
+
+.event-simple .event-status-circle {
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.8;
+}
+
+.event-simple .event-patient {
+  font-size: 10px;
+  line-height: 1.15;
+  color: #1f2937;
+}
+
+/* Fondos pastel por tipo en calendario */
+.event-simple.event-type-valoracion {
+  background: #f8e9af;
+  border-color: #d7be58;
+}
+
+.event-simple.event-type-hidroterapia {
+  background: #cfe0ff;
+  border-color: #6f96dc;
+}
+
+.event-simple.event-type-terapia {
+  background: #d9f3f4;
+  border-color: #93d7d9;
+}
+
+.event-simple.event-type-domicilio {
+  background: #dff1e0;
+  border-color: #a2c9a4;
+}
+
+.event-simple.event-type-control {
+  background: #ffe7d1;
+  border-color: #e09a5f;
+}
+
+.event-simple.event-type-emergencia {
+  background: #fde2df;
+  border-color: #efb2ab;
+}
+
+.event-simple.event-type-general {
+  background: #eceff1;
+  border-color: #c7d0d8;
+}
+
+/* Lista: compactar alto visual para no hacerla tan larga */
+.cita-card {
+  padding: 8px 10px;
+  border-left: 4px solid transparent;
+}
+
+.cita-header {
+  margin-bottom: 6px;
+  gap: 8px;
+}
+
+.cita-hora {
+  padding: 3px 7px;
+}
+
+.hora-texto {
+  font-size: 12px;
+}
+
+.mascota-icon {
+  font-size: 18px;
+}
+
+.mascota-nombre {
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.cliente-nombre,
+.vet-nombre,
+.notas-texto {
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.tipo-cita .tipo-badge,
+.cita-estado .estado-indicator {
+  padding: 3px 8px;
+  font-size: 10px;
+}
+
+.cita-secundaria {
+  padding-top: 4px;
+}
+
+/* Fondo pastel por tipo en lista para diferenciar rápido */
+.cita-card-tipo-valoracion {
+  background: #fffbf1;
+  border-left-color: #d7be58;
+}
+
+.cita-card-tipo-hidroterapia {
+  background: #ecf3ff;
+  border-left-color: #6f96dc;
+}
+
+.cita-card-tipo-terapia {
+  background: #f4fcfc;
+  border-left-color: #93d7d9;
+}
+
+.cita-card-tipo-domicilio {
+  background: #f5fbf5;
+  border-left-color: #a2c9a4;
+}
+
+.cita-card-tipo-control {
+  background: #fff4e9;
+  border-left-color: #e09a5f;
+}
+
+.cita-card-tipo-emergencia {
+  background: #fff7f6;
+  border-left-color: #efb2ab;
+}
+
+.cita-card-tipo-general {
+  background: #f8f9fb;
+  border-left-color: #c7d0d8;
+}
+
+/* ===== FINAL OVERRIDES (APR-2026) ===== */
+:host {
+  --tipo-valoracion-bg: #ffd878;
+  --tipo-valoracion-border: #bf9622;
+  --tipo-hidro-bg: #aac8ff;
+  --tipo-hidro-border: #3f67c2;
+  --tipo-terapia-bg: #aee8eb;
+  --tipo-terapia-border: #3faab0;
+  --tipo-domicilio-bg: #bbe8bf;
+  --tipo-domicilio-border: #548b5b;
+  --tipo-control-bg: #ffd6b5;
+  --tipo-control-border: #cc874c;
+  --tipo-general-bg: #e2e8ed;
+  --tipo-general-border: #9fb0bc;
+}
+
+/* Compactación real de calendario y mejor legibilidad */
+:host ::ng-deep .fc-timegrid-slot {
+  height: 30px !important;
+}
+
+:host ::ng-deep .fc-timegrid-event-harness {
+  margin: 1px !important;
+}
+
+:host ::ng-deep .fc-timegrid-event {
+  min-height: 16px !important;
+  border-radius: 6px !important;
+}
+
+/* Calendario con el mismo tono visual de lista: menos brillo y sin opacidades por estado */
+:host ::ng-deep .fc-event {
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+:host ::ng-deep .fc-event:hover {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.14) !important;
+}
+
+:host ::ng-deep .cita-estado-completada,
+:host ::ng-deep .cita-estado-cancelada,
+:host ::ng-deep .cita-estado-no_asistio {
+  opacity: 1 !important;
+}
+
+.event-simple {
+  padding: 1px 5px !important;
+  border-width: 1px !important;
+  border-style: solid !important;
+  border-radius: 6px !important;
+  line-height: 1.05 !important;
+}
+
+.event-simple .event-header-simple {
+  margin-bottom: 1px !important;
+}
+
+.event-simple .event-time {
+  font-size: 9px !important;
+  padding: 1px 3px !important;
+}
+
+.event-simple .event-patient {
+  font-size: 10px !important;
+  line-height: 1.05 !important;
+}
+
+.event-simple.event-type-valoracion {
+  background: var(--tipo-valoracion-bg) !important;
+  border-color: var(--tipo-valoracion-border) !important;
+}
+
+.event-simple.event-type-hidroterapia {
+  background: var(--tipo-hidro-bg) !important;
+  border-color: var(--tipo-hidro-border) !important;
+}
+
+.event-simple.event-type-terapia {
+  background: var(--tipo-terapia-bg) !important;
+  border-color: var(--tipo-terapia-border) !important;
+}
+
+.event-simple.event-type-domicilio {
+  background: var(--tipo-domicilio-bg) !important;
+  border-color: var(--tipo-domicilio-border) !important;
+}
+
+.event-simple.event-type-control {
+  background: var(--tipo-control-bg) !important;
+  border-color: var(--tipo-control-border) !important;
+}
+
+.event-simple.event-type-general,
+.event-simple.event-type-sin_clasificar {
+  background: var(--tipo-general-bg) !important;
+  border-color: var(--tipo-general-border) !important;
+}
+
+/* Vista lista más densa y con codificación de color equivalente al calendario */
+.agenda-layout {
+  grid-template-columns: 260px 1fr !important;
+  gap: 12px !important;
+}
+
+.citas-del-dia .cita-card {
+  padding: 7px 10px !important;
+  border-left-width: 5px !important;
+  border-left-style: solid !important;
+}
+
+.citas-del-dia .cita-header {
+  margin-bottom: 5px !important;
+}
+
+.citas-del-dia .cita-hora {
+  padding: 2px 6px !important;
+}
+
+.citas-del-dia .hora-texto {
+  font-size: 11px !important;
+}
+
+.citas-del-dia .mascota-nombre {
+  font-size: 13px !important;
+}
+
+.citas-del-dia .cliente-nombre,
+.citas-del-dia .vet-nombre {
+  font-size: 10px !important;
+}
+
+.citas-del-dia .tipo-cita .tipo-badge,
+.citas-del-dia .cita-estado .estado-indicator {
+  font-size: 10px !important;
+  padding: 2px 7px !important;
+}
+
+/* Mismo lenguaje de color para badges en lista */
+.tipo-cita .tipo-badge.tipo-valoracion {
+  background: var(--tipo-valoracion-bg) !important;
+  color: #6d5600 !important;
+}
+
+.tipo-cita .tipo-badge.tipo-hidroterapia {
+  background: var(--tipo-hidro-bg) !important;
+  color: #2f4ea8 !important;
+}
+
+.tipo-cita .tipo-badge.tipo-terapia {
+  background: var(--tipo-terapia-bg) !important;
+  color: #0d6f73 !important;
+}
+
+.tipo-cita .tipo-badge.tipo-domicilio {
+  background: var(--tipo-domicilio-bg) !important;
+  color: #2f7f28 !important;
+}
+
+.tipo-cita .tipo-badge.tipo-control {
+  background: var(--tipo-control-bg) !important;
+  color: #8f4f17 !important;
+}
+
+.tipo-cita .tipo-badge.tipo-general {
+  background: var(--tipo-general-bg) !important;
+  color: #4b5563 !important;
+}
+
+/* ===== OVERRIDE FINAL: EVENTOS COMPACTOS 2 LINEAS ===== */
+:host ::ng-deep .fc-timegrid-slot {
+  height: 24px !important;
+}
+
+:host ::ng-deep .day-calendar .fc-timegrid-slot {
+  height: 24px !important;
+}
+
+:host ::ng-deep .fc-timegrid-event-harness {
+  margin: 1px !important;
+}
+
+:host ::ng-deep .fc-timegrid-event {
+  min-height: 32px !important;
+  border-radius: 8px !important;
+}
+
+.event-simple {
+  height: 100%;
+  min-height: 30px;
+  padding: 2px 4px !important;
+  border-width: 1px !important;
+  border-style: solid !important;
+  border-radius: 6px !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  overflow: hidden;
+  line-height: 1;
+}
+
+.event-simple .event-header-simple {
+  margin: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  min-width: 0;
+  white-space: nowrap !important;
+  overflow: hidden;
+}
+
+.event-simple .event-time {
+  font-size: 9px !important;
+  font-weight: 700;
+  padding: 0 !important;
+  background: transparent !important;
+  color: #1f2937;
+  white-space: nowrap !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  max-width: calc(100% - 18px);
+  flex: 0 1 auto;
+}
+
+.event-simple .event-patient {
+  font-size: 10px !important;
+  line-height: 1 !important;
+  color: #1f2937;
+  white-space: nowrap !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:host ::ng-deep .fc-event .event-status-dot {
+  width: 10px;
+  min-width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: 0 0 10px;
+  position: relative;
+  z-index: 2;
+  opacity: 1 !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9), 0 0 0 2px rgba(0, 0, 0, 0.14);
+}
+
+:host ::ng-deep .fc-event .event-status-dot.state-confirmada {
+  background: #1e88e5;
+}
+
+:host ::ng-deep .fc-event .event-status-dot.state-en_curso {
+  background: #8e24aa;
+}
+
+:host ::ng-deep .fc-event .event-status-dot.state-completada {
+  background: #43a047;
+}
+
+:host ::ng-deep .fc-event .event-status-dot.state-no_asistio {
+  background: #e53935;
+}
+
+:host ::ng-deep .fc-event .event-status-dot:not(.state-confirmada):not(.state-en_curso):not(.state-completada):not(.state-no_asistio) {
+  background: #607d8b;
+}
+
+/* Colores por tipo para todas las vistas de FullCalendar (incluye vista mes) */
+:host ::ng-deep .fc-event.cita-tipo-valoracion {
+  background: var(--tipo-valoracion-bg) !important;
+  border-color: var(--tipo-valoracion-border) !important;
+}
+
+:host ::ng-deep .fc-event.cita-tipo-hidroterapia {
+  background: var(--tipo-hidro-bg) !important;
+  border-color: var(--tipo-hidro-border) !important;
+}
+
+:host ::ng-deep .fc-event.cita-tipo-terapia {
+  background: var(--tipo-terapia-bg) !important;
+  border-color: var(--tipo-terapia-border) !important;
+}
+
+:host ::ng-deep .fc-event.cita-tipo-domicilio {
+  background: var(--tipo-domicilio-bg) !important;
+  border-color: var(--tipo-domicilio-border) !important;
+}
+
+:host ::ng-deep .fc-event.cita-tipo-control {
+  background: var(--tipo-control-bg) !important;
+  border-color: var(--tipo-control-border) !important;
+}
+
+:host ::ng-deep .fc-event.cita-tipo-general,
+:host ::ng-deep .fc-event.cita-tipo-sin_clasificar,
+:host ::ng-deep .fc-event.cita-tipo-emergencia {
+  background: var(--tipo-general-bg) !important;
+  border-color: var(--tipo-general-border) !important;
+}
+
+/* Refuerzo de no-wrap dentro de wrappers internos de FullCalendar */
+:host ::ng-deep .fc-timegrid-event .fc-event-main,
+:host ::ng-deep .fc-timegrid-event .fc-event-main-frame,
+:host ::ng-deep .fc-timegrid-event .fc-event-title-container {
+  overflow: hidden !important;
+  min-width: 0 !important;
+}
+
+:host ::ng-deep .fc-timegrid-event .event-simple,
+:host ::ng-deep .fc-timegrid-event .event-simple .event-header-simple,
+:host ::ng-deep .fc-timegrid-event .event-simple .event-time,
+:host ::ng-deep .fc-timegrid-event .event-simple .event-patient {
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
+}
+
+:host ::ng-deep .fc-timegrid-event .event-simple .event-patient {
+  display: block;
+  max-width: 100%;
 }

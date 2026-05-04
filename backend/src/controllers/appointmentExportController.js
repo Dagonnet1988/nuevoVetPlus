@@ -3,6 +3,8 @@ import PDFDocument from 'pdfkit';
 import ExcelJS from 'exceljs';
 
 class AppointmentExportController {
+
+    MAX_LINE_LENGTH = 95;
     
     /**
      * Exportar agenda en formato PDF
@@ -302,6 +304,7 @@ class AppointmentExportController {
      */
     async renderAgendaConsolidadaSimple(doc, agendaData, margin, startY, pageWidth) {
         let currentY = startY;
+        const pageBottomY = doc.page.height - 85;
         
         // Título
         doc.fillColor('#000000')
@@ -317,7 +320,7 @@ class AppointmentExportController {
 
         // Renderizar cada veterinario
         for (const [vetId, veterinarioData] of Object.entries(agendaData.veterinarios)) {
-            if (currentY > 700) { // Nueva página si es necesario
+            if (currentY + 70 > pageBottomY) {
                 doc.addPage();
                 currentY = 50;
             }
@@ -334,6 +337,7 @@ class AppointmentExportController {
      */
     async renderAgendaIndividualSimple(doc, agendaData, margin, startY, pageWidth) {
         let currentY = startY;
+        const pageBottomY = doc.page.height - 85;
         
         // Título
         doc.fillColor('#000000')
@@ -347,9 +351,18 @@ class AppointmentExportController {
            
         currentY += 60;
 
+        if (!agendaData.citas?.length) {
+            doc.fontSize(11)
+               .font('Helvetica')
+               .text('No hay citas en el periodo seleccionado.', margin, currentY);
+            this.renderFooterSimple(doc, pageWidth, agendaData);
+            return;
+        }
+
         // Renderizar citas
         for (const cita of agendaData.citas) {
-            if (currentY > 700) { // Nueva página si es necesario
+            const citaHeight = this.getCitaBlockHeight(cita);
+            if (currentY + citaHeight > pageBottomY) {
                 doc.addPage();
                 currentY = 50;
             }
@@ -366,6 +379,12 @@ class AppointmentExportController {
      */
     async renderVeterinarioSeccionSimple(doc, veterinarioData, margin, startY, pageWidth) {
         let currentY = startY;
+        const pageBottomY = doc.page.height - 85;
+
+        if (currentY + 60 > pageBottomY) {
+            doc.addPage();
+            currentY = 50;
+        }
         
         // Nombre del veterinario
         doc.fillColor('#000000')
@@ -381,6 +400,11 @@ class AppointmentExportController {
 
         // Renderizar citas del veterinario
         for (const cita of veterinarioData.citas) {
+            const citaHeight = this.getCitaBlockHeight(cita);
+            if (currentY + citaHeight > pageBottomY) {
+                doc.addPage();
+                currentY = 50;
+            }
             currentY = this.renderCitaLimpia(doc, cita, margin, currentY, pageWidth);
         }
 
@@ -397,53 +421,60 @@ class AppointmentExportController {
         const fecha = this.formatDateClean(cita.fecha_inicio);
         const horaInicio = this.formatTimeClean(cita.fecha_inicio);
         const horaFin = this.formatTimeClean(cita.fecha_fin);
+          const estado = this.getEstadoSimple(cita.estado);
+          const tipo = this.formatTipoSimple(cita.tipo);
+          const mascota = this.truncateText(
+                `${cita.mascota_nombre || 'Sin nombre'} (${cita.especie || 'N/A'} - ${cita.raza || 'N/A'})`,
+                this.MAX_LINE_LENGTH
+          );
+          const cliente = this.truncateText(
+                `${cita.cliente_nombre || 'Sin cliente'} · Tel: ${cita.cliente_telefono || 'N/A'}`,
+                this.MAX_LINE_LENGTH
+          );
+          const motivo = cita.motivo && cita.motivo.trim()
+                ? this.truncateText(`Motivo: ${cita.motivo.trim()}`, this.MAX_LINE_LENGTH)
+                : null;
+
+          const blockHeight = this.getCitaBlockHeight(cita);
+
+          doc.save();
+          doc.roundedRect(margin + 10, currentY - 2, pageWidth - (margin * 2) - 20, blockHeight - 8, 6)
+              .lineWidth(0.5)
+              .strokeColor('#d9d9d9')
+              .stroke();
+          doc.restore();
         
         doc.fillColor('#000000')
            .fontSize(11)
            .font('Helvetica-Bold')
-           .text(`${fecha} ${horaInicio} - ${horaFin}`, margin + 20, currentY);
+              .text(`${fecha} ${horaInicio} - ${horaFin} · ${estado} · ${tipo}`, margin + 20, currentY + 6);
 
-        // Estado - texto simple sin caracteres especiales
-        const estado = this.getEstadoSimple(cita.estado);
         doc.fontSize(10)
            .font('Helvetica')
-           .text(estado, margin + 200, currentY);
+              .text(`Paciente: ${mascota}`, margin + 20, currentY + 22);
 
-        currentY += 20;
-
-        // Información del paciente
-        doc.fontSize(10)
-           .font('Helvetica-Bold')
-           .text(`Paciente: `, margin + 20, currentY);
-        
         doc.font('Helvetica')
-           .text(`${cita.mascota_nombre} (${cita.especie} - ${cita.raza})`, margin + 80, currentY);
+              .text(`Cliente: ${cliente}`, margin + 20, currentY + 36);
 
-        currentY += 15;
-
-        // Información del cliente
-        doc.font('Helvetica-Bold')
-           .text(`Cliente: `, margin + 20, currentY);
-        
-        doc.font('Helvetica')
-           .text(`${cita.cliente_nombre} - Tel: ${cita.cliente_telefono}`, margin + 80, currentY);
-
-        currentY += 15;
-
-        // Tipo de cita
-        doc.font('Helvetica-Bold')
-           .text(`Tipo: `, margin + 20, currentY);
-        
-        doc.font('Helvetica')
-           .text(`${this.formatTipoSimple(cita.tipo)}`, margin + 60, currentY);
-
-        // Motivo si existe
-        if (cita.motivo && cita.motivo.trim()) {
-            doc.text(` Motivo: ${cita.motivo}`, margin + 150, currentY);
+          if (motivo) {
+                doc.font('Helvetica-Oblique')
+                    .text(motivo, margin + 20, currentY + 50);
         }
 
-        return currentY + 30; // Espacio entre citas
+          return currentY + blockHeight;
     }
+
+     getCitaBlockHeight(cita) {
+          const hasMotivo = Boolean(cita.motivo && String(cita.motivo).trim());
+          return hasMotivo ? 72 : 58;
+     }
+
+     truncateText(value, maxLength = 95) {
+          if (!value) return '';
+          const str = String(value).replace(/\s+/g, ' ').trim();
+          if (str.length <= maxLength) return str;
+          return `${str.slice(0, Math.max(0, maxLength - 1)).trim()}…`;
+     }
 
     /**
      * Obtener estado simple sin caracteres especiales

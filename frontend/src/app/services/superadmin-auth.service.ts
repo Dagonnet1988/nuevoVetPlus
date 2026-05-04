@@ -18,6 +18,9 @@ export interface TenantStats {
   plan: string;
   estado: string;
   max_usuarios: number;
+  periodicidad_pago: 'monthly' | 'quarterly' | 'semiannual' | 'annual' | null;
+  fecha_inicio_suscripcion: string | null;
+  fecha_proximo_pago: string | null;
   created_at: string;
   total_usuarios: number;
   total_clientes: number;
@@ -122,7 +125,14 @@ export class SuperadminAuthService {
     return this.http.post<any>(`${this.API}/tenants`, payload);
   }
 
-  updateTenant(id: string, changes: Partial<Pick<TenantStats, 'nombre' | 'plan' | 'estado' | 'max_usuarios'>>): Observable<any> {
+  updateTenant(id: string, changes: Partial<Pick<TenantStats, 'nombre' | 'plan' | 'estado' | 'max_usuarios' | 'periodicidad_pago' | 'fecha_inicio_suscripcion' | 'fecha_proximo_pago'>>): Observable<any> {
     return this.http.patch<any>(`${this.API}/tenants/${id}`, changes);
+  }
+
+  changePassword(passwordActual: string, passwordNuevo: string): Observable<{ message: string }> {
+    return this.http.put<{ message: string }>(`${this.API}/me/password`, {
+      password_actual: passwordActual,
+      password_nuevo: passwordNuevo
+    });
   }
 }

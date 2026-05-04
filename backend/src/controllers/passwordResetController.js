@@ -71,7 +71,7 @@ class PasswordResetController {
       `, [tempPasswordHash, adminId, userId]);
 
       // Log de auditoría
-      await logPasswordReset(adminId, userId, 'temp_password_generated', req.ip);
+      await logPasswordReset(adminId, userId, 'temp_password', req.ip);
 
       console.log(`🔑 Contraseña temporal generada para ${targetUser.email} por admin ${req.user.email}`);
 
@@ -86,7 +86,13 @@ class PasswordResetController {
           },
           tempPassword: tempPassword,
           expiresIn: '24 horas',
-          mustChangeOnLogin: true
+          mustChangeOnLogin: true,
+          email: {
+            attempted: true,
+            sent: false,
+            status: 'not_configured',
+            message: 'Envio por email pendiente de configuracion SMTP'
+          }
         }
       });
 
@@ -160,7 +166,7 @@ class PasswordResetController {
       `, [newPasswordHash, forceChange, adminId, userId]);
 
       // Log de auditoría
-      await logPasswordReset(adminId, userId, 'admin_reset_password', req.ip);
+      await logPasswordReset(adminId, userId, 'admin_reset', req.ip);
 
       console.log(`🔑 Contraseña reseteada para ${targetUser.email} por admin ${req.user.email}`);
 
@@ -352,7 +358,7 @@ class PasswordResetController {
       `, [userId]);
 
       // Log de auditoría
-      await logPasswordReset(adminId, userId, 'force_password_change', req.ip);
+      await logPasswordReset(adminId, userId, 'force_change', req.ip);
 
       res.json({
         success: true,

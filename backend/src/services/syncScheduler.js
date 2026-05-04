@@ -7,6 +7,44 @@ class SyncScheduler {
     constructor() {
         this.jobs = new Map();
         this.isRunning = false;
+        this.lastAutoSyncAt = null;
+    }
+
+    async getRuntimeSyncConfig() {
+        try {
+            const result = await query(`
+                SELECT
+                    notification_email AS sync_automatico,
+                    default_reminder_minutes AS intervalo_sync
+                FROM vetplus_auth.google_calendar_config
+                WHERE is_active = true
+                ORDER BY created_at DESC
+                LIMIT 1
+            `);
+
+            const row = result.rows[0];
+            if (!row) {
+                return {
+                    syncAutomatico: false,
+                    intervalMinutes: 30
+                };
+            }
+
+            const intervalMinutes = Number.isFinite(Number(row.intervalo_sync))
+                ? Math.max(5, Number(row.intervalo_sync))
+                : 30;
+
+            return {
+                syncAutomatico: row.sync_automatico === true,
+                intervalMinutes
+            };
+        } catch (error) {
+            console.error('❌ Error obteniendo configuración runtime del scheduler:', error);
+            return {
+                syncAutomatico: true,
+                intervalMinutes: 30
+            };
+        }
     }
 
     /**
@@ -22,7 +60,7 @@ class SyncScheduler {
                 return;
             }
 
-            // Programar sincronización automática cada 15 minutos
+            // Programar sincronización automática con intervalo dinámico (runtime)
             this.scheduleSync();
             
             // Programar limpieza de logs cada día a las 2 AM
@@ -40,18 +78,30 @@ class SyncScheduler {
      * Programar sincronización automática
      */
     scheduleSync() {
-        // Cada 15 minutos sincronizar cambios desde Google Calendar
-        const syncJob = cron.schedule('*/15 * * * *', async () => {
+        // Verificar cada minuto y ejecutar según la configuración runtime
+        const syncJob = cron.schedule('* * * * *', async () => {
             try {
-                console.log('🔄 Ejecutando sincronización automática desde Google Calendar...');
-                
-                const result = await bidirectionalSyncService.syncChangesFromGoogle();
+                const { syncAutomatico, intervalMinutes } = await this.getRuntimeSyncConfig();
+
+                if (!syncAutomatico) {
+                    return;
+                }
+
+                if (this.lastAutoSyncAt) {
+                    const elapsedMs = Date.now() - this.lastAutoSyncAt.getTime();
+                    if (elapsedMs < intervalMinutes * 60 * 1000) {
+                        return;
+                    }
+                }
+
+                const result = await bidirectionalSyncService.syncChangesFromGoogle({ onlyToday: true });
+
+                this.lastAutoSyncAt = new Date();
                 
                 if (result.success) {
-                    console.log(`✅ Sincronización completada: ${result.results.total_changes} cambios procesados`);
-                    
-                    // Registrar estadísticas si hay cambios
+                    // Registrar estadísticas y log solo cuando hubo cambios
                     if (result.results.total_changes > 0) {
+                        console.log(`✅ Sincronización automática: ${result.results.total_changes} cambios procesados`);
                         await this.logSyncActivity('auto_sync', result.results);
                     }
                 } else {
@@ -70,7 +120,7 @@ class SyncScheduler {
         this.jobs.set('sync', syncJob);
         syncJob.start();
         
-        console.log('📅 Sincronización automática programada cada 15 minutos');
+        console.log('📅 Sincronización automática programada con intervalo dinámico');
     }
 
     /**
@@ -84,9 +134,9 @@ class SyncScheduler {
                 
                 // Eliminar logs de más de 30 días
                 const cleanupResult = await query(`
-                    DELETE FROM audit.activity_log 
-                    WHERE accion LIKE '%sync%' 
-                    AND timestamp < CURRENT_DATE - INTERVAL '30 days'
+                    DELETE FROM system.activity_log
+                    WHERE tipo_actividad = 'SYNC_CALENDAR'
+                    AND created_at < CURRENT_DATE - INTERVAL '30 days'
                 `);
 
                 console.log(`✅ Limpieza completada: ${cleanupResult.rowCount} logs eliminados`);
@@ -155,13 +205,32 @@ class SyncScheduler {
     async logSyncActivity(action, data) {
         try {
             await query(`
-                INSERT INTO audit.activity_log (
-                    tabla_afectada,
-                    accion,
-                    datos_nuevos,
-                    timestamp
-                ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
-            `, ['google_calendar_sync', action, JSON.stringify(data)]);
+                INSERT INTO system.activity_log (
+                    id_log,
+                    tipo_actividad,
+                    descripcion,
+                    url,
+                    metodo_http,
+                    status_code,
+                    duracion_ms,
+                    request_data,
+                    response_data
+                ) VALUES (
+                    uuid_generate_v4(),
+                    'SYNC_CALENDAR',
+                    $1,
+                    '/system/google-calendar/scheduler',
+                    'SYSTEM',
+                    200,
+                    0,
+                    $2,
+                    $3
+                )
+            `, [
+                `google_calendar_sync:${action}`,
+                JSON.stringify({ action }),
+                JSON.stringify(data)
+            ]);
             
         } catch (error) {
             console.error('Error registrando actividad de sync:', error);
@@ -175,26 +244,26 @@ class SyncScheduler {
         try {
             const statsResult = await query(`
                 SELECT 
-                    accion,
+                    split_part(descripcion, ':', 2) as accion,
                     COUNT(*) as total,
-                    MAX(timestamp) as ultima_ejecucion
-                FROM audit.activity_log 
-                WHERE tabla_afectada = 'google_calendar_sync'
-                AND timestamp >= CURRENT_DATE - INTERVAL '7 days'
-                GROUP BY accion
+                    MAX(created_at) as ultima_ejecucion
+                FROM system.activity_log
+                WHERE tipo_actividad = 'SYNC_CALENDAR'
+                AND created_at >= CURRENT_DATE - INTERVAL '7 days'
+                GROUP BY split_part(descripcion, ':', 2)
                 ORDER BY ultima_ejecucion DESC
             `);
 
             const recentErrorsResult = await query(`
                 SELECT 
-                    accion,
-                    datos_nuevos,
-                    timestamp
-                FROM audit.activity_log 
-                WHERE tabla_afectada = 'google_calendar_sync'
-                AND accion LIKE '%error%'
-                AND timestamp >= CURRENT_DATE - INTERVAL '3 days'
-                ORDER BY timestamp DESC
+                    split_part(descripcion, ':', 2) as accion,
+                    response_data as datos_nuevos,
+                    created_at as timestamp
+                FROM system.activity_log
+                WHERE tipo_actividad = 'SYNC_CALENDAR'
+                AND descripcion ILIKE '%error%'
+                AND created_at >= CURRENT_DATE - INTERVAL '3 days'
+                ORDER BY created_at DESC
                 LIMIT 10
             `);
 
@@ -225,7 +294,7 @@ class SyncScheduler {
         try {
             console.log('🔄 Ejecutando sincronización manual...');
             
-            const result = await bidirectionalSyncService.syncChangesFromGoogle();
+            const result = await bidirectionalSyncService.syncChangesFromGoogle({ onlyToday: true });
             
             if (result.success) {
                 await this.logSyncActivity('manual_sync', result.results);

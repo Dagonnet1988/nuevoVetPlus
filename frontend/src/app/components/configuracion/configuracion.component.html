@@ -53,6 +53,16 @@
           </div>
 
           <div class="stat-item">
+            <mat-icon [style.color]="quickStats().correo_configurado ? '#4caf50' : '#ff9800'">
+              {{ quickStats().correo_configurado ? 'check_circle' : 'schedule' }}
+            </mat-icon>
+            <div class="stat-info">
+              <span class="stat-label">Correo SMTP</span>
+              <span class="stat-value">{{ quickStats().correo_configurado ? 'Configurado' : 'Pendiente' }}</span>
+            </div>
+          </div>
+
+          <div class="stat-item">
             <mat-icon [style.color]="'#2196f3'">admin_panel_settings</mat-icon>
             <div class="stat-info">
               <span class="stat-label">Configuraciones</span>

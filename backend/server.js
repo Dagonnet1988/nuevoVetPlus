@@ -6,6 +6,20 @@ import morgan from 'morgan';
 import fs from 'fs';
 import DBInit from './src/database/DBInit.js';
 
+// ── Handlers globales: evitar reinicios por errores no capturados ──────────────
+process.on('uncaughtException', (err) => {
+  console.error('❌ [uncaughtException] Error no capturado:', err.message);
+  console.error(err.stack);
+  // No llamar process.exit() — dejar que el servidor siga corriendo
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ [unhandledRejection] Promesa rechazada no capturada:');
+  console.error('   Promesa:', promise);
+  console.error('   Razón:', reason);
+  // No llamar process.exit() — en Node 22+ terminaría el proceso
+});
+
 // Importar rutas
 import authRoutes from './src/routes/auth.js';
 import clinicalRoutes from './src/routes/clinical.js';
@@ -19,6 +33,8 @@ import systemStatusRoutes from './src/routes/systemStatus.js';
 import testRoutes from './src/routes/test.js';
 import publicRoutes from './src/routes/public.js';
 import superadminRoutes from './src/routes/superadmin.js';
+import emailConfigRoutes from './src/routes/emailConfigRoutes.js';
+import documentEmailRoutes from './src/routes/documentEmailRoutes.js';
 import { generalRateLimit, rateLimitStats } from './src/middleware/rateLimiter.js';
 
 // Importar middleware de auditoría
@@ -27,6 +43,7 @@ import { setAuditContext, auditActivity, auditAuthActivity } from './src/middlew
 // Importar servicio de notificaciones automáticas
 // import autoNotificationService from './src/services/autoNotificationService.js'; // TEMPORALMENTE DESACTIVADO
 import googleCalendarService from './src/services/googleCalendar.js';
+import syncScheduler from './src/services/syncScheduler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -93,6 +110,8 @@ app.use('/api/config/consentimiento', configConsentimientoRoutes);
 app.use('/api/google-calendar-webhook', googleCalendarWebhookRoutes);
 app.use('/api/system', systemStatusRoutes);
 app.use('/api/superadmin', superadminRoutes);
+app.use('/api/admin/email', emailConfigRoutes);
+app.use('/api/clinical/notificaciones', documentEmailRoutes);
 
 // Rutas de test — solo en desarrollo/staging, nunca en producción
 if (process.env.NODE_ENV !== 'production') {
@@ -190,17 +209,28 @@ async function startServer() {
     // Initialize services after database is ready
     try {
       await googleCalendarService.initialize();
+      await syncScheduler.initialize();
     } catch (error) {
       console.error('Error initializing services:', error);
     }
 
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`🚀 VetPlus API iniciada en puerto ${PORT}`);
       console.log(`📍 URL: http://localhost:${PORT}`);
       console.log(`🏥 Módulos: Clínico`);
       console.log(`🔒 Autenticación: JWT habilitada`);
       console.log(`📊 Base de datos: Lista y verificada`);
       console.log(`🔔 Notificaciones automáticas: Activas`);
+    });
+
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(`❌ Puerto ${PORT} ya está en uso. Mata el proceso anterior y reinicia.`);
+        console.error(`   Ejecuta: kill $(lsof -ti:${PORT})`);
+      } else {
+        console.error('❌ Error en el servidor HTTP:', err.message);
+      }
+      process.exit(1);
     });
 
   } catch (error) {

@@ -15,6 +15,7 @@ export interface Cliente {
   activo: boolean;
   consentimiento_firmado?: boolean;
   total_mascotas?: number;
+  foto_primer_mascota?: string;
   created_at: string;
   updated_at: string;
 }
@@ -27,13 +28,17 @@ export class ClientesService {
 
   constructor(private http: HttpClient) { }
 
-  getClientes(page: number = 1, limit: number = 10, search?: string): Observable<{ data: Cliente[], pagination: any }> {
+  getClientes(page: number = 1, limit: number = 10, search?: string, activo?: boolean): Observable<{ data: Cliente[], pagination: any }> {
     let params = new HttpParams()
       .set('page', page.toString())
       .set('limit', limit.toString());
 
     if (search) {
       params = params.set('search', search);
+    }
+
+    if (activo !== undefined && activo !== null) {
+      params = params.set('activo', String(activo));
     }
 
     return this.http.get<any>(this.API_URL, { params }).pipe(
@@ -85,5 +90,9 @@ export class ClientesService {
 
   deleteCliente(id: string): Observable<any> {
     return this.http.delete<any>(`${this.API_URL}/${id}`);
+  }
+
+  restoreCliente(id: string): Observable<any> {
+    return this.http.patch<any>(`${this.API_URL}/${id}/restore`, {});
   }
 }

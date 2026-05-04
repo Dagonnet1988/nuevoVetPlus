@@ -32,8 +32,7 @@ import { validateRequest } from '../middleware/validateRequest.js';
 
 const router = express.Router();
 
-// Aplicar autenticación a todas las rutas
-router.use(authenticateToken);
+// Nota: authenticateToken y tenantContext ya están aplicados en clinical.js
 
 /**
  * @route   POST /api/clinical/appointments
@@ -174,11 +173,11 @@ router.delete(
 /**
  * @route   POST /api/clinical/appointments/:id/sync-google
  * @desc    Forzar sincronización con Google Calendar
- * @access  Veterinario, Admin
+ * @access  Veterinario, Admin, Auxiliar
  */
 router.post(
     '/:id/sync-google',
-    authorize(['admin', 'vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateUUIDParam,
     validateRequest,
     forceSyncWithGoogle
@@ -187,22 +186,22 @@ router.post(
 /**
  * @route   POST /api/clinical/appointments/force-sync-google
  * @desc    Forzar sincronización con Google Calendar (todas las citas pendientes)
- * @access  Admin
+ * @access  Admin, Veterinario, Auxiliar
  */
 router.post(
     '/force-sync-google',
-    authorize(['admin', 'aux']),
+    authorize(['admin', 'vet', 'aux']),
     syncAllPendingAppointments
 );
 
 /**
  * @route   POST /api/clinical/appointments/sync-all-pending
  * @desc    Sincronizar todas las citas pendientes con Google Calendar
- * @access  Admin
+ * @access  Admin, Veterinario, Auxiliar
  */
 router.post(
     '/sync-all-pending',
-    authorize(['admin', 'aux']),
+    authorize(['admin', 'vet', 'aux']),
     syncAllPendingAppointments
 );
 

@@ -3,13 +3,15 @@
 -- Archivo: 10_workflow_integration.sql
 -- ===========================================
 
--- Agregar campos de integración entre citas y consultas
-ALTER TABLE clinical.calendario_citas 
-ADD COLUMN IF NOT EXISTS id_consulta UUID REFERENCES clinical.consultas_clinicas(id_consulta);
+-- Vinculación historia clínica ↔ cita (bidireccional)
+-- id_historia ya está en calendario_citas desde 03_clinical_tables.sql
+-- id_cita ya está en historias_clinicas desde 03_clinical_tables.sql
+-- Aquí sólo agregamos la FK diferida (evita problema de orden de creación)
+ALTER TABLE clinical.historias_clinicas
+    ADD CONSTRAINT fk_historia_cita
+    FOREIGN KEY (id_cita) REFERENCES clinical.calendario_citas(id_cita) ON DELETE SET NULL
+    NOT VALID;
 
-ALTER TABLE clinical.consultas_clinicas 
-ADD COLUMN IF NOT EXISTS id_cita UUID REFERENCES clinical.calendario_citas(id_cita);
+ALTER TABLE clinical.historias_clinicas VALIDATE CONSTRAINT fk_historia_cita;
 
--- Índices para mejorar rendimiento
-CREATE INDEX IF NOT EXISTS idx_citas_consulta ON clinical.calendario_citas(id_consulta);
-CREATE INDEX IF NOT EXISTS idx_consultas_cita ON clinical.consultas_clinicas(id_cita);
+CREATE INDEX IF NOT EXISTS idx_historias_cita_wf ON clinical.historias_clinicas(id_cita);

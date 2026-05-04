@@ -1,19 +1,15 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormBuilder, FormGroup, ReactiveFormsModule, Validators, FormsModule } from '@angular/forms';
+import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { MatSelectModule } from '@angular/material/select';
-import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatTabsModule } from '@angular/material/tabs';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatChipsModule } from '@angular/material/chips';
 import { Router } from '@angular/router';
-import { ConfiguracionService, EmpresaConfig, HorarioAtencion, DiaEspecial } from '../../../services/configuracion.service';
+import { ConfiguracionService, EmpresaConfig, HorarioAtencion } from '../../../services/configuracion.service';
 
 @Component({
   selector: 'app-empresa-config',
@@ -26,23 +22,18 @@ import { ConfiguracionService, EmpresaConfig, HorarioAtencion, DiaEspecial } fro
     MatInputModule,
     MatButtonModule,
     MatIconModule,
-    MatSelectModule,
-    MatCheckboxModule,
-    MatTabsModule,
     MatProgressSpinnerModule,
-    MatChipsModule,
-    FormsModule
   ],
   templateUrl: './empresa-config.component.html',
   styleUrl: './empresa-config.component.css'
 })
 export class EmpresaConfigComponent implements OnInit {
   loading = signal(false);
-  empresaConfig = signal<any>(null);
+  empresaConfig = computed(() => this.configuracionService.empresaConfig());
   horarios = signal<HorarioAtencion[]>([]);
+  private currentConfig = signal<EmpresaConfig | null>(null);
 
   empresaForm: FormGroup;
-  configForm: FormGroup;
 
   constructor(
     private fb: FormBuilder,
@@ -51,11 +42,9 @@ export class EmpresaConfigComponent implements OnInit {
     private router: Router
   ) {
     this.empresaForm = this.createEmpresaForm();
-    this.configForm = this.createConfigForm();
   }
 
   ngOnInit(): void {
-    this.empresaConfig.set(this.configuracionService.empresaConfig());
     this.loadConfiguration();
   }
 
@@ -68,16 +57,6 @@ export class EmpresaConfigComponent implements OnInit {
       email: ['', [Validators.required, Validators.email]],
       sitio_web: [''],
       eslogan: ['']
-    });
-  }
-
-  private createConfigForm(): FormGroup {
-    return this.fb.group({
-      moneda: ['COP', Validators.required],
-      zona_horaria: ['America/Bogota', Validators.required],
-      idioma: ['es', Validators.required],
-      formato_fecha: ['DD/MM/YYYY', Validators.required],
-      formato_hora: ['HH:mm', Validators.required]
     });
   }
 
@@ -98,7 +77,7 @@ export class EmpresaConfigComponent implements OnInit {
   }
 
   private populateForm(config: EmpresaConfig): void {
-    console.log('Configuración recibida:', config);
+    this.currentConfig.set(config);
 
     // Llenar formulario de empresa
     this.empresaForm.patchValue({
@@ -110,22 +89,6 @@ export class EmpresaConfigComponent implements OnInit {
       sitio_web: config.sitio_web || '',
       eslogan: config.eslogan || ''
     });
-
-    // Llenar configuración general
-    if (config.configuracion_general) {
-      const configGeneral = typeof config.configuracion_general === 'string'
-        ? JSON.parse(config.configuracion_general)
-        : config.configuracion_general;
-      this.configForm.patchValue(configGeneral);
-    }
-
-    // Llenar numeración
-    if (config.configuracion_numeracion) {
-      const configNumeracion = typeof config.configuracion_numeracion === 'string'
-        ? JSON.parse(config.configuracion_numeracion)
-        : config.configuracion_numeracion;
-      this.configForm.patchValue(configNumeracion);
-    }
 
     // Cargar horarios - asegurar que sean válidos
     let horariosCargados = config.horarios;
@@ -141,7 +104,6 @@ export class EmpresaConfigComponent implements OnInit {
     }
 
     this.horarios.set(horariosCargados);
-    console.log('Horarios cargados:', horariosCargados);
   }
 
   private initializeDefaults(): void {
@@ -149,7 +111,7 @@ export class EmpresaConfigComponent implements OnInit {
   }
 
   saveConfiguration(): void {
-    if (this.empresaForm.invalid || this.configForm.invalid) {
+    if (this.empresaForm.invalid) {
       this.snackBar.open('Por favor completa todos los campos requeridos', 'Cerrar', { duration: 3000 });
       return;
     }
@@ -165,22 +127,24 @@ export class EmpresaConfigComponent implements OnInit {
       sitio_web: this.empresaForm.value.sitio_web,
       eslogan: this.empresaForm.value.eslogan,
       horarios: this.horarios(),
-      configuracion_general: {
-        moneda: this.configForm.value.moneda,
-        zona_horaria: this.configForm.value.zona_horaria,
-        idioma: this.configForm.value.idioma,
-        formato_fecha: this.configForm.value.formato_fecha,
-        formato_hora: this.configForm.value.formato_hora
+      configuracion_general: this.currentConfig()?.configuracion_general || {
+        moneda: 'COP',
+        zona_horaria: 'America/Bogota',
+        idioma: 'es',
+        formato_fecha: 'DD/MM/YYYY',
+        formato_hora: 'HH:mm'
       },
-      configuracion_numeracion: {
+      configuracion_numeracion: this.currentConfig()?.configuracion_numeracion || {
         cita_prefijo: 'CIT',
         cita_siguiente: 1,
         cita_digitos: 6
-      }
+      },
+      logo_url: this.empresaConfig()?.logo_url
     };
 
     this.configuracionService.updateEmpresaConfig(empresaConfig).subscribe({
-      next: () => {
+      next: (updatedConfig) => {
+        this.currentConfig.set(updatedConfig);
         this.snackBar.open('Configuración guardada exitosamente', 'Cerrar', { duration: 3000 });
         this.loading.set(false);
       },
@@ -209,7 +173,7 @@ export class EmpresaConfigComponent implements OnInit {
 
       this.loading.set(true);
       this.configuracionService.uploadLogo(file).subscribe({
-        next: (logoUrl) => {
+        next: () => {
           this.snackBar.open('Logo subido exitosamente', 'Cerrar', { duration: 3000 });
           this.loading.set(false);
         },
@@ -222,24 +186,13 @@ export class EmpresaConfigComponent implements OnInit {
     }
   }
 
+  getLogoPreviewUrl(): string {
+    return this.configuracionService.getAbsoluteAssetUrl(this.empresaConfig()?.logo_url);
+  }
+
   removeLogo(): void {
     // Implementar eliminación de logo si el backend lo soporta
     this.snackBar.open('Funcionalidad pendiente de implementar', 'Cerrar', { duration: 3000 });
-  }
-
-  updateHorario(dia: number, horario: HorarioAtencion): void {
-    const horarios = this.horarios();
-    const index = horarios.findIndex(h => h.dia_semana === dia);
-    if (index >= 0) {
-      // Crear un nuevo array con el horario actualizado
-      const nuevosHorarios = [...horarios];
-      nuevosHorarios[index] = { ...horario };
-      this.horarios.set(nuevosHorarios);
-    }
-  }
-
-  getDayName(dayIndex: number): string {
-    return this.configuracionService.getDayName(dayIndex);
   }
 
   goBack(): void {

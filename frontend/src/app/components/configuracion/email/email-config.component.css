@@ -1,0 +1,162 @@
+.email-config-container {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.page-header h1 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.4rem;
+}
+
+.page-header p {
+  margin: 4px 0 0;
+  color: #64748b;
+}
+
+.back-btn {
+  margin-top: 2px;
+}
+
+.loading-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #667085;
+}
+
+.info-card {
+  border-left: 4px solid #2563eb;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+}
+
+.toggle-wrap {
+  display: flex;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.oauth-panel {
+  margin-top: 8px;
+  border: 1px solid #dbeafe;
+  background: #f8fbff;
+  border-radius: 10px;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.oauth-help {
+  margin: 8px 0 0;
+  font-size: 0.88rem;
+  color: #4b5563;
+}
+
+.oauth-ok {
+  color: #0f766e;
+  font-weight: 600;
+  margin-left: 6px;
+}
+
+.oauth-bad {
+  color: #b42318;
+  font-weight: 600;
+  margin-left: 6px;
+}
+
+.oauth-email {
+  color: #475467;
+  margin-left: 4px;
+}
+
+.oauth-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  min-width: 220px;
+}
+
+.oauth-btn {
+  width: 100%;
+  white-space: nowrap;
+  justify-content: center;
+}
+
+.mode-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 16px 14px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.stats-grid .label {
+  display: block;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.stats-grid strong {
+  font-size: 1.15rem;
+  color: #0f172a;
+}
+
+.stats-grid .ok {
+  color: #0f766e;
+}
+
+.stats-grid .bad {
+  color: #b42318;
+}
+
+@media (max-width: 640px) {
+  .actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .oauth-panel {
+    grid-template-columns: 1fr;
+    align-items: flex-start;
+  }
+
+  .oauth-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

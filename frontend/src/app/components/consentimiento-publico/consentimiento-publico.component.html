@@ -55,8 +55,15 @@
       <header class="consent-header">
         @if (datos.empresa.logoUrl) {
           <img [src]="datos.empresa.logoUrl" [alt]="datos.empresa.nombre" class="logo" />
+        } @else {
+          <div class="logo-fallback" [attr.aria-label]="datos.empresa.nombre">
+            {{ datos.empresa.nombre.charAt(0) || 'V' }}
+          </div>
         }
-        <h1 class="empresa-nombre">{{ datos.empresa.nombre }}</h1>
+        <div class="header-copy">
+          <span class="kicker">Consentimiento Digital</span>
+          <h1 class="empresa-nombre">{{ datos.empresa.nombre }}</h1>
+        </div>
       </header>
 
       <!-- Título del consentimiento -->
@@ -77,6 +84,7 @@
 
       <!-- Texto legal (scroll) -->
       <section class="texto-legal-section">
+        <p class="texto-hint">Lea el documento completo antes de firmar.</p>
         <div class="texto-legal">{{ datos.version.textoLegal }}</div>
       </section>
 

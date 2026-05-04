@@ -39,6 +39,9 @@ export class DetalleClinicaComponent implements OnInit {
   editPlan: string = 'standard';
   editEstado: string = 'active';
   editMaxUsuarios = 5;
+  editPeriodicidad: string = 'monthly';
+  editFechaInicio: string = '';
+  editFechaProximo: string = '';
 
   constructor(
     private route: ActivatedRoute,
@@ -51,10 +54,15 @@ export class DetalleClinicaComponent implements OnInit {
     this.svc.getTenant(id).subscribe({
       next: data => {
         this.tenant.set(data);
-        this.editNombre      = data.nombre;
-        this.editPlan        = data.plan;
-        this.editEstado      = data.estado;
-        this.editMaxUsuarios = data.max_usuarios;
+        this.editNombre       = data.nombre;
+        this.editPlan         = data.plan;
+        this.editEstado       = data.estado;
+        this.editMaxUsuarios  = data.max_usuarios;
+        this.editPeriodicidad = data.periodicidad_pago ?? 'monthly';
+        this.editFechaInicio  = data.fecha_inicio_suscripcion
+          ? data.fecha_inicio_suscripcion.substring(0, 10) : '';
+        this.editFechaProximo = data.fecha_proximo_pago
+          ? data.fecha_proximo_pago.substring(0, 10) : '';
         this.loading.set(false);
       },
       error: err => {
@@ -75,7 +83,10 @@ export class DetalleClinicaComponent implements OnInit {
       nombre: this.editNombre,
       plan: this.editPlan as any,
       estado: this.editEstado as any,
-      max_usuarios: this.editMaxUsuarios
+      max_usuarios: this.editMaxUsuarios,
+      periodicidad_pago: this.editPeriodicidad as any,
+      fecha_inicio_suscripcion: this.editFechaInicio || null,
+      fecha_proximo_pago: this.editFechaProximo || null
     }).subscribe({
       next: res => {
         this.tenant.set({ ...t, ...res.tenant });
@@ -97,5 +108,16 @@ export class DetalleClinicaComponent implements OnInit {
   planLabel(plan: string): string {
     const m: Record<string, string> = { standard: 'Standard', pro: 'Pro', enterprise: 'Enterprise' };
     return m[plan] ?? plan;
+  }
+
+  /** Returns 'vencido' | 'alerta' | 'proximo' | 'ok' | 'sin-fecha' */
+  pagoEstado(): 'vencido' | 'alerta' | 'proximo' | 'ok' | 'sin-fecha' {
+    const fecha = this.editFechaProximo;
+    if (!fecha) return 'sin-fecha';
+    const dias = Math.floor((new Date(fecha).getTime() - Date.now()) / 86_400_000);
+    if (dias < 0)   return 'vencido';
+    if (dias <= 7)  return 'alerta';
+    if (dias <= 30) return 'proximo';
+    return 'ok';
   }
 }

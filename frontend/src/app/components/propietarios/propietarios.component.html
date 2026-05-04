@@ -26,6 +26,14 @@
           </button>
         }
       </mat-form-field>
+
+      <mat-form-field appearance="outline" class="status-field">
+        <mat-label>Estado</mat-label>
+        <mat-select formControlName="activo">
+          <mat-option [value]="true">Activos</mat-option>
+          <mat-option [value]="false">Inactivos</mat-option>
+        </mat-select>
+      </mat-form-field>
     </form>
   </mat-card>
 
@@ -127,7 +135,15 @@
               mat-stroked-button
               (click)="verPacientes(p)"
               matTooltip="Ver mascotas de este propietario">
-              <mat-icon>pets</mat-icon>
+              @if (p.foto_primer_mascota) {
+                <img
+                  class="mascota-preview-btn"
+                  [src]="getMascotaPreviewUrl(p.foto_primer_mascota)"
+                  alt="Mascota"
+                  (error)="$event.target.style.display='none'" />
+              } @else {
+                <mat-icon>pets</mat-icon>
+              }
               Ver mascotas
             </button>
             <button
@@ -145,6 +161,14 @@
               matTooltip="Editar datos de contacto">
               <mat-icon>edit</mat-icon>
               Editar
+            </button>
+            <button
+              mat-stroked-button
+              [color]="p.activo ? 'warn' : 'primary'"
+              (click)="cambiarEstadoPropietario(p)"
+              [matTooltip]="p.activo ? 'Desactivar/eliminar propietario' : 'Reactivar propietario'">
+              <mat-icon>{{ p.activo ? 'person_off' : 'person_add' }}</mat-icon>
+              {{ p.activo ? 'Desactivar / Eliminar' : 'Reactivar' }}
             </button>
           </div>
         </mat-card>

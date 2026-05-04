@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, signal, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, ElementRef, signal, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
@@ -69,9 +69,11 @@ import {
   templateUrl: './citas.component.html',
   styleUrl: './citas.component.css'
 })
-export class CitasComponent implements OnInit, OnDestroy {
+export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
   // ViewChild para acceder al calendario
   @ViewChild('calendar') calendarComponent: any;
+  @ViewChild('dayCalendar') dayCalendarComponent: any;
+  private resizeObserver?: ResizeObserver;
 
   // Signals para estado reactivo
   loading = signal(false);
@@ -79,16 +81,15 @@ export class CitasComponent implements OnInit, OnDestroy {
   stats = signal<CitaStats | null>(null);
   citas = signal<Cita[]>([]);
   veterinarios = signal<any[]>([]);
-  currentView = signal<string>('timeGridWeek');
+  currentView = signal<string>('timeGridFiveDay');
 
   // Signal para controlar si mostrar el botón de sincronización manual
-  showManualSyncButton = signal(false);
-
-  // Signal para controlar el modo de vista del calendario
-  calendarViewMode = signal<'compact' | 'expanded'>('expanded');
+  showManualSyncButton = signal(true);
 
   // Signal para controlar el modo de vista (plana vs calendario)
   viewMode = signal<'plana' | 'calendario'>('plana');
+  selectedDate = signal<Date>(new Date());
+  showCompletedToday = signal(false);
 
   // Timestamp de cuando se carga la vista
   private viewLoadTime: number = 0;  // Formulario de filtros
@@ -101,12 +102,19 @@ export class CitasComponent implements OnInit, OnDestroy {
   // Opciones del calendario
   calendarOptions: CalendarOptions = {
     plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
-    initialView: 'timeGridWeek',
+    initialView: 'timeGridFiveDay',
     locale: esLocale,
     headerToolbar: {
       left: 'prev,next today',
       center: 'title',
-      right: 'dayGridMonth,timeGridWeek,timeGridDay'
+      right: 'dayGridMonth,timeGridFiveDay,timeGridDay'
+    },
+    views: {
+      timeGridFiveDay: {
+        type: 'timeGrid',
+        duration: { days: 5 },
+        buttonText: 'Semana'
+      }
     },
     // El día actual siempre es el 2do día visible: la semana arranca desde ayer
     firstDay: (new Date().getDay() - 1 + 7) % 7,
@@ -128,10 +136,17 @@ export class CitasComponent implements OnInit, OnDestroy {
     slotDuration: '00:30:00',
     slotLabelInterval: '01:00:00', // Mostrar etiquetas cada hora
     slotLabelFormat: {
-      hour: '2-digit',
+      hour: 'numeric',
       minute: '2-digit',
       omitZeroMinute: false,
-      meridiem: false
+      hour12: true,
+      meridiem: 'short'
+    },
+    eventTimeFormat: {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      meridiem: 'short'
     },
     nowIndicator: true,
     now: new Date(),
@@ -139,6 +154,8 @@ export class CitasComponent implements OnInit, OnDestroy {
     allDaySlot: false, // Ocultar slot de "todo el día" para ahorrar espacio
     expandRows: true, // Expandir filas para usar todo el espacio
     stickyHeaderDates: true, // Mantener fechas fijas al hacer scroll
+    navLinks: true,
+    navLinkDayClick: this.handleDayHeaderClick.bind(this),
     validRange: {
       start: '2020-01-01',
       end: '2030-12-31'
@@ -151,12 +168,51 @@ export class CitasComponent implements OnInit, OnDestroy {
     eventContent: this.renderEventContent.bind(this),
     // Configuraciones específicas para timeGrid
     dayHeaderFormat: { weekday: 'short', day: 'numeric' },
-    slotEventOverlap: false, // Evitar solapamiento de eventos
-    eventMinHeight: 25, // Altura mínima de eventos para mejor legibilidad
-    eventShortHeight: 20
+    slotEventOverlap: true, // Permitir visualizar eventos solapados
+    eventMaxStack: 4,
+    eventMinHeight: 20,
+    eventShortHeight: 16
+  };
+
+  dayCalendarOptions: CalendarOptions = {
+    plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
+    initialView: 'timeGridDay',
+    initialDate: new Date(),
+    locale: esLocale,
+    headerToolbar: false,
+    height: 'auto',
+    contentHeight: 'auto',
+    allDaySlot: false,
+    nowIndicator: true,
+    editable: false,
+    selectable: false,
+    slotMinTime: '07:00:00',
+    slotMaxTime: '18:00:00',
+    slotDuration: '00:30:00',
+    slotLabelInterval: '01:00:00',
+    slotLabelFormat: {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      meridiem: 'short'
+    },
+    eventTimeFormat: {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      meridiem: 'short'
+    },
+    slotEventOverlap: true,
+    eventMaxStack: 4,
+    eventMinHeight: 20,
+    eventShortHeight: 16,
+    events: [],
+    eventClick: this.handleEventClick.bind(this),
+    eventContent: this.renderEventContent.bind(this)
   };
 
   constructor(
+    private elementRef: ElementRef<HTMLElement>,
     private fb: FormBuilder,
     private citasService: CitasService,
     private exportService: ExportService,
@@ -173,7 +229,6 @@ export class CitasComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    console.log('🚪 Entrando a la vista de citas');
     this.viewLoadTime = Date.now();
 
     // Verificar si se solicita vista de calendario desde URL
@@ -193,9 +248,6 @@ export class CitasComponent implements OnInit, OnDestroy {
 
       // Check if we need to refresh due to query param
       this.checkForRefreshParam();
-
-      // Verificar si necesitamos sincronizar automáticamente
-      this.checkAutoSync();
     });
 
     // Listen for browser navigation events to refresh calendar
@@ -205,85 +257,14 @@ export class CitasComponent implements OnInit, OnDestroy {
     });
   }
 
-  private checkAutoSync(): void {
-    const SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutos en milliseconds
-    const lastSync = localStorage.getItem('citas_last_sync');
-    const lastSyncTime = lastSync ? parseInt(lastSync) : 0;
-    const now = Date.now();
-
-    // Verificar si ha pasado suficiente tiempo desde la última sincronización
-    const shouldAutoSync = (now - lastSyncTime) > SYNC_INTERVAL;
-
-    // SIEMPRE sincronizar al cargar la página por primera vez
-    this.performAutoSync();
-  }
-
-  private performAutoSync(): void {
-    this.syncing.set(true);
-
-    // Paso 1: Sincronizar cambios locales pendientes hacia Google
-    this.citasService.forceSyncAllPending().subscribe({
-      next: (result) => {
-        const processedChanges = result?.data?.processed || 0;
-
-        // Paso 2: Escuchar cambios desde Google Calendar
-        this.autoSyncFromGoogle();
-      },
-      error: (error) => {
-        console.error('Error en sincronización automática:', error);
-        this.syncing.set(false);
-        // Mostrar botón manual si falla la auto sync
-        this.showManualSyncButton.set(true);
-      }
-    });
-  }
-
-  private autoSyncFromGoogle(): void {
-    this.citasService.syncChangesFromGoogle().subscribe({
-      next: (result) => {
-        this.syncing.set(false);
-        const changesDetected = result?.data?.processed || 0;
-
-        console.log(`✅ Sincronización automática completada: ${changesDetected} cambios detectados desde Google`);
-
-        // Actualizar timestamp de última sincronización
-        localStorage.setItem('citas_last_sync', Date.now().toString());
-
-        if (changesDetected > 0) {
-          // Recargar calendario y estadísticas para mostrar cambios
-          this.loadCalendarEvents();
-          this.loadStats();
-
-          // Mostrar notificación discreta
-          this.snackBar.open(
-            `${changesDetected} cambios detectados desde Google Calendar`,
-            'Cerrar',
-            { duration: 3000 }
-          );
-        } else {
-          // Aún si no hay cambios detectados, recargar para asegurar sincronización
-          this.loadCalendarEvents();
-        }
-
-        // Mostrar botón de sincronización manual después de unos segundos
-        setTimeout(() => {
-          this.showManualSyncButton.set(true);
-        }, 2000);
-      },
-      error: (error) => {
-        console.error('Error en sincronización automática desde Google:', error);
-        this.syncing.set(false);
-        // Mostrar botón manual si falla
-        this.showManualSyncButton.set(true);
-      }
-    });
+  ngAfterViewInit(): void {
+    this.setupCalendarAutoResize();
   }
 
   private checkForRefreshParam(): void {
     // Check if refresh query param is present
     const refresh = this.router.url.includes('refresh=true');
     if (refresh) {
-      console.log('🔄 Refrescando calendario por parámetro de consulta');
       this.refreshCalendar();
       // Clean up the URL
       this.router.navigate(['/citas'], { replaceUrl: true });
@@ -349,6 +330,7 @@ export class CitasComponent implements OnInit, OnDestroy {
         };
 
         this.citas.set(citasArray);
+        this.updateDayCalendar();
         this.loading.set(false);
       },
       error: (error) => {
@@ -366,6 +348,7 @@ export class CitasComponent implements OnInit, OnDestroy {
         }
 
         this.citas.set([]);
+        this.updateDayCalendar();
         this.loading.set(false);
       }
     });
@@ -422,6 +405,8 @@ export class CitasComponent implements OnInit, OnDestroy {
       const mascotaNombre = cita.mascota?.nombre || cita.mascota_nombre || 'Sin nombre';
       const clienteNombre = cita.mascota?.cliente?.nombre || cita.cliente_nombre || '';
       const veterinarioNombre = cita.veterinario?.nombre || cita.veterinario_nombre || '';
+      const tipoToken = this.getTipoToken(cita.tipo);
+      const estadoNormalizado = this.normalizeEstado(cita.estado);
 
 
       return {
@@ -429,15 +414,16 @@ export class CitasComponent implements OnInit, OnDestroy {
         title: `${mascotaNombre}`,
         start: this.parseLocalDate(cita.fecha_inicio),
         end: this.parseLocalDate(cita.fecha_fin),
-        backgroundColor: this.citasService.obtenerColorPorVeterinario(cita.id_veterinario),
-        borderColor: this.citasService.obtenerColorSecundarioPorVeterinario(cita.id_veterinario),
-        textColor: '#ffffff',
-        borderWidth: 2,
-        classNames: ['cita-evento', `cita-estado-${cita.estado}`, `cita-tipo-${cita.tipo}`],
+        backgroundColor: this.citasService.obtenerColorPorTipo(cita.tipo),
+        borderColor: this.citasService.obtenerColorBordePorTipo(cita.tipo),
+        textColor: '#1f2937',
+        borderWidth: 1,
+        classNames: ['cita-evento', `cita-estado-${estadoNormalizado}`, `cita-tipo-${tipoToken}`],
         extendedProps: {
           cita: cita,
           tipo: cita.tipo,
-          estado: cita.estado,
+          tipoToken,
+          estado: estadoNormalizado,
           mascotaNombre,
           clienteNombre,
           veterinarioNombre,
@@ -489,10 +475,16 @@ export class CitasComponent implements OnInit, OnDestroy {
   private getVistaFromCalendarView(calendarView: string): 'mes' | 'semana' | 'dia' {
     switch (calendarView) {
       case 'dayGridMonth': return 'mes';
+      case 'timeGridFiveDay': return 'semana';
       case 'timeGridWeek': return 'semana';
       case 'timeGridDay': return 'dia';
       default: return 'semana';
     }
+  }
+
+  handleDayHeaderClick(date: Date): void {
+    this.selectedDate.set(new Date(date));
+    this.setViewMode('plana');
   }
 
   // Event Handlers del Calendario
@@ -503,7 +495,10 @@ export class CitasComponent implements OnInit, OnDestroy {
 
   handleEventClick(clickInfo: EventClickArg): void {
     const cita = clickInfo.event.extendedProps['cita'] as Cita;
-    this.router.navigate(['/citas', cita.id_cita]);
+
+    this.router.navigate(['/citas', cita.id_cita], {
+      queryParams: { from: 'calendario' }
+    });
   }
 
 
@@ -550,33 +545,35 @@ export class CitasComponent implements OnInit, OnDestroy {
 
   renderEventContent(eventInfo: any): any {
     const cita = eventInfo.event.extendedProps['cita'] as Cita;
-    const estado = eventInfo.event.extendedProps['estado'] || '';
+    const estado = eventInfo.event.extendedProps['estado'] || 'confirmada';
+    const tipoToken = eventInfo.event.extendedProps['tipoToken'] || this.getTipoToken(cita?.tipo || '');
 
     // Validar que cita existe
     if (!cita) {
+      const fallbackHour = this.formatearHoraEvento(eventInfo.event.start ?? new Date());
       return {
         html: `
-          <div class="event-simple">
-            <div class="event-time">${eventInfo.timeText}</div>
-            <div class="event-patient">${eventInfo.event.title}</div>
+          <div class="event-simple event-type-general event-state-confirmada">
+            <div class="event-header-simple">
+              <span class="event-status-dot state-confirmada"></span>
+              <span class="event-time">${fallbackHour}</span>
+            </div>
+            <div class="event-patient">${eventInfo.event.title || ''}</div>
           </div>
         `
       };
     }
 
-    // Obtener información simplificada
-    const indicadorEstado = this.obtenerIndicadorEstado(estado);
-    const nombreMascota = cita.mascota_nombre || 'Mascota';
-
-    // Extraer solo la hora de inicio del timeText
-    const horaInicio = this.extraerHoraInicio(eventInfo.timeText);
+    const estadoNormalizado = this.normalizeEstado(estado);
+    const nombreMascota = this.sanitizeInlineText(cita.mascota_nombre || 'Mascota');
+    const horaInicio = this.formatearHoraEvento(cita.fecha_inicio);
 
     return {
       html: `
-        <div class="event-simple">
+        <div class="event-simple event-type-${tipoToken} event-state-${estadoNormalizado}">
           <div class="event-header-simple">
+            <span class="event-status-dot state-${estadoNormalizado}"></span>
             <span class="event-time">${horaInicio}</span>
-            <span class="event-status-circle">${indicadorEstado}</span>
           </div>
           <div class="event-patient">${nombreMascota}</div>
         </div>
@@ -594,18 +591,24 @@ export class CitasComponent implements OnInit, OnDestroy {
     return timeText;
   }
 
-  private obtenerIndicadorEstado(estado: string): string {
-    const indicadores: { [key: string]: string } = {
-      'pendiente': '🟡',
-      'confirmada': '🔵',
-      'en_progreso': '🟣',
-      'completada': '🟢',
-      'cancelada': '⚫',
-      'no_asistio': '🔴'
-    };
-    return indicadores[estado] || '⚪';
+  private formatearHoraEvento(fecha: string | Date): string {
+    const d = new Date(fecha);
+    const raw = d.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    }).toLowerCase();
+
+    // Evita salto entre hora y am/pm dentro del cuadro.
+    return raw.replace(' ', '&nbsp;');
   }
 
+  private sanitizeInlineText(value: string): string {
+    return String(value || '')
+      .replace(/[\r\n\t]+/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  }
 
   // Método público para refrescar el calendario (llamado desde otros componentes)
   refreshCalendar(): void {
@@ -644,16 +647,14 @@ export class CitasComponent implements OnInit, OnDestroy {
   syncWithGoogle(): void {
     this.syncing.set(true);
 
-    console.log('🔄 Iniciando sincronización manual...');
-
     // Paso 1: Sincronizar cambios locales pendientes hacia Google
     this.citasService.forceSyncAllPending().subscribe({
       next: (result) => {
-        const processedChanges = result?.data?.processed || 0;
-        console.log(`✅ Sincronización manual - Paso 1: ${processedChanges} cambios locales enviados a Google`);
+        const syncedLocal = result?.data?.synced ?? 0;
+        const failedLocal = result?.data?.failed ?? 0;
 
         // Paso 2: Escuchar cambios desde Google Calendar (listener manual)
-        this.checkGoogleCalendarChanges();
+        this.checkGoogleCalendarChanges(syncedLocal, failedLocal);
       },
       error: (error) => {
         this.handleSyncError('Error sincronizando cambios locales', error);
@@ -661,29 +662,22 @@ export class CitasComponent implements OnInit, OnDestroy {
     });
   }
 
-  private checkGoogleCalendarChanges(): void {
-    console.log('👂 Escuchando cambios desde Google Calendar...');
-
+  private checkGoogleCalendarChanges(syncedLocal: number, failedLocal: number): void {
     // Detectar cambios en los últimos 10 minutos
     this.citasService.syncChangesFromGoogle().subscribe({
       next: (result) => {
         this.syncing.set(false);
         const changesDetected = result?.data?.processed || 0;
 
-        console.log(`✅ Sincronización manual completada: ${changesDetected} cambios detectados desde Google`);
-
-        // Actualizar timestamp de última sincronización
-        localStorage.setItem('citas_last_sync', Date.now().toString());
-
         if (changesDetected > 0) {
           this.snackBar.open(
-            `Sincronización completada: ${changesDetected} cambios detectados desde Google Calendar`,
+            `Sincronización completada: ${syncedLocal} pendientes enviados, ${changesDetected} cambios recibidos de Google${failedLocal > 0 ? `, ${failedLocal} con error` : ''}`,
             'Cerrar',
             { duration: 5000 }
           );
         } else {
           this.snackBar.open(
-            'Sincronización completada: No hay cambios nuevos desde Google Calendar',
+            `Sincronización completada: ${syncedLocal} pendientes enviados y sin cambios nuevos desde Google${failedLocal > 0 ? ` (${failedLocal} con error)` : ''}`,
             'Cerrar',
             { duration: 3000 }
           );
@@ -758,40 +752,6 @@ export class CitasComponent implements OnInit, OnDestroy {
     });
   }
 
-  toggleCalendarViewMode(): void {
-    const currentMode = this.calendarViewMode();
-    const newMode = currentMode === 'compact' ? 'expanded' : 'compact';
-    this.calendarViewMode.set(newMode);
-
-    console.log(`📱 Modo de calendario cambiado a: ${newMode}`);
-
-    // Actualizar configuraciones del calendario según el modo
-    if (this.calendarComponent && this.calendarComponent.getApi) {
-      const calendarApi = this.calendarComponent.getApi();
-
-      if (newMode === 'compact') {
-        // Modo compacto: horario laboral (8AM-7PM)
-        calendarApi.setOption('slotMinTime', '08:00');
-        calendarApi.setOption('slotMaxTime', '19:00');
-        calendarApi.setOption('height', 'auto'); // Cambiar a auto para que se ajuste
-        calendarApi.setOption('scrollTime', '08:00');
-        this.snackBar.open('Vista compacta: horario laboral (8AM-7PM)', 'Cerrar', { duration: 3000 });
-      } else {
-        // Modo expandido: día completo (6AM-10PM)
-        calendarApi.setOption('slotMinTime', '06:00');
-        calendarApi.setOption('slotMaxTime', '22:00');
-        calendarApi.setOption('height', 'auto'); // Cambiar a auto para que se ajuste
-        calendarApi.setOption('scrollTime', '08:00');
-        this.snackBar.open('Vista expandida: día completo (6AM-10PM)', 'Cerrar', { duration: 3000 });
-      }
-
-      // Recargar eventos para ajustar layout
-      calendarApi.refetchEvents();
-    } else {
-      console.warn('🚫 No se pudo acceder al API del calendario');
-    }
-  }
-
   // ===========================================
   // NUEVAS FUNCIONES PARA VISTA PLANA
   // ===========================================
@@ -810,7 +770,211 @@ export class CitasComponent implements OnInit, OnDestroy {
           this.calendarComponent.getApi().updateSize();
         }
       }, 150);
+      return;
     }
+
+    setTimeout(() => {
+      this.updateDayCalendar();
+    }, 100);
+  }
+
+  onDateSelected(date: Date | null): void {
+    if (!date) return;
+    this.selectedDate.set(date);
+    this.updateDayCalendar();
+  }
+
+  goToToday(): void {
+    this.selectedDate.set(new Date());
+    this.showCompletedToday.set(false);
+    this.updateDayCalendar();
+  }
+
+  shiftSelectedDate(days: number): void {
+    const base = new Date(this.selectedDate());
+    base.setDate(base.getDate() + days);
+    this.selectedDate.set(base);
+    this.updateDayCalendar();
+  }
+
+  citasDelDiaSeleccionado(): any[] {
+    const target = this.getLocalDateString(this.selectedDate());
+    return this.citas()
+      .filter((cita) => this.getLocalDateString(new Date(cita.fecha_inicio)) === target)
+      .sort((a, b) => new Date(a.fecha_inicio).getTime() - new Date(b.fecha_inicio).getTime());
+  }
+
+  citasVisiblesDelDiaSeleccionado(): any[] {
+    const citas = this.citasDelDiaSeleccionado();
+    if (!this.isSelectedDayToday() || this.showCompletedToday()) {
+      return citas;
+    }
+    return citas.filter((cita) => !this.esCitaGestionada(cita.estado));
+  }
+
+  citasAgrupadasPorHoraSeleccionada(): { hora: number; etiqueta: string; citas: any[] }[] {
+    const grupos = new Map<number, any[]>();
+
+    for (const cita of this.citasVisiblesDelDiaSeleccionado()) {
+      const hora = this.getHoraBloque(cita.fecha_inicio);
+      if (!grupos.has(hora)) {
+        grupos.set(hora, []);
+      }
+      grupos.get(hora)?.push(cita);
+    }
+
+    return Array.from(grupos.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([hora, citas]) => ({
+        hora,
+        etiqueta: this.formatearHoraLateral(hora),
+        citas
+      }));
+  }
+
+  completadasOcultasCount(): number {
+    if (!this.isSelectedDayToday() || this.showCompletedToday()) {
+      return 0;
+    }
+    return this.citasDelDiaSeleccionado().filter((cita) => this.esCitaGestionada(cita.estado)).length;
+  }
+
+  private esCitaGestionada(estado: string): boolean {
+    const normalized = this.normalizeEstado(estado);
+    return normalized === 'completada' || normalized === 'no_asistio';
+  }
+
+  isSelectedDayToday(): boolean {
+    const selected = this.getLocalDateString(this.selectedDate());
+    const today = this.getLocalDateString(new Date());
+    return selected === today;
+  }
+
+  toggleCompletedTodayVisibility(): void {
+    this.showCompletedToday.set(!this.showCompletedToday());
+    this.updateDayCalendar();
+  }
+
+  private updateDayCalendar(): void {
+    const selected = new Date(this.selectedDate());
+    const citasVisibles = this.citasVisiblesDelDiaSeleccionado();
+    const events = this.transformCitasToEvents(citasVisibles as Cita[]);
+    const { slotMinTime, slotMaxTime } = this.calcularRangoHorarioVistaDia(citasVisibles as Cita[]);
+
+    this.dayCalendarOptions = {
+      ...this.dayCalendarOptions,
+      initialDate: selected,
+      events,
+      slotMinTime,
+      slotMaxTime
+    };
+
+    const api = this.dayCalendarComponent?.getApi?.();
+    if (api) {
+      api.gotoDate(selected);
+    }
+
+    this.queueCalendarResize();
+  }
+
+  private setupCalendarAutoResize(): void {
+    const host = this.elementRef.nativeElement;
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', this.boundWindowResize);
+      return;
+    }
+
+    this.resizeObserver = new ResizeObserver(() => {
+      this.queueCalendarResize();
+    });
+
+    this.resizeObserver.observe(host);
+
+    const mainContent = host.closest('.main-content');
+    if (mainContent instanceof HTMLElement) {
+      this.resizeObserver.observe(mainContent);
+    }
+  }
+
+  private readonly boundWindowResize = () => {
+    this.queueCalendarResize();
+  };
+
+  private queueCalendarResize(): void {
+    requestAnimationFrame(() => {
+      this.calendarComponent?.getApi?.()?.updateSize();
+      this.dayCalendarComponent?.getApi?.()?.updateSize();
+    });
+
+    // Reintentos para capturar la transición de ancho del sidebar (250ms)
+    setTimeout(() => {
+      this.calendarComponent?.getApi?.()?.updateSize();
+      this.dayCalendarComponent?.getApi?.()?.updateSize();
+    }, 180);
+
+    setTimeout(() => {
+      this.calendarComponent?.getApi?.()?.updateSize();
+      this.dayCalendarComponent?.getApi?.()?.updateSize();
+    }, 320);
+  }
+
+  /**
+   * Rango horario para la vista día embebida:
+   * - Si es hoy y se ocultan completadas, recorta horas pasadas.
+   * - Si hay citas NO completadas en horas anteriores, esas horas se mantienen visibles.
+   * - Si son >= :45 y no hay pendientes en la hora actual, inicia en la hora siguiente.
+   */
+  private calcularRangoHorarioVistaDia(citasVisibles: Cita[]): { slotMinTime: string; slotMaxTime: string } {
+    const { slotMinTime: baseMin, slotMaxTime: baseMax } = this.calcularRangoHorario(citasVisibles);
+
+    if (!this.isSelectedDayToday() || this.showCompletedToday()) {
+      return { slotMinTime: baseMin, slotMaxTime: baseMax };
+    }
+
+    const now = new Date();
+    let inicioSugerido = now.getHours();
+
+    if (now.getMinutes() >= 45) {
+      inicioSugerido = Math.min(23, inicioSugerido + 1);
+    }
+
+    const horasInicioVisibles = citasVisibles
+      .map((cita) => new Date(cita.fecha_inicio).getHours())
+      .filter((h) => Number.isFinite(h));
+
+    const hayPendienteEnHoraActual = citasVisibles.some((cita) => {
+      const inicio = new Date(cita.fecha_inicio);
+      return inicio.getHours() === now.getHours();
+    });
+
+    if (hayPendienteEnHoraActual) {
+      inicioSugerido = now.getHours();
+    }
+
+    const horaMasTempranaVisible = horasInicioVisibles.length > 0
+      ? Math.min(...horasInicioVisibles)
+      : inicioSugerido;
+
+    const slotMinHour = Math.max(0, Math.min(inicioSugerido, horaMasTempranaVisible));
+
+    return {
+      slotMinTime: `${String(slotMinHour).padStart(2, '0')}:00:00`,
+      slotMaxTime: baseMax
+    };
+  }
+
+  tituloDiaSeleccionado(): string {
+    const date = this.selectedDate();
+    const hoy = new Date();
+    const dateKey = this.getLocalDateString(date);
+    const hoyKey = this.getLocalDateString(hoy);
+    const manana = new Date(hoy);
+    manana.setDate(hoy.getDate() + 1);
+    const mananaKey = this.getLocalDateString(manana);
+
+    if (dateKey === hoyKey) return 'Hoy';
+    if (dateKey === mananaKey) return 'Mañana';
+    return date.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   }
 
   // Obtener citas agrupadas por día
@@ -858,11 +1022,10 @@ export class CitasComponent implements OnInit, OnDestroy {
       grupo.estadisticas.total++;
 
       // Contar por estado
-      switch (cita.estado) {
+      switch (this.normalizeEstado(cita.estado)) {
         case 'completada':
           grupo.estadisticas.completadas++;
           break;
-        case 'cancelada':
         case 'no_asistio':
           grupo.estadisticas.canceladas++;
           break;
@@ -923,93 +1086,167 @@ export class CitasComponent implements OnInit, OnDestroy {
     }
   }
 
+  private getHoraBloque(fecha: string): number {
+    const date = new Date(fecha);
+    return date.getHours();
+  }
+
+  private formatearHoraLateral(hora: number): string {
+    const d = new Date();
+    d.setHours(hora, 0, 0, 0);
+    return d.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    }).toLowerCase();
+  }
+
   // Funciones para estilos y clases
+  /**
+   * Normaliza estados legados para mantener solo el modelo operativo de 4 estados.
+   */
+  private normalizeEstado(estado: string): 'confirmada' | 'en_curso' | 'completada' | 'no_asistio' {
+    const value = String(estado || '').trim().toLowerCase();
+    const map: Record<string, 'confirmada' | 'en_curso' | 'completada' | 'no_asistio'> = {
+      pendiente: 'confirmada',
+      confirmada: 'confirmada',
+      en_curso: 'en_curso',
+      en_progreso: 'en_curso',
+      completada: 'completada',
+      cancelada: 'no_asistio',
+      no_asistio: 'no_asistio'
+    };
+
+    return map[value] ?? 'confirmada';
+  }
+
   getCitaCardClasses(cita: any): string {
-    return `cita-card-estado-${cita.estado} cita-card-tipo-${cita.tipo}`;
+    return `cita-card-estado-${this.normalizeEstado(cita?.estado)} cita-card-tipo-${this.getTipoToken(cita.tipo)}`;
+  }
+
+  private getTipoToken(tipo: string): string {
+    return this.getTipoClass(tipo).replace('tipo-', '');
   }
 
   getEstadoClass(estado: string): string {
+    const normalized = this.normalizeEstado(estado);
     const clases: { [key: string]: string } = {
-      'pendiente':  'estado-pendiente',
       'confirmada': 'estado-confirmada',
       'en_curso':   'estado-en-progreso',
       'completada': 'estado-completada',
-      'cancelada':  'estado-cancelada',
       'no_asistio': 'estado-no-asistio'
     };
-    return clases[estado] || 'estado-desconocido';
+    return clases[normalized] || 'estado-desconocido';
   }
 
   getEstadoTexto(estado: string): string {
+    const normalized = this.normalizeEstado(estado);
     const textos: { [key: string]: string } = {
-      'pendiente':  'Pendiente',
       'confirmada': 'Confirmada',
       'en_curso':   'En curso',
-      'completada': 'Completada',
-      'cancelada':  'Cancelada',
+      'completada': 'Completa',
       'no_asistio': 'No asistió'
     };
-    return textos[estado] || 'Desconocido';
+    return textos[normalized] || 'Desconocido';
   }
 
   getTipoClass(tipo: string): string {
+    const normalizedTipo = String(tipo || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase();
+
     const clases: { [key: string]: string } = {
-      'consulta': 'tipo-consulta',
-      'vacunacion': 'tipo-vacunacion',
-      'cirugia': 'tipo-cirugia',
-      'emergencia': 'tipo-emergencia',
-      'control': 'tipo-control'
+      'valoracion': 'tipo-valoracion',
+      'hidroterapia': 'tipo-hidroterapia',
+      'terapia': 'tipo-terapia',
+      'fisio': 'tipo-terapia',
+      'fisioterapia': 'tipo-terapia',
+      'domicilio': 'tipo-domicilio',
+      'sin_clasificar': 'tipo-general',
+      'control': 'tipo-control',
+      // Legacy fallbacks
+      'consulta': 'tipo-domicilio',
+      'consulta_general': 'tipo-domicilio',
+      'vacunacion': 'tipo-domicilio',
+      'cirugia': 'tipo-hidroterapia',
+      'emergencia': 'tipo-emergencia'
     };
-    return clases[tipo] || 'tipo-general';
+    return clases[normalizedTipo] || 'tipo-general';
   }
 
   getTipoTexto(tipo: string): string {
+    const normalizedTipo = String(tipo || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase();
+
     const textos: { [key: string]: string } = {
-      'consulta': 'Consulta',
-      'vacunacion': 'Vacunación',
-      'cirugia': 'Cirugía',
-      'emergencia': 'Emergencia',
-      'control': 'Control'
+      'domicilio': 'Domicilio',
+      'sin_clasificar': 'Sin Clasificar',
+      'valoracion': 'Valoración (Primera Vez)',
+      'hidroterapia': 'Hidroterapia',
+      'terapia': 'Terapia',
+      'control': 'Control',
+      // Legacy fallbacks
+      'consulta': 'Domicilio',
+      'consulta_general': 'Domicilio',
+      'vacunacion': 'Domicilio',
+      'cirugia': 'Hidroterapia',
+      'fisio': 'Terapia',
+      'fisioterapia': 'Terapia',
+      'general': 'Domicilio',
+      'emergencia': 'Emergencia'
     };
-    return textos[tipo] || 'General';
+    return textos[normalizedTipo] || 'Sin Clasificar';
   }
 
   // Funciones de acciones
   abrirDetalleCita(cita: any): void {
-    this.router.navigate(['/citas', cita.id_cita]);
+    this.router.navigate(['/citas', cita.id_cita], {
+      queryParams: {
+        from: this.viewMode() === 'calendario' ? 'calendario' : 'plana'
+      }
+    });
   }
 
   editarCita(cita: any): void {
-    // TODO: Implementar edición
-    console.log('Editar cita:', cita);
+    const id = cita?.id_cita;
+    if (!id) {
+      this.snackBar.open('No se pudo abrir la edición de la cita', 'Cerrar', { duration: 3000 });
+      return;
+    }
+    this.router.navigate(['/citas', id, 'editar']);
   }
 
   // Mapa de transiciones válidas entre estados de cita
   private readonly TRANSICIONES_VALIDAS: Record<string, string[]> = {
-    pendiente:  ['confirmada', 'no_asistio', 'cancelada'],
-    confirmada: ['en_curso', 'no_asistio', 'cancelada'],
+    confirmada: ['en_curso', 'no_asistio'],
     en_curso:   ['completada', 'no_asistio'],
     completada: [],
-    no_asistio: [],
-    cancelada:  ['pendiente']
+    no_asistio: []
   };
 
   puedeTransicionar(estadoActual: string, estadoDestino: string): boolean {
-    return this.TRANSICIONES_VALIDAS[estadoActual]?.includes(estadoDestino) ?? false;
+    const actual = this.normalizeEstado(estadoActual);
+    const destino = this.normalizeEstado(estadoDestino);
+    return this.TRANSICIONES_VALIDAS[actual]?.includes(destino) ?? false;
   }
 
   cambiarEstadoCita(cita: any, nuevoEstado: string): void {
-    this.citasService.updateEstadoCita(cita.id_cita, nuevoEstado).subscribe({
+    const estadoDestino = this.normalizeEstado(nuevoEstado);
+
+    this.citasService.updateEstadoCita(cita.id_cita, estadoDestino).subscribe({
       next: () => {
         const etiquetas: Record<string, string> = {
-          pendiente: 'Pendiente',
           confirmada: 'Confirmada',
           en_curso: 'En curso',
-          completada: 'Completada',
-          no_asistio: 'No asistió',
-          cancelada: 'Cancelada'
+          completada: 'Completa',
+          no_asistio: 'No asistió'
         };
-        this.snackBar.open(`Estado actualizado: ${etiquetas[nuevoEstado] ?? nuevoEstado}`, 'Cerrar', { duration: 3000 });
+        this.snackBar.open(`Estado actualizado: ${etiquetas[estadoDestino] ?? estadoDestino}`, 'Cerrar', { duration: 3000 });
         this.loadCalendarEvents(); // Recargar para reflejar el cambio
       },
       error: (err) => {
@@ -1030,6 +1267,8 @@ export class CitasComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     // Cleanup si es necesario
+    this.resizeObserver?.disconnect();
+    window.removeEventListener('resize', this.boundWindowResize);
     console.log('🚪 Saliendo de la vista de citas');
   }
 }

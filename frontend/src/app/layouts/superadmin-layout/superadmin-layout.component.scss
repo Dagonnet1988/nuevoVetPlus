@@ -60,9 +60,8 @@
 // ── Footer / perfil ───────────────────────────────────────────────────────────
 .sa-footer {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 12px;
+  flex-direction: column;
+  padding: 12px;
   border-top: 1px solid #1e2d3d;
   gap: 8px;
 }
@@ -72,17 +71,42 @@
   align-items: center;
   gap: 8px;
   overflow: hidden;
+  min-width: 0;
 
   mat-icon { color: #4fc3f7; flex-shrink: 0; }
 }
 
+.sa-profile-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
 .sa-profile-name {
   font-size: 13px;
+  font-weight: 500;
+  color: #c8d6e5;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.sa-profile-email {
+  font-size: 11px;
+  color: #6c8ebf;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sa-footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.sa-change-pwd { color: #6c8ebf !important; }
 .sa-logout { color: #6c8ebf !important; }
 
 // ── Main content ──────────────────────────────────────────────────────────────

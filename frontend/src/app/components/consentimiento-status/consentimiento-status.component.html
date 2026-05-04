@@ -53,40 +53,53 @@
         mat-stroked-button
         color="primary"
         [disabled]="actuando()"
-        (click)="enviarConsentimiento()"
-        matTooltip="Generar enlace de firma y mostrar QR"
+        (click)="enviarPorCanal()"
+        matTooltip="Elegir canal de envío"
       >
         <ng-container>
           @if (actuando()) { <mat-spinner diameter="18" class="btn-spinner"></mat-spinner> }
           @if (!actuando()) { <mat-icon>send</mat-icon> }
-          Pedir consentimiento
+          Enviar
         </ng-container>
       </button>
     }
 
-    <!-- Pendiente → Reenviar + Ver QR (si el token no ha expirado aún) -->
+    <!-- Pendiente → Enviar + Ver enlace -->
     @if (estado()!.estado === 'pendiente') {
       <button
         mat-stroked-button
         [disabled]="actuando()"
-        (click)="reenviarConsentimiento()"
-        matTooltip="Generar nuevo enlace y mostrar QR"
+        (click)="enviarPorCanal()"
+        matTooltip="Elegir canal de envío"
       >
         <ng-container>
           @if (actuando()) { <mat-spinner diameter="18" class="btn-spinner"></mat-spinner> }
-          @if (!actuando()) { <mat-icon>refresh</mat-icon> }
-          Reenviar
+          @if (!actuando()) { <mat-icon>send</mat-icon> }
+          Enviar
         </ng-container>
       </button>
       @if (estado()!.consentimiento?.expiresAt && isLinkVigente(estado()!.consentimiento!.expiresAt!)) {
-        <button mat-icon-button (click)="verQR()" matTooltip="Copiar enlace de firma">
+        <button mat-icon-button (click)="verQR()" matTooltip="Copiar enlace">
           <mat-icon>link</mat-icon>
         </button>
       }
     }
 
-    <!-- Firmado → Ver PDF + Revocar -->
+    <!-- Firmado → Enviar + Ver PDF + Revocar -->
     @if (estado()!.estado === 'firmado') {
+      <button
+        mat-stroked-button
+        [disabled]="actuando()"
+        (click)="enviarPorCanal()"
+        matTooltip="Elegir canal de envío"
+      >
+        <ng-container>
+          @if (actuando()) { <mat-spinner diameter="18" class="btn-spinner"></mat-spinner> }
+          @if (!actuando()) { <mat-icon>send</mat-icon> }
+          Enviar
+        </ng-container>
+      </button>
+
       @if (estado()!.consentimiento?.pdfDisponible) {
         <button
           mat-stroked-button
@@ -127,5 +140,33 @@
     }
 
   </div>
+
+  @if (mostrandoCanales()) {
+    <div class="cs-channel-panel">
+      <div class="cs-channel-title">¿Por dónde deseas enviar?</div>
+      <div class="cs-channel-subtitle">
+        @if (debeEnviarPdf()) {
+          Se descargará el PDF para adjuntarlo en el canal seleccionado.
+        } @else {
+          Se compartirá el enlace de firma y QR.
+        }
+      </div>
+
+      <div class="cs-channel-buttons">
+        <button mat-stroked-button color="primary" [disabled]="actuando()" (click)="enviarPorCanal('whatsapp')">
+          <mat-icon>chat</mat-icon>
+          WhatsApp
+        </button>
+        <button mat-stroked-button color="primary" [disabled]="actuando()" (click)="enviarPorCanal('correo')">
+          <mat-icon>mail</mat-icon>
+          Correo
+        </button>
+        <button mat-stroked-button [disabled]="actuando()" (click)="enviarPorCanal('ambos')">
+          <mat-icon>send</mat-icon>
+          Ambos
+        </button>
+      </div>
+    </div>
+  }
 
 }

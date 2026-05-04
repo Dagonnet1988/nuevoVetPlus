@@ -4,6 +4,7 @@ import petRoutes from './pets.js';
 import pacientesRoutes from './pacientes.js';
 import consultationRoutes from './consultations.js';
 import appointmentRoutes from './appointments.js';
+import historiaRoutes from './historias.js';
 import { getEspecies, getRazasByEspecie } from '../controllers/pacientesController.js';
 import { authenticateToken, authorize } from '../middleware/auth.js';
 import { tenantContext } from '../middleware/tenantContext.js';
@@ -262,18 +263,20 @@ router.get('/consultations/:id/files',
 // Ruta para eliminar archivo de consulta
 router.delete('/consultations/:id/files/:fileId',
   authenticateToken,
+  tenantContext,
   authorize(['admin', 'vet']),
   async (req, res) => {
     try {
       const { id, fileId } = req.params;
+      const tenantId = req.tenantId;
 
       // Verificar que el archivo existe y pertenece a la consulta
       const { query } = await import('../config/database.js');
       const archivoResult = await query(`
         SELECT nombre_archivo, ruta_archivo
         FROM clinical.archivos_consulta
-        WHERE id_archivo = $1 AND id_consulta = $2 AND activo = true
-      `, [fileId, id]);
+        WHERE id_archivo = $1 AND id_consulta = $2 AND id_tenant = $3 AND activo = true
+      `, [fileId, id, tenantId]);
 
       if (archivoResult.rows.length === 0) {
         return res.status(404).json({
@@ -288,8 +291,8 @@ router.delete('/consultations/:id/files/:fileId',
       await query(`
         UPDATE clinical.archivos_consulta
         SET activo = false, updated_at = CURRENT_TIMESTAMP
-        WHERE id_archivo = $1
-      `, [fileId]);
+        WHERE id_archivo = $1 AND id_consulta = $2 AND id_tenant = $3
+      `, [fileId, id, tenantId]);
 
       // Intentar eliminar el archivo físico
       try {
@@ -317,10 +320,13 @@ router.delete('/consultations/:id/files/:fileId',
   }
 );
 
-// Montar las rutas de consultas clínicas
-router.use('/consultations', consultationRoutes);
+// Montar las rutas de consultas clínicas (legacy, mantener por compatibilidad)
+router.use('/consultations', authenticateToken, tenantContext, consultationRoutes);
+
+// Montar las rutas de historias clínicas (nuevo módulo)
+router.use('/historias', authenticateToken, tenantContext, historiaRoutes);
 
 // Montar las rutas de citas
-router.use('/appointments', appointmentRoutes);
+router.use('/appointments', authenticateToken, tenantContext, appointmentRoutes);
 
 export default router;

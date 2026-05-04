@@ -1,0 +1,494 @@
+<div class="historia-details-container">
+
+  @if (loading()) {
+    <div class="loading-container">
+      <mat-spinner diameter="48"></mat-spinner>
+      <p>Cargando documento...</p>
+    </div>
+  } @else if (!historia()) {
+    <div class="error-state">
+      <mat-icon>error_outline</mat-icon>
+      <h3>Historia no encontrada</h3>
+      <button mat-raised-button (click)="volver()">Volver a la lista</button>
+    </div>
+  } @else {
+
+    <!-- ─── HEADER ─── -->
+    <div class="details-header">
+      <button mat-icon-button (click)="volver()" class="btn-back" matTooltip="Volver">
+        <mat-icon>arrow_back</mat-icon>
+      </button>
+
+      <div class="header-main">
+        <div class="header-top-row">
+          <div class="tipo-chip" [style.background-color]="getTipoColor(historia()!.tipo_documento)">
+            <mat-icon>{{ getTipoIcon(historia()!.tipo_documento) }}</mat-icon>
+            <span>{{ getTipoLabel(historia()!.tipo_documento) }}</span>
+          </div>
+          <span class="estado-chip" [class.estado-completado]="historia()!.estado === 'Completado'"
+                                    [class.estado-anulado]="historia()!.estado === 'Cancelado'">
+            {{ historia()!.estado }}
+          </span>
+        </div>
+        <h1 class="doc-title">{{ historia()!.codigo_historia }}</h1>
+        <p class="doc-fecha">{{ formatFecha(historia()!.fecha) }}</p>
+      </div>
+
+      <!-- Acciones -->
+      <div class="header-actions">
+        @if (historia()!.id_cita) {
+          <button mat-stroked-button (click)="irACita()" matTooltip="Ir a la cita relacionada">
+            <mat-icon>event</mat-icon>
+            Ir a cita
+          </button>
+        }
+        <button mat-raised-button color="primary" (click)="verPDF()"
+                matTooltip="Abre el documento en una nueva pestaña para ver, descargar o imprimir">
+          <mat-icon>picture_as_pdf</mat-icon>
+          Ver PDF
+        </button>
+        <button mat-icon-button [matMenuTriggerFor]="accMenu" matTooltip="Más opciones">
+          <mat-icon>more_vert</mat-icon>
+        </button>
+        <mat-menu #accMenu="matMenu">
+          <button mat-menu-item (click)="editar()" [disabled]="historia()!.estado === 'Cancelado'">
+            <mat-icon>edit</mat-icon> Modificar documento
+          </button>
+          <mat-divider></mat-divider>
+          <button mat-menu-item disabled matTooltip="Próximamente: envío por WhatsApp y correo">
+            <mat-icon>send</mat-icon> Enviar al propietario
+            <span class="menu-badge-soon">Próximamente</span>
+          </button>
+          <mat-divider></mat-divider>
+          @if (historia()!.estado === 'Cancelado') {
+            <button mat-menu-item (click)="reactivar()">
+              <mat-icon>restart_alt</mat-icon> Reactivar documento
+            </button>
+          } @else {
+            <button mat-menu-item class="menu-anular" (click)="anular()">
+              <mat-icon>do_not_disturb_on</mat-icon> Anular documento
+            </button>
+          }
+        </mat-menu>
+      </div>
+    </div>
+
+    <!-- ─── CARD PACIENTE / INFO ─── -->
+    <mat-card class="info-card">
+      <mat-card-content>
+        <div class="info-grid">
+          <div class="info-item">
+            <mat-icon class="info-icon">pets</mat-icon>
+            <div>
+              <span class="info-label">Paciente</span>
+              <span class="info-value">{{ historia()!.mascota_nombre }}</span>
+              @if (historia()!.especie || historia()!.raza) {
+                <span class="info-sub">{{ historia()!.especie }}{{ historia()!.raza ? ' · ' + historia()!.raza : '' }}</span>
+              }
+            </div>
+          </div>
+          <div class="info-item">
+            <mat-icon class="info-icon">person</mat-icon>
+            <div>
+              <span class="info-label">Propietario</span>
+              <span class="info-value">{{ historia()!.cliente_nombre }}</span>
+            </div>
+          </div>
+          <div class="info-item">
+            <mat-icon class="info-icon">medical_services</mat-icon>
+            <div>
+              <span class="info-label">Veterinario</span>
+              <span class="info-value">{{ historia()!.veterinario_nombre }}</span>
+            </div>
+          </div>
+          <div class="info-item">
+            <mat-icon class="info-icon">calendar_today</mat-icon>
+            <div>
+              <span class="info-label">Fecha</span>
+              <span class="info-value">{{ formatFecha(historia()!.fecha) }}</span>
+            </div>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- ─── VALORACIÓN INICIAL ─── -->
+    @if (datosVI) {
+
+      <!-- Anamnesis -->
+      <mat-card class="datos-card">
+        <div class="section-header">
+          <mat-icon class="section-icon">history_edu</mat-icon>
+          <h3>Anamnesis</h3>
+        </div>
+        <mat-card-content>
+          <div class="datos-grid">
+            @if (datosVI.remitido_por) {
+              <div class="dato-item"><span class="dato-label">Remitido por</span><span>{{ datosVI.remitido_por }}</span></div>
+            }
+            @if (datosVI.antiguedad_signos) {
+              <div class="dato-item"><span class="dato-label">Antigüedad signos</span><span>{{ datosVI.antiguedad_signos }}</span></div>
+            }
+            @if (datosVI.medicacion_previa) {
+              <div class="dato-item"><span class="dato-label">Medicación previa</span><span>{{ datosVI.medicacion_previa }}</span></div>
+            }
+            @if (datosVI.enfermedades_anteriores) {
+              <div class="dato-item"><span class="dato-label">Enfermedades anteriores</span><span>{{ datosVI.enfermedades_anteriores }}</span></div>
+            }
+            @if (datosVI.actividad_fisica) {
+              <div class="dato-item"><span class="dato-label">Actividad física</span><span>{{ datosVI.actividad_fisica }}</span></div>
+            }
+            @if (datosVI.anamnesis) {
+              <div class="dato-item full"><span class="dato-label">Descripción</span><p class="dato-texto">{{ datosVI.anamnesis }}</p></div>
+            }
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Valoración -->
+      @if (datosVI.valoracion_estatica || datosVI.valoracion_dinamica || datosVI.hallazgos_musculares || datosVI.hallazgos_osteoarticulares) {
+        <mat-card class="datos-card">
+          <div class="section-header">
+            <mat-icon class="section-icon">accessibility_new</mat-icon>
+            <h3>Valoración</h3>
+          </div>
+          <mat-card-content>
+            <div class="datos-grid">
+              @if (datosVI.valoracion_estatica) {
+                <div class="dato-item full"><span class="dato-label">Estática</span><p class="dato-texto">{{ datosVI.valoracion_estatica }}</p></div>
+              }
+              @if (datosVI.valoracion_dinamica) {
+                <div class="dato-item full"><span class="dato-label">Dinámica</span><p class="dato-texto">{{ datosVI.valoracion_dinamica }}</p></div>
+              }
+              @if (datosVI.hallazgos_musculares) {
+                <div class="dato-item full"><span class="dato-label">Hallazgos musculares</span><p class="dato-texto">{{ datosVI.hallazgos_musculares }}</p></div>
+              }
+              @if (datosVI.hallazgos_osteoarticulares) {
+                <div class="dato-item full"><span class="dato-label">Hallazgos osteoarticulares</span><p class="dato-texto">{{ datosVI.hallazgos_osteoarticulares }}</p></div>
+              }
+            </div>
+          </mat-card-content>
+        </mat-card>
+      }
+
+      <!-- Medidas clínicas (estilo tabla como PDF) -->
+      @if (perimetriaRows.length > 0 || goniometriaGroups.length > 0 || reflejosGroups.length > 0) {
+        <mat-card class="datos-card">
+          <div class="section-header">
+            <mat-icon class="section-icon">straighten</mat-icon>
+            <h3>Medidas clínicas</h3>
+          </div>
+          <mat-card-content>
+            <div class="assessment-panels">
+
+              @if (perimetriaRows.length > 0) {
+                <section class="measure-card">
+                  <div class="measure-card-title">Perimetría</div>
+                  <div class="measure-table-wrap">
+                    <table class="measure-table">
+                      <thead>
+                        <tr>
+                          <th>Miembro</th>
+                          <th>Medición 1</th>
+                          <th>Medición 2</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (row of perimetriaRows; track row.miembro) {
+                          <tr>
+                            <td>{{ row.miembro }}</td>
+                            <td>{{ row.medicion1 }}</td>
+                            <td>{{ row.medicion2 }}</td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              }
+
+              @if (goniometriaGroups.length > 0) {
+                <section class="measure-card">
+                  <div class="measure-card-title">Goniometría</div>
+
+                  @for (group of goniometriaGroups; track group.titulo) {
+                    <div class="measure-subgroup">
+                      <div class="measure-subtitle">{{ group.titulo }}</div>
+                      <div class="measure-table-wrap">
+                        <table class="measure-table measure-table-compact">
+                          <thead>
+                            <tr>
+                              <th>Articulación</th>
+                              <th>Flexión</th>
+                              <th>Extensión</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            @for (row of group.rows; track row.articulacion) {
+                              <tr>
+                                <td>{{ row.articulacion }}</td>
+                                <td>{{ row.flexion }}</td>
+                                <td>{{ row.extension }}</td>
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  }
+                </section>
+              }
+
+              @if (reflejosGroups.length > 0) {
+                <section class="measure-card">
+                  <div class="measure-card-title">Reflejos</div>
+
+                  @for (group of reflejosGroups; track group.titulo) {
+                    <div class="measure-subgroup">
+                      <div class="measure-subtitle">{{ group.titulo }}</div>
+                      <div class="measure-table-wrap">
+                        <table class="measure-table measure-table-compact">
+                          <thead>
+                            <tr>
+                              <th>Prueba</th>
+                              <th>{{ group.colD }}</th>
+                              <th>{{ group.colI }}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            @for (row of group.rows; track row.nombre) {
+                              <tr>
+                                <td>{{ row.nombre }}</td>
+                                <td>{{ row.derecho }}</td>
+                                <td>{{ row.izquierdo }}</td>
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  }
+                </section>
+              }
+
+            </div>
+          </mat-card-content>
+        </mat-card>
+      }
+
+      <!-- Diagnóstico y Plan -->
+      @if (datosVI.diagnostico || datosVI.tratamiento || datosVI.recomendaciones || datosVI.costo) {
+        <mat-card class="datos-card">
+          <div class="section-header">
+            <mat-icon class="section-icon">local_hospital</mat-icon>
+            <h3>Diagnóstico y Plan</h3>
+          </div>
+          <mat-card-content>
+            <div class="datos-grid">
+              @if (datosVI.diagnostico) {
+                <div class="dato-item full"><span class="dato-label">Diagnóstico</span><p class="dato-texto">{{ datosVI.diagnostico }}</p></div>
+              }
+              @if (datosVI.tratamiento) {
+                <div class="dato-item full"><span class="dato-label">Tratamiento</span><p class="dato-texto">{{ datosVI.tratamiento }}</p></div>
+              }
+              @if (datosVI.recomendaciones) {
+                <div class="dato-item full"><span class="dato-label">Recomendaciones</span><p class="dato-texto">{{ datosVI.recomendaciones }}</p></div>
+              }
+              @if (datosVI.costo) {
+                <div class="dato-item"><span class="dato-label">Costo</span><span class="dato-costo">${{ datosVI.costo | number }}</span></div>
+              }
+            </div>
+          </mat-card-content>
+        </mat-card>
+      }
+    }
+
+    <!-- ─── SEGUIMIENTO ─── -->
+    @if (datosSeg) {
+      <mat-card class="datos-card">
+        <div class="section-header">
+          <mat-icon class="section-icon">repeat</mat-icon>
+          <h3>Seguimiento — Sesión {{ datosSeg.numero_sesion }}</h3>
+        </div>
+        <mat-card-content>
+          <div class="datos-grid">
+            @if (datosSeg.observaciones_en_casa) {
+              <div class="dato-item full"><span class="dato-label">Observaciones en casa</span><p class="dato-texto">{{ datosSeg.observaciones_en_casa }}</p></div>
+            }
+            @if (datosSeg.ejercicios_realizados) {
+              <div class="dato-item full">
+                <span class="dato-label">Checklist de ejercicios realizados</span>
+
+                @if (seguimientoChecklist.length > 0) {
+                  <div class="seguimiento-checklist-grid">
+                    @for (grupo of seguimientoChecklist; track grupo.titulo) {
+                      <div class="seguimiento-checklist-card">
+                        <p class="seguimiento-checklist-title">{{ grupo.titulo }}</p>
+                        <div class="seguimiento-checklist-items">
+                          @for (item of grupo.items; track item) {
+                            <div class="seguimiento-check-item">
+                              <mat-icon>check_circle</mat-icon>
+                              <span>{{ item }}</span>
+                            </div>
+                          }
+                        </div>
+                      </div>
+                    }
+                  </div>
+                }
+
+                @if (seguimientoOtrosEjercicios) {
+                  <p class="dato-texto dato-texto-multiline" style="margin-top:10px">
+                    <strong>Otros:</strong> {{ seguimientoOtrosEjercicios }}
+                  </p>
+                }
+              </div>
+            }
+            @if (datosSeg.recomendaciones_casa) {
+              <div class="dato-item full"><span class="dato-label">Recomendaciones</span><p class="dato-texto">{{ datosSeg.recomendaciones_casa }}</p></div>
+            }
+            @if (datosSeg.notas_clinicas) {
+              <div class="dato-item full"><span class="dato-label">Notas clínicas</span><p class="dato-texto">{{ datosSeg.notas_clinicas }}</p></div>
+            }
+            @if (datosSeg.costo) {
+              <div class="dato-item"><span class="dato-label">Costo</span><span class="dato-costo">${{ datosSeg.costo | number }}</span></div>
+            }
+          </div>
+        </mat-card-content>
+      </mat-card>
+    }
+
+    <!-- ─── FÓRMULA MÉDICA ─── -->
+    @if (datosFormula) {
+      <mat-card class="datos-card">
+        <div class="section-header">
+          <mat-icon class="section-icon">medication</mat-icon>
+          <h3>Fórmula Médica</h3>
+        </div>
+        <mat-card-content>
+          @if (datosFormula.medicamentos && datosFormula.medicamentos.length > 0) {
+            <div class="formula-list">
+              @for (m of datosFormula.medicamentos; track $index) {
+                <article class="formula-item">
+                  <div class="formula-item-head">
+                    <h4>{{ m.medicamento || 'Medicamento' }}</h4>
+                    @if (m.cantidad) {
+                      <span class="formula-pill">Cantidad: {{ m.cantidad }}</span>
+                    }
+                  </div>
+
+                  <div class="formula-item-meta">
+                    @if (m.dosis) {
+                      <span>Dosis: {{ m.dosis }}</span>
+                    }
+                    @if (m.frecuencia) {
+                      <span>Frecuencia: {{ m.frecuencia }}</span>
+                    }
+                    @if (m.duracion) {
+                      <span>Duración: {{ m.duracion }}</span>
+                    }
+                  </div>
+
+                  @if (m.instrucciones) {
+                    <p class="formula-item-notes">{{ m.instrucciones }}</p>
+                  }
+                </article>
+              }
+            </div>
+          }
+          @if (datosFormula.plan_terapeutico) {
+            <div class="dato-item full mt-16"><span class="dato-label">Plan terapéutico</span><p class="dato-texto">{{ datosFormula.plan_terapeutico }}</p></div>
+          }
+          @if (datosFormula.notas) {
+            <div class="dato-item full"><span class="dato-label">Notas</span><p class="dato-texto">{{ datosFormula.notas }}</p></div>
+          }
+        </mat-card-content>
+      </mat-card>
+    }
+
+    <!-- ─── REMISIÓN ─── -->
+    @if (datosRemision) {
+      <mat-card class="datos-card">
+        <div class="section-header">
+          <mat-icon class="section-icon">send</mat-icon>
+          <h3>Remisión</h3>
+        </div>
+        <mat-card-content>
+          <div class="datos-grid">
+            @if (datosRemision.motivo) {
+              <div class="dato-item full"><span class="dato-label">Motivo</span><span>{{ datosRemision.motivo }}</span></div>
+            }
+            @if (datosRemision.especialidad_destino) {
+              <div class="dato-item"><span class="dato-label">Especialidad</span><span>{{ datosRemision.especialidad_destino }}</span></div>
+            }
+            @if (datosRemision.profesional_destino) {
+              <div class="dato-item"><span class="dato-label">Profesional</span><span>{{ datosRemision.profesional_destino }}</span></div>
+            }
+            @if (datosRemision.institucion_destino) {
+              <div class="dato-item"><span class="dato-label">Institución</span><span>{{ datosRemision.institucion_destino }}</span></div>
+            }
+            @if (datosRemision.texto_remision) {
+              <div class="dato-item full"><span class="dato-label">Texto de remisión</span><p class="dato-texto">{{ datosRemision.texto_remision }}</p></div>
+            }
+          </div>
+        </mat-card-content>
+      </mat-card>
+    }
+
+    <!-- ─── ARCHIVOS ADJUNTOS ─── -->
+    @if (historia()!.archivos && historia()!.archivos!.length > 0) {
+      <mat-card class="datos-card">
+        <div class="section-header">
+          <mat-icon class="section-icon">attach_file</mat-icon>
+          <h3>Archivos Adjuntos ({{ historia()!.archivos!.length }})</h3>
+        </div>
+        <mat-card-content>
+          <div class="archivos-list">
+            @for (a of historia()!.archivos; track a.id_archivo) {
+              <div class="archivo-item">
+                @if (isImageFile(a.tipo_mime, a.nombre_original)) {
+                  <img
+                    class="archivo-thumb"
+                    [src]="getArchivoUrl(a.ruta_archivo)"
+                    [alt]="a.nombre_original"
+                    (click)="abrirAdjunto(a.ruta_archivo)"
+                    matTooltip="Ver imagen"
+                  />
+                } @else {
+                  <button
+                    type="button"
+                    class="archivo-thumb archivo-thumb-file pdf-tile"
+                    [ngClass]="getFileTypeClass(a.tipo_mime, a.nombre_original)"
+                    (click)="abrirAdjunto(a.ruta_archivo)"
+                    matTooltip="Abrir archivo">
+                    <mat-icon>{{ getFileTypeIcon(a.tipo_mime, a.nombre_original) }}</mat-icon>
+                    <span>{{ getFileTypeLabel(a.tipo_mime, a.nombre_original) }}</span>
+                  </button>
+                }
+                <div class="archivo-info">
+                  <span class="archivo-nombre">{{ a.nombre_original }}</span>
+                  @if (a.tamano_bytes) {
+                    <span class="archivo-meta">{{ formatFileSize(a.tamano_bytes) }}</span>
+                  }
+                  @if (a.descripcion) {
+                    <span class="archivo-desc">{{ a.descripcion }}</span>
+                  }
+                </div>
+                <div class="archivo-actions">
+                  <button mat-stroked-button (click)="abrirAdjunto(a.ruta_archivo)">
+                    <mat-icon>visibility</mat-icon>
+                    Ver
+                  </button>
+                  <button mat-icon-button matTooltip="Descargar" (click)="descargarAdjunto(a.nombre_original, a.ruta_archivo)">
+                    <mat-icon>download</mat-icon>
+                  </button>
+                </div>
+              </div>
+            }
+          </div>
+        </mat-card-content>
+      </mat-card>
+    }
+
+  }
+</div>

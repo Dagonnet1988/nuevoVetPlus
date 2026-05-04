@@ -78,6 +78,41 @@
             </mat-form-field>
           </div>
 
+          <!-- Facturación -->
+          <mat-divider style="margin: 12px 0 16px" />
+          <p class="sa-section-subtitle"><mat-icon>payment</mat-icon> Facturación</p>
+
+          <div class="sa-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Periodicidad de pago</mat-label>
+              <mat-select [(ngModel)]="editPeriodicidad">
+                <mat-option value="monthly">Mensual</mat-option>
+                <mat-option value="quarterly">Trimestral</mat-option>
+                <mat-option value="semiannual">Semestral</mat-option>
+                <mat-option value="annual">Anual</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Inicio de suscripción</mat-label>
+              <input matInput type="date" [(ngModel)]="editFechaInicio" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Próximo pago</mat-label>
+              <input matInput type="date" [(ngModel)]="editFechaProximo" />
+              @if (editFechaProximo) {
+                <mat-hint>
+                  <span class="pago-hint pago-{{ pagoEstado() }}">
+                    {{ pagoEstado() === 'vencido' ? 'Vencido' :
+                       pagoEstado() === 'alerta'  ? 'Menos de 7 días' :
+                       pagoEstado() === 'proximo' ? 'Menos de 30 días' : 'Al día' }}
+                  </span>
+                </mat-hint>
+              }
+            </mat-form-field>
+          </div>
+
           @if (saveError()) { <p class="sa-error">{{ saveError() }}</p> }
           @if (saveOk())    { <p class="sa-ok">{{ saveOk() }}</p> }
 

@@ -1,7 +1,7 @@
 /* Container principal */
 .cita-details-container {
-  padding: 24px;
-  max-width: 1200px;
+  padding: 18px;
+  max-width: 1280px;
   margin: 0 auto;
   background-color: #f5f5f5;
   min-height: 100vh;
@@ -51,7 +51,7 @@
 
 /* Header */
 .header-section {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 .header-content {
@@ -59,7 +59,7 @@
   align-items: center;
   gap: 16px;
   background: white;
-  padding: 20px 24px;
+  padding: 16px 18px;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
@@ -70,6 +70,7 @@
 
 .title-section {
   flex: 1;
+  min-width: 0;
 }
 
 .page-title {
@@ -83,29 +84,74 @@
 }
 
 .cita-codigo {
-  margin: 4px 0 0 0;
+  margin: 0;
   color: #666;
-  font-size: 14px;
+  font-size: 12px;
   font-family: 'Courier New', monospace;
+  font-weight: 700;
+}
+
+.title-meta-row {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid #cfd8e3;
+  background: #fff;
+  color: #374151;
+}
+
+.meta-pill mat-icon {
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
+}
+
+.meta-pill-estado {
+  border-color: #b8d6ff;
+  color: #1d4f91;
+}
+
+.meta-pill-tipo {
+  border-color: #cdebd5;
+  color: #206a3d;
 }
 
 .header-actions {
   display: flex;
   gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.sync-header-btn {
+  border-color: #1976d2;
+  color: #1976d2;
 }
 
 /* Quick actions card */
 .quick-actions-card {
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
 }
 
 .quick-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -132,6 +178,45 @@
 
 .quick-status-btn mat-icon {
   font-size: 18px;
+}
+
+.status-btn-confirmada {
+  border-color: #2196f3 !important;
+  color: #2196f3 !important;
+}
+
+.status-btn-curso {
+  border-color: #9c27b0 !important;
+  color: #9c27b0 !important;
+}
+
+.status-btn-completada {
+  border-color: #4caf50 !important;
+  color: #2e7d32 !important;
+}
+
+.status-btn-cancelada,
+.status-btn-no-asistio {
+  border-color: #f44336 !important;
+  color: #d32f2f !important;
+}
+
+.status-btn-pendiente {
+  border-color: #ff9800 !important;
+  color: #ef6c00 !important;
+}
+
+.status-warning {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #8d6e00;
+  background: #fff9db;
+  border: 1px solid #ffe082;
+  border-radius: 8px;
+  padding: 8px 10px;
 }
 
 /* Consulta actions card */
@@ -186,7 +271,93 @@
 .main-content {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 12px;
+}
+
+.docs-card {
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.docs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.docs-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.docs-title h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #1f2937;
+}
+
+.docs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.doc-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #e5e9f0;
+  border-radius: 8px;
+  background: #fcfdff;
+  flex-wrap: wrap;
+}
+
+.doc-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.doc-code {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  background: #eef2ff;
+  border-radius: 999px;
+  padding: 4px 8px;
+}
+
+.doc-type {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f4f9b;
+}
+
+.doc-date {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.doc-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.docs-empty-state {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #64748b;
 }
 
 /* Info card */
@@ -212,29 +383,28 @@
   margin: 0;
 }
 
-.info-grid {
+.summary-grid {
   display: grid;
-  gap: 24px;
-}
-
-.info-section {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.info-item {
-  display: flex;
-  flex-direction: column;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
   gap: 8px;
 }
 
-.info-item label {
-  font-weight: 600;
-  color: #666;
-  font-size: 14px;
+.summary-item {
+  border: 1px solid #e4e9f2;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.summary-label {
+  font-size: 12px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
+  color: #607d8b;
+  font-weight: 600;
 }
 
 /* Chips */
@@ -251,23 +421,24 @@
 .time-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   color: #333;
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .time-info .duration {
   color: #666;
-  font-size: 14px;
-  margin-left: 8px;
+  font-size: 12px;
+  margin-left: 4px;
 }
 
 /* Sync status */
 .sync-status {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   font-weight: 500;
+  font-size: 13px;
 }
 
 .sync-status.success {
@@ -285,21 +456,68 @@
 }
 
 .tab-content {
-  padding: 24px;
+  padding: 8px;
 }
 
-/* Patient info */
-.patient-info {
+.details-sections {
+  display: block;
+}
+
+.detail-section-block {
+  border: 1px solid #e5e9f0;
+  border-radius: 10px;
+  padding: 12px;
+  background: #fbfcfe;
+}
+
+.detail-section-block h3 {
+  margin: 0 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  color: #1f2937;
+}
+
+.unified-info-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 1.2fr) minmax(260px, 1fr);
+  gap: 12px;
+}
+
+.unified-paciente-col,
+.unified-vet-col {
+  min-width: 0;
+}
+
+.unified-vet-col {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 10px;
+}
+
+.vet-name-simple {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #d8e3f0;
+  border-radius: 8px;
+  background: #f8fbff;
+  color: #1f2937;
+  font-weight: 600;
+}
+
+.vet-name-simple mat-icon {
+  color: #2f6cb3;
+  font-size: 18px;
 }
 
 .patient-header {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px;
+  gap: 12px;
+  padding: 12px;
   background: #f8f9fa;
   border-radius: 8px;
 }
@@ -313,6 +531,13 @@
   align-items: center;
   justify-content: center;
   color: white;
+  overflow: hidden;
+}
+
+.patient-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .patient-avatar mat-icon {
@@ -351,6 +576,13 @@
   padding: 16px 0;
 }
 
+.owner-info-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 2px 0;
+}
+
 .owner-info h4 {
   margin: 0 0 12px 0;
   color: #333;
@@ -374,67 +606,6 @@
 .detail-item mat-icon {
   color: #666;
   font-size: 18px;
-}
-
-/* Vet info */
-.vet-info {
-  padding: 16px;
-}
-
-.vet-header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px;
-  background: #f8f9fa;
-  border-radius: 8px;
-}
-
-.vet-avatar {
-  width: 60px;
-  height: 60px;
-  background: #4caf50;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-}
-
-.vet-avatar mat-icon {
-  font-size: 32px;
-}
-
-.vet-details {
-  flex: 1;
-}
-
-.vet-details h3 {
-  margin: 0 0 4px 0;
-  font-size: 20px;
-  color: #333;
-}
-
-.specialty {
-  margin: 0 0 8px 0;
-  color: #4caf50;
-  font-weight: 500;
-  font-style: italic;
-}
-
-.contact-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #666;
-  font-size: 14px;
-}
-
-/* Appointment details */
-.appointment-details {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
 }
 
 .detail-section {
@@ -464,7 +635,7 @@
 .motivo-text,
 .observaciones-text,
 .precio-text {
-  padding: 16px;
+  padding: 12px;
   margin: 0;
   line-height: 1.5;
   color: #333;
@@ -478,7 +649,7 @@
 
 /* Timestamps */
 .timestamps {
-  padding: 16px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -486,8 +657,9 @@
 
 .timestamp-item {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
+  gap: 8px;
 }
 
 .timestamp-item label {
@@ -499,15 +671,6 @@
   color: #333;
   font-family: 'Courier New', monospace;
   font-size: 13px;
-}
-
-/* Menu actions */
-.cancel-action {
-  color: #f44336 !important;
-}
-
-.cancel-action mat-icon {
-  color: #f44336 !important;
 }
 
 /* Responsive */
@@ -526,8 +689,7 @@
     justify-content: center;
   }
 
-  .patient-header,
-  .vet-header {
+  .patient-header {
     flex-direction: column;
     text-align: center;
     gap: 12px;
@@ -543,12 +705,25 @@
     gap: 4px;
   }
 
-  .info-grid {
-    gap: 16px;
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .doc-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .tab-content {
-    padding: 16px;
+    padding: 8px;
+  }
+
+  .details-sections {
+    display: block;
+  }
+
+  .unified-info-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -557,14 +732,12 @@
     font-size: 20px;
   }
 
-  .patient-avatar,
-  .vet-avatar {
+  .patient-avatar {
     width: 50px;
     height: 50px;
   }
 
-  .patient-avatar mat-icon,
-  .vet-avatar mat-icon {
+  .patient-avatar mat-icon {
     font-size: 24px;
   }
 
@@ -574,6 +747,10 @@
 
   .header-actions button {
     width: 100%;
+  }
+
+  .title-meta-row {
+    gap: 6px;
   }
 }
 
@@ -595,28 +772,8 @@
 }
 
 /* Tab styles */
-::ng-deep .mat-mdc-tab-group {
-  --mdc-tab-indicator-active-indicator-color: #1976d2;
-}
-
-::ng-deep .mat-mdc-tab .mdc-tab__text-label {
-  color: #666;
-  font-weight: 500;
-}
-
-::ng-deep .mat-mdc-tab.mdc-tab--active .mdc-tab__text-label {
-  color: #1976d2;
-  font-weight: 600;
-}
-
 /* Chip improvements */
 ::ng-deep .mat-mdc-chip {
   border-radius: 16px;
   font-weight: 500;
-}
-
-/* Menu improvements */
-::ng-deep .mat-mdc-menu-panel {
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }

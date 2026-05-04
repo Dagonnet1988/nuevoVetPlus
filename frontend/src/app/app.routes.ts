@@ -113,11 +113,12 @@ export const routes: Routes = [
         data: { roles: ['admin'] }
       },
 
-      // Perfil temporal - placeholder
+      // Perfil de usuario (acceso por menú superior)
       {
         path: 'perfil',
-        redirectTo: '/dashboard',
-        pathMatch: 'full'
+        loadComponent: () => import('./components/usuarios/components/usuario-profile.component').then(m => m.UsuarioProfileComponent),
+        canActivate: [RoleGuard],
+        data: { roles: ['admin', 'vet'] }
       }
     ]
   },
@@ -149,6 +150,11 @@ export const routes: Routes = [
         path: 'clinicas/:id',
         loadComponent: () => import('./components/superadmin/detalle-clinica/detalle-clinica.component')
           .then(m => m.DetalleClinicaComponent)
+      },
+      {
+        path: 'cambiar-password',
+        loadComponent: () => import('./components/superadmin/cambiar-password/cambiar-password.component')
+          .then(m => m.CambiarPasswordComponent)
       }
     ]
   },

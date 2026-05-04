@@ -132,9 +132,13 @@ export class AuditoriaComponent implements OnInit {
     { value: 'UPDATE',            label: 'Actualización' },
     { value: 'DELETE',            label: 'Eliminación' },
     { value: 'READ',              label: 'Consulta' },
-    { value: 'MEDICAL_ACCESS',    label: 'Acceso médico' },
-    { value: 'CLIENT_MANAGEMENT', label: 'Gestión cliente' },
-    { value: 'PET_MANAGEMENT',    label: 'Gestión mascota' },
+    { value: 'MEDICAL_ACCESS',    label: 'Historia clínica' },
+    { value: 'HISTORIA_CLINICA',  label: 'Historia clínica' },
+    { value: 'CLIENT_MANAGEMENT', label: 'Propietarios' },
+    { value: 'PROPIETARIOS',      label: 'Propietarios' },
+    { value: 'PET_MANAGEMENT',    label: 'Mascotas' },
+    { value: 'MASCOTAS',          label: 'Mascotas' },
+    { value: 'CITAS',             label: 'Citas' },
     { value: 'PASSWORD_RESET',    label: 'Reset contraseña' },
   ];
 
@@ -321,10 +325,33 @@ export class AuditoriaComponent implements OnInit {
     const iconos: Record<string, string> = {
       LOGIN: 'login', LOGOUT: 'logout', CREATE: 'add_circle',
       UPDATE: 'edit', DELETE: 'delete', READ: 'visibility',
-      MEDICAL_ACCESS: 'medical_services', CLIENT_MANAGEMENT: 'person',
-      PET_MANAGEMENT: 'pets', PASSWORD_RESET: 'lock_reset'
+      MEDICAL_ACCESS: 'medical_services', HISTORIA_CLINICA: 'medical_services',
+      CLIENT_MANAGEMENT: 'person', PROPIETARIOS: 'person',
+      PET_MANAGEMENT: 'pets', MASCOTAS: 'pets',
+      CITAS: 'event', PASSWORD_RESET: 'lock_reset'
     };
     return iconos[tipo] ?? 'info';
+  }
+
+  getTipoLabel(tipo: string): string {
+    const labels: Record<string, string> = {
+      LOGIN: 'Inicio de sesión',
+      LOGOUT: 'Cierre de sesión',
+      CREATE: 'Creación',
+      UPDATE: 'Actualización',
+      DELETE: 'Eliminación',
+      READ: 'Consulta',
+      MEDICAL_ACCESS: 'Historia clínica',
+      HISTORIA_CLINICA: 'Historia clínica',
+      CLIENT_MANAGEMENT: 'Propietarios',
+      PROPIETARIOS: 'Propietarios',
+      PET_MANAGEMENT: 'Mascotas',
+      MASCOTAS: 'Mascotas',
+      CITAS: 'Citas',
+      PASSWORD_RESET: 'Cambio de contraseña'
+    };
+
+    return labels[tipo] ?? tipo;
   }
 
   formatDuration(ms: number): string {

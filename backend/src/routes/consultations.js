@@ -21,8 +21,7 @@ import {
 
 const router = express.Router();
 
-// ✅ RUTAS PROTEGIDAS - REQUIEREN AUTENTICACIÓN
-router.use(authenticateToken);
+// Nota: authenticateToken y tenantContext ya están aplicados en clinical.js
 
 // ✅ CREAR CONSULTA CLÍNICA
 // POST /api/clinical/consultations

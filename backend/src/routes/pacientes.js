@@ -228,11 +228,11 @@ router.get('/cliente/:idCliente/consentimiento/pdf',
 /**
  * @route   PUT /api/clinical/pacientes/cliente/:idCliente/consentimiento/revocar
  * @desc    Revocar el consentimiento firmado vigente de un cliente
- * @access  Private (admin)
+ * @access  Private (admin, vet)
  */
 router.put('/cliente/:idCliente/consentimiento/revocar',
   authenticateToken,
-  authorize(['admin']),
+  authorize(['admin', 'vet']),
   (req, res, next) => { req.params.id = req.params.idCliente; next(); },
   revocarConsentimiento
 );

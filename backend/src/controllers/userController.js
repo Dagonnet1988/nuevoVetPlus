@@ -81,7 +81,7 @@ export const createUser = async (req, res) => {
                 telefono, direccion, password_hash, rol, especialidad, numero_licencia,
                 activo, password_temporal, debe_cambiar_password, created_at, updated_at
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            RETURNING id_usuario, nombre, apellido, email, documento, rol, activo, created_at
+            RETURNING id_usuario, nombre, apellido, email, documento, rol, activo, avatar_url, created_at
         `, [
             id_usuario, 
             nombre, 
@@ -159,6 +159,8 @@ export const getUsers = async (req, res) => {
                 ultimo_login,
                 intentos_login,
                 bloqueado_hasta,
+                avatar_url,
+                firma_url,
                 created_at,
                 updated_at
             FROM vetplus_auth.usuarios
@@ -273,7 +275,9 @@ export const getUserById = async (req, res) => {
                 created_at,
                 updated_at,
                 password_temporal,
-                debe_cambiar_password
+                debe_cambiar_password,
+                avatar_url,
+                firma_url
             FROM vetplus_auth.usuarios 
             WHERE id_usuario = $1
         `, [id]);
@@ -447,7 +451,7 @@ export const updateUser = async (req, res) => {
             UPDATE vetplus_auth.usuarios 
             SET ${updateFields.join(', ')}
             WHERE id_usuario = $${paramCount + 1}
-            RETURNING id_usuario, nombre, apellido, email, rol, especialidad, numero_licencia, activo, telefono, direccion, tipo_documento, updated_at
+            RETURNING id_usuario, nombre, apellido, email, rol, especialidad, numero_licencia, activo, telefono, direccion, tipo_documento, avatar_url, updated_at
         `;
 
         const result = await query(updateQuery, updateValues);
@@ -693,7 +697,102 @@ export const getUserStats = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error obteniendo estadísticas de usuarios:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+/**
+ * Subir firma del veterinario
+ * @route POST /api/auth/users/:id/firma
+ */
+export const uploadFirma = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+
+        const isSelf = req.user.id_usuario === id;
+        const isAdmin = req.user.rol === 'admin';
+        if (!isSelf && !isAdmin) {
+            return res.status(403).json({ success: false, message: 'Sin permiso para modificar esta firma' });
+        }
+
+        if (!req.file) {
+            return res.status(400).json({ success: false, message: 'No se recibió ningún archivo' });
+        }
+
+        const firmaUrl = `/uploads/firmas/${req.file.filename}`;
+
+        const result = await query(
+            `UPDATE vetplus_auth.usuarios
+             SET firma_url = $1, updated_at = NOW()
+             WHERE id_usuario = $2 AND id_tenant = $3
+             RETURNING id_usuario, firma_url`,
+            [firmaUrl, id, tenantId]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+        }
+
+        res.json({
+            success: true,
+            message: 'Firma subida exitosamente',
+            data: { firma_url: result.rows[0].firma_url }
+        });
+    } catch (error) {
+        console.error('Error subiendo firma:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+/**
+ * Subir avatar de usuario
+ * @route POST /api/auth/users/:id/avatar
+ */
+export const uploadAvatar = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+
+        const isSelf = req.user.id_usuario === id;
+        const isAdmin = req.user.rol === 'admin';
+        if (!isSelf && !isAdmin) {
+            return res.status(403).json({ success: false, message: 'Sin permiso para modificar este avatar' });
+        }
+
+        if (!req.file) {
+            return res.status(400).json({ success: false, message: 'No se recibió ningún archivo' });
+        }
+
+        const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+
+        const result = await query(
+            `UPDATE vetplus_auth.usuarios
+             SET avatar_url = $1, updated_at = NOW()
+             WHERE id_usuario = $2 AND id_tenant = $3
+             RETURNING id_usuario, avatar_url`,
+            [avatarUrl, id, tenantId]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+        }
+
+        res.json({
+            success: true,
+            message: 'Avatar actualizado exitosamente',
+            data: { avatar_url: result.rows[0].avatar_url }
+        });
+    } catch (error) {
+        console.error('Error subiendo avatar:', error);
         res.status(500).json({
             success: false,
             message: 'Error interno del servidor',

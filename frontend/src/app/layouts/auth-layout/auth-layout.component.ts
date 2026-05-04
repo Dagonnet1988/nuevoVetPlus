@@ -32,7 +32,7 @@ import { AuthService } from '../../services/auth.service';
               Solución integral para la administración de clínicas veterinarias
             </p>
           </div>
-          
+
           <div class="footer-links">
             <button mat-button class="footer-link" [matTooltip]="'Contactar soporte técnico'">
               <mat-icon>support</mat-icon>
@@ -42,8 +42,8 @@ import { AuthService } from '../../services/auth.service';
               <mat-icon>help</mat-icon>
               Ayuda
             </button>
-            <button mat-button 
-                    (click)="authService.toggleTheme()" 
+            <button mat-button
+                    (click)="authService.toggleTheme()"
                     class="footer-link"
                     [matTooltip]="'Cambiar tema visual'">
               <mat-icon>palette</mat-icon>
@@ -51,9 +51,9 @@ import { AuthService } from '../../services/auth.service';
             </button>
           </div>
         </div>
-        
+
         <div class="footer-bottom">
-          <p class="copyright">© 2024 VetPlus. Todos los derechos reservados.</p>
+          <p class="copyright">© {{ currentYear }} VetPlus. Todos los derechos reservados.</p>
           <p class="version">Versión 1.0.0</p>
         </div>
       </footer>
@@ -85,9 +85,10 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .auth-footer {
-      background: rgba(255, 255, 255, 0.9);
+      background: rgba(255, 255, 255, 0.95);
       backdrop-filter: blur(10px);
-      border-top: 1px solid rgba(46, 125, 50, 0.1);
+      border-top: 1px solid rgba(46, 125, 50, 0.2);
+      box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.06);
       padding: 24px 16px 16px;
       margin-top: auto;
     }
@@ -313,6 +314,7 @@ import { AuthService } from '../../services/auth.service';
   `]
 })
 export class AuthLayoutComponent {
+  currentYear = new Date().getFullYear();
 
   constructor(public authService: AuthService) {}
 

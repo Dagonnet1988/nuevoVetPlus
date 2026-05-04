@@ -64,6 +64,9 @@ export async function listTenants(req, res) {
         t.plan,
         t.estado,
         t.max_usuarios,
+        t.periodicidad_pago,
+        t.fecha_inicio_suscripcion,
+        t.fecha_proximo_pago,
         t.created_at,
         (SELECT COUNT(*) FROM vetplus_auth.usuarios u WHERE u.id_tenant = t.id_tenant AND u.activo = true)  AS total_usuarios,
         (SELECT COUNT(*) FROM clinical.clientes   c WHERE c.id_tenant = t.id_tenant AND c.activo = true)    AS total_clientes,
@@ -170,8 +173,9 @@ export async function getTenant(req, res) {
   try {
     const result = await query(
       `SELECT t.*,
-        (SELECT COUNT(*) FROM vetplus_auth.usuarios u WHERE u.id_tenant = t.id_tenant) AS total_usuarios,
-        (SELECT COUNT(*) FROM clinical.clientes c WHERE c.id_tenant = t.id_tenant)     AS total_clientes,
+        (SELECT COUNT(*) FROM vetplus_auth.usuarios u WHERE u.id_tenant = t.id_tenant)       AS total_usuarios,
+        (SELECT COUNT(*) FROM clinical.clientes c WHERE c.id_tenant = t.id_tenant)            AS total_clientes,
+        (SELECT COUNT(*) FROM clinical.mascotas m JOIN clinical.clientes cc ON cc.id_cliente = m.id_cliente WHERE cc.id_tenant = t.id_tenant) AS total_mascotas,
         (SELECT COUNT(*) FROM clinical.calendario_citas ci WHERE ci.id_tenant = t.id_tenant) AS total_citas
        FROM system.tenants t
        WHERE t.id_tenant = $1`,
@@ -208,16 +212,20 @@ export async function getTenant(req, res) {
  */
 export async function updateTenant(req, res) {
   const { id } = req.params;
-  const { nombre, plan, estado, max_usuarios } = req.body;
+  const { nombre, plan, estado, max_usuarios, periodicidad_pago, fecha_inicio_suscripcion, fecha_proximo_pago } = req.body;
 
   const updates = [];
   const values = [];
   let idx = 1;
 
-  if (nombre)       { updates.push(`nombre = $${idx++}`);       values.push(nombre.trim()); }
-  if (plan)         { updates.push(`plan = $${idx++}`);          values.push(plan); }
-  if (estado)       { updates.push(`estado = $${idx++}`);        values.push(estado); }
-  if (max_usuarios) { updates.push(`max_usuarios = $${idx++}`);  values.push(max_usuarios); }
+  if (nombre)                { updates.push(`nombre = $${idx++}`);                    values.push(nombre.trim()); }
+  if (plan)                  { updates.push(`plan = $${idx++}`);                       values.push(plan); }
+  if (estado)                { updates.push(`estado = $${idx++}`);                     values.push(estado); }
+  if (max_usuarios)          { updates.push(`max_usuarios = $${idx++}`);               values.push(max_usuarios); }
+  if (periodicidad_pago)     { updates.push(`periodicidad_pago = $${idx++}`);          values.push(periodicidad_pago); }
+  // Permitir null explícito para limpiar fechas
+  if (fecha_inicio_suscripcion !== undefined) { updates.push(`fecha_inicio_suscripcion = $${idx++}`); values.push(fecha_inicio_suscripcion || null); }
+  if (fecha_proximo_pago      !== undefined) { updates.push(`fecha_proximo_pago = $${idx++}`);       values.push(fecha_proximo_pago || null); }
 
   if (updates.length === 0) {
     return res.status(400).json({ message: 'No hay campos para actualizar.' });
@@ -253,4 +261,53 @@ export async function getSuperadminProfile(req, res) {
     email: req.superadmin.email,
     nombre: req.superadmin.nombre
   });
+}
+
+// ─── CAMBIAR CONTRASEÑA ────────────────────────────────────────────────────────
+/**
+ * PUT /api/superadmin/me/password
+ * Body: { password_actual, password_nuevo }
+ */
+export async function changePassword(req, res) {
+  const { password_actual, password_nuevo } = req.body;
+
+  if (!password_actual || !password_nuevo) {
+    return res.status(400).json({ message: 'Se requiere la contraseña actual y la nueva.' });
+  }
+
+  if (password_nuevo.length < 8) {
+    return res.status(400).json({ message: 'La nueva contraseña debe tener al menos 8 caracteres.' });
+  }
+
+  if (password_actual === password_nuevo) {
+    return res.status(400).json({ message: 'La nueva contraseña debe ser diferente a la actual.' });
+  }
+
+  try {
+    const { query } = await import('../config/database.js');
+    const result = await query(
+      'SELECT password_hash FROM system.superadmins WHERE id_superadmin = $1',
+      [req.superadmin.id_superadmin]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Superadmin no encontrado.' });
+    }
+
+    const valid = await bcrypt.compare(password_actual, result.rows[0].password_hash);
+    if (!valid) {
+      return res.status(401).json({ message: 'La contraseña actual es incorrecta.' });
+    }
+
+    const newHash = await bcrypt.hash(password_nuevo, 12);
+    await query(
+      'UPDATE system.superadmins SET password_hash = $1, updated_at = now() WHERE id_superadmin = $2',
+      [newHash, req.superadmin.id_superadmin]
+    );
+
+    return res.json({ message: 'Contraseña actualizada correctamente.' });
+  } catch (error) {
+    console.error('Error en changePassword superadmin:', error);
+    return res.status(500).json({ message: 'Error interno del servidor.' });
+  }
 }

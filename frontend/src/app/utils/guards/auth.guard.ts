@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { CanActivate, Router, UrlTree } from '@angular/router';
+import { ActivatedRouteSnapshot, CanActivate, Router, RouterStateSnapshot, UrlTree } from '@angular/router';
 import { Observable } from 'rxjs';
 import { AuthService } from '../../services/auth.service';
 
@@ -13,7 +13,10 @@ export class AuthGuard implements CanActivate {
     private router: Router
   ) {}
 
-  canActivate(): Observable<boolean | UrlTree> | Promise<boolean | UrlTree> | boolean | UrlTree {
+  canActivate(
+    _route: ActivatedRouteSnapshot,
+    state: RouterStateSnapshot
+  ): Observable<boolean | UrlTree> | Promise<boolean | UrlTree> | boolean | UrlTree {
     // Verificar si está autenticado
     if (!this.authService.isAuthenticated()) {
       return this.router.createUrlTree(['/login']);
@@ -27,15 +30,14 @@ export class AuthGuard implements CanActivate {
 
     // Verificar si debe cambiar contraseña en primer acceso
     if (this.authService.mustChangePassword()) {
+      if (state.url.startsWith('/change-password')) {
+        return true;
+      }
       return this.router.createUrlTree(['/change-password']);
     }
 
-    // Verificar si el token está próximo a expirar
-    if (this.authService.isTokenExpiringSoon()) {
-      // Intentar refrescar el token o redirigir al login
-      this.authService.logout();
-      return this.router.createUrlTree(['/login']);
-    }
+    // No cerrar sesión aquí por expiración próxima.
+    // El interceptor maneja refresh/expiración real para evitar bucles al navegar.
 
     return true;
   }

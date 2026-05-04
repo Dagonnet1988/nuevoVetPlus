@@ -51,10 +51,19 @@ export class ConfiguracionComponent implements OnInit {
     },
     {
       title: 'Google Calendar',
-      description: 'Integración con Google Calendar para sincronizar citas',
+      description: 'Integración y sincronización de citas con Google Calendar',
       icon: 'event',
       route: '/configuracion/google-calendar',
       color: '#4285f4',
+      adminOnly: true,
+      status: 'loading'
+    },
+    {
+      title: 'Correo',
+      description: 'Configurar envío de correos clínicos (Google OAuth o SMTP)',
+      icon: 'mail',
+      route: '/configuracion/correo',
+      color: '#0f766e',
       adminOnly: true,
       status: 'loading'
     },
@@ -66,15 +75,6 @@ export class ConfiguracionComponent implements OnInit {
       color: '#6a1b9a',
       adminOnly: true,
       status: 'active'
-    },
-    {
-      title: 'Sistema',
-      description: 'Configuraciones generales del sistema',
-      icon: 'settings',
-      route: '/configuracion/sistema',
-      color: '#ff9800',
-      adminOnly: true,
-      status: 'loading'
     },
     {
       title: 'Usuarios y Roles',
@@ -98,6 +98,7 @@ export class ConfiguracionComponent implements OnInit {
   quickStats = signal({
     empresa_configurada: false,
     google_calendar_conectado: false,
+    correo_configurado: false,
     usuarios_activos: 0,
     total_configuraciones: 0
   });
@@ -145,18 +146,19 @@ export class ConfiguracionComponent implements OnInit {
     // Actualizar estado de cada sección basado en configuración real
     this.updateSectionStatus('Empresa', getUIStatus(status.empresa?.estado || 'pending'));
     this.updateSectionStatus('Google Calendar', getUIStatus(status.google_calendar?.estado || 'pending'));
-    this.updateSectionStatus('Sistema', getUIStatus(status.sistema?.estado || 'pending'));
+    this.updateSectionStatus('Correo', getUIStatus(status.correo?.estado || 'pending'));
   }
 
   private updateQuickStats(status: any): void {
     const stats = {
       empresa_configurada: status.empresa?.configurado || false,
       google_calendar_conectado: status.google_calendar?.conectado || false,
+      correo_configurado: status.correo?.configurado || false,
       usuarios_activos: status.sistema?.usuarios_activos || 0,
       total_configuraciones: [
         status.empresa?.configurado,
         status.google_calendar?.conectado,
-        status.sistema?.estado === 'operativo'
+        status.correo?.configurado
       ].filter(Boolean).length
     };
 

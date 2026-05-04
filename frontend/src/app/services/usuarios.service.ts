@@ -28,6 +28,7 @@ export interface Usuario {
   debe_cambiar_password?: boolean;
   // Campos opcionales que pueden no venir del backend
   avatar_url?: string;
+  firma_url?: string;
   configuraciones?: ConfiguracionUsuario;
   estadisticas?: EstadisticasUsuario;
 }
@@ -431,6 +432,22 @@ export class UsuariosService {
 
   cerrarTodasLasSesiones(id_usuario: string): Observable<any> {
     return this.http.delete<any>(`${this.API_URL}/usuarios/${id_usuario}/sesiones`);
+  }
+
+  uploadFirma(id_usuario: string, file: File): Observable<{ firma_url: string }> {
+    const formData = new FormData();
+    formData.append('firma', file);
+    return this.http.post<any>(`${this.API_URL}/users/${id_usuario}/firma`, formData).pipe(
+      map(r => r.data)
+    );
+  }
+
+  uploadAvatar(id_usuario: string, file: File): Observable<{ avatar_url: string }> {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    return this.http.post<any>(`${this.API_URL}/users/${id_usuario}/avatar`, formData).pipe(
+      map(r => r.data)
+    );
   }
 
   // ===============================

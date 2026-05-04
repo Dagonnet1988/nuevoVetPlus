@@ -95,9 +95,15 @@
 
 .stats-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 24px;
-  margin-bottom: 32px;
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+@media (max-width: 1000px) {
+  .stats-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .stat-card {
@@ -161,9 +167,9 @@
 
 .view-selector-card {
   margin-bottom: 24px;
-  border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+  background: #ffffff;
 }
 
 .view-toggle {
@@ -200,9 +206,9 @@
 
 .filters-card {
   margin-bottom: 24px;
-  border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+  background: #ffffff;
 }
 
 .filters-form {
@@ -211,8 +217,8 @@
 
 .filter-row {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr auto;
-  gap: 20px;
+  grid-template-columns: 2fr 1fr auto;
+  gap: 14px;
   align-items: start;
 }
 
@@ -231,8 +237,7 @@
 }
 
 .search-field,
-.rol-field,
-.especialidad-field {
+.rol-field {
   flex: 1;
 }
 
@@ -254,16 +259,16 @@
    =============================== */
 
 .table-card {
-  border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border-radius: 14px;
+  box-shadow: 0 6px 24px rgba(26, 54, 93, 0.12);
+  background: #ffffff;
   overflow: hidden;
 }
 
 .table-card mat-card-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #214d83 0%, #1f3d66 100%);
   color: white;
-  padding: 20px 24px;
+  padding: 14px 18px;
   margin: -16px -16px 0 -16px;
 }
 
@@ -288,18 +293,18 @@
 }
 
 .usuarios-table th {
-  background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
-  color: #2d3748;
+  background: #f0f4f9;
+  color: #23354d;
   font-weight: 600;
-  font-size: 0.95rem;
-  padding: 20px 16px;
+  font-size: 0.82rem;
+  padding: 14px 12px;
   border-bottom: 2px solid #e2e8f0;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .usuarios-table td {
-  padding: 16px;
+  padding: 12px;
   border-bottom: 1px solid #e2e8f0;
   vertical-align: middle;
 }
@@ -309,9 +314,13 @@
   transition: all 0.2s ease;
 }
 
+.clickable-row:nth-child(even) {
+  background: #fbfdff;
+}
+
 .clickable-row:hover {
-  background-color: #f7fafc !important;
-  transform: scale(1.01);
+  background-color: #edf4ff !important;
+  transform: none;
 }
 
 /* ===============================
@@ -409,11 +418,23 @@
 /* Especialidad */
 .especialidad {
   font-weight: 500;
-  color: #4a5568;
-  background: linear-gradient(135deg, #bee3f8 0%, #90cdf4 100%);
-  padding: 6px 12px;
-  border-radius: 12px;
+  color: #2a3b52;
+  background: #dbe8f8;
+  padding: 4px 9px;
+  border-radius: 10px;
   font-size: 0.9rem;
+}
+
+.profesional-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.licencia {
+  font-size: 0.78rem;
+  color: #4d647f;
+  font-weight: 600;
 }
 
 .no-especialidad {
@@ -439,17 +460,10 @@
   color: white !important;
 }
 
-.primer-acceso-chip {
-  background: linear-gradient(135deg, #fbd38d 0%, #ed8936 100%) !important;
-  color: white !important;
-  font-size: 0.8rem !important;
-  padding: 4px 8px !important;
-}
-
 /* Último acceso */
 .ultimo-acceso {
-  font-weight: 500;
-  color: #4a5568;
+  font-weight: 600;
+  color: #324b67;
 }
 
 .nunca-acceso {
@@ -568,12 +582,12 @@
   .usuarios-container {
     padding: 16px;
   }
-  
+
   .stats-row {
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: 16px;
   }
-  
+
   .page-title {
     font-size: 2rem;
   }
@@ -584,48 +598,48 @@
     flex-direction: column;
     align-items: stretch;
   }
-  
+
   .actions-section {
     justify-content: stretch;
   }
-  
+
   .export-button,
   .create-button {
     flex: 1;
     min-width: unset;
   }
-  
+
   .stats-row {
     grid-template-columns: 1fr;
     gap: 12px;
   }
-  
+
   .view-toggle {
     flex-direction: column;
   }
-  
+
   .view-toggle .mat-button-toggle {
     min-width: unset;
   }
-  
+
   .table-container {
     font-size: 0.9rem;
   }
-  
+
   .usuarios-table th,
   .usuarios-table td {
     padding: 12px 8px;
   }
-  
+
   .user-info {
     gap: 12px;
   }
-  
+
   .user-avatar {
     width: 40px;
     height: 40px;
   }
-  
+
   .user-avatar mat-icon {
     font-size: 24px !important;
   }
@@ -635,31 +649,31 @@
   .usuarios-container {
     padding: 12px;
   }
-  
+
   .page-title {
     font-size: 1.5rem;
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
   }
-  
+
   .page-icon {
     font-size: 2rem !important;
   }
-  
+
   .stat-content {
     gap: 12px;
   }
-  
+
   .stat-icon {
     font-size: 2.5rem !important;
     padding: 12px;
   }
-  
+
   .stat-number {
     font-size: 2rem;
   }
-  
+
   /* Ocultar algunas columnas en móvil */
   .usuarios-table .mat-column-documento,
   .usuarios-table .mat-column-especialidad,

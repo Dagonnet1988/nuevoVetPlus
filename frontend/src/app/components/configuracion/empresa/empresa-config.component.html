@@ -28,183 +28,80 @@
     </div>
   </div>
 
-  <!-- Formulario en tabs -->
+  <!-- Formulario de Empresa -->
   <mat-card class="config-card">
-    <mat-tab-group>
-      <!-- Tab 1: Información General -->
-      <mat-tab label="Información General">
-        <div class="tab-content">
-          <form [formGroup]="empresaForm" class="empresa-form">
-            <div class="form-row">
-              <mat-form-field appearance="outline" class="form-field">
-                <mat-label>Nombre de la Empresa</mat-label>
-                <input matInput formControlName="nombre" placeholder="Clínica Veterinaria...">
-                <mat-icon matSuffix>business</mat-icon>
-              </mat-form-field>
+    <div class="tab-content">
+      <form [formGroup]="empresaForm" class="empresa-form">
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Nombre de la Empresa</mat-label>
+            <input matInput formControlName="nombre" placeholder="Clínica Veterinaria...">
+            <mat-icon matSuffix>business</mat-icon>
+          </mat-form-field>
 
-              <mat-form-field appearance="outline" class="form-field">
-                <mat-label>NIT</mat-label>
-                <input matInput formControlName="nit" placeholder="123456789-1">
-                <mat-icon matSuffix>receipt_long</mat-icon>
-              </mat-form-field>
-            </div>
-
-            <mat-form-field appearance="outline" class="form-field-full">
-              <mat-label>Dirección</mat-label>
-              <input matInput formControlName="direccion" placeholder="Calle 123 # 45-67, Ciudad">
-              <mat-icon matSuffix>location_on</mat-icon>
-            </mat-form-field>
-
-            <div class="form-row">
-              <mat-form-field appearance="outline" class="form-field">
-                <mat-label>Teléfono</mat-label>
-                <input matInput formControlName="telefono" placeholder="+57 300 123 4567">
-                <mat-icon matSuffix>phone</mat-icon>
-              </mat-form-field>
-
-              <mat-form-field appearance="outline" class="form-field">
-                <mat-label>Email</mat-label>
-                <input matInput formControlName="email" type="email" placeholder="contacto@clinica.com">
-                <mat-icon matSuffix>email</mat-icon>
-              </mat-form-field>
-            </div>
-
-            <div class="form-row">
-              <mat-form-field appearance="outline" class="form-field">
-                <mat-label>Sitio Web</mat-label>
-                <input matInput formControlName="sitio_web" placeholder="https://www.clinica.com">
-                <mat-icon matSuffix>language</mat-icon>
-              </mat-form-field>
-
-              <mat-form-field appearance="outline" class="form-field">
-                <mat-label>Eslogan</mat-label>
-                <input matInput formControlName="eslogan" placeholder="Cuidamos a tu mascota">
-                <mat-icon matSuffix>format_quote</mat-icon>
-              </mat-form-field>
-            </div>
-
-            <!-- Logo -->
-            <div class="logo-section">
-              <h3>Logo de la Empresa</h3>
-              @if (empresaConfig()?.logo_url) {
-                <div class="current-logo">
-                  <img [src]="empresaConfig()?.logo_url" alt="Logo actual" class="logo-preview">
-                  <button mat-button color="warn" (click)="removeLogo()">
-                    <mat-icon>delete</mat-icon>
-                    Eliminar Logo
-                  </button>
-                </div>
-              }
-
-              <div class="logo-upload">
-                <input type="file" #fileInput (change)="onLogoSelected($event)" accept="image/png,image/jpeg,image/jpg" style="display: none;">
-                <button mat-raised-button color="accent" (click)="fileInput.click()">
-                  <mat-icon>cloud_upload</mat-icon>
-                  {{ empresaConfig()?.logo_url ? 'Cambiar Logo' : 'Subir Logo' }}
-                </button>
-                <p class="help-text">Formatos: JPG, PNG. Tamaño máximo: 2MB</p>
-              </div>
-            </div>
-          </form>
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>NIT</mat-label>
+            <input matInput formControlName="nit" placeholder="123456789-1">
+            <mat-icon matSuffix>receipt_long</mat-icon>
+          </mat-form-field>
         </div>
-      </mat-tab>
 
-      <!-- Tab 2: Horarios de Atención -->
-      <mat-tab label="Horarios">
-        <div class="tab-content">
-          <h3>Horarios de Atención</h3>
-          <div class="horarios-section">
-            @for (horario of horarios(); track $index) {
-              <div class="horario-row">
-                <div class="dia-info">
-                  <mat-checkbox
-                    [(ngModel)]="horario.activo"
-                    (change)="updateHorario(horario.dia_semana, horario)">
-                    {{ getDayName(horario.dia_semana) }}
-                  </mat-checkbox>
-                </div>
+        <mat-form-field appearance="outline" class="form-field-full">
+          <mat-label>Dirección</mat-label>
+          <input matInput formControlName="direccion" placeholder="Calle 123 # 45-67, Ciudad">
+          <mat-icon matSuffix>location_on</mat-icon>
+        </mat-form-field>
 
-                @if (horario.activo) {
-                  <div class="horario-inputs">
-                    <mat-form-field appearance="outline" class="time-field">
-                      <mat-label>Apertura</mat-label>
-                      <input matInput type="time" [(ngModel)]="horario.hora_inicio"
-                             (change)="updateHorario(horario.dia_semana, horario)">
-                    </mat-form-field>
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Teléfono</mat-label>
+            <input matInput formControlName="telefono" placeholder="+57 300 123 4567">
+            <mat-icon matSuffix>phone</mat-icon>
+          </mat-form-field>
 
-                    <mat-form-field appearance="outline" class="time-field">
-                      <mat-label>Cierre</mat-label>
-                      <input matInput type="time" [(ngModel)]="horario.hora_fin"
-                             (change)="updateHorario(horario.dia_semana, horario)">
-                    </mat-form-field>
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Email</mat-label>
+            <input matInput formControlName="email" type="email" placeholder="contacto@clinica.com">
+            <mat-icon matSuffix>email</mat-icon>
+          </mat-form-field>
+        </div>
 
-                    <mat-form-field appearance="outline" class="time-field">
-                      <mat-label>Almuerzo Inicio</mat-label>
-                      <input matInput type="time" [(ngModel)]="horario.hora_almuerzo_inicio"
-                             (change)="updateHorario(horario.dia_semana, horario)">
-                    </mat-form-field>
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Sitio Web</mat-label>
+            <input matInput formControlName="sitio_web" placeholder="https://www.clinica.com">
+            <mat-icon matSuffix>language</mat-icon>
+          </mat-form-field>
 
-                    <mat-form-field appearance="outline" class="time-field">
-                      <mat-label>Almuerzo Fin</mat-label>
-                      <input matInput type="time" [(ngModel)]="horario.hora_almuerzo_fin"
-                             (change)="updateHorario(horario.dia_semana, horario)">
-                    </mat-form-field>
-                  </div>
-                }
-              </div>
-            }
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Eslogan</mat-label>
+            <input matInput formControlName="eslogan" placeholder="Cuidamos a tu mascota">
+            <mat-icon matSuffix>format_quote</mat-icon>
+          </mat-form-field>
+        </div>
+
+        <div class="logo-section">
+          <h3>Logo de la Empresa</h3>
+          @if (empresaConfig()?.logo_url) {
+            <div class="current-logo">
+              <img [src]="getLogoPreviewUrl()" alt="Logo actual" class="logo-preview">
+              <button mat-button color="warn" type="button" (click)="removeLogo()">
+                <mat-icon>delete</mat-icon>
+                Eliminar Logo
+              </button>
+            </div>
+          }
+
+          <div class="logo-upload">
+            <input type="file" #fileInput (change)="onLogoSelected($event)" accept="image/png,image/jpeg,image/jpg" style="display: none;">
+            <button mat-raised-button color="accent" type="button" (click)="fileInput.click()">
+              <mat-icon>cloud_upload</mat-icon>
+              {{ empresaConfig()?.logo_url ? 'Cambiar Logo' : 'Subir Logo' }}
+            </button>
+            <p class="help-text">Formatos: JPG, PNG. Tamaño máximo: 2MB</p>
           </div>
         </div>
-      </mat-tab>
-
-      <!-- Tab 3: Configuración General -->
-      <mat-tab label="Configuración">
-        <div class="tab-content">
-          <form [formGroup]="configForm" class="config-form">
-            <h3>Configuración Regional</h3>
-            <div class="form-row">
-              <mat-form-field appearance="outline" class="form-field">
-                <mat-label>Moneda</mat-label>
-                <mat-select formControlName="moneda">
-                  <mat-option value="COP">Peso Colombiano (COP)</mat-option>
-                  <mat-option value="USD">Dólar Americano (USD)</mat-option>
-                  <mat-option value="EUR">Euro (EUR)</mat-option>
-                </mat-select>
-              </mat-form-field>
-
-              <mat-form-field appearance="outline" class="form-field">
-                <mat-label>Zona Horaria</mat-label>
-                <mat-select formControlName="zona_horaria">
-                  <mat-option value="America/Bogota">América/Bogotá</mat-option>
-                  <mat-option value="America/New_York">América/Nueva York</mat-option>
-                  <mat-option value="Europe/Madrid">Europa/Madrid</mat-option>
-                </mat-select>
-              </mat-form-field>
-            </div>
-
-            <div class="form-row">
-              <mat-form-field appearance="outline" class="form-field">
-                <mat-label>Idioma</mat-label>
-                <mat-select formControlName="idioma">
-                  <mat-option value="es">Español</mat-option>
-                  <mat-option value="en">Inglés</mat-option>
-                  <mat-option value="fr">Francés</mat-option>
-                </mat-select>
-              </mat-form-field>
-
-              <mat-form-field appearance="outline" class="form-field">
-                <mat-label>Formato de Fecha</mat-label>
-                <mat-select formControlName="formato_fecha">
-                  <mat-option value="DD/MM/YYYY">DD/MM/YYYY</mat-option>
-                  <mat-option value="MM/DD/YYYY">MM/DD/YYYY</mat-option>
-                  <mat-option value="YYYY-MM-DD">YYYY-MM-DD</mat-option>
-                </mat-select>
-              </mat-form-field>
-            </div>
-
-          </form>
-        </div>
-      </mat-tab>
-    </mat-tab-group>
+      </form>
+    </div>
   </mat-card>
 </div>

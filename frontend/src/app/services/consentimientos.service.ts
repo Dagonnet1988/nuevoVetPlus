@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 
@@ -50,8 +50,11 @@ export class ConsentimientosService {
     return this.http.post<ConsentimientoCreado>(`${this.BASE}/${idCliente}/consentimiento/reenviar`, {});
   }
 
-  descargarPDF(idCliente: string): Observable<Blob> {
-    return this.http.get(`${this.BASE}/${idCliente}/consentimiento/pdf`, { responseType: 'blob' });
+  descargarPDF(idCliente: string): Observable<HttpResponse<Blob>> {
+    return this.http.get(`${this.BASE}/${idCliente}/consentimiento/pdf`, {
+      responseType: 'blob',
+      observe: 'response'
+    });
   }
 
   revocar(idCliente: string, motivo: string): Observable<{ message: string }> {

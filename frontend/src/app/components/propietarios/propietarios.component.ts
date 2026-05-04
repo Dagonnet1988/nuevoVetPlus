@@ -8,6 +8,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
@@ -293,6 +294,7 @@ export class ConsentimientoPropietarioDialogComponent {
     MatIconModule,
     MatFormFieldModule,
     MatInputModule,
+    MatSelectModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
     MatDialogModule,
@@ -319,7 +321,10 @@ export class PropietariosComponent implements OnInit {
     private snackBar: MatSnackBar,
     private router: Router
   ) {
-    this.searchForm = this.fb.group({ search: [''] });
+    this.searchForm = this.fb.group({
+      search: [''],
+      activo: [true]
+    });
   }
 
   ngOnInit(): void {
@@ -334,13 +339,19 @@ export class PropietariosComponent implements OnInit {
         this.cargarPropietarios();
       }, 350);
     });
+
+    this.searchForm.get('activo')!.valueChanges.subscribe(() => {
+      this.currentPage.set(1);
+      this.cargarPropietarios();
+    });
   }
 
   cargarPropietarios(): void {
     this.loading.set(true);
     const search = this.searchForm.get('search')!.value?.trim() || undefined;
+    const activo = this.searchForm.get('activo')!.value;
 
-    this.clientesService.getClientes(this.currentPage(), this.pageSize, search).subscribe({
+    this.clientesService.getClientes(this.currentPage(), this.pageSize, search, activo).subscribe({
       next: (res) => {
         this.propietarios.set(res.data);
         this.totalPropietarios.set(res.pagination?.total ?? res.data.length);
@@ -398,5 +409,47 @@ export class PropietariosComponent implements OnInit {
 
   limpiarBusqueda(): void {
     this.searchForm.get('search')!.setValue('');
+  }
+
+  cambiarEstadoPropietario(propietario: Cliente): void {
+    if (propietario.activo) {
+      const confirmar = window.confirm(
+        `¿Deseas desactivar/eliminar a "${propietario.nombre}"?\n\n` +
+        'Si tiene mascotas asociadas se desactivará.\n' +
+        'Si no tiene mascotas asociadas se eliminará definitivamente.'
+      );
+
+      if (!confirmar) return;
+
+      this.clientesService.deleteCliente(propietario.id_cliente).subscribe({
+        next: (res) => {
+          this.snackBar.open(res?.message || 'Propietario actualizado', 'Cerrar', { duration: 3500 });
+          this.cargarPropietarios();
+        },
+        error: (err) => {
+          this.snackBar.open(extractError(err, 'Error desactivando/eliminando propietario'), 'Cerrar', { duration: 4000 });
+        }
+      });
+      return;
+    }
+
+    const confirmar = window.confirm(`¿Deseas reactivar a "${propietario.nombre}"?`);
+    if (!confirmar) return;
+
+    this.clientesService.restoreCliente(propietario.id_cliente).subscribe({
+      next: (res) => {
+        this.snackBar.open(res?.message || 'Propietario reactivado', 'Cerrar', { duration: 3000 });
+        this.cargarPropietarios();
+      },
+      error: (err) => {
+        this.snackBar.open(extractError(err, 'Error reactivando propietario'), 'Cerrar', { duration: 4000 });
+      }
+    });
+  }
+
+  getMascotaPreviewUrl(fotoUrl?: string): string {
+    if (!fotoUrl || fotoUrl.trim() === '') return '';
+    if (fotoUrl.startsWith('http')) return fotoUrl;
+    return `${environment.backendUrl}${fotoUrl}`;
   }
 }

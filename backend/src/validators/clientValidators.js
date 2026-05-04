@@ -170,6 +170,11 @@ export const validateClientSearch = [
     .withMessage('El límite debe ser un número entero entre 1 y 100')
     .toInt(),
 
+  query('activo')
+    .optional()
+    .isIn(['true', 'false'])
+    .withMessage('El filtro activo debe ser true o false'),
+
   query('sortBy')
     .optional()
     .isIn(['nombre', 'telefono', 'email', 'created_at'])

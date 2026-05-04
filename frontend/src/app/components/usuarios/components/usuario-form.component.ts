@@ -86,17 +86,6 @@ export class UsuarioFormComponent implements OnInit {
     { value: 'aux', label: 'Auxiliar', icon: 'support_agent', color: '#4caf50' }
   ];
 
-  especialidades = [
-    'Medicina General',
-    'Cirugía',
-    'Dermatología',
-    'Cardiología',
-    'Neurología',
-    'Oncología',
-    'Radiología',
-    'Anestesiología'
-  ];
-
   constructor() {
     this.personalForm = this.fb.group({
       nombre: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(50)]],

@@ -287,19 +287,113 @@
 }
 
 /* History */
-.history-filters {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 24px;
-}
-
-.history-filters button.active {
-  background: #2e7d32;
-  color: white;
-}
 
 .medical-timeline {
   position: relative;
+}
+
+.medical-grouped-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.group-row {
+  border: 1px solid #e3e7ec;
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px 10px;
+}
+
+.group-date {
+  font-size: 11px;
+  color: #6b7280;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.group-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.group-compact-item {
+  min-height: 38px;
+  border: 1px solid #e8edf3;
+  border-radius: 8px;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #ffffff;
+}
+
+.compact-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.compact-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+}
+
+.compact-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.compact-sep {
+  color: #9ca3af;
+  font-weight: 600;
+}
+
+.compact-value {
+  font-size: 12px;
+  color: #1f2937;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact-eye {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  color: #6b7280;
+}
+
+.muted-card {
+  opacity: 0.72;
+}
+
+.cita-item {
+  border-left: 3px solid #0d9488;
+}
+
+.historia-item {
+  border-left: 3px solid #2563eb;
+}
+
+.is-clickable {
+  cursor: pointer;
+}
+
+.is-clickable:hover {
+  background: #f8fafc;
+  border-color: #dce4ee;
+}
+
+.is-clickable:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
 }
 
 .timeline-item {
@@ -334,6 +428,11 @@
 .timeline-marker.vacuna { background: #1976d2; }
 .timeline-marker.tratamiento { background: #f57c00; }
 .timeline-marker.cirugia { background: #d32f2f; }
+.timeline-marker.valoracion_inicial { background: #1976d2; }
+.timeline-marker.seguimiento { background: #388e3c; }
+.timeline-marker.formula { background: #f57c00; }
+.timeline-marker.remision { background: #7b1fa2; }
+.timeline-marker.cita { background: #00897b; }
 
 .timeline-content {
   flex: 1;
@@ -396,6 +495,56 @@
   color: #666;
   font-size: 24px;
 }
+
+.document-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid #d8dee6;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.document-thumb-pdf {
+  background: #fff;
+  overflow: hidden;
+}
+
+.pdf-doc-tile {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  color: #c62828;
+  background: #fff5f5;
+}
+
+.pdf-doc-tile mat-icon {
+  font-size: 22px;
+  width: 22px;
+  height: 22px;
+}
+
+.pdf-doc-tile span {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.document-thumb-file.file-pdf { color: #c62828; background: #fff5f5; }
+.document-thumb-file.file-doc,
+.document-thumb-file.file-docx,
+.document-thumb-file.file-txt { color: #1565c0; background: #f3f8ff; }
+.document-thumb-file.file-xls,
+.document-thumb-file.file-xlsx,
+.document-thumb-file.file-csv { color: #2e7d32; background: #f1fbf3; }
+.document-thumb-file.file-jpg,
+.document-thumb-file.file-jpeg,
+.document-thumb-file.file-png,
+.document-thumb-file.file-webp { color: #6a1b9a; background: #faf4ff; }
+.document-thumb-file.file-generic { color: #455a64; background: #f3f5f7; }
 
 .document-details h4 {
   margin: 0 0 4px 0;
@@ -501,5 +650,13 @@
 
   .timeline-marker {
     align-self: flex-start;
+  }
+
+  .group-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .compact-value {
+    max-width: 100%;
   }
 }

@@ -415,6 +415,7 @@ export async function updatePacienteCompleto(req, res) {
     const { id } = req.params; // ID de la mascota
     const tenantId = req.tenantId;
     const {
+      id_cliente_existente,
       // Datos del cliente
       nombre_cliente,
       cedula,
@@ -458,7 +459,25 @@ export async function updatePacienteCompleto(req, res) {
         });
       }
 
-      const id_cliente = mascotaActual.rows[0].id_cliente;
+      const id_cliente_actual = mascotaActual.rows[0].id_cliente;
+      let id_cliente = id_cliente_actual;
+
+      if (id_cliente_existente && id_cliente_existente !== id_cliente_actual) {
+        const clienteDestino = await txClient.query(
+          'SELECT id_cliente FROM clinical.clientes WHERE id_cliente = $1 AND id_tenant = $2 AND activo = true',
+          [id_cliente_existente, tenantId]
+        );
+
+        if (clienteDestino.rows.length === 0) {
+          await txClient.query('ROLLBACK');
+          return res.status(404).json({
+            success: false,
+            message: 'El propietario seleccionado no existe o está inactivo'
+          });
+        }
+
+        id_cliente = id_cliente_existente;
+      }
 
       // 2. Actualizar datos del cliente
       const clienteQuery = `
@@ -497,24 +516,26 @@ export async function updatePacienteCompleto(req, res) {
       const mascotaQuery = `
         UPDATE clinical.mascotas
         SET
-          nombre = COALESCE($2, nombre),
-          especie = COALESCE($3, especie),
-          raza = $4,
-          edad = COALESCE($5, edad),
-          sexo = COALESCE($6, sexo),
-          peso = $7,
-          color = $8,
-          fecha_nacimiento = $9,
-          microchip = $10,
-          notas = $11,
-          esterilizado = COALESCE($12, esterilizado),
+          id_cliente = COALESCE($2, id_cliente),
+          nombre = COALESCE($3, nombre),
+          especie = COALESCE($4, especie),
+          raza = $5,
+          edad = COALESCE($6, edad),
+          sexo = COALESCE($7, sexo),
+          peso = $8,
+          color = $9,
+          fecha_nacimiento = $10,
+          microchip = $11,
+          notas = $12,
+          esterilizado = COALESCE($13, esterilizado),
           updated_at = CURRENT_TIMESTAMP
-        WHERE id_mascota = $1 AND id_tenant = $13
+        WHERE id_mascota = $1 AND id_tenant = $14
         RETURNING *
       `;
 
       const mascotaValues = [
         id,
+        id_cliente,
         nombre_mascota,
         especie,
         raza || null,
@@ -605,6 +626,7 @@ export async function getMascotasConCliente(req, res) {
         m.color,
         m.fecha_nacimiento,
         m.microchip,
+        m.esterilizado,
         m.foto_url,
         m.activo,
         m.created_at as fecha_registro,
@@ -724,6 +746,7 @@ export async function getMascotasConCliente(req, res) {
       color: row.color,
       fecha_nacimiento: row.fecha_nacimiento,
       microchip: row.microchip,
+      esterilizado: row.esterilizado,
       foto_url: row.foto_url,
       activo: row.activo,
       fecha_registro: row.fecha_registro,

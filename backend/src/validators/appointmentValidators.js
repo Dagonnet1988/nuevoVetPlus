@@ -1,5 +1,15 @@
 import { body, param, query } from 'express-validator/lib/index.js';
 
+const TIPOS_CITA_VALIDOS = [
+    // Nuevos tipos de negocio
+    'valoracion', 'hidroterapia', 'terapia', 'domicilio', 'sin_clasificar', 'control',
+    // Compatibilidad con datos legados
+    'consulta_general', 'vacunacion', 'cirugia', 'emergencia', 'revision', 'desparasitacion', 'estetica', 'otro',
+    'Consulta', 'Terapia', 'Cirugía', 'Control', 'Vacunación', 'Emergencia'
+];
+
+const ESTADOS_CITA_VALIDOS = ['confirmada', 'en_curso', 'completada', 'no_asistio'];
+
 /**
  * Validaciones para la creación de citas
  */
@@ -55,7 +65,7 @@ export const validateCreateAppointment = [
     body('tipo')
         .notEmpty()
         .withMessage('El tipo de cita es obligatorio')
-        .isIn(['consulta_general', 'vacunacion', 'cirugia', 'control', 'emergencia', 'revision', 'desparasitacion', 'estetica', 'otro', 'Consulta', 'Terapia', 'Cirugía', 'Control', 'Vacunación', 'Emergencia'])
+        .isIn(TIPOS_CITA_VALIDOS)
         .withMessage('El tipo de cita no es válido'),
     
     body('motivo')
@@ -117,12 +127,12 @@ export const validateUpdateAppointment = [
     
     body('tipo')
         .optional()
-        .isIn(['consulta_general', 'vacunacion', 'cirugia', 'control', 'emergencia', 'revision', 'desparasitacion', 'estetica', 'otro', 'Consulta', 'Terapia', 'Cirugía', 'Control', 'Vacunación', 'Emergencia'])
+        .isIn(TIPOS_CITA_VALIDOS)
         .withMessage('El tipo de cita no es válido'),
     
     body('estado')
         .optional()
-        .isIn(['Programada', 'Confirmada', 'En Curso', 'Completada', 'Cancelada', 'No Asistió', 'pendiente', 'confirmada', 'en_curso', 'completada', 'cancelada', 'no_asistio'])
+        .isIn(ESTADOS_CITA_VALIDOS)
         .withMessage('El estado de la cita no es válido'),
     
     body('motivo')
@@ -154,7 +164,7 @@ export const validateUpdateAppointmentStatus = [
     body('estado')
         .notEmpty()
         .withMessage('El estado es obligatorio')
-        .isIn(['Programada', 'Confirmada', 'En Curso', 'Completada', 'Cancelada', 'No Asistió', 'pendiente', 'confirmada', 'en_curso', 'completada', 'cancelada', 'no_asistio'])
+        .isIn(ESTADOS_CITA_VALIDOS)
         .withMessage('El estado de la cita no es válido'),
     
     body('notas')
@@ -211,12 +221,12 @@ export const validateGetAppointments = [
     
     query('estado')
         .optional()
-        .isIn(['Programada', 'Confirmada', 'En Curso', 'Completada', 'Cancelada', 'No Asistió', 'pendiente', 'confirmada', 'en_curso', 'completada', 'cancelada', 'no_asistio'])
+        .isIn(ESTADOS_CITA_VALIDOS)
         .withMessage('El estado de la cita no es válido'),
     
     query('tipo')
         .optional()
-        .isIn(['consulta_general', 'vacunacion', 'cirugia', 'control', 'emergencia', 'revision', 'desparasitacion', 'estetica', 'otro', 'Consulta', 'Terapia', 'Cirugía', 'Control', 'Vacunación', 'Emergencia'])
+        .isIn(TIPOS_CITA_VALIDOS)
         .withMessage('El tipo de cita no es válido'),
     
     query('id_veterinario')

@@ -103,3 +103,17 @@
 .rol-aux   { background: #f1f8e9; color: #33691e; }
 
 .sa-center { display: flex; justify-content: center; padding: 60px; }
+
+// ── Billing section ───────────────────────────────────────────────────────────
+.sa-section-subtitle {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600; color: #546e7a;
+  margin: 0 0 12px;
+  mat-icon { font-size: 16px; width: 16px; height: 16px; }
+}
+
+.pago-hint { font-weight: 600; font-size: 11px; }
+.pago-ok      { color: #2e7d32; }
+.pago-proximo { color: #f57f17; }
+.pago-alerta  { color: #e65100; }
+.pago-vencido { color: #c62828; }

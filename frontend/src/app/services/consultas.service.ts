@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 
 export interface Medicamento {
@@ -224,18 +225,21 @@ export class ConsultasService {
 
   uploadDocumento(consultaId: string, file: File, descripcion?: string): Observable<any> {
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('archivos', file);
     if (descripcion) formData.append('descripcion', descripcion);
 
-    return this.http.post<any>(`${this.API_URL}/consultations/${consultaId}/documents`, formData);
+    return this.http.post<any>(`${this.API_URL}/consultations/${consultaId}/upload-files`, formData);
   }
 
   getArchivos(consultaId: string): Observable<any[]> {
-    return this.http.get<any[]>(`${this.API_URL}/consultations/${consultaId}/documents`);
+    return this.http.get<any>(`${this.API_URL}/consultations/${consultaId}/files`).pipe(
+      // The endpoint returns { success, data: files }
+      map((response) => response?.data || [])
+    );
   }
 
   getDocumentosConsulta(consultaId: string): Observable<any> {
-    return this.http.get<any>(`${this.API_URL}/consultations/${consultaId}/documents`);
+    return this.http.get<any>(`${this.API_URL}/consultations/${consultaId}/files`);
   }
 
   downloadArchivo(archivoId: string): Observable<Blob> {
@@ -249,7 +253,7 @@ export class ConsultasService {
   }
 
   deleteDocumento(consultaId: string, documentoId: string): Observable<any> {
-    return this.http.delete<any>(`${this.API_URL}/consultations/${consultaId}/documents/${documentoId}`);
+    return this.http.delete<any>(`${this.API_URL}/consultations/${consultaId}/files/${documentoId}`);
   }
 
   // ===============================

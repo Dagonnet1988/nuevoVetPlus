@@ -30,6 +30,10 @@ CREATE TABLE vetplus_auth.usuarios (
     -- Multi-tenancy
     id_tenant UUID NOT NULL DEFAULT system.get_default_tenant()
         REFERENCES system.tenants(id_tenant) ON DELETE RESTRICT,
+    -- Firma del veterinario (ruta al archivo PNG/JPG subido)
+    firma_url TEXT,
+    -- Avatar general del usuario (perfil)
+    avatar_url TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

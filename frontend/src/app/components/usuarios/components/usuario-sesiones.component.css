@@ -44,6 +44,12 @@
 
 .page-icon {
   font-size: 2.2rem !important;
+  width: 2.2rem !important;
+  height: 2.2rem !important;
+  line-height: 1 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: #3182ce;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
 }
@@ -124,6 +130,11 @@
   font-size: 2.5rem !important;
   width: 2.5rem !important;
   height: 2.5rem !important;
+  line-height: 1 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: content-box;
   padding: 12px;
   border-radius: 12px;
   background: rgba(255,255,255,0.9);
@@ -273,6 +284,10 @@
   font-size: 24px !important;
   width: 24px !important;
   height: 24px !important;
+  line-height: 1 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 8px;
   border-radius: 8px;
   background: rgba(255,255,255,0.9);
@@ -504,6 +519,10 @@
   font-size: 24px !important;
   width: 24px !important;
   height: 24px !important;
+  line-height: 1 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 8px;
   border-radius: 8px;
   background: white;
@@ -628,16 +647,16 @@
   .sesiones-container {
     padding: 16px;
   }
-  
+
   .stats-row {
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 16px;
   }
-  
+
   .page-title {
     font-size: 2rem;
   }
-  
+
   .info-cards {
     grid-template-columns: 1fr;
   }
@@ -648,46 +667,46 @@
     flex-direction: column;
     align-items: stretch;
   }
-  
+
   .actions-section {
     justify-content: stretch;
   }
-  
+
   .back-button,
   .close-all-button {
     flex: 1;
     min-width: unset;
   }
-  
+
   .stats-row {
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 12px;
   }
-  
+
   .table-container {
     font-size: 0.9rem;
   }
-  
+
   .sesiones-table th,
   .sesiones-table td {
     padding: 12px 8px;
   }
-  
+
   .device-info {
     gap: 8px;
   }
-  
+
   .device-icon {
     font-size: 20px !important;
     width: 20px !important;
     height: 20px !important;
     padding: 6px;
   }
-  
+
   .tip-item {
     padding: 12px;
   }
-  
+
   .summary-item {
     padding: 10px 12px;
   }
@@ -697,61 +716,61 @@
   .sesiones-container {
     padding: 12px;
   }
-  
+
   .page-title {
     font-size: 1.5rem;
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
   }
-  
+
   .page-icon {
     font-size: 2rem !important;
   }
-  
+
   .stats-row {
     grid-template-columns: 1fr;
     gap: 12px;
   }
-  
+
   .stat-content {
     gap: 12px;
   }
-  
+
   .stat-icon {
     font-size: 2rem !important;
     width: 2rem !important;
     height: 2rem !important;
     padding: 10px;
   }
-  
+
   .stat-number {
     font-size: 1.5rem;
   }
-  
+
   /* Ocultar algunas columnas en móvil */
   .sesiones-table .mat-column-navegador,
   .sesiones-table .mat-column-ip_address {
     display: none;
   }
-  
+
   .date-info {
     align-items: flex-start;
   }
-  
+
   .date-absolute {
     font-size: 0.8rem;
   }
-  
+
   .date-relative {
     font-size: 0.7rem;
   }
-  
+
   .tip-item {
     flex-direction: column;
     text-align: center;
   }
-  
+
   .tip-icon {
     align-self: center;
   }

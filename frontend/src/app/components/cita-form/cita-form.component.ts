@@ -28,6 +28,8 @@ import {
   SugerenciaHorario
 } from '../../models/cita.interface';
 
+const APPOINTMENT_DURATION_MINUTES = 60;
+
 @Component({
   selector: 'app-cita-form',
   standalone: true,
@@ -68,7 +70,9 @@ export class CitaFormComponent implements OnInit {
   horaFin = signal<string>('');
   sugerenciasHorario = signal<SugerenciaHorario[]>([]);
   pacientes = signal<any[]>([]);
+  pacientesFiltrados = signal<any[]>([]);
   veterinarios = signal<any[]>([]);
+  pacienteSeleccionado = signal<any | null>(null);
 
   // Form
   citaForm: FormGroup;
@@ -83,16 +87,16 @@ export class CitaFormComponent implements OnInit {
 
   constructor() {
     this.citaForm = this.fb.group({
+      mascota_search: [''],
       id_mascota: ['', Validators.required],
       id_veterinario: ['', Validators.required],
       fecha: ['', Validators.required],
       hora_inicio: ['', Validators.required],
-      duracion: [30],
+      duracion: [APPOINTMENT_DURATION_MINUTES],
       tipo: ['', Validators.required],
-      estado: ['pendiente'],
+      estado: ['confirmada'],
       motivo: [''],
-      observaciones: [''],
-      precio: [null]
+      observaciones: ['']
     });
   }
 
@@ -140,15 +144,25 @@ export class CitaFormComponent implements OnInit {
 
       // Verificar que data sea un array antes de asignarlo
       if (Array.isArray(data)) {
-        console.log('Pacientes cargados:', data.length);
-        this.pacientes.set(data);
+        const normalizados = data.map((p: any) => ({
+          id: p.id_mascota || p.id,
+          nombre: p.nombre || p.nombre_mascota || 'Sin nombre',
+          especie: p.especie || 'Sin especie',
+          raza: p.raza || 'Sin raza',
+          propietario: p.cliente?.nombre || p.cliente_nombre || p.nombre_cliente || p.propietario || 'Sin propietario'
+        })).filter((p: any) => Boolean(p.id));
+        this.pacientes.set(normalizados);
+        this.pacientesFiltrados.set(normalizados);
+        this.syncPacienteSelectionFromForm();
       } else {
         console.warn('Respuesta de pacientes no es un array:', response);
         this.pacientes.set([]);
+        this.pacientesFiltrados.set([]);
       }
     } catch (error) {
       console.error('Error cargando pacientes:', error);
       this.pacientes.set([]); // Asegurar que siempre sea un array
+      this.pacientesFiltrados.set([]);
       this.snackBar.open('Error cargando pacientes', 'Cerrar', { duration: 3000 });
     }
   }
@@ -158,9 +172,15 @@ export class CitaFormComponent implements OnInit {
       const response = await firstValueFrom(this.citasService.getVeterinarios());
       console.log('Respuesta veterinarios en form:', response);
       const data = response?.data;
-      // Verificar que data sea un array antes de asignarlo
       if (Array.isArray(data)) {
-        this.veterinarios.set(data);
+        const normalizados = data
+          .map((v: any) => ({
+            id: v.id || v.id_usuario,
+            nombre: v.nombre || 'Sin nombre',
+            especialidad: v.especialidad || 'Sin especialidad'
+          }))
+          .filter((v: any) => Boolean(v.id));
+        this.veterinarios.set(normalizados);
       } else {
         console.warn('Respuesta de veterinarios no es un array:', data);
         this.veterinarios.set([]);
@@ -186,6 +206,7 @@ export class CitaFormComponent implements OnInit {
           fecha: fecha,
           hora_inicio: this.formatTimeFromDateTime(fecha)
         });
+        this.calculateEndTime();
       }
     }
   }
@@ -212,41 +233,38 @@ export class CitaFormComponent implements OnInit {
     // Parsear fechas usando la lógica correcta de timezone para mostrar en hora local de Colombia
     const fechaInicio = this.parseLocalDateForForm(cita.fecha_inicio);
     const fechaFin = this.parseLocalDateForForm(cita.fecha_fin);
-    const duracion = Math.round((fechaFin.getTime() - fechaInicio.getTime()) / (1000 * 60));
-
     console.log('🔧 populateFormWithCita:', {
       fecha_inicio_raw: cita.fecha_inicio,
       fecha_fin_raw: cita.fecha_fin,
       fechaInicio_parsed: fechaInicio,
       fechaFin_parsed: fechaFin,
-      duracion: duracion,
+      duracion: APPOINTMENT_DURATION_MINUTES,
       hora_inicio_formatted: this.formatTimeFromDateTime(fechaInicio)
     });
 
     this.citaForm.patchValue({
+      mascota_search: '',
       id_mascota: cita.id_mascota,
       id_veterinario: cita.id_veterinario,
       fecha: fechaInicio,
       hora_inicio: this.formatTimeFromDateTime(fechaInicio),
-      duracion: duracion,
+      duracion: APPOINTMENT_DURATION_MINUTES,
       tipo: cita.tipo,
       estado: cita.estado,
       motivo: cita.motivo || '',
-      observaciones: cita.observaciones || '',
-      precio: cita.precio || null
+      observaciones: cita.observaciones || ''
     });
 
+    this.syncPacienteSelectionFromForm();
     this.calculateEndTime();
   }
 
   private setupFormChanges(): void {
-    // Auto-calculate duration based on appointment type
-    this.citaForm.get('tipo')?.valueChanges.subscribe(tipo => {
-      if (tipo && !this.isEditing()) {
-        const duracion = this.citasService.calcularDuracionCita(tipo);
-        this.citaForm.patchValue({ duracion }, { emitEvent: false });
-        this.calculateEndTime();
-      }
+    this.citaForm.patchValue({ duracion: APPOINTMENT_DURATION_MINUTES }, { emitEvent: false });
+    this.calculateEndTime();
+
+    this.citaForm.get('mascota_search')?.valueChanges.subscribe((value) => {
+      this.filterPacientes(String(value || ''));
     });
   }
 
@@ -264,18 +282,104 @@ export class CitaFormComponent implements OnInit {
   }
 
   onTipoChange(): void {
-    const tipo = this.citaForm.get('tipo')?.value;
-    if (tipo && !this.isEditing()) {
-      const duracion = this.citasService.calcularDuracionCita(tipo);
-      this.citaForm.patchValue({ duracion });
-      this.calculateEndTime();
+    this.calculateEndTime();
+  }
+
+  onPacienteChange(): void {
+    this.syncPacienteSelectionFromForm();
+  }
+
+  onMascotaSelected(event: any): void {
+    const paciente = event?.option?.value;
+    if (!paciente?.id) return;
+
+    this.citaForm.patchValue({
+      id_mascota: paciente.id,
+      mascota_search: this.getPacienteDisplayText(paciente)
+    }, { emitEvent: false });
+
+    this.pacienteSeleccionado.set(paciente);
+    this.pacientesFiltrados.set(this.pacientes());
+  }
+
+  onMascotaInputBlur(): void {
+    const selected = this.pacienteSeleccionado();
+    if (selected) {
+      this.citaForm.patchValue({
+        mascota_search: this.getPacienteDisplayText(selected)
+      }, { emitEvent: false });
     }
+  }
+
+  displayMascota = (paciente: any): string => {
+    if (!paciente) return '';
+    if (typeof paciente === 'string') return paciente;
+    return this.getPacienteDisplayText(paciente);
+  };
+
+  getTipoColor(tipo: string): string {
+    const normalized = String(tipo || '').trim().toLowerCase();
+    const tipoMatch = this.tiposCita.find(t => t.value === normalized);
+    if (tipoMatch) return tipoMatch.color;
+
+    const fallback: Record<string, string> = {
+      control: '#e09a5f',
+      consulta: '#51b749',
+      general: '#51b749'
+    };
+
+    return fallback[normalized] || '#607d8b';
+  }
+
+  getTipoLabel(tipo: string): string {
+    const normalized = String(tipo || '').trim().toLowerCase();
+    const tipoMatch = this.tiposCita.find(t => t.value === normalized);
+    if (tipoMatch) return tipoMatch.label;
+    if (normalized === 'control') return 'Control';
+    if (normalized === 'consulta' || normalized === 'general') return 'Domicilio';
+    return 'Tipo de cita';
+  }
+
+  private filterPacientes(searchTerm: string): void {
+    const term = String(searchTerm || '').trim().toLowerCase();
+    if (!term) {
+      this.pacientesFiltrados.set(this.pacientes());
+      return;
+    }
+
+    const filtered = this.pacientes().filter((paciente) => {
+      const base = `${paciente.nombre} ${paciente.propietario} ${paciente.especie} ${paciente.raza}`.toLowerCase();
+      return base.includes(term);
+    });
+
+    this.pacientesFiltrados.set(filtered);
+  }
+
+  private syncPacienteSelectionFromForm(): void {
+    const pacienteId = this.citaForm.get('id_mascota')?.value;
+    const paciente = this.pacientes().find((p: any) => p.id === pacienteId) || null;
+    this.pacienteSeleccionado.set(paciente);
+
+    if (paciente) {
+      this.citaForm.patchValue({
+        mascota_search: this.getPacienteDisplayText(paciente)
+      }, { emitEvent: false });
+    }
+  }
+
+  private getPacienteDisplayText(paciente: any): string {
+    if (!paciente) return '';
+    if (typeof paciente === 'string') return paciente;
+
+    const nombre = paciente.nombre || paciente.nombre_mascota || 'Sin nombre';
+    const propietario = paciente.propietario || paciente.cliente_nombre || paciente.nombre_cliente || paciente.cliente?.nombre || 'Sin propietario';
+    return `${nombre} · ${propietario}`;
   }
 
   calculateEndTime(): void {
     const fecha = this.citaForm.get('fecha')?.value;
     const horaInicio = this.citaForm.get('hora_inicio')?.value;
-    const duracion = this.citaForm.get('duracion')?.value;
+    const duracion = APPOINTMENT_DURATION_MINUTES;
 
     if (fecha && horaInicio && duracion) {
       const [hours, minutes] = horaInicio.split(':').map(Number);
@@ -292,7 +396,7 @@ export class CitaFormComponent implements OnInit {
   private async checkAvailabilityAndSuggest(): Promise<void> {
     const veterinarioId = this.citaForm.get('id_veterinario')?.value;
     const fecha = this.citaForm.get('fecha')?.value;
-    const duracion = this.citaForm.get('duracion')?.value;
+    const duracion = APPOINTMENT_DURATION_MINUTES;
 
     if (veterinarioId && fecha && duracion) {
       try {
@@ -413,7 +517,7 @@ export class CitaFormComponent implements OnInit {
       fechaParaBackend: this.citasService.formatearFechaParaBackend(fechaInicio)
     });
 
-    const fechaFin = new Date(fechaInicio.getTime() + (parseInt(formValue.duracion) * 60 * 1000));
+    const fechaFin = new Date(fechaInicio.getTime() + (APPOINTMENT_DURATION_MINUTES * 60 * 1000));
 
     const data: CitaFormData = {
       id_mascota: formValue.id_mascota,
@@ -423,8 +527,7 @@ export class CitaFormComponent implements OnInit {
       tipo: formValue.tipo,
       estado: formValue.estado, // Incluir estado para actualizaciones
       motivo: formValue.motivo || undefined,
-      observaciones: formValue.observaciones || undefined,
-      precio: formValue.precio || undefined
+      observaciones: formValue.observaciones || undefined
     };
 
     // console.log('📤 Datos procesados para enviar:', data);

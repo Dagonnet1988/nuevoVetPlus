@@ -3,17 +3,240 @@ import { v4 as uuidv4 } from 'uuid';
 import googleCalendarService from './googleCalendar.js';
 
 class BidirectionalSyncService {
+    constructor() {
+        this.contextTenantId = null;
+    }
+
+    getBogotaDateString(date = new Date()) {
+        return new Date(date).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+    }
+
+    toBogotaDateOnly(value) {
+        if (!value) return null;
+
+        // Formato all-day de Google Calendar: YYYY-MM-DD
+        if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+            return value.trim();
+        }
+
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return null;
+        return this.getBogotaDateString(date);
+    }
+
+    isWithinDateRange(fechaInicio, startDate, endDate) {
+        const eventDate = this.toBogotaDateOnly(fechaInicio);
+        if (!eventDate) return false;
+        if (startDate && eventDate < startDate) return false;
+        if (endDate && eventDate > endDate) return false;
+        return true;
+    }
+
+    sanitizeRichTextToPlain(value) {
+        if (!value) return '';
+
+        return String(value)
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<\/p>/gi, '\n')
+            .replace(/<p[^>]*>/gi, '')
+            .replace(/<[^>]*>/g, ' ')
+            .replace(/&nbsp;|&#160;/gi, ' ')
+            .replace(/[ \t]+/g, ' ')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+    }
+
+    normalizeText(value) {
+        return String(value || '')
+            .replace(/<br\s*\/?>/gi, ' ')
+            .replace(/<\/p>/gi, ' ')
+            .replace(/<[^>]*>/g, ' ')
+            .replace(/&nbsp;|&#160;/gi, ' ')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .replace(/[^a-z0-9\s]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    toTitleCase(value) {
+        return String(value || '')
+            .toLowerCase()
+            .split(/\s+/)
+            .filter(Boolean)
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ')
+            .slice(0, 100);
+    }
+
+    isValidAutoCreateName(value) {
+        const normalized = this.normalizeText(value);
+        if (!normalized) return false;
+        if (normalized.length < 2 || normalized.length > 80) return false;
+
+        const forbidden = ['cliente:', 'mascota:', 'veterinario:', 'tipo:', 'motivo:', 'codigo de cita'];
+        return !forbidden.some(fragment => normalized.includes(fragment));
+    }
+
+    async createMissingClientAndPet(eventData, matchedData = {}) {
+        const tenantId = matchedData?.tenant_id || await this.resolveActiveTenantId();
+        const veterinarioId = matchedData?.veterinario_id || null;
+
+        let clienteId = matchedData?.cliente_id || null;
+        let mascotaId = matchedData?.mascota_id || null;
+
+        const safePetName = this.isValidAutoCreateName(eventData?.mascota_nombre)
+            ? this.toTitleCase(eventData.mascota_nombre).slice(0, 50)
+            : null;
+
+        const safeClientNameFromEvent = this.isValidAutoCreateName(eventData?.cliente_nombre)
+            ? this.toTitleCase(eventData.cliente_nombre)
+            : null;
+
+        // Caso mínimo soportado: solo llega la mascota.
+        // Se crea un cliente placeholder para poder registrar la cita y completar datos después en UI.
+        const placeholderClientName = safePetName ? `Propietario de ${safePetName}` : null;
+
+        if (!clienteId && (safeClientNameFromEvent || placeholderClientName)) {
+            const newClientId = uuidv4();
+            const createdClient = await query(
+                `INSERT INTO clinical.clientes (id_cliente, nombre, email, notas, id_tenant, created_by)
+                 VALUES ($1, $2, $3, $4, $5, $6)
+                 RETURNING id_cliente`,
+                [
+                    newClientId,
+                    safeClientNameFromEvent || placeholderClientName,
+                    eventData?.cliente_email || null,
+                    safeClientNameFromEvent
+                        ? 'Creado automaticamente desde sincronizacion Google Calendar'
+                        : 'Cliente placeholder creado automaticamente desde Google Calendar (solo se recibio mascota).',
+                    tenantId,
+                    veterinarioId
+                ]
+            );
+            clienteId = createdClient.rows[0]?.id_cliente || null;
+        }
+
+        if (!mascotaId && clienteId && safePetName) {
+            const newPetId = uuidv4();
+            const createdPet = await query(
+                `INSERT INTO clinical.mascotas (id_mascota, id_cliente, nombre, especie, notas, id_tenant, created_by)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)
+                 RETURNING id_mascota`,
+                [
+                    newPetId,
+                    clienteId,
+                    safePetName,
+                    'Perro',
+                    'Creado automaticamente desde sincronizacion Google Calendar (especie por defecto: Perro).',
+                    tenantId,
+                    veterinarioId
+                ]
+            );
+            mascotaId = createdPet.rows[0]?.id_mascota || null;
+        }
+
+        return {
+            ...matchedData,
+            tenant_id: tenantId,
+            cliente_id: clienteId,
+            mascota_id: mascotaId
+        };
+    }
+
+    async resolveActiveTenantId() {
+        if (this.contextTenantId) {
+            return this.contextTenantId;
+        }
+
+        if (googleCalendarService?.config?.configured_by) {
+            const tenantByConfig = await query(
+                `SELECT id_tenant
+                 FROM vetplus_auth.usuarios
+                 WHERE id_usuario = $1
+                 LIMIT 1`,
+                [googleCalendarService.config.configured_by]
+            );
+
+            if (tenantByConfig.rows.length > 0) {
+                return tenantByConfig.rows[0].id_tenant;
+            }
+        }
+
+        const fallback = await query(
+            `SELECT id_tenant
+             FROM vetplus_auth.usuarios
+             WHERE rol IN ('admin', 'vet') AND activo = true
+             ORDER BY created_at ASC
+             LIMIT 1`
+        );
+
+        return fallback.rows[0]?.id_tenant || null;
+    }
+
+    normalizeAppointmentType(rawType) {
+        const source = String(rawType || '').trim();
+        if (!source) return 'control';
+
+        const normalized = source.toLowerCase();
+        const mapped = {
+            sin_clasificar: 'sin_clasificar',
+            'sin clasificar': 'sin_clasificar',
+            valoracion: 'valoracion',
+            'valoración': 'valoracion',
+            'valoracion inicial': 'valoracion',
+            'valoración inicial': 'valoracion',
+            domicilio: 'domicilio',
+            fisio: 'terapia',
+            fisioterapia: 'terapia',
+            hidroterapia: 'hidroterapia',
+            terapia: 'terapia',
+            control: 'control',
+            consulta: 'domicilio',
+            'consulta general': 'domicilio',
+            general: 'domicilio',
+            cita: 'domicilio',
+            'cita veterinaria': 'domicilio'
+        }[normalized];
+
+        const safeType = mapped || normalized;
+        return safeType.length > 30 ? safeType.slice(0, 30) : safeType;
+    }
+
+    normalizeAppointmentStatus(rawStatus) {
+        const source = String(rawStatus || '').trim().toLowerCase();
+        const allowed = new Set(['confirmada', 'en_curso', 'completada', 'no_asistio']);
+
+        if (allowed.has(source)) return source;
+
+        const mapped = {
+            confirmed: 'confirmada',
+            tentative: 'confirmada',
+            cancelled: 'no_asistio',
+            canceled: 'no_asistio',
+            pendiente: 'confirmada',
+            cancelada: 'no_asistio',
+            done: 'completada'
+        }[source];
+
+        return mapped && allowed.has(mapped) ? mapped : 'confirmada';
+    }
     
     /**
      * Importar eventos desde Google Calendar y crear citas en VetPlus
      */
     async importFromGoogle(startDate, endDate, options = {}) {
+        const previousContextTenant = this.contextTenantId;
         try {
             const {
                 autoMatch = true,      // Intentar matching automático de clientes/mascotas
-                createMissingData = false, // Crear clientes/mascotas si no existen
-                dryRun = false        // Solo simular, no crear realmente
+                createMissingData = true, // Crear clientes/mascotas si no existen
+                dryRun = false,       // Solo simular, no crear realmente
+                tenantId = null
             } = options;
+            this.contextTenantId = tenantId || this.contextTenantId;
+            const resolvedTenantId = await this.resolveActiveTenantId();
 
             // Obtener eventos desde Google Calendar
             const importResult = await googleCalendarService.importEventsFromGoogle(startDate, endDate);
@@ -31,32 +254,54 @@ class BidirectionalSyncService {
                 skipped: 0,
                 errors: [],
                 created_appointments: [],
-                matched_data: []
+                matched_data: [],
+                event_logs: []
             };
 
             // Procesar cada evento importado
             for (const eventData of importResult.imported_events) {
                 try {
                     results.processed++;
+                    const eventLog = {
+                        index: results.processed,
+                        google_event_id: eventData.google_event_id,
+                        titulo: eventData.titulo || '(sin titulo)',
+                        tipo_detectado: eventData.tipo || 'sin_clasificar',
+                        fecha_inicio: eventData.fecha_inicio,
+                        action: 'pending',
+                        reason: '',
+                        details: {}
+                    };
                     
                     // Verificar si ya existe una cita con este google_event_id
                     const existingResult = await query(`
                         SELECT id_cita, codigo_cita, google_sync_status 
                         FROM clinical.calendario_citas 
-                        WHERE google_event_id = $1
-                    `, [eventData.google_event_id]);
+                                                WHERE google_event_id = $1
+                                                    AND id_tenant = $2
+                                        `, [eventData.google_event_id, resolvedTenantId]);
 
                     if (existingResult.rows.length > 0) {
                         // Ya existe, verificar si necesita actualización
                         const existing = existingResult.rows[0];
                         const needsUpdate = await this.needsUpdate(existing.id_cita, eventData);
+                        eventLog.details = {
+                            existing_id_cita: existing.id_cita,
+                            existing_codigo_cita: existing.codigo_cita,
+                            needs_update: needsUpdate
+                        };
                         
                         if (needsUpdate && !dryRun) {
                             await this.updateAppointmentFromGoogle(existing.id_cita, eventData);
                             results.updated++;
+                            eventLog.action = 'updated';
+                            eventLog.reason = 'existing_needs_update';
                         } else {
                             results.skipped++;
+                            eventLog.action = 'skipped';
+                            eventLog.reason = needsUpdate && dryRun ? 'dry_run_would_update_existing' : 'existing_no_changes';
                         }
+                        results.event_logs.push(eventLog);
                         continue;
                     }
 
@@ -65,6 +310,30 @@ class BidirectionalSyncService {
                     if (autoMatch) {
                         matchedData = await this.matchClientAndPet(eventData);
                         results.matched_data.push(matchedData);
+                        eventLog.details = {
+                            ...eventLog.details,
+                            match_score: matchedData?.match_score ?? 0,
+                            cliente_id: matchedData?.cliente_id || null,
+                            mascota_id: matchedData?.mascota_id || null,
+                            veterinario_id: matchedData?.veterinario_id || null
+                        };
+                    }
+
+                    if (createMissingData && (!matchedData?.cliente_id || !matchedData?.mascota_id)) {
+                        const beforeCreate = {
+                            cliente_id: matchedData?.cliente_id || null,
+                            mascota_id: matchedData?.mascota_id || null
+                        };
+                        matchedData = await this.createMissingClientAndPet(eventData, matchedData || {});
+                        eventLog.details = {
+                            ...eventLog.details,
+                            create_missing_data_applied: true,
+                            before_create_missing: beforeCreate,
+                            after_create_missing: {
+                                cliente_id: matchedData?.cliente_id || null,
+                                mascota_id: matchedData?.mascota_id || null
+                            }
+                        };
                     }
 
                     // Si no se pudo hacer matching y no se permite crear datos faltantes, saltar
@@ -74,6 +343,9 @@ class BidirectionalSyncService {
                             google_event_id: eventData.google_event_id,
                             error: 'No se pudo hacer matching de cliente/mascota'
                         });
+                        eventLog.action = 'skipped';
+                        eventLog.reason = 'no_client_match_create_missing_disabled';
+                        results.event_logs.push(eventLog);
                         continue;
                     }
 
@@ -83,20 +355,47 @@ class BidirectionalSyncService {
                         if (newAppointment.success) {
                             results.created++;
                             results.created_appointments.push(newAppointment.data);
+                            eventLog.action = 'created';
+                            eventLog.reason = 'created_successfully';
+                            eventLog.details = {
+                                ...eventLog.details,
+                                id_cita: newAppointment?.data?.id_cita || null,
+                                codigo_cita: newAppointment?.data?.codigo_cita || null
+                            };
                         } else {
                             results.errors.push({
                                 google_event_id: eventData.google_event_id,
                                 error: newAppointment.error
                             });
+                            eventLog.action = 'error';
+                            eventLog.reason = 'create_failed';
+                            eventLog.details = {
+                                ...eventLog.details,
+                                error: newAppointment.error
+                            };
                         }
                     } else {
                         results.created++;
+                        eventLog.action = 'created';
+                        eventLog.reason = 'dry_run_would_create';
                     }
+
+                    results.event_logs.push(eventLog);
 
                 } catch (error) {
                     results.errors.push({
                         google_event_id: eventData.google_event_id,
                         error: error.message
+                    });
+                    results.event_logs.push({
+                        index: results.processed,
+                        google_event_id: eventData.google_event_id,
+                        titulo: eventData.titulo || '(sin titulo)',
+                        tipo_detectado: eventData.tipo || 'sin_clasificar',
+                        fecha_inicio: eventData.fecha_inicio,
+                        action: 'error',
+                        reason: 'unexpected_exception',
+                        details: { error: error.message }
                     });
                 }
             }
@@ -118,23 +417,44 @@ class BidirectionalSyncService {
                 success: false,
                 error: error.message
             };
+        } finally {
+            this.contextTenantId = previousContextTenant;
         }
     }
 
     /**
      * Detectar y procesar cambios desde Google Calendar
      */
-    async syncChangesFromGoogle() {
+    async syncChangesFromGoogle(options = {}) {
+        const previousContextTenant = this.contextTenantId;
         try {
+            const {
+                onlyToday = false,
+                startDate = null,
+                endDate = null,
+                tenantId = null
+            } = options;
+
+            this.contextTenantId = tenantId || this.contextTenantId;
+
+            const todayBogota = this.getBogotaDateString();
+            const rangeStart = startDate || (onlyToday ? todayBogota : null);
+            const rangeEnd = endDate || (onlyToday ? todayBogota : null);
+            const tenantIdResolved = await this.resolveActiveTenantId();
+
             // Obtener última sincronización
             const lastSyncResult = await query(`
                 SELECT 
                     COALESCE(MAX(last_google_sync), CURRENT_TIMESTAMP - INTERVAL '1 day') as last_sync
                 FROM clinical.calendario_citas
                 WHERE google_event_id IS NOT NULL
-            `);
+                  AND id_tenant = $1
+            `, [tenantIdResolved]);
 
-            const lastSyncTime = lastSyncResult.rows[0]?.last_sync || new Date(Date.now() - 24 * 60 * 60 * 1000);
+            const rawLastSyncTime = lastSyncResult.rows[0]?.last_sync || new Date(Date.now() - 24 * 60 * 60 * 1000);
+            // Ventana de solape para evitar perder cambios por desfases/reintentos.
+            const syncOverlapMs = 2 * 60 * 60 * 1000;
+            const lastSyncTime = new Date(new Date(rawLastSyncTime).getTime() - syncOverlapMs);
 
             // Detectar cambios en Google Calendar
             const changesResult = await googleCalendarService.detectChangesFromGoogle(lastSyncTime.toISOString());
@@ -143,44 +463,122 @@ class BidirectionalSyncService {
                 return changesResult;
             }
 
+            const filteredChanges = changesResult.changes.filter((change) =>
+                this.isWithinDateRange(change?.parsed_data?.fecha_inicio, rangeStart, rangeEnd)
+            );
+
+            let fallbackImport = null;
+
+            // Para sincronización automática diaria, además del incremental
+            // ejecutar importación por rango del día para garantizar cobertura completa.
+            if (onlyToday && rangeStart && rangeEnd) {
+                if (filteredChanges.length === 0) {
+                    console.log(`ℹ️ Sync incremental sin cambios para hoy (${rangeStart}). Ejecutando import por rango diario...`);
+                } else {
+                    console.log(`ℹ️ Sync incremental detectó ${filteredChanges.length} cambios para hoy (${rangeStart}). Ejecutando import por rango diario para completar eventos no modificados recientemente...`);
+                }
+                fallbackImport = await this.importFromGoogle(rangeStart, rangeEnd, {
+                    autoMatch: true,
+                    createMissingData: true,
+                    dryRun: false,
+                    tenantId: tenantIdResolved
+                });
+
+                if (fallbackImport?.success) {
+                    console.log(
+                        `✅ Fallback import completado: created=${fallbackImport?.results?.created || 0}, ` +
+                        `updated=${fallbackImport?.results?.updated || 0}, skipped=${fallbackImport?.results?.skipped || 0}`
+                    );
+                } else {
+                    console.warn(`⚠️ Fallback import falló: ${fallbackImport?.error || 'sin detalle'}`);
+                }
+            }
+
             const results = {
                 last_sync_time: lastSyncTime,
-                total_changes: changesResult.total_changes,
+                total_changes_detected: changesResult.total_changes,
+                total_changes: filteredChanges.length,
+                applied_date_range: {
+                    start_date: rangeStart,
+                    end_date: rangeEnd,
+                    only_today: onlyToday
+                },
                 processed: 0,
                 updated: 0,
                 deleted: 0,
                 created: 0,
-                errors: []
+                errors: [],
+                change_logs: [],
+                fallback_import: fallbackImport ? {
+                    success: fallbackImport.success,
+                    created: fallbackImport?.results?.created || 0,
+                    updated: fallbackImport?.results?.updated || 0,
+                    skipped: fallbackImport?.results?.skipped || 0,
+                    errors: fallbackImport?.results?.errors || [],
+                    event_logs: fallbackImport?.results?.event_logs || []
+                } : null
             };
 
             // Procesar cada cambio
-            for (const change of changesResult.changes) {
+            for (const change of filteredChanges) {
                 try {
                     results.processed++;
                     
                     switch (change.change_type) {
                         case 'created':
-                            const createResult = await this.handleGoogleEventCreated(change);
+                            const createResult = await this.handleGoogleEventCreated(change, { createMissingData: true });
                             if (createResult.success) results.created++;
                             else results.errors.push(createResult.error);
+                            results.change_logs.push({
+                                google_event_id: change?.parsed_data?.google_event_id,
+                                titulo: change?.parsed_data?.titulo || '(sin titulo)',
+                                change_type: change.change_type,
+                                action: createResult.success ? 'created' : 'error',
+                                reason: createResult.success ? 'created_from_incremental' : 'create_failed',
+                                details: createResult.success ? createResult.data : createResult.error
+                            });
                             break;
 
                         case 'updated':
                             const updateResult = await this.handleGoogleEventUpdated(change);
                             if (updateResult.success) results.updated++;
                             else results.errors.push(updateResult.error);
+                            results.change_logs.push({
+                                google_event_id: change?.parsed_data?.google_event_id,
+                                titulo: change?.parsed_data?.titulo || '(sin titulo)',
+                                change_type: change.change_type,
+                                action: updateResult.success ? 'updated' : 'error',
+                                reason: updateResult.success ? 'updated_from_incremental' : 'update_failed',
+                                details: updateResult.success ? updateResult.data : updateResult.error
+                            });
                             break;
 
                         case 'attendee_response':
                             const attendeeResult = await this.handleAttendeeResponse(change);
                             if (attendeeResult.success) results.updated++;
                             else results.errors.push(attendeeResult.error);
+                            results.change_logs.push({
+                                google_event_id: change?.parsed_data?.google_event_id,
+                                titulo: change?.parsed_data?.titulo || '(sin titulo)',
+                                change_type: change.change_type,
+                                action: attendeeResult.success ? 'updated' : 'error',
+                                reason: attendeeResult.success ? 'attendee_response_applied' : 'attendee_response_failed',
+                                details: attendeeResult.success ? attendeeResult.data : attendeeResult.error
+                            });
                             break;
 
                         case 'deleted':
                             const deleteResult = await this.handleGoogleEventDeleted(change);
                             if (deleteResult.success) results.deleted++;
                             else results.errors.push(deleteResult.error);
+                            results.change_logs.push({
+                                google_event_id: change?.parsed_data?.google_event_id,
+                                titulo: change?.parsed_data?.titulo || '(sin titulo)',
+                                change_type: change.change_type,
+                                action: deleteResult.success ? 'deleted' : 'error',
+                                reason: deleteResult.success ? 'deleted_from_incremental' : 'delete_failed',
+                                details: deleteResult.success ? deleteResult.data : deleteResult.error
+                            });
                             break;
                     }
 
@@ -189,11 +587,38 @@ class BidirectionalSyncService {
                         google_event_id: change.parsed_data?.google_event_id,
                         error: error.message
                     });
+                    results.change_logs.push({
+                        google_event_id: change?.parsed_data?.google_event_id,
+                        titulo: change?.parsed_data?.titulo || '(sin titulo)',
+                        change_type: change?.change_type || 'unknown',
+                        action: 'error',
+                        reason: 'unexpected_exception',
+                        details: { error: error.message }
+                    });
                 }
             }
 
             // Actualizar marca de tiempo de sincronización
             await this.updateLastSyncTime('sync_changes_from_google');
+
+            if (fallbackImport && fallbackImport.success) {
+                results.created += fallbackImport?.results?.created || 0;
+                results.updated += fallbackImport?.results?.updated || 0;
+                results.processed += fallbackImport?.results?.processed || 0;
+                if (Array.isArray(fallbackImport?.results?.errors) && fallbackImport.results.errors.length > 0) {
+                    results.errors.push(...fallbackImport.results.errors);
+                }
+            }
+
+            if (results.errors.length > 0) {
+                console.warn('⚠️ Errores de sync (primeros 5):', results.errors.slice(0, 5));
+            }
+
+            console.log(
+                `📊 Sync resumen tenant=${tenantIdResolved}: incremental_detected=${results.total_changes_detected}, ` +
+                `incremental_in_range=${results.total_changes}, processed=${results.processed}, ` +
+                `created=${results.created}, updated=${results.updated}, deleted=${results.deleted}, errors=${results.errors.length}`
+            );
 
             return {
                 success: true,
@@ -206,6 +631,8 @@ class BidirectionalSyncService {
                 success: false,
                 error: error.message
             };
+        } finally {
+            this.contextTenantId = previousContextTenant;
         }
     }
 
@@ -214,7 +641,8 @@ class BidirectionalSyncService {
      */
     async matchClientAndPet(eventData) {
         try {
-            const { cliente_nombre, mascota_nombre } = eventData;
+            const { cliente_nombre, mascota_nombre, cliente_email, veterinario_nombre } = eventData;
+            const tenantId = await this.resolveActiveTenantId();
             
             let cliente_id = null;
             let mascota_id = null;
@@ -226,15 +654,57 @@ class BidirectionalSyncService {
                     SELECT id_cliente, nombre, telefono 
                     FROM clinical.clientes 
                     WHERE LOWER(nombre) LIKE LOWER($1) 
+                    AND id_tenant = $2
                     AND activo = true
                     ORDER BY 
-                        CASE WHEN LOWER(nombre) = LOWER($2) THEN 1 ELSE 2 END,
+                        CASE WHEN LOWER(nombre) = LOWER($3) THEN 1 ELSE 2 END,
                         nombre
                     LIMIT 1
-                `, [`%${cliente_nombre}%`, cliente_nombre]);
+                `, [`%${cliente_nombre}%`, tenantId, cliente_nombre]);
 
                 if (clienteResult.rows.length > 0) {
                     cliente_id = clienteResult.rows[0].id_cliente;
+                }
+            }
+
+            // Fallback por email si existe
+            if (!cliente_id && cliente_email) {
+                const clienteByEmail = await query(`
+                    SELECT id_cliente
+                    FROM clinical.clientes
+                    WHERE id_tenant = $1
+                    AND activo = true
+                    AND LOWER(email) = LOWER($2)
+                    LIMIT 1
+                `, [tenantId, cliente_email]);
+
+                if (clienteByEmail.rows.length > 0) {
+                    cliente_id = clienteByEmail.rows[0].id_cliente;
+                }
+            }
+
+            // Fallback flexible por tokens de nombre (nombres compuestos)
+            if (!cliente_id && cliente_nombre) {
+                const candidateClients = await query(`
+                    SELECT id_cliente, nombre
+                    FROM clinical.clientes
+                    WHERE id_tenant = $1
+                    AND activo = true
+                    LIMIT 500
+                `, [tenantId]);
+
+                const targetName = this.normalizeText(cliente_nombre);
+                const targetTokens = targetName.split(/\s+/).filter(token => token.length >= 3);
+
+                const bestClient = candidateClients.rows.find(row => {
+                    const candidateName = this.normalizeText(row.nombre);
+                    if (candidateName === targetName) return true;
+                    if (targetTokens.length === 0) return candidateName.includes(targetName) || targetName.includes(candidateName);
+                    return targetTokens.every(token => candidateName.includes(token));
+                });
+
+                if (bestClient) {
+                    cliente_id = bestClient.id_cliente;
                 }
             }
 
@@ -244,34 +714,113 @@ class BidirectionalSyncService {
                     SELECT id_mascota, nombre, especie 
                     FROM clinical.mascotas 
                     WHERE id_cliente = $1 
-                    AND LOWER(nombre) LIKE LOWER($2)
+                    AND id_tenant = $2
+                    AND LOWER(nombre) LIKE LOWER($3)
                     AND activo = true
                     ORDER BY 
-                        CASE WHEN LOWER(nombre) = LOWER($3) THEN 1 ELSE 2 END,
+                        CASE WHEN LOWER(nombre) = LOWER($4) THEN 1 ELSE 2 END,
                         nombre
                     LIMIT 1
-                `, [cliente_id, `%${mascota_nombre}%`, mascota_nombre]);
+                `, [cliente_id, tenantId, `%${mascota_nombre}%`, mascota_nombre]);
 
                 if (mascotaResult.rows.length > 0) {
                     mascota_id = mascotaResult.rows[0].id_mascota;
                 }
             }
 
-            // Asignar veterinario por defecto (el primero disponible)
-            const veterinarioResult = await query(`
-                SELECT id_usuario 
+            // Si no hay cliente pero sí nombre de mascota, intentar resolver mascota global por tenant
+            // y derivar el cliente a partir de esa mascota.
+            if (!cliente_id && !mascota_id && mascota_nombre) {
+                const mascotaGlobalResult = await query(`
+                    SELECT m.id_mascota, m.id_cliente
+                    FROM clinical.mascotas m
+                    WHERE m.id_tenant = $1
+                      AND m.activo = true
+                      AND LOWER(m.nombre) LIKE LOWER($2)
+                    ORDER BY CASE WHEN LOWER(m.nombre) = LOWER($3) THEN 1 ELSE 2 END, m.nombre
+                    LIMIT 1
+                `, [tenantId, `%${mascota_nombre}%`, mascota_nombre]);
+
+                if (mascotaGlobalResult.rows.length > 0) {
+                    mascota_id = mascotaGlobalResult.rows[0].id_mascota;
+                    cliente_id = mascotaGlobalResult.rows[0].id_cliente;
+                }
+            }
+
+            // Fallback flexible de mascota por nombre normalizado
+            if (!mascota_id && mascota_nombre && cliente_id) {
+                const candidatePets = await query(`
+                    SELECT id_mascota, nombre
+                    FROM clinical.mascotas
+                    WHERE id_cliente = $1
+                    AND id_tenant = $2
+                    AND activo = true
+                    LIMIT 200
+                `, [cliente_id, tenantId]);
+
+                const targetPet = this.normalizeText(mascota_nombre);
+                const bestPet = candidatePets.rows.find(row => {
+                    const candidatePet = this.normalizeText(row.nombre);
+                    return candidatePet === targetPet || candidatePet.includes(targetPet) || targetPet.includes(candidatePet);
+                });
+
+                if (bestPet) {
+                    mascota_id = bestPet.id_mascota;
+                }
+            }
+
+            // Si el cliente ya está identificado y no vino nombre de mascota o no hubo match,
+            // usar la única mascota activa del cliente como fallback seguro.
+            if (!mascota_id && cliente_id) {
+                const singlePetResult = await query(`
+                    SELECT id_mascota
+                    FROM clinical.mascotas
+                    WHERE id_cliente = $1
+                      AND id_tenant = $2
+                      AND activo = true
+                    ORDER BY created_at ASC
+                    LIMIT 2
+                `, [cliente_id, tenantId]);
+
+                if (singlePetResult.rows.length === 1) {
+                    mascota_id = singlePetResult.rows[0].id_mascota;
+                }
+            }
+
+            const veterinariosResult = await query(`
+                SELECT id_usuario, nombre, apellido
                 FROM vetplus_auth.usuarios 
                 WHERE rol IN ('vet', 'admin') 
+                AND id_tenant = $1
                 AND activo = true 
-                ORDER BY rol DESC, nombre
-                LIMIT 1
-            `);
+                ORDER BY rol DESC, nombre, apellido
+            `, [tenantId]);
 
-            if (veterinarioResult.rows.length > 0) {
-                veterinario_id = veterinarioResult.rows[0].id_usuario;
+            if (veterinariosResult.rows.length > 0) {
+                if (veterinario_nombre) {
+                    const targetVet = this.normalizeText(veterinario_nombre);
+                    const targetTokens = targetVet.split(/\s+/).filter(token => token.length >= 3);
+
+                    const matchedVet = veterinariosResult.rows.find(vet => {
+                        const fullName = this.normalizeText(`${vet.nombre || ''} ${vet.apellido || ''}`);
+                        if (fullName === targetVet) return true;
+                        if (targetTokens.length === 0) return fullName.includes(targetVet) || targetVet.includes(fullName);
+                        return targetTokens.every(token => fullName.includes(token));
+                    });
+
+                    if (matchedVet) {
+                        veterinario_id = matchedVet.id_usuario;
+                    }
+                }
+
+                // Fallback: primer veterinario/admin disponible
+                if (!veterinario_id) {
+                    veterinario_id = veterinariosResult.rows[0].id_usuario;
+                }
             }
 
             return {
+                tenant_id: tenantId,
                 cliente_id,
                 mascota_id,
                 veterinario_id,
@@ -316,6 +865,21 @@ class BidirectionalSyncService {
                 };
             }
 
+            if (!matchedData?.mascota_id) {
+                return {
+                    success: false,
+                    error: `No se pudo asignar mascota para el evento '${eventData?.titulo || eventData?.google_event_id || 'sin título'}'`
+                };
+            }
+
+            const safeTipo = this.normalizeAppointmentType(eventData?.tipo);
+            const safeEstado = this.normalizeAppointmentStatus(eventData?.estado_vetplus);
+            const safeMotivo = this.sanitizeRichTextToPlain(eventData?.motivo || 'Importado desde Google Calendar');
+            const safeDescripcion = this.sanitizeRichTextToPlain(eventData?.descripcion || '');
+
+            const notesPrefix = 'Importado desde Google Calendar.';
+            const safeNotas = safeDescripcion ? `${notesPrefix} ${safeDescripcion}` : notesPrefix;
+
             const id_cita = uuidv4();
             const codigo_cita = `GCL-${Date.now().toString().slice(-8)}`;
 
@@ -323,8 +887,8 @@ class BidirectionalSyncService {
                 INSERT INTO clinical.calendario_citas (
                     id_cita, codigo_cita, id_mascota, id_veterinario,
                     fecha_inicio, fecha_fin, tipo, estado, motivo, notas,
-                    google_event_id, google_sync_status, created_by
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'synced', $12)
+                    google_event_id, google_sync_status, created_by, id_tenant
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'synced', $12, $13)
                 RETURNING *
             `;
 
@@ -335,12 +899,13 @@ class BidirectionalSyncService {
                 matchedData.veterinario_id,
                 eventData.fecha_inicio,
                 eventData.fecha_fin,
-                eventData.tipo,
-                eventData.estado_vetplus || 'pendiente', // Usar el estado mapeado o pendiente por defecto
-                eventData.motivo,
-                `Importado desde Google Calendar. ${eventData.descripcion || ''}`,
+                safeTipo,
+                safeEstado,
+                safeMotivo,
+                safeNotas,
                 eventData.google_event_id,
-                matchedData.veterinario_id // created_by
+                matchedData.veterinario_id,
+                matchedData.tenant_id
             ]);
 
             return {
@@ -360,9 +925,31 @@ class BidirectionalSyncService {
     /**
      * Manejar evento creado en Google
      */
-    async handleGoogleEventCreated(change) {
+    async handleGoogleEventCreated(change, options = {}) {
         try {
-            const matchedData = await this.matchClientAndPet(change.parsed_data);
+            const { createMissingData = false } = options;
+
+            const existing = await query(
+                `SELECT id_cita FROM clinical.calendario_citas WHERE google_event_id = $1 AND id_tenant = $2 LIMIT 1`,
+                [change.parsed_data.google_event_id, await this.resolveActiveTenantId()]
+            );
+
+            if (existing.rows.length > 0) {
+                await this.updateAppointmentFromGoogle(existing.rows[0].id_cita, change.parsed_data);
+                return {
+                    success: true,
+                    data: {
+                        id_cita: existing.rows[0].id_cita,
+                        mode: 'updated_existing'
+                    }
+                };
+            }
+
+            let matchedData = await this.matchClientAndPet(change.parsed_data);
+
+            if (createMissingData && (!matchedData?.cliente_id || !matchedData?.mascota_id)) {
+                matchedData = await this.createMissingClientAndPet(change.parsed_data, matchedData);
+            }
             
             if (!matchedData.veterinario_id) {
                 return {
@@ -397,11 +984,12 @@ class BidirectionalSyncService {
                 JOIN clinical.mascotas m ON cc.id_mascota = m.id_mascota
                 JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
                 WHERE cc.google_event_id = $1
-            `, [change.parsed_data.google_event_id]);
+                  AND cc.id_tenant = $2
+            `, [change.parsed_data.google_event_id, await this.resolveActiveTenantId()]);
 
             if (existingResult.rows.length === 0) {
                 // No existe, crear nueva
-                return await this.handleGoogleEventCreated(change);
+                return await this.handleGoogleEventCreated(change, { createMissingData: true });
             }
 
             const appointment = existingResult.rows[0];
@@ -450,7 +1038,8 @@ class BidirectionalSyncService {
                 JOIN clinical.mascotas m ON cc.id_mascota = m.id_mascota
                 JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
                 WHERE cc.google_event_id = $1
-            `, [change.parsed_data.google_event_id]);
+                  AND cc.id_tenant = $2
+            `, [change.parsed_data.google_event_id, await this.resolveActiveTenantId()]);
 
             if (existingResult.rows.length === 0) {
                 console.log(`⚠️ No se encontró cita con google_event_id: ${change.parsed_data.google_event_id}`);
@@ -518,7 +1107,7 @@ class BidirectionalSyncService {
                 switch (clienteResponse.response_status) {
                     case 'accepted':
                         // Lógica simplificada: Una vez cancelada, debe contactar para reactivar
-                        if (appointment.estado === 'cancelada') {
+                        if (['cancelada', 'no_asistio'].includes(appointment.estado)) {
                             console.log(`🚫 Cita ${id_cita} cancelada - cliente debe contactar para reactivar`);
                             notas = 'Cliente intentó reactivar cita cancelada desde Google Calendar. Debe contactar directamente para reagendar.';
                             
@@ -535,12 +1124,12 @@ class BidirectionalSyncService {
                         }
                         break;
                     case 'declined':
-                        nuevoEstado = 'cancelada';
+                        nuevoEstado = 'no_asistio';
                         notas = 'Cliente canceló desde Google Calendar';
                         break;
                     case 'tentative':
-                        // Cliente marcó como tentativo - siempre pendiente
-                        nuevoEstado = 'pendiente';
+                        // Cliente marcó como tentativo - se mantiene confirmada
+                        nuevoEstado = 'confirmada';
                         notas = 'Cliente marcó como tentativo desde Google Calendar';
                         break;
                 }
@@ -638,6 +1227,7 @@ class BidirectionalSyncService {
      */
     async handleGoogleEventDeleted(change) {
         try {
+            const tenantId = await this.resolveActiveTenantId();
             const result = await query(`
                 UPDATE clinical.calendario_citas 
                 SET 
@@ -646,8 +1236,9 @@ class BidirectionalSyncService {
                     notas = COALESCE(notas, '') || ' | Cancelada desde Google Calendar',
                     updated_at = CURRENT_TIMESTAMP
                 WHERE google_event_id = $1
+                  AND id_tenant = $2
                 RETURNING id_cita, codigo_cita
-            `, [change.parsed_data.google_event_id]);
+            `, [change.parsed_data.google_event_id, tenantId]);
 
             return {
                 success: true,
@@ -666,6 +1257,8 @@ class BidirectionalSyncService {
      * Actualizar cita desde Google
      */
     async updateAppointmentFromGoogle(id_cita, eventData) {
+        const safeTipo = this.normalizeAppointmentType(eventData?.tipo);
+        const safeMotivo = this.sanitizeRichTextToPlain(eventData?.motivo || 'Importado desde Google Calendar');
         const updateQuery = `
             UPDATE clinical.calendario_citas 
             SET 
@@ -683,8 +1276,8 @@ class BidirectionalSyncService {
         const result = await query(updateQuery, [
             eventData.fecha_inicio,
             eventData.fecha_fin,
-            eventData.tipo,
-            eventData.motivo,
+            safeTipo,
+            safeMotivo,
             id_cita
         ]);
 

@@ -84,7 +84,7 @@ import { environment } from '../../../environments/environment';
 
             <mat-card-content>
               <!-- Búsqueda de propietario existente -->
-              <div class="search-section" *ngIf="!isEditing()">
+                <div class="search-section">
                 <mat-form-field appearance="outline" class="search-field">
                   <mat-label>Buscar propietario existente</mat-label>
                   <input matInput
@@ -860,6 +860,18 @@ export class PacienteFormComponent implements OnInit {
           this.pacienteForm.reset();
           this.pacienteForm.patchValue(formData);
 
+          const owner: Cliente = {
+            id_cliente: pacienteData.id_cliente,
+            nombre: pacienteData.nombre_cliente || '',
+            telefono: pacienteData.telefono || '',
+            email: pacienteData.email || '',
+            direccion: pacienteData.direccion || '',
+            cedula: pacienteData.cedula || '',
+            activo: true
+          };
+          this.clienteSeleccionado.set(owner);
+          this.clienteSearchControl.setValue(owner.nombre || '', { emitEvent: false });
+
           // Marcar campos como touched para labels de Material Design
           this.markAllFieldsAsTouched();
 
@@ -880,7 +892,13 @@ export class PacienteFormComponent implements OnInit {
   private loadClientes(): void {
     this.pacientesService.getClientes(1, 50).subscribe({
       next: (response) => {
-        this.filteredClientes.set(response.data.clientes);
+        const data: any = response as any;
+        const clientes = Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(data?.data?.clientes)
+            ? data.data.clientes
+            : [];
+        this.filteredClientes.set(clientes);
       },
       error: (error) => {
         console.error('Error cargando clientes:', error);
@@ -898,7 +916,13 @@ export class PacienteFormComponent implements OnInit {
 
     this.pacientesService.getClientes(1, 20, searchTerm).subscribe({
       next: (response) => {
-        this.filteredClientes.set(response.data.clientes);
+        const data: any = response as any;
+        const clientes = Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(data?.data?.clientes)
+            ? data.data.clientes
+            : [];
+        this.filteredClientes.set(clientes);
       },
       error: (error) => {
         console.error('Error buscando clientes:', error);
@@ -996,7 +1020,9 @@ export class PacienteFormComponent implements OnInit {
   }
 
   displayCliente(cliente: Cliente): string {
-    return cliente ? cliente.nombre : '';
+    if (!cliente) return '';
+    if (typeof cliente === 'string') return cliente;
+    return cliente.nombre || '';
   }
 
   onSubmit(): void {
@@ -1073,6 +1099,12 @@ export class PacienteFormComponent implements OnInit {
           ...(rawFormData.microchip && rawFormData.microchip.trim() && { microchip: rawFormData.microchip }),
           ...(rawFormData.notas && rawFormData.notas.trim() && { notas: rawFormData.notas })
         };
+
+        // Si se seleccionó un propietario existente desde el buscador,
+        // priorizar vínculo por ID para crear/editar la mascota sin duplicar cliente.
+        if (this.clienteSeleccionado()?.id_cliente) {
+          (formData as any).id_cliente_existente = this.clienteSeleccionado()!.id_cliente;
+        }
       }
 
       if (this.isEditing()) {

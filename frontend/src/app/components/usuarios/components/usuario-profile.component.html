@@ -5,16 +5,39 @@
       <p>Cargando perfil del usuario...</p>
     </div>
   } @else if (usuario()) {
+    <div class="profile-top-actions">
+      <button mat-raised-button
+              color="primary"
+              (click)="volver()"
+              class="top-back-button">
+        <mat-icon>arrow_back</mat-icon>
+        Volver
+      </button>
+    </div>
+
     <!-- Header del Perfil -->
     <div class="profile-header">
       <div class="header-content">
         <div class="user-info">
           <div class="user-avatar-large">
-            @if (usuario()?.avatar_url) {
-              <img [src]="usuario()!.avatar_url" [alt]="usuario()!.nombre">
+            @if (avatarPreview() || usuario()?.avatar_url) {
+              <img [src]="avatarPreview() || getAvatarUrl(usuario()!.avatar_url)" [alt]="usuario()!.nombre">
             } @else {
               <mat-icon>person</mat-icon>
             }
+            <input #avatarInput type="file" accept="image/png,image/jpeg,image/webp" style="display:none"
+                   (change)="onAvatarSelected($event)">
+            <button mat-mini-fab
+                    class="avatar-upload-btn"
+                    matTooltip="Cambiar foto de perfil"
+                    (click)="avatarInput.click()"
+                    [disabled]="uploadingAvatar()">
+              @if (uploadingAvatar()) {
+                <mat-icon>hourglass_top</mat-icon>
+              } @else {
+                <mat-icon>photo_camera</mat-icon>
+              }
+            </button>
           </div>
           <div class="user-details">
             <h1 class="user-name">{{ usuario()!.nombre }} {{ usuario()!.apellido }}</h1>
@@ -193,84 +216,52 @@
                     <span>{{ usuario()!.numero_licencia || 'No especificado' }}</span>
                   </div>
                 </div>
+
+                <!-- Firma digital -->
+                <mat-divider style="margin: 16px 0"></mat-divider>
+                <div class="firma-section">
+                  <p class="firma-label">
+                    <mat-icon style="vertical-align:middle;font-size:16px">draw</mat-icon>
+                    Firma del Veterinario
+                  </p>
+                  <p style="font-size:12px;color:#78909c;margin:0 0 10px">
+                    Se insertará automáticamente en los PDFs de historias clínicas. Formatos: PNG o JPG, máx. 3 MB.
+                  </p>
+
+                  @if (usuario()!.firma_url || firmaPreview()) {
+                    <div class="firma-preview-box">
+                      <img [src]="firmaPreview() || getFirmaUrl(usuario()!.firma_url)" alt="Firma" class="firma-img">
+                    </div>
+                  } @else {
+                    <div class="firma-placeholder">
+                      <mat-icon>gesture</mat-icon>
+                      <span>Sin firma cargada</span>
+                    </div>
+                  }
+
+                  <div style="margin-top:12px">
+                    <input #firmaInput type="file" accept="image/png,image/jpeg" style="display:none"
+                           (change)="onFirmaSelected($event)">
+                    <button mat-stroked-button color="primary" (click)="firmaInput.click()" [disabled]="uploadingFirma()">
+                      @if (uploadingFirma()) {
+                        <mat-spinner diameter="16" style="display:inline-block;margin-right:6px"></mat-spinner>
+                      } @else {
+                        <mat-icon>upload</mat-icon>
+                      }
+                      {{ usuario()!.firma_url ? 'Cambiar firma' : 'Subir firma' }}
+                    </button>
+                  </div>
+                </div>
               </mat-card-content>
             </mat-card>
           }
         </div>
       </mat-tab>
 
-      <!-- Tab: Actividad Reciente -->
-      <mat-tab label="Actividad Reciente">
-        <div class="tab-content">
-          <mat-card class="activity-card">
-            <mat-card-header>
-              <mat-card-title>
-                <mat-icon>history</mat-icon>
-                Últimas Actividades
-              </mat-card-title>
-              <mat-card-subtitle>Registro de las últimas 10 acciones del usuario</mat-card-subtitle>
-            </mat-card-header>
-            <mat-card-content>
-              @if (loadingLogs()) {
-                <div class="loading-small">
-                  <mat-spinner diameter="30"></mat-spinner>
-                  <span>Cargando actividad...</span>
-                </div>
-              } @else {
-                <mat-list class="activity-list">
-                  @for (log of logsActividad(); track log.id_log) {
-                    <mat-list-item class="activity-item">
-                      <mat-icon matListItemIcon
-                                [style.color]="getColorTipoLog(log.tipo)"
-                                class="activity-icon">
-                        {{ getIconoTipoLog(log.tipo) }}
-                      </mat-icon>
-                      <div matListItemTitle class="activity-title">{{ log.accion }}</div>
-                      <div matListItemLine class="activity-description">{{ log.descripcion }}</div>
-                      <div matListItemLine class="activity-meta">
-                        <span class="activity-module">{{ log.modulo }}</span>
-                        <span class="activity-time">{{ formatearFechaRelativa(log.fecha) }}</span>
-                      </div>
-                      <mat-chip matListItemMeta
-                                [class]="'result-' + log.resultado"
-                                class="result-chip">
-                        {{ log.resultado }}
-                      </mat-chip>
-                    </mat-list-item>
-                    @if (!$last) {
-                      <mat-divider></mat-divider>
-                    }
-                  }
-                </mat-list>
-
-                @if (logsActividad().length === 0) {
-                  <div class="no-data">
-                    <mat-icon>history</mat-icon>
-                    <h3>Sin actividad reciente</h3>
-                    <p>Los logs de actividad estarán disponibles próximamente</p>
-                  </div>
-                }
-
-                @if (logsActividad().length > 0) {
-                  <div class="view-more">
-                    <button mat-stroked-button
-                            disabled
-                            matTooltip="Próximamente disponible">
-                      <mat-icon>visibility</mat-icon>
-                      Ver toda la actividad
-                    </button>
-                  </div>
-                }
-              }
-            </mat-card-content>
-          </mat-card>
-        </div>
-      </mat-tab>
-
-      <!-- Tab: Sesiones Activas -->
+      <!-- Tab: Accesos/Sesiones -->
       <mat-tab>
         <ng-template mat-tab-label>
-          <span>Sesiones</span>
+          <span>Accesos</span>
           @if (sesionesActivas().length > 0) {
             <mat-icon matBadge="{{ sesionesActivas().length }}" matBadgeColor="warn" class="tab-badge-icon">devices</mat-icon>
           }
@@ -280,11 +271,16 @@
             <mat-card-header>
               <mat-card-title>
                 <mat-icon>devices</mat-icon>
-                Sesiones Activas
+                Accesos recientes
               </mat-card-title>
-              <mat-card-subtitle>Dispositivos desde los que el usuario ha iniciado sesión</mat-card-subtitle>
+              <mat-card-subtitle>Listado de inicios de sesión registrados para este usuario</mat-card-subtitle>
             </mat-card-header>
             <mat-card-content>
+              <div class="config-warning" style="margin-bottom: 12px;">
+                <mat-icon>info</mat-icon>
+                <span>Esta vista muestra accesos registrados (logins). No representa conexiones en tiempo real.</span>
+              </div>
+
               <div class="sessions-actions">
                 @if (sesionesActivas().length > 0) {
                   <button mat-stroked-button
@@ -341,8 +337,8 @@
                 @if (sesionesActivas().length === 0) {
                   <div class="no-data">
                     <mat-icon>devices_off</mat-icon>
-                    <h3>Sin sesiones activas</h3>
-                    <p>La gestión de sesiones estará disponible próximamente</p>
+                    <h3>Sin accesos registrados</h3>
+                    <p>No hay inicios de sesión recientes para este usuario.</p>
                   </div>
                 }
 
@@ -357,73 +353,6 @@
                   </div>
                 }
               }
-            </mat-card-content>
-          </mat-card>
-        </div>
-      </mat-tab>
-
-      <!-- Tab: Configuración -->
-      <mat-tab label="Configuración">
-        <div class="tab-content">
-          <mat-card class="config-card">
-            <mat-card-header>
-              <mat-card-title>
-                <mat-icon>settings</mat-icon>
-                Configuración del Usuario
-              </mat-card-title>
-            </mat-card-header>
-            <mat-card-content>
-              <div class="config-grid">
-                <div class="config-section">
-                  <h3>Preferencias de Interface</h3>
-                  <div class="config-item">
-                    <label>Tema</label>
-                    <span>{{ usuario()?.configuraciones?.tema || 'Claro' }}</span>
-                  </div>
-                  <div class="config-item">
-                    <label>Idioma</label>
-                    <span>{{ (usuario()?.configuraciones?.idioma === 'es') ? 'Español' : 'Inglés' }}</span>
-                  </div>
-                  <div class="config-item">
-                    <label>Zona Horaria</label>
-                    <span>{{ usuario()?.configuraciones?.timezone || 'America/Bogota' }}</span>
-                  </div>
-                </div>
-
-                <div class="config-section">
-                  <h3>Notificaciones</h3>
-                  <div class="config-item">
-                    <label>Email</label>
-                    <mat-icon class="config-status"
-                              [style.color]="usuario()?.configuraciones?.notificaciones_email ? '#38a169' : '#e53e3e'">
-                      {{ usuario()?.configuraciones?.notificaciones_email ? 'check_circle' : 'cancel' }}
-                    </mat-icon>
-                  </div>
-                  <div class="config-item">
-                    <label>Push</label>
-                    <mat-icon class="config-status"
-                              [style.color]="usuario()?.configuraciones?.notificaciones_push ? '#38a169' : '#e53e3e'">
-                      {{ usuario()?.configuraciones?.notificaciones_push ? 'check_circle' : 'cancel' }}
-                    </mat-icon>
-                  </div>
-                </div>
-
-                <div class="config-section">
-                  <h3>Formato</h3>
-                  <div class="config-item">
-                    <label>Fecha</label>
-                    <span>{{ usuario()?.configuraciones?.formato_fecha || 'DD/MM/YYYY' }}</span>
-                  </div>
-                  <div class="config-item">
-                    <label>Hora</label>
-                    <span>{{ usuario()?.configuraciones?.formato_hora || '24h' }}</span>
-                  </div>
-                  <div class="config-item">
-                    <label>Items por página</label>
-                    <span>{{ usuario()?.configuraciones?.items_por_pagina || 25 }}</span>
-                  </div>
-                </div>
-              </div>
             </mat-card-content>
           </mat-card>
         </div>

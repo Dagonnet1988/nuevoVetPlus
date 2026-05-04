@@ -1,5 +1,7 @@
 import pkg from 'pg';
 const { Pool } = pkg;
+const LOG_DB_QUERIES = process.env.LOG_DB_QUERIES === 'true';
+const LOG_DB_SLOW_MS = Number(process.env.LOG_DB_SLOW_MS || 800);
 
 // Configuración de PostgreSQL
 const pool = new Pool({
@@ -17,8 +19,8 @@ const pool = new Pool({
     ssl: (process.env.DB_HOST && process.env.DB_HOST.includes('neon.tech')) ? { rejectUnauthorized: false } : (process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false),
   }),
   max: 20, // máximo número de conexiones en el pool
-  idleTimeoutMillis: 30000, // tiempo de espera antes de cerrar conexiones inactivas
-  connectionTimeoutMillis: 2000, // tiempo límite para obtener una conexión
+  idleTimeoutMillis: 60000, // tiempo de espera antes de cerrar conexiones inactivas (60s)
+  connectionTimeoutMillis: 5000, // tiempo límite para obtener una conexión
 });
 
 // Evento de conexión exitosa
@@ -51,7 +53,10 @@ const query = async (text, params) => {
   try {
     const res = await pool.query(text, params);
     const duration = Date.now() - start;
-    console.log('📊 Query ejecutada:', { text: text.substring(0, 50), duration, rows: res.rowCount });
+    if (LOG_DB_QUERIES || duration >= LOG_DB_SLOW_MS) {
+      const level = duration >= LOG_DB_SLOW_MS ? '⚠️ Query lenta' : '📊 Query ejecutada';
+      console.log(level, { text: text.substring(0, 80), duration, rows: res.rowCount });
+    }
     return res;
   } catch (error) {
     console.error('❌ Error en query:', error.message);

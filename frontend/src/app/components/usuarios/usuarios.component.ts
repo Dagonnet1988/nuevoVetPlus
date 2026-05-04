@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, computed, ViewChild, inject } from '@angular/core';
+import { Component, OnInit, signal, computed, ViewChild, inject, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
@@ -19,6 +19,8 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatBadgeModule } from '@angular/material/badge';
 import { Router } from '@angular/router';
+import { environment } from '../../../environments/environment';
+import { TempPasswordDialogComponent } from './components/usuario-profile.component';
 
 import {
   UsuariosService,
@@ -57,6 +59,7 @@ import {
 export class UsuariosComponent implements OnInit {
   @ViewChild(MatPaginator) paginator!: MatPaginator;
   @ViewChild(MatSort) sort!: MatSort;
+  @ViewChild('avatarInput') avatarInput!: ElementRef<HTMLInputElement>;
 
   private fb = inject(FormBuilder);
   private usuariosService = inject(UsuariosService);
@@ -76,7 +79,8 @@ export class UsuariosComponent implements OnInit {
     nuevos_este_mes: 0,
     sesiones_activas: 0
   });
-  currentView = signal<'todos' | 'activos' | 'inactivos' | 'primer_acceso'>('todos');
+  currentView = signal<'todos' | 'activos' | 'inactivos'>('todos');
+  private selectedAvatarUserId: string | null = null;
 
   // Form y paginación
   filterForm: FormGroup;
@@ -88,29 +92,16 @@ export class UsuariosComponent implements OnInit {
     'usuario',
     'documento',
     'rol',
-    'especialidad',
+    'profesional',
     'estado',
     'ultimo_acceso',
     'acciones'
   ];
 
-  // Opciones
-  especialidades = [
-    'Medicina General',
-    'Cirugía',
-    'Dermatología',
-    'Cardiología',
-    'Neurología',
-    'Oncología',
-    'Radiología',
-    'Anestesiología'
-  ];
-
   constructor() {
     this.filterForm = this.fb.group({
       search: [''],
-      rol: [''],
-      especialidad: ['']
+      rol: ['']
     });
   }
 
@@ -131,8 +122,21 @@ export class UsuariosComponent implements OnInit {
 
     this.usuariosService.getUsuarios(1, this.pageSize, filtros).subscribe({
       next: (usuarios) => {
-        this.usuarios.set(Array.isArray(usuarios) ? usuarios : []);
-        this.totalUsuarios = usuarios.length;
+        const usersArray = Array.isArray(usuarios) ? usuarios : [];
+        const visibleUsers = usersArray.filter((u: Usuario) => u.rol !== 'admin');
+
+        this.usuarios.set(visibleUsers);
+        this.totalUsuarios = visibleUsers.length;
+
+        const activos = visibleUsers.filter(u => u.activo).length;
+        const inactivos = visibleUsers.length - activos;
+        this.resumen.update((current) => ({
+          ...current,
+          total_usuarios: visibleUsers.length,
+          usuarios_activos: activos,
+          usuarios_inactivos: inactivos
+        }));
+
         this.loading.set(false);
       },
       error: (error) => {
@@ -165,8 +169,6 @@ export class UsuariosComponent implements OnInit {
 
     if (formValue.search) filtros.search = formValue.search;
     if (formValue.rol) filtros.rol = formValue.rol;
-    if (formValue.especialidad) filtros.especialidad = formValue.especialidad;
-
     // Aplicar filtro de vista
     switch (this.currentView()) {
       case 'activos':
@@ -175,15 +177,12 @@ export class UsuariosComponent implements OnInit {
       case 'inactivos':
         filtros.activo = false;
         break;
-      case 'primer_acceso':
-        filtros.primer_acceso = true;
-        break;
     }
 
     return filtros;
   }
 
-  changeView(view: 'todos' | 'activos' | 'inactivos' | 'primer_acceso'): void {
+  changeView(view: 'todos' | 'activos' | 'inactivos'): void {
     this.currentView.set(view);
     this.loadUsuarios();
   }
@@ -233,15 +232,25 @@ export class UsuariosComponent implements OnInit {
 
   resetearPassword(usuario: Usuario): void {
     if (confirm(`¿Resetear la contraseña de ${usuario.nombre} ${usuario.apellido}? Se enviará una contraseña temporal por email.`)) {
-      const request = {
-        id_usuario: usuario.id_usuario,
-        password_temporal: this.usuariosService.generarPasswordString(),
-        enviar_email: true
-      };
+      this.usuariosService.enviarPasswordTemporal(usuario.id_usuario).subscribe({
+        next: (response) => {
+          const tempPassword = response?.data?.tempPassword;
+          if (tempPassword) {
+            this.dialog.open(TempPasswordDialogComponent, {
+              width: '520px',
+              data: {
+                usuario: `${usuario.nombre} ${usuario.apellido}`,
+                password: tempPassword
+              }
+            });
+          }
 
-      this.usuariosService.resetearPassword(request).subscribe({
-        next: () => {
-          this.snackBar.open('Contraseña reseteada y enviada por email', 'Cerrar', { duration: 3000 });
+          const emailSent = response?.data?.email?.sent === true;
+          const statusMessage = emailSent
+            ? 'Se mostro la contrasena temporal y se envio por email.'
+            : 'Se mostro la contrasena temporal. Envio por email pendiente de configuracion.';
+
+          this.snackBar.open(statusMessage, 'Cerrar', { duration: 4500 });
         },
         error: (error) => {
           console.error('Error reseteando contraseña:', error);
@@ -265,6 +274,38 @@ export class UsuariosComponent implements OnInit {
 
   gestionarSesiones(usuario: Usuario): void {
     this.router.navigate(['/usuarios', usuario.id_usuario, 'sesiones']);
+  }
+
+  abrirSelectorAvatar(usuario: Usuario): void {
+    this.selectedAvatarUserId = usuario.id_usuario;
+    this.avatarInput?.nativeElement.click();
+  }
+
+  onAvatarSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    const userId = this.selectedAvatarUserId;
+
+    if (!file || !userId) {
+      return;
+    }
+
+    this.usuariosService.uploadAvatar(userId, file).subscribe({
+      next: ({ avatar_url }) => {
+        this.usuarios.update((items) =>
+          items.map((u) => u.id_usuario === userId ? { ...u, avatar_url } : u)
+        );
+        this.snackBar.open('Foto de usuario actualizada', 'Cerrar', { duration: 2500 });
+        input.value = '';
+        this.selectedAvatarUserId = null;
+      },
+      error: (error) => {
+        console.error('Error subiendo avatar:', error);
+        this.snackBar.open('No se pudo subir la foto de usuario', 'Cerrar', { duration: 3000 });
+        input.value = '';
+        this.selectedAvatarUserId = null;
+      }
+    });
   }
 
   exportarUsuarios(): void {
@@ -297,5 +338,13 @@ export class UsuariosComponent implements OnInit {
       hour: '2-digit',
       minute: '2-digit'
     });
+  }
+
+  getAvatarUrl(avatarUrl?: string): string {
+    if (!avatarUrl) return '';
+    if (/^https?:\/\//i.test(avatarUrl)) return avatarUrl;
+
+    const apiBase = environment.apiUrl.replace(/\/api\/?$/, '');
+    return `${apiBase}${avatarUrl.startsWith('/') ? '' : '/'}${avatarUrl}`;
   }
 }

@@ -14,90 +14,83 @@
         <p class="page-subtitle">Calendario integrado con Google Calendar</p>
       </div>
       <div class="actions-section">
-        <!-- Toggle de vista -->
-        <mat-button-toggle-group [value]="viewMode()" (change)="setViewMode($event.value)" class="view-toggle">
-          <mat-button-toggle value="plana">
-            <mat-icon>view_list</mat-icon>
-            Lista
-          </mat-button-toggle>
-          <mat-button-toggle value="calendario">
-            <mat-icon>calendar_month</mat-icon>
-            Calendario
-          </mat-button-toggle>
-        </mat-button-toggle-group>
+        <div class="primary-actions">
+          <mat-button-toggle-group [value]="viewMode()" (change)="setViewMode($event.value)" class="view-toggle">
+            <mat-button-toggle value="plana">
+              <mat-icon>view_list</mat-icon>
+              Lista
+            </mat-button-toggle>
+            <mat-button-toggle value="calendario">
+              <mat-icon>calendar_month</mat-icon>
+              Calendario
+            </mat-button-toggle>
+          </mat-button-toggle-group>
+        </div>
+
+        <div class="secondary-actions">
+          <button mat-stroked-button
+                  (click)="syncWithGoogle()"
+                  [disabled]="syncing()"
+                  class="sync-button"
+                  matTooltip="Sincronización bidireccional con Google Calendar"
+                  *ngIf="showManualSyncButton()">
+            @if (syncing()) {
+              <mat-icon class="spinning">sync</mat-icon>
+            } @else {
+              <mat-icon>sync</mat-icon>
+            }
+            {{ syncing() ? 'Sincronizando...' : 'Sincronizar' }}
+          </button>
+
+          <button mat-stroked-button
+                  (click)="openExportDialog()"
+                  class="export-button">
+            <mat-icon>download</mat-icon>
+            Exportar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="quick-overview-bar">
+    <div class="quick-overview-content">
+      <div class="overview-stats">
+        @if (stats()) {
+          <div class="stat-group">
+            <div class="stat-item">
+              <span class="stat-number">{{ stats()?.citas_hoy || 0 }}</span>
+              <span class="stat-label">Hoy</span>
+            </div>
+            <div class="stat-item pending">
+              <span class="stat-number">{{ stats()?.citas_pendientes || 0 }}</span>
+              <span class="stat-label">Pendientes</span>
+            </div>
+            <div class="stat-item completed">
+              <span class="stat-number">{{ stats()?.citas_completadas || 0 }}</span>
+              <span class="stat-label">Completadas</span>
+            </div>
+            <div class="stat-item total">
+              <span class="stat-number">{{ stats()?.total_citas || 0 }}</span>
+              <span class="stat-label">Semana</span>
+            </div>
+          </div>
+        }
+      </div>
+
+      <div class="overview-create">
         <button mat-raised-button
                 color="primary"
                 (click)="openCreateDialog()"
-                class="create-button">
+                class="quick-create-button">
           <mat-icon>add</mat-icon>
           Nueva Cita
         </button>
-        <button mat-stroked-button
-                (click)="syncWithGoogle()"
-                [disabled]="syncing()"
-                class="sync-button"
-                matTooltip="Sincronización bidireccional con Google Calendar"
-                *ngIf="showManualSyncButton()">
-          @if (syncing()) {
-            <mat-icon class="spinning">sync</mat-icon>
-          } @else {
-            <mat-icon>sync</mat-icon>
-          }
-          {{ syncing() ? 'Sincronizando...' : 'Sincronizar' }}
-        </button>
       </div>
-    </div>
-  </div>
 
-  <!-- Línea 1: Solo estadísticas -->
-  <div class="stats-bar">
-    <div class="compact-stats">
-      @if (stats()) {
-        <div class="stat-group">
-          <div class="stat-item">
-            <span class="stat-number">{{ stats()?.citas_hoy || 0 }}</span>
-            <span class="stat-label">Hoy</span>
-          </div>
-          <div class="stat-item pending">
-            <span class="stat-number">{{ stats()?.citas_pendientes || 0 }}</span>
-            <span class="stat-label">Pendientes</span>
-          </div>
-          <div class="stat-item completed">
-            <span class="stat-number">{{ stats()?.citas_completadas || 0 }}</span>
-            <span class="stat-label">Completadas</span>
-          </div>
-          <div class="stat-item total">
-            <span class="stat-number">{{ stats()?.total_citas || 0 }}</span>
-            <span class="stat-label">Esta Semana</span>
-          </div>
-        </div>
-      }
-    </div>
-    <div class="calendar-controls">
-        <button mat-stroked-button
-                (click)="toggleCalendarViewMode()"
-                [matTooltip]="calendarViewMode() === 'expanded' ? 'Vista compacta: solo horario laboral (8AM-7PM)' : 'Vista expandida: día completo (6AM-10PM)'">
-          @if (calendarViewMode() === 'expanded') {
-            <mat-icon>unfold_less</mat-icon>
-          } @else {
-            <mat-icon>unfold_more</mat-icon>
-          }
-          {{ calendarViewMode() === 'expanded' ? 'Compactar' : 'Expandir' }}
-        </button>
-        <button mat-stroked-button
-                (click)="openExportDialog()"
-                class="export-button">
-          <mat-icon>download</mat-icon>
-          Exportar
-        </button>
-      </div>
-  </div>
-
-  <!-- Línea 2: Filtros y controles (sticky) -->
-  <div class="filters-bar">
-    <div class="compact-filters">
-      <form [formGroup]="filterForm" class="filter-form">
-        <mat-form-field appearance="outline" class="filter-field">
+      <div class="overview-filters">
+        <form [formGroup]="filterForm" class="overview-filter-form">
+          <mat-form-field appearance="outline" class="overview-field">
           <mat-label>Veterinario</mat-label>
           <mat-select formControlName="id_veterinario" (selectionChange)="onFilterChange()">
             <mat-option value="">Todos</mat-option>
@@ -109,41 +102,42 @@
               }
             }
           </mat-select>
-        </mat-form-field>
+          </mat-form-field>
 
-        <mat-form-field appearance="outline" class="filter-field">
-          <mat-label>Estado</mat-label>
-          <mat-select formControlName="estado" (selectionChange)="onFilterChange()">
-            <mat-option value="">Todos</mat-option>
-            @for (estado of estadosCita; track estado.value) {
-              <mat-option [value]="estado.value">{{ estado.label }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
+          <mat-form-field appearance="outline" class="overview-field">
+            <mat-label>Estado</mat-label>
+            <mat-select formControlName="estado" (selectionChange)="onFilterChange()">
+              <mat-option value="">Todos</mat-option>
+              @for (estado of estadosCita; track estado.value) {
+                <mat-option [value]="estado.value">{{ estado.label }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
 
-        <mat-form-field appearance="outline" class="filter-field">
-          <mat-label>Tipo</mat-label>
-          <mat-select formControlName="tipo" (selectionChange)="onFilterChange()">
-            <mat-option value="">Todos</mat-option>
-            @for (tipo of tiposCita; track tipo.value) {
-              <mat-option [value]="tipo.value">{{ tipo.label }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
+          <mat-form-field appearance="outline" class="overview-field">
+            <mat-label>Tipo</mat-label>
+            <mat-select formControlName="tipo" (selectionChange)="onFilterChange()">
+              <mat-option value="">Todos</mat-option>
+              @for (tipo of tiposCita; track tipo.value) {
+                <mat-option [value]="tipo.value">{{ tipo.label }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
 
-        <button mat-icon-button
-                (click)="clearFilters()"
-                matTooltip="Limpiar filtros"
-                class="clear-filters-btn">
-          <mat-icon>clear</mat-icon>
-        </button>
-      </form>
+          <button mat-icon-button
+                  (click)="clearFilters()"
+                  matTooltip="Limpiar filtros"
+                  class="overview-clear-btn">
+            <mat-icon>clear</mat-icon>
+          </button>
+        </form>
+      </div>
     </div>
   </div>
 
   <!-- Vista Calendario -->
   @if (viewMode() === 'calendario') {
-    <div class="calendar-section" [class.compact-mode]="calendarViewMode() === 'compact'">
+    <div class="calendar-section">
       @if (loading()) {
         <div class="loading-container">
           <div class="loading-spinner">
@@ -182,97 +176,69 @@
           <p>Utiliza el botón "Nueva Cita" para programar tu primera cita</p>
         </div>
       } @else {
-        <!-- Agrupar citas por fecha -->
-        @for (dia of citasPorDia(); track dia.fecha) {
-          <div class="dia-grupo">
+        <div class="agenda-layout">
+          <aside class="agenda-sidebar">
+            <mat-card class="mini-calendar-card">
+              <mat-card-header>
+                <mat-card-title>Seleccionar día</mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <mat-calendar [selected]="selectedDate()" (selectedChange)="onDateSelected($event)"></mat-calendar>
+                <button mat-stroked-button class="btn-hoy" (click)="goToToday()">
+                  <mat-icon>today</mat-icon>
+                  Ir a hoy
+                </button>
+              </mat-card-content>
+            </mat-card>
+          </aside>
+
+          <section class="agenda-dia">
             <div class="dia-header">
               <div class="dia-info">
-                <h3 class="dia-titulo">{{ dia.fechaFormateada }}</h3>
+                <h3 class="dia-titulo">{{ tituloDiaSeleccionado() }}</h3>
                 <div class="dia-estadisticas">
                   <span class="estadistica-item">
-                    <strong>{{ dia.estadisticas.total }}</strong> cita{{ dia.estadisticas.total !== 1 ? 's' : '' }}
+                    <strong>{{ citasVisiblesDelDiaSeleccionado().length }}</strong> cita{{ citasVisiblesDelDiaSeleccionado().length !== 1 ? 's' : '' }}
                   </span>
-                  @if (dia.estadisticas.pendientes > 0) {
-                    <span class="estadistica-item pendiente">
-                      {{ dia.estadisticas.pendientes }} pendiente{{ dia.estadisticas.pendientes !== 1 ? 's' : '' }}
-                    </span>
-                  }
-                  @if (dia.estadisticas.completadas > 0) {
+                  @if (completadasOcultasCount() > 0) {
                     <span class="estadistica-item completada">
-                      {{ dia.estadisticas.completadas }} completada{{ dia.estadisticas.completadas !== 1 ? 's' : '' }}
-                    </span>
-                  }
-                  @if (dia.estadisticas.canceladas > 0) {
-                    <span class="estadistica-item cancelada">
-                      {{ dia.estadisticas.canceladas }} cancelada{{ dia.estadisticas.canceladas !== 1 ? 's' : '' }}
+                      {{ completadasOcultasCount() }} gestionada{{ completadasOcultasCount() !== 1 ? 's' : '' }} oculta{{ completadasOcultasCount() !== 1 ? 's' : '' }}
                     </span>
                   }
                 </div>
               </div>
+              <div class="day-nav-actions">
+                @if (isSelectedDayToday() && citasDelDiaSeleccionado().length > 0) {
+                  <button mat-stroked-button
+                          class="toggle-completadas-btn"
+                          (click)="toggleCompletedTodayVisibility()"
+                          [disabled]="completadasOcultasCount() === 0 && !showCompletedToday()">
+                    <mat-icon>{{ showCompletedToday() ? 'visibility_off' : 'visibility' }}</mat-icon>
+                    {{ showCompletedToday() ? 'Ocultar gestionadas' : 'Mostrar gestionadas' }}
+                  </button>
+                }
+                <button mat-icon-button (click)="shiftSelectedDate(-1)" matTooltip="Día anterior">
+                  <mat-icon>chevron_left</mat-icon>
+                </button>
+                <button mat-icon-button (click)="shiftSelectedDate(1)" matTooltip="Día siguiente">
+                  <mat-icon>chevron_right</mat-icon>
+                </button>
+              </div>
             </div>
 
-            <div class="citas-del-dia">
-              @for (cita of dia.citas; track cita.id_cita) {
-                <div class="cita-card"
-                     [class]="getCitaCardClasses(cita)"
-                     (click)="abrirDetalleCita(cita)">
-                  <div class="cita-header">
-                    <div class="cita-hora">
-                      <mat-icon class="hora-icon">schedule</mat-icon>
-                      <span class="hora-texto">
-                        {{ cita.fecha_inicio | date:'h:mm a' }} - {{ cita.fecha_fin | date:'h:mm a' }}
-                      </span>
-                    </div>
-                    <div class="cita-estado">
-                      <span class="estado-indicator" [class]="getEstadoClass(cita.estado)">
-                        {{ getEstadoTexto(cita.estado) }}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div class="cita-contenido">
-                    <div class="cita-principal">
-                      <div class="mascota-info">
-                        <mat-icon class="mascota-icon">pets</mat-icon>
-                        <div class="mascota-detalles">
-                          <span class="mascota-nombre">{{ cita.mascota_nombre || 'Sin nombre' }}</span>
-                          <span class="cliente-nombre">{{ cita.cliente_nombre || 'Sin cliente' }}</span>
-                        </div>
-                      </div>
-                      <div class="tipo-cita">
-                        <span class="tipo-badge" [class]="getTipoClass(cita.tipo)">
-                          {{ getTipoTexto(cita.tipo) }}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div class="cita-secundaria">
-                      <div class="veterinario-info">
-                        <mat-icon class="vet-icon">person</mat-icon>
-                        <span class="vet-nombre">{{ cita.veterinario_nombre || 'Sin asignar' }}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="cita-acciones">
-                    <button mat-icon-button
-                            (click)="$event.stopPropagation(); editarCita(cita)"
-                            matTooltip="Editar cita">
-                      <mat-icon>edit</mat-icon>
-                    </button>
-                    <button mat-icon-button
-                            [matMenuTriggerFor]="menuEstado"
-                            [matMenuTriggerData]="{cita: cita}"
-                            (click)="$event.stopPropagation()"
-                            matTooltip="Cambiar estado">
-                      <mat-icon>swap_horiz</mat-icon>
-                    </button>
-                  </div>
-                </div>
-              }
-            </div>
-          </div>
-        }
+            @if (citasDelDiaSeleccionado().length === 0) {
+              <div class="no-citas-container">
+                <mat-icon class="no-citas-icon">event_busy</mat-icon>
+                <h3>Sin citas para este día</h3>
+                <p>Selecciona otra fecha en el calendario o crea una nueva cita.</p>
+              </div>
+            } @else {
+              <div class="citas-del-dia day-calendar-wrapper">
+                <full-calendar class="day-calendar" [options]="dayCalendarOptions" #dayCalendar></full-calendar>
+              </div>
+            }
+          </section>
+        </div>
       }
     </div>
   </div>
@@ -282,10 +248,6 @@
 <!-- Menú de cambio de estado (compartido para todas las citas) -->
 <mat-menu #menuEstado="matMenu">
   <ng-template matMenuContent let-cita="cita">
-    <button mat-menu-item (click)="cambiarEstadoCita(cita, 'pendiente')" [disabled]="!puedeTransicionar(cita.estado, 'pendiente')">
-      <mat-icon style="color:#ff9800">schedule</mat-icon>
-      <span>Pendiente</span>
-    </button>
     <button mat-menu-item (click)="cambiarEstadoCita(cita, 'confirmada')" [disabled]="!puedeTransicionar(cita.estado, 'confirmada')">
       <mat-icon style="color:#2196f3">check_circle</mat-icon>
       <span>Confirmada</span>
@@ -296,16 +258,11 @@
     </button>
     <button mat-menu-item (click)="cambiarEstadoCita(cita, 'completada')" [disabled]="!puedeTransicionar(cita.estado, 'completada')">
       <mat-icon style="color:#4caf50">task_alt</mat-icon>
-      <span>Completada</span>
+      <span>Completa</span>
     </button>
-    <mat-divider></mat-divider>
     <button mat-menu-item (click)="cambiarEstadoCita(cita, 'no_asistio')" [disabled]="!puedeTransicionar(cita.estado, 'no_asistio')">
       <mat-icon style="color:#f44336">person_off</mat-icon>
       <span>No asistió</span>
-    </button>
-    <button mat-menu-item (click)="cambiarEstadoCita(cita, 'cancelada')" [disabled]="!puedeTransicionar(cita.estado, 'cancelada')">
-      <mat-icon style="color:#607d8b">cancel</mat-icon>
-      <span>Cancelada</span>
     </button>
   </ng-template>
 </mat-menu>

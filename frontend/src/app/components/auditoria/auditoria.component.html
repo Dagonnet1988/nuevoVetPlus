@@ -132,7 +132,7 @@
                   <mat-icon [style.color]="getStatusColor(row.status_code)" class="tipo-icon">
                     {{ getTipoIcon(row.tipo_actividad) }}
                   </mat-icon>
-                  <span class="tipo-badge">{{ row.tipo_actividad }}</span>
+                  <span class="tipo-badge">{{ getTipoLabel(row.tipo_actividad) }}</span>
                 </div>
               </td>
             </ng-container>

@@ -54,6 +54,11 @@
   flex: 1;
 }
 
+.status-field {
+  width: 170px;
+  min-width: 170px;
+}
+
 /* Loading / empty */
 .loading-center {
   display: flex;
@@ -231,6 +236,16 @@
   padding: 8px 16px 12px;
   justify-content: flex-end;
   flex-wrap: wrap;
+}
+
+.mascota-preview-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  margin-right: 4px;
+  vertical-align: middle;
 }
 
 /* Badge consentimiento */

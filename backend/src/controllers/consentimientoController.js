@@ -14,6 +14,50 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:4200';
 // Duración del token de firma en horas (configurable aquí o por variable de entorno)
 const TOKEN_DURATION_HOURS = parseInt(process.env.CONSENT_TOKEN_HOURS ?? '48', 10);
 
+function field(value, fallback = 'No registrado') {
+  if (value === null || value === undefined) return fallback;
+  const text = String(value).trim();
+  return text.length ? text : fallback;
+}
+
+function safeSlug(text) {
+  return String(text || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+}
+
+function resolveConsentText(textoLegal, empresa) {
+  const replacements = {
+    NOMBRE_CLINICA: field(empresa.nombre, 'Clínica veterinaria'),
+    NIT: field(empresa.nit),
+    DIRECCION: field(empresa.direccion, 'No registrada'),
+    EMAIL_CLINICA: field(empresa.email, 'No registrado'),
+    EMAIL_EMPRESA: field(empresa.email, 'No registrado'),
+    CORREO_CLINICA: field(empresa.email, 'No registrado'),
+    CORREO_EMPRESA: field(empresa.email, 'No registrado')
+  };
+
+  let text = String(textoLegal || '');
+  for (const [key, value] of Object.entries(replacements)) {
+    text = text.replace(new RegExp(`\\[${key}\\]`, 'g'), value);
+  }
+
+  return text.replace(/\[[A-Z_]{3,}\]/g, 'No registrado');
+}
+
+function toAbsoluteAssetUrl(req, assetPath) {
+  if (!assetPath) return null;
+  if (/^https?:\/\//i.test(assetPath)) return assetPath;
+
+  const base = process.env.BACKEND_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+  const clean = String(assetPath).startsWith('/') ? assetPath : `/${assetPath}`;
+  return `${base}${clean}`;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // RUTAS AUTENTICADAS (personal de la clínica)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -242,8 +286,9 @@ export async function descargarPDFConsentimiento(req, res) {
 
   try {
     const result = await query(
-      `SELECT c.pdf_path, c.pdf_numero, c.estado
+      `SELECT c.pdf_path, c.pdf_numero, c.estado, cl.nombre AS cliente_nombre
        FROM clinical.consentimientos c
+       JOIN clinical.clientes cl ON cl.id_cliente = c.id_cliente
        WHERE c.id_cliente = $1 AND c.id_tenant = $2 AND c.estado = 'firmado'
        ORDER BY c.firmado_en DESC
        LIMIT 1`,
@@ -254,13 +299,17 @@ export async function descargarPDFConsentimiento(req, res) {
       return res.status(404).json({ message: 'No hay PDF disponible para este cliente' });
     }
 
-    const { pdf_path, pdf_numero } = result.rows[0];
+    const { pdf_path, pdf_numero, cliente_nombre } = result.rows[0];
 
     // pdf_path es relativo a la raíz del backend (ej: uploads/consentimientos/CONS-xxx.pdf)
     const absolutePath = path.join(__dirname, '../../', pdf_path);
 
+    const clienteSlug = safeSlug(cliente_nombre) || 'cliente';
+    const displayName = `consentimiento-${clienteSlug}-${pdf_numero}.pdf`;
+
+    const encodedFilename = encodeURIComponent(displayName);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="consentimiento-${pdf_numero}.pdf"`);
+    res.setHeader('Content-Disposition', `inline; filename="${displayName}"; filename*=UTF-8''${encodedFilename}`);
 
     return res.sendFile(absolutePath, (err) => {
       if (err && !res.headersSent) {
@@ -498,11 +547,12 @@ export async function obtenerFormularioPublico(req, res) {
 
     // Aplicar los mismos placeholders que se usan al generar el PDF,
     // para que el propietario lea exactamente el texto que quedará en el documento firmado
-    const textoResuelto = (row.texto_legal || '')
-      .replace(/\[NOMBRE_CLINICA\]/g, row.nombre_empresa  || '')
-      .replace(/\[NIT\]/g,            row.nit             || '')
-      .replace(/\[DIRECCION\]/g,      row.direccion       || '')
-      .replace(/\[EMAIL_CLINICA\]/g,  row.email_empresa   || '');
+    const textoResuelto = resolveConsentText(row.texto_legal, {
+      nombre: row.nombre_empresa,
+      nit: row.nit,
+      direccion: row.direccion,
+      email: row.email_empresa
+    });
 
     return res.json({
       idConsentimiento: row.id_consentimiento,
@@ -517,7 +567,7 @@ export async function obtenerFormularioPublico(req, res) {
       },
       empresa: {
         nombre: row.nombre_empresa,
-        logoUrl: row.logo_url
+        logoUrl: toAbsoluteAssetUrl(req, row.logo_url)
       },
       expiresAt: row.token_expires_at,
       tokenDurationHours: TOKEN_DURATION_HOURS

@@ -55,14 +55,26 @@ router.put('/:id',
 
 /**
  * @route   DELETE /api/clinical/clients/:id
- * @desc    Eliminar (desactivar) cliente
- * @access  Private (admin)
+ * @desc    Eliminar condicional: desactiva si tiene mascotas, elimina físico si no tiene
+ * @access  Private (admin, vet)
  */
 router.delete('/:id',
   authenticateToken,
-  authorize(['admin']),
+  authorize(['admin', 'vet']),
   clientValidators.validateClientId,
   clientController.deleteClient
+);
+
+/**
+ * @route   PATCH /api/clinical/clients/:id/restore
+ * @desc    Reactivar cliente deshabilitado
+ * @access  Private (admin, vet)
+ */
+router.patch('/:id/restore',
+  authenticateToken,
+  authorize(['admin', 'vet']),
+  clientValidators.validateClientId,
+  clientController.restoreClient
 );
 
 export default router;

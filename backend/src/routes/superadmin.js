@@ -7,7 +7,8 @@ import {
   createTenant,
   getTenant,
   updateTenant,
-  getSuperadminProfile
+  getSuperadminProfile,
+  changePassword
 } from '../controllers/superadminController.js';
 
 const router = Router();
@@ -28,6 +29,13 @@ router.post('/auth/login',
 
 // ── Perfil propio ──────────────────────────────────────────────────────────────
 router.get('/me', authenticateSuperadmin, getSuperadminProfile);
+router.put('/me/password',
+  authenticateSuperadmin,
+  body('password_actual').notEmpty().withMessage('Contraseña actual requerida'),
+  body('password_nuevo').isLength({ min: 8 }).withMessage('La nueva contraseña debe tener al menos 8 caracteres'),
+  validate,
+  changePassword
+);
 
 // ── Tenants / Clínicas ─────────────────────────────────────────────────────────
 router.get('/tenants',       authenticateSuperadmin, listTenants);

@@ -192,12 +192,8 @@
                   </h3>
                   <div class="form-row">
                     <mat-form-field appearance="outline" class="full-width">
-                      <mat-label>Especialidad</mat-label>
-                      <mat-select formControlName="especialidad">
-                        @for (especialidad of especialidades; track especialidad) {
-                          <mat-option [value]="especialidad">{{ especialidad }}</mat-option>
-                        }
-                      </mat-select>
+                      <mat-label>Título profesional / Especialidad</mat-label>
+                      <input matInput formControlName="especialidad" placeholder="Ej: Médica Veterinaria Zootecnista">
                       <mat-icon matSuffix>medical_services</mat-icon>
                       <mat-error>{{ getFieldError(configuracionForm, 'especialidad') }}</mat-error>
                     </mat-form-field>

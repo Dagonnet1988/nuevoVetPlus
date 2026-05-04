@@ -71,7 +71,8 @@ export interface GoogleCalendarConfig {
   id?: string;
   activo: boolean;
   cliente_id: string;
-  cliente_secret: string;
+  cliente_secret?: string;
+  has_client_secret?: boolean;
   calendar_id: string;
   sync_automatico: boolean;
   intervalo_sync: number; // minutos
@@ -81,6 +82,10 @@ export interface GoogleCalendarConfig {
     cirugia: string;
     vacunacion: string;
     control: string;
+    domicilio?: string;
+    valoracion?: string;
+    terapia?: string;
+    hidroterapia?: string;
   };
   configuracion_eventos: {
     duracion_default: number; // minutos
@@ -116,11 +121,45 @@ export interface SyncStats {
   proxima_ejecucion: string;
 }
 
+export interface EmailConfig {
+  id_config_correo?: string;
+  proveedor: 'smtp';
+  auth_mode?: 'smtp' | 'gmail_oauth';
+  nombre_remitente?: string;
+  correo_remitente: string;
+  correo_respuesta?: string;
+  smtp_host?: string;
+  smtp_port?: number;
+  smtp_secure?: boolean;
+  smtp_usuario?: string;
+  smtp_password?: string;
+  tiene_password?: boolean;
+  oauth_client_id?: string;
+  oauth_client_secret?: string;
+  oauth_email?: string;
+  oauth_connected?: boolean;
+  oauth_redirect_uri?: string;
+  activa?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface EmailModuleStatus {
+  configured: boolean;
+  config: Omit<EmailConfig, 'smtp_password'> | null;
+  stats: {
+    total: string;
+    enviados: string;
+    fallidos: string;
+  };
+}
+
 @Injectable({
   providedIn: 'root'
 })
 export class ConfiguracionService {
   private readonly API_URL = environment.apiUrl;
+  private readonly BACKEND_URL = environment.backendUrl;
 
   // Signals para estado reactivo
   public empresaConfig = signal<EmpresaConfig | null>(null);
@@ -139,8 +178,9 @@ export class ConfiguracionService {
     return this.http.get<any>(`${this.API_URL}/admin/empresa/config`).pipe(
       map((response: any) => {
         if (response.success && response.data) {
-          this.empresaConfig.set(response.data);
-          return response.data;
+          const normalizedConfig = this.normalizeEmpresaConfig(response.data);
+          this.empresaConfig.set(normalizedConfig);
+          return normalizedConfig;
         }
         throw new Error('Error obteniendo configuración de empresa');
       })
@@ -148,11 +188,14 @@ export class ConfiguracionService {
   }
 
   updateEmpresaConfig(config: EmpresaConfig): Observable<EmpresaConfig> {
-    return this.http.put<any>(`${this.API_URL}/admin/empresa/config`, config).pipe(
+    const payload = this.toApiEmpresaConfig(config);
+
+    return this.http.put<any>(`${this.API_URL}/admin/empresa/config`, payload).pipe(
       map((response: any) => {
         if (response.success && response.data) {
-          this.empresaConfig.set(response.data);
-          return response.data;
+          const normalizedConfig = this.normalizeEmpresaConfig(response.data);
+          this.empresaConfig.set(normalizedConfig);
+          return normalizedConfig;
         }
         throw new Error('Error actualizando configuración de empresa');
       })
@@ -216,23 +259,28 @@ export class ConfiguracionService {
             id: response.data.id_config,
             activo: response.data.activo,
             cliente_id: response.data.cliente_id,
-            cliente_secret: response.data.cliente_secret,
+            cliente_secret: '',
+            has_client_secret: !!response.data.has_client_secret,
             calendar_id: response.data.calendar_id,
             sync_automatico: response.data.sync_automatico,
-            intervalo_sync: 30, // valor por defecto
-            prefijo_eventos: 'VetPlus', // valor por defecto
+            intervalo_sync: response.data.intervalo_sync ?? 30,
+            prefijo_eventos: response.data.prefijo_eventos || 'QI',
             mapeo_colores: {
-              consulta: '#2196f3',
-              cirugia: '#f44336',
-              vacunacion: '#4caf50',
-              control: '#ff9800'
+              consulta: response.data.mapeo_colores?.consulta || '#46d6db',
+              cirugia: response.data.mapeo_colores?.cirugia || '#5484ed',
+              vacunacion: response.data.mapeo_colores?.vacunacion || '#51b749',
+              control: response.data.mapeo_colores?.control || '#fbd75b',
+              domicilio: response.data.mapeo_colores?.domicilio || '#51b749',
+              valoracion: response.data.mapeo_colores?.valoracion || '#fbd75b',
+              terapia: response.data.mapeo_colores?.terapia || '#46d6db',
+              hidroterapia: response.data.mapeo_colores?.hidroterapia || '#5484ed'
             },
             configuracion_eventos: {
-              duracion_default: 30,
-              recordatorio_default: 30,
-              incluir_cliente: true,
-              incluir_mascota: true,
-              incluir_veterinario: true
+              duracion_default: response.data.configuracion_eventos?.duracion_default ?? 60,
+              recordatorio_default: response.data.configuracion_eventos?.recordatorio_default ?? 30,
+              incluir_cliente: response.data.configuracion_eventos?.incluir_cliente ?? true,
+              incluir_mascota: response.data.configuracion_eventos?.incluir_mascota ?? true,
+              incluir_veterinario: response.data.configuracion_eventos?.incluir_veterinario ?? true
             }
           };
           this.googleCalendarConfig.set(config);
@@ -243,18 +291,23 @@ export class ConfiguracionService {
           activo: false,
           cliente_id: '',
           cliente_secret: '',
+          has_client_secret: false,
           calendar_id: 'primary',
           sync_automatico: true,
           intervalo_sync: 30,
-          prefijo_eventos: 'VetPlus',
+          prefijo_eventos: 'QI',
           mapeo_colores: {
-            consulta: '#2196f3',
-            cirugia: '#f44336',
-            vacunacion: '#4caf50',
-            control: '#ff9800'
+            consulta: '#46d6db',
+            cirugia: '#5484ed',
+            vacunacion: '#51b749',
+            control: '#fbd75b',
+            domicilio: '#51b749',
+            valoracion: '#fbd75b',
+            terapia: '#46d6db',
+            hidroterapia: '#5484ed'
           },
           configuracion_eventos: {
-            duracion_default: 30,
+            duracion_default: 60,
             recordatorio_default: 30,
             incluir_cliente: true,
             incluir_mascota: true,
@@ -271,18 +324,23 @@ export class ConfiguracionService {
           activo: false,
           cliente_id: '',
           cliente_secret: '',
+          has_client_secret: false,
           calendar_id: 'primary',
           sync_automatico: true,
           intervalo_sync: 30,
-          prefijo_eventos: 'VetPlus',
+          prefijo_eventos: 'QI',
           mapeo_colores: {
-            consulta: '#2196f3',
-            cirugia: '#f44336',
-            vacunacion: '#4caf50',
-            control: '#ff9800'
+            consulta: '#46d6db',
+            cirugia: '#5484ed',
+            vacunacion: '#51b749',
+            control: '#fbd75b',
+            domicilio: '#51b749',
+            valoracion: '#fbd75b',
+            terapia: '#46d6db',
+            hidroterapia: '#5484ed'
           },
           configuracion_eventos: {
-            duracion_default: 30,
+            duracion_default: 60,
             recordatorio_default: 30,
             incluir_cliente: true,
             incluir_mascota: true,
@@ -303,7 +361,10 @@ export class ConfiguracionService {
       cliente_secret: config.cliente_secret,
       calendar_id: config.calendar_id || 'primary',
       sync_automatico: config.sync_automatico,
-      prefijo_eventos: config.prefijo_eventos || 'VetPlus'
+      intervalo_sync: config.intervalo_sync,
+      prefijo_eventos: config.prefijo_eventos || 'QI',
+      mapeo_colores: config.mapeo_colores,
+      configuracion_eventos: config.configuracion_eventos
     };
 
     return this.http.post<any>(`${this.API_URL}/google-calendar/simple/configure`, backendConfig).pipe(
@@ -314,23 +375,28 @@ export class ConfiguracionService {
             id: response.data.id_config,
             activo: response.data.activo,
             cliente_id: response.data.cliente_id,
-            cliente_secret: response.data.cliente_secret,
+            cliente_secret: '',
+            has_client_secret: !!response.data.has_client_secret,
             calendar_id: response.data.calendar_id,
             sync_automatico: response.data.sync_automatico,
-            intervalo_sync: 30,
-            prefijo_eventos: response.data.prefijo_eventos || 'VetPlus',
+            intervalo_sync: response.data.intervalo_sync ?? config.intervalo_sync ?? 30,
+            prefijo_eventos: response.data.prefijo_eventos || config.prefijo_eventos || 'QI',
             mapeo_colores: {
-              consulta: '#2196f3',
-              cirugia: '#f44336',
-              vacunacion: '#4caf50',
-              control: '#ff9800'
+              consulta: response.data.mapeo_colores?.consulta || config.mapeo_colores?.consulta || '#46d6db',
+              cirugia: response.data.mapeo_colores?.cirugia || config.mapeo_colores?.cirugia || '#5484ed',
+              vacunacion: response.data.mapeo_colores?.vacunacion || config.mapeo_colores?.vacunacion || '#51b749',
+              control: response.data.mapeo_colores?.control || config.mapeo_colores?.control || '#fbd75b',
+              domicilio: response.data.mapeo_colores?.domicilio || config.mapeo_colores?.domicilio || '#51b749',
+              valoracion: response.data.mapeo_colores?.valoracion || config.mapeo_colores?.valoracion || '#fbd75b',
+              terapia: response.data.mapeo_colores?.terapia || config.mapeo_colores?.terapia || '#46d6db',
+              hidroterapia: response.data.mapeo_colores?.hidroterapia || config.mapeo_colores?.hidroterapia || '#5484ed'
             },
             configuracion_eventos: {
-              duracion_default: 30,
-              recordatorio_default: 30,
-              incluir_cliente: true,
-              incluir_mascota: true,
-              incluir_veterinario: true
+              duracion_default: response.data.configuracion_eventos?.duracion_default ?? config.configuracion_eventos?.duracion_default ?? 60,
+              recordatorio_default: response.data.configuracion_eventos?.recordatorio_default ?? config.configuracion_eventos?.recordatorio_default ?? 30,
+              incluir_cliente: response.data.configuracion_eventos?.incluir_cliente ?? config.configuracion_eventos?.incluir_cliente ?? true,
+              incluir_mascota: response.data.configuracion_eventos?.incluir_mascota ?? config.configuracion_eventos?.incluir_mascota ?? true,
+              incluir_veterinario: response.data.configuracion_eventos?.incluir_veterinario ?? config.configuracion_eventos?.incluir_veterinario ?? true
             }
           };
           this.googleCalendarConfig.set(frontendConfig);
@@ -389,6 +455,71 @@ export class ConfiguracionService {
 
   syncGoogleCalendar(): Observable<any> {
     return this.http.post<any>(`${this.API_URL}/google-calendar/sync-changes`, {});
+  }
+
+  // ===============================
+  // CORREO (SMTP INDEPENDIENTE)
+  // ===============================
+
+  getEmailConfig(): Observable<EmailConfig | null> {
+    return this.http.get<any>(`${this.API_URL}/admin/email/config`).pipe(
+      map((response: any) => {
+        if (response.success) {
+          return response.data || null;
+        }
+        throw new Error('Error obteniendo configuración de correo');
+      })
+    );
+  }
+
+  updateEmailConfig(config: EmailConfig): Observable<EmailConfig> {
+    return this.http.put<any>(`${this.API_URL}/admin/email/config`, config).pipe(
+      map((response: any) => {
+        if (response.success && response.data) {
+          return response.data;
+        }
+        throw new Error('Error guardando configuración de correo');
+      })
+    );
+  }
+
+  testEmailConfig(email_prueba?: string): Observable<{ message: string }> {
+    return this.http.post<any>(`${this.API_URL}/admin/email/test`, { email_prueba }).pipe(
+      map((response: any) => {
+        if (response.success) {
+          return { message: response.message || 'Correo de prueba enviado' };
+        }
+        throw new Error('No fue posible validar la configuración de correo');
+      })
+    );
+  }
+
+  getEmailModuleStatus(): Observable<EmailModuleStatus> {
+    return this.http.get<any>(`${this.API_URL}/admin/email/status`).pipe(
+      map((response: any) => {
+        if (response.success && response.data) {
+          return response.data as EmailModuleStatus;
+        }
+        throw new Error('Error obteniendo estado del módulo de correo');
+      })
+    );
+  }
+
+  getGoogleEmailAuthUrl(): Observable<string> {
+    return this.http.get<any>(`${this.API_URL}/admin/email/google/auth-url`).pipe(
+      map((response: any) => {
+        if (response.success && response.authUrl) {
+          return response.authUrl;
+        }
+        throw new Error('No se pudo obtener URL de autorización de Google');
+      })
+    );
+  }
+
+  disconnectGoogleEmail(): Observable<{ message: string }> {
+    return this.http.post<any>(`${this.API_URL}/admin/email/google/disconnect`, {}).pipe(
+      map((response: any) => ({ message: response.message || 'Google desconectado' }))
+    );
   }
 
   toggleScheduler(): Observable<any> {
@@ -515,5 +646,101 @@ export class ConfiguracionService {
 
   updateTextoConsentimiento(titulo: string, textoLegal: string): Observable<{ message: string; version: any }> {
     return this.http.put<any>(`${this.API_URL}/config/consentimiento/texto`, { titulo, textoLegal });
+  }
+
+  getAbsoluteAssetUrl(url?: string): string {
+    if (!url) return '';
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    return `${this.BACKEND_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+  }
+
+  private normalizeEmpresaConfig(data: any): EmpresaConfig {
+    const sitioWebValue = data?.sitio_web ?? '';
+
+    return {
+      ...data,
+      sitio_web: sitioWebValue,
+      horarios: this.normalizeHorariosFromApi(data?.horarios),
+      configuracion_general: this.safeParseJson(data?.configuracion_general, {
+        moneda: 'COP',
+        zona_horaria: 'America/Bogota',
+        idioma: 'es',
+        formato_fecha: 'DD/MM/YYYY',
+        formato_hora: 'HH:mm'
+      }),
+      configuracion_numeracion: this.safeParseJson(data?.configuracion_numeracion, {
+        cita_prefijo: 'CIT',
+        cita_siguiente: 1,
+        cita_digitos: 6
+      })
+    } as EmpresaConfig;
+  }
+
+  private toApiEmpresaConfig(config: EmpresaConfig): any {
+    const sitioWebValue = config.sitio_web ?? '';
+
+    return {
+      ...config,
+      sitio_web: sitioWebValue,
+      horarios: this.mapHorariosToApi(config.horarios)
+    };
+  }
+
+  private normalizeHorariosFromApi(horarios: any): HorarioAtencion[] {
+    if (!Array.isArray(horarios) || horarios.length === 0) {
+      return this.generateDefaultHorarios();
+    }
+
+    const normalized = horarios.map((h: any) => ({
+      dia_semana: Number(h.dia_semana),
+      activo: h.activo ?? !h.cerrado,
+      hora_inicio: h.hora_inicio ?? h.hora_apertura ?? '08:00',
+      hora_fin: h.hora_fin ?? h.hora_cierre ?? '17:00',
+      hora_almuerzo_inicio: h.hora_almuerzo_inicio ?? '12:00',
+      hora_almuerzo_fin: h.hora_almuerzo_fin ?? '13:00'
+    }));
+
+    const byDay = new Map<number, HorarioAtencion>();
+    normalized.forEach((h) => {
+      if (!Number.isNaN(h.dia_semana) && h.dia_semana >= 0 && h.dia_semana <= 6) {
+        byDay.set(h.dia_semana, h);
+      }
+    });
+
+    return Array.from({ length: 7 }, (_, day) =>
+      byDay.get(day) || {
+        dia_semana: day,
+        activo: day >= 1 && day <= 5,
+        hora_inicio: '08:00',
+        hora_fin: '17:00',
+        hora_almuerzo_inicio: '12:00',
+        hora_almuerzo_fin: '13:00'
+      }
+    );
+  }
+
+  private mapHorariosToApi(horarios: HorarioAtencion[] = []): Array<{ dia_semana: number; hora_apertura: string | null; hora_cierre: string | null; cerrado: boolean; notas: string | null }> {
+    return horarios.map((h) => {
+      const cerrado = !h.activo;
+      return {
+        dia_semana: h.dia_semana,
+        hora_apertura: cerrado ? null : h.hora_inicio,
+        hora_cierre: cerrado ? null : h.hora_fin,
+        cerrado,
+        notas: null
+      };
+    });
+  }
+
+  private safeParseJson<T>(value: unknown, fallback: T): T {
+    if (!value) return fallback;
+    if (typeof value === 'object') return value as T;
+    if (typeof value !== 'string') return fallback;
+
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return fallback;
+    }
   }
 }

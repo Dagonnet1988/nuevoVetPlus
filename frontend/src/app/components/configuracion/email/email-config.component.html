@@ -1,0 +1,163 @@
+<div class="email-config-container">
+  <div class="page-header">
+    <button mat-icon-button (click)="back()" class="back-btn" matTooltip="Volver">
+      <mat-icon>arrow_back</mat-icon>
+    </button>
+    <div>
+      <h1>
+        <mat-icon>mail</mat-icon>
+        Configuración de Correo
+      </h1>
+      <p>Configura el envío de correos del sistema de forma independiente.</p>
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="loading-wrap">
+      <mat-spinner diameter="42"></mat-spinner>
+      <span>Cargando configuración...</span>
+    </div>
+  } @else {
+    <mat-card class="form-card">
+      <mat-card-header>
+        <mat-card-title>Canal de envío de correos</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <form [formGroup]="form" class="form-grid">
+          <mat-form-field appearance="outline">
+            <mat-label>Nombre remitente</mat-label>
+            <input matInput formControlName="nombre_remitente" placeholder="VetPlus Clínica">
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Correo remitente *</mat-label>
+            <input matInput formControlName="correo_remitente" placeholder="correo que se usará para enviar">
+            @if (form.get('correo_remitente')?.touched && form.get('correo_remitente')?.invalid) {
+              <mat-error>Ingresa un correo válido</mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Correo respuesta (opcional)</mat-label>
+            <input matInput formControlName="correo_respuesta" placeholder="recepcion@tuclinica.com">
+          </mat-form-field>
+
+          @if (showSmtpConfig()) {
+            <mat-form-field appearance="outline">
+              <mat-label>SMTP Host *</mat-label>
+              <input matInput formControlName="smtp_host" placeholder="smtp.office365.com">
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>SMTP Port *</mat-label>
+              <input matInput type="number" formControlName="smtp_port" placeholder="587">
+            </mat-form-field>
+
+            <div class="toggle-wrap">
+              <mat-slide-toggle formControlName="smtp_secure">Conexión segura (SSL/TLS)</mat-slide-toggle>
+            </div>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Usuario SMTP *</mat-label>
+              <input matInput formControlName="smtp_usuario" placeholder="notificaciones@tuclinica.com">
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Contraseña SMTP</mat-label>
+              <input matInput type="password" formControlName="smtp_password" placeholder="Deja en blanco para mantener la actual">
+            </mat-form-field>
+          }
+        </form>
+
+        @if (!showSmtpConfig()) {
+          <div class="oauth-panel">
+            <div>
+              <strong>Conexión con Google para Correo:</strong>
+              @if (oauthConnected()) {
+                <span class="oauth-ok">Conectado</span>
+                @if (oauthEmail()) {
+                  <span class="oauth-email">({{ oauthEmail() }})</span>
+                }
+              } @else {
+                <span class="oauth-bad">No conectado</span>
+              }
+              <p class="oauth-help">Se abrirá una pestaña de Google para validar tu cuenta y habilitar envíos por correo.</p>
+            </div>
+
+            <div class="oauth-actions">
+              <button class="oauth-btn" mat-stroked-button color="primary" (click)="connectGoogle()" [disabled]="oauthLoading() || saving()">
+                @if (oauthLoading()) {
+                  <mat-spinner diameter="18"></mat-spinner>
+                } @else {
+                  <mat-icon>link</mat-icon>
+                }
+                Conectar Google
+              </button>
+
+              <button class="oauth-btn" mat-stroked-button color="warn" (click)="disconnectGoogle()" [disabled]="oauthLoading() || !oauthConnected()">
+                <mat-icon>link_off</mat-icon>
+                Desconectar Google
+              </button>
+
+              <button class="mode-btn" mat-button type="button" (click)="useSmtpMode()">
+                Cambiar a SMTP manual
+              </button>
+            </div>
+          </div>
+        }
+
+        @if (showSmtpConfig()) {
+          <div class="oauth-panel smtp-panel">
+            <div>
+              <strong>Modo SMTP manual</strong>
+              <p class="oauth-help">Solo úsalo si no quieres Login con Google.</p>
+            </div>
+            <div class="oauth-actions">
+              <button class="mode-btn" mat-button type="button" (click)="useGoogleMode()">Volver a Google</button>
+            </div>
+          </div>
+        }
+      </mat-card-content>
+      <mat-card-actions class="actions">
+        <button mat-stroked-button (click)="testConnection()" [disabled]="testing() || saving()">
+          @if (testing()) {
+            <mat-spinner diameter="18"></mat-spinner>
+          } @else {
+            <mat-icon>mark_email_read</mat-icon>
+          }
+          Probar envío
+        </button>
+
+        <button mat-raised-button color="primary" (click)="save()" [disabled]="saving() || testing()">
+          @if (saving()) {
+            <mat-spinner diameter="18"></mat-spinner>
+          } @else {
+            <mat-icon>save</mat-icon>
+          }
+          Guardar
+        </button>
+      </mat-card-actions>
+    </mat-card>
+
+    @if (stats()) {
+      <mat-card class="stats-card">
+        <mat-card-content>
+          <div class="stats-grid">
+            <div>
+              <span class="label">Total envíos</span>
+              <strong>{{ stats()!.total }}</strong>
+            </div>
+            <div>
+              <span class="label">Enviados</span>
+              <strong class="ok">{{ stats()!.enviados }}</strong>
+            </div>
+            <div>
+              <span class="label">Fallidos</span>
+              <strong class="bad">{{ stats()!.fallidos }}</strong>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    }
+  }
+</div>

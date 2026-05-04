@@ -189,6 +189,16 @@ class AuditController {
           u.rol    AS usuario_rol,
           u.nombre AS usuario_nombre,
           CASE
+            WHEN al.tipo_actividad IN ('CLIENT_MANAGEMENT', 'PROPIETARIOS') THEN 'Propietarios'
+            WHEN al.tipo_actividad IN ('PET_MANAGEMENT', 'MASCOTAS') THEN 'Mascotas'
+            WHEN al.tipo_actividad IN ('MEDICAL_ACCESS', 'HISTORIA_CLINICA') THEN 'Historia clínica'
+            WHEN al.tipo_actividad = 'CITAS' THEN 'Citas'
+            WHEN al.tipo_actividad = 'PASSWORD_RESET' THEN 'Cambio de contraseña'
+            WHEN al.tipo_actividad = 'LOGIN' THEN 'Inicio de sesión'
+            WHEN al.tipo_actividad = 'LOGOUT' THEN 'Cierre de sesión'
+            ELSE al.tipo_actividad
+          END AS tipo_actividad_label,
+          CASE
             WHEN al.status_code >= 400 THEN 'ERROR'
             WHEN al.status_code >= 300 THEN 'REDIRECT'
             WHEN al.status_code >= 200 THEN 'SUCCESS'

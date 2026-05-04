@@ -53,10 +53,14 @@ CREATE TABLE IF NOT EXISTS system.tenants (
                               CHECK (plan IN ('standard', 'pro', 'enterprise')),
     estado        VARCHAR(20) NOT NULL DEFAULT 'active'
                               CHECK (estado IN ('active', 'suspended', 'cancelled')),
-    max_usuarios  INTEGER     DEFAULT 10,
-    configuracion JSONB       NOT NULL DEFAULT '{}',
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    max_usuarios           INTEGER     DEFAULT 10,
+    periodicidad_pago      VARCHAR(20) DEFAULT 'monthly'
+                                       CHECK (periodicidad_pago IN ('monthly','quarterly','semiannual','annual')),
+    fecha_inicio_suscripcion DATE,
+    fecha_proximo_pago       DATE,
+    configuracion          JSONB       NOT NULL DEFAULT '{}',
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 DROP TRIGGER IF EXISTS update_tenants_updated_at ON system.tenants;
@@ -66,12 +70,8 @@ CREATE TRIGGER update_tenants_updated_at
 
 CREATE INDEX IF NOT EXISTS idx_tenants_estado ON system.tenants(estado);
 
--- Tenant por defecto (única clínica en instalación estándar)
-INSERT INTO system.tenants (slug, nombre, plan, estado)
-VALUES ('default', 'VetPlus - Clínica Principal', 'standard', 'active')
-ON CONFLICT (slug) DO NOTHING;
-
 -- Función helper: devuelve el UUID del tenant por defecto.
+-- Retorna NULL si no existe ningún tenant (instalación limpia).
 -- Se usa como DEFAULT en todas las columnas id_tenant de las tablas core,
 -- eliminando la necesidad de pasarlo explícitamente al insertar.
 CREATE OR REPLACE FUNCTION system.get_default_tenant()

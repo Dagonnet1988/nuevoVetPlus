@@ -19,6 +19,52 @@ function ensurePDFDir() {
   }
 }
 
+function field(value, fallback = 'No registrado') {
+  if (value === null || value === undefined) return fallback;
+  const text = String(value).trim();
+  return text.length ? text : fallback;
+}
+
+function safeSlug(text) {
+  return String(text || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+}
+
+function resolveLogoPath(logoUrl) {
+  if (!logoUrl) return null;
+  if (/^https?:\/\//i.test(logoUrl)) return null;
+
+  const clean = String(logoUrl).replace(/^\/+/, '');
+  const normalized = clean.startsWith('uploads/') ? clean : `uploads/${clean.replace(/^uploads\//, '')}`;
+  return path.join(__dirname, '../../', normalized);
+}
+
+function resolveConsentText(textoLegal, empresa) {
+  const replacements = {
+    NOMBRE_CLINICA: field(empresa.nombre_empresa, 'Clínica veterinaria'),
+    SLOGAN_CLINICA: field(empresa.eslogan, ''),
+    NIT: field(empresa.nit, 'No registrado'),
+    DIRECCION: field(empresa.direccion, 'No registrada'),
+    EMAIL_CLINICA: field(empresa.email, 'No registrado'),
+    EMAIL_EMPRESA: field(empresa.email, 'No registrado'),
+    CORREO_CLINICA: field(empresa.email, 'No registrado'),
+    CORREO_EMPRESA: field(empresa.email, 'No registrado')
+  };
+
+  let text = String(textoLegal || '');
+  for (const [key, value] of Object.entries(replacements)) {
+    text = text.replace(new RegExp(`\\[${key}\\]`, 'g'), value);
+  }
+
+  // Si quedó algún placeholder no reconocido, evitar que salga literal en el PDF.
+  return text.replace(/\[[A-Z_]{3,}\]/g, 'No registrado');
+}
+
 /**
  * Obtiene los datos de la empresa para el encabezado del PDF
  */
@@ -26,7 +72,7 @@ async function getEmpresaData() {
   try {
     const result = await query(
       `SELECT nombre_empresa, nit, direccion, telefono, email, ciudad,
-              representante_legal, logo_url
+              logo_url, eslogan
        FROM system.configuracion_empresa
        WHERE activa = true
        LIMIT 1`
@@ -37,7 +83,8 @@ async function getEmpresaData() {
       direccion: '-',
       telefono: '-',
       email: '-',
-      ciudad: ''
+      ciudad: '',
+      eslogan: ''
     };
   } catch {
     return {
@@ -46,7 +93,8 @@ async function getEmpresaData() {
       direccion: '-',
       telefono: '-',
       email: '-',
-      ciudad: ''
+      ciudad: '',
+      eslogan: ''
     };
   }
 }
@@ -80,7 +128,8 @@ export async function generarPDFConsentimiento({ consentimiento, cliente, textoL
   ensurePDFDir();
 
   const empresa = await getEmpresaData();
-  const filename = `${pdfNumero}.pdf`;
+  const clientSlug = safeSlug(cliente?.nombre) || 'cliente';
+  const filename = `${pdfNumero}-${clientSlug}.pdf`;
   const filepath = path.join(PDF_DIR, filename);
 
   return new Promise((resolve, reject) => {
@@ -92,10 +141,10 @@ export async function generarPDFConsentimiento({ consentimiento, cliente, textoL
     // ── ENCABEZADO ────────────────────────────────────────────────
     // Logo si existe y es un formato soportado por PDFKit (PNG o JPEG)
     if (empresa.logo_url) {
-      const logoPath = path.join(__dirname, '../../', empresa.logo_url);
-      const ext = path.extname(logoPath).toLowerCase();
+      const logoPath = resolveLogoPath(empresa.logo_url);
+      const ext = logoPath ? path.extname(logoPath).toLowerCase() : '';
       const soportado = ['.png', '.jpg', '.jpeg'].includes(ext);
-      if (soportado && fs.existsSync(logoPath)) {
+      if (logoPath && soportado && fs.existsSync(logoPath)) {
         try {
           doc.image(logoPath, 50, 40, { width: 80 });
           doc.moveDown(0.5);
@@ -107,10 +156,14 @@ export async function generarPDFConsentimiento({ consentimiento, cliente, textoL
 
     doc.fontSize(16).font('Helvetica-Bold')
       .text(empresa.nombre_empresa, { align: 'center' });
+    if (empresa.eslogan) {
+      doc.fontSize(9).font('Helvetica-Oblique')
+        .text(empresa.eslogan, { align: 'center' });
+    }
     doc.fontSize(10).font('Helvetica')
-      .text(`NIT: ${empresa.nit}`, { align: 'center' })
-      .text(empresa.direccion, { align: 'center' })
-      .text(`${empresa.ciudad}${empresa.telefono ? ' | Tel: ' + empresa.telefono : ''}`, { align: 'center' });
+      .text(`NIT: ${field(empresa.nit)}`, { align: 'center' })
+      .text(field(empresa.direccion), { align: 'center' })
+      .text(`${field(empresa.ciudad, '-')}${empresa.telefono ? ' | Tel: ' + empresa.telefono : ''}`, { align: 'center' });
 
     doc.moveDown(0.5);
     doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke();
@@ -127,12 +180,15 @@ export async function generarPDFConsentimiento({ consentimiento, cliente, textoL
     doc.moveDown(1);
 
     // ── DATOS DEL PROPIETARIO ─────────────────────────────────────
-    doc.fontSize(11).font('Helvetica-Bold').text('DATOS DEL PROPIETARIO');
+    doc.rect(50, doc.y - 2, 495, 18).fill('#f2f7f2');
+    doc.fillColor('#1b5e20').fontSize(11).font('Helvetica-Bold').text('DATOS DEL PROPIETARIO', 56, doc.y + 2);
+    doc.fillColor('black');
+    doc.moveDown(0.9);
     doc.fontSize(10).font('Helvetica')
-      .text(`Nombre:   ${cliente.nombre}`)
-      .text(`Cédula:   ${cliente.cedula || 'No registrada'}`)
-      .text(`Teléfono: ${cliente.telefono || 'No registrado'}`)
-      .text(`Email:    ${cliente.email || 'No registrado'}`);
+      .text(`Nombre:   ${field(cliente.nombre)}`)
+      .text(`Cédula:   ${field(cliente.cedula)}`)
+      .text(`Teléfono: ${field(cliente.telefono)}`)
+      .text(`Email:    ${field(cliente.email)}`);
     doc.moveDown(0.5);
 
     // ── TEXTO LEGAL ───────────────────────────────────────────────
@@ -140,11 +196,7 @@ export async function generarPDFConsentimiento({ consentimiento, cliente, textoL
     doc.moveDown(0.5);
 
     // Reemplazar placeholders del texto con datos reales
-    const textoFinal = textoLegal
-      .replace(/\[NOMBRE_CLINICA\]/g, empresa.nombre_empresa)
-      .replace(/\[NIT\]/g,            empresa.nit)
-      .replace(/\[DIRECCION\]/g,      empresa.direccion)
-      .replace(/\[EMAIL_CLINICA\]/g,  empresa.email || 'soporte@vetplus.com')
+    const textoFinal = resolveConsentText(textoLegal, empresa);
 
     doc.fontSize(10).font('Helvetica').text(textoFinal, { align: 'justify', lineGap: 2 });
     doc.moveDown(1);

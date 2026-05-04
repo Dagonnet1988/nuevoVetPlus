@@ -20,8 +20,9 @@ export const validateLogin = [
 // Validación para cambio de contraseña
 export const validateChangePassword = [
   body('currentPassword')
-    .notEmpty()
-    .withMessage('Contraseña actual es requerida'),
+    .optional({ values: 'falsy' })
+    .isLength({ min: 6 })
+    .withMessage('Contraseña actual inválida'),
     
   body('newPassword')
     .isLength({ min: 8 })
