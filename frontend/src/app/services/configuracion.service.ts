@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
+import { AuthService } from './auth.service';
 
 // ===============================
 // INTERFACES DE CONFIGURACIÓN
@@ -15,6 +16,7 @@ export interface EmpresaConfig {
   direccion: string;
   telefono: string;
   email: string;
+  ciudad?: string;
   sitio_web?: string;
   logo_url?: string;
   eslogan?: string;
@@ -165,8 +167,12 @@ export class ConfiguracionService {
   public empresaConfig = signal<EmpresaConfig | null>(null);
   public googleCalendarConfig = signal<GoogleCalendarConfig | null>(null);
   public loading = signal<boolean>(false);
+  private bootstrapped = false;
 
-  constructor(private http: HttpClient) {
+  constructor(
+    private http: HttpClient,
+    private authService: AuthService
+  ) {
     this.loadConfigurations();
   }
 
@@ -177,8 +183,10 @@ export class ConfiguracionService {
   getEmpresaConfig(): Observable<EmpresaConfig> {
     return this.http.get<any>(`${this.API_URL}/admin/empresa/config`).pipe(
       map((response: any) => {
-        if (response.success && response.data) {
-          const normalizedConfig = this.normalizeEmpresaConfig(response.data);
+        if (response.success) {
+          const normalizedConfig = response.data
+            ? this.normalizeEmpresaConfig(response.data)
+            : this.createEmptyEmpresaConfig();
           this.empresaConfig.set(normalizedConfig);
           return normalizedConfig;
         }
@@ -568,6 +576,14 @@ export class ConfiguracionService {
   // ===============================
 
   private loadConfigurations(): void {
+    if (this.bootstrapped) return;
+    this.bootstrapped = true;
+
+    // Evita llamadas /admin/empresa/config sin sesión activa.
+    if (!this.authService.isAuthenticated() || !this.authService.getToken()) {
+      return;
+    }
+
     // Cargar configuraciones básicas al inicializar el servicio
     this.getEmpresaConfig().subscribe({
       next: () => {},
@@ -674,6 +690,33 @@ export class ConfiguracionService {
         cita_digitos: 6
       })
     } as EmpresaConfig;
+  }
+
+  private createEmptyEmpresaConfig(): EmpresaConfig {
+    return {
+      nombre_empresa: '',
+      nit: '',
+      direccion: '',
+      telefono: '',
+      email: '',
+      ciudad: '',
+      sitio_web: '',
+      eslogan: '',
+      logo_url: '',
+      horarios: this.generateDefaultHorarios(),
+      configuracion_general: {
+        moneda: 'COP',
+        zona_horaria: 'America/Bogota',
+        idioma: 'es',
+        formato_fecha: 'DD/MM/YYYY',
+        formato_hora: 'HH:mm'
+      },
+      configuracion_numeracion: {
+        cita_prefijo: 'CIT',
+        cita_siguiente: 1,
+        cita_digitos: 6
+      }
+    };
   }
 
   private toApiEmpresaConfig(config: EmpresaConfig): any {

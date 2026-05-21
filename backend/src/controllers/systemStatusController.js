@@ -27,11 +27,15 @@ export const getSystemStatus = async (req, res) => {
             });
         }
 
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+
         const status = {
-            empresa: await checkEmpresaStatus(),
-            google_calendar: await checkGoogleCalendarStatus(),
-          correo: await checkCorreoStatus(),
-            sistema: await checkSistemaStatus()
+            empresa: await checkEmpresaStatus(tenantId),
+            google_calendar: await checkGoogleCalendarStatus(tenantId),
+            correo: await checkCorreoStatus(tenantId),
+            consentimiento: await checkConsentimientoStatus(tenantId),
+            usuarios: await checkUsuariosStatus(tenantId),
+            sistema: await checkSistemaStatus(tenantId)
         };
 
         res.json({
@@ -52,23 +56,39 @@ export const getSystemStatus = async (req, res) => {
 /**
  * Verificar estado de configuración de empresa
  */
-async function checkEmpresaStatus() {
+async function checkEmpresaStatus(tenantId) {
   try {
     const result = await query(`
       SELECT 
-        COUNT(*) as configurado,
-        CASE 
-          WHEN COUNT(*) > 0 THEN 'Configurado'
-          ELSE 'Pendiente'
-        END as estado
+        nombre_empresa,
+        nit,
+        direccion,
+        email,
+        telefono,
+        logo_url
       FROM system.configuracion_empresa 
-      WHERE activa = true
-    `);
-    
+      WHERE activa = true AND id_tenant = $1
+      ORDER BY updated_at DESC NULLS LAST, created_at DESC
+      LIMIT 1
+    `, [tenantId]);
+
+    const row = result.rows[0] || null;
+    const hasMeaningfulConfig = Boolean(
+      row &&
+      row.nombre_empresa &&
+      row.nit && row.nit !== 'POR-DEFINIR' &&
+      row.direccion && row.direccion !== 'Por definir' &&
+      row.email &&
+      row.telefono
+    );
+
     return {
-      estado: result.rows[0].estado || 'Error',
-      configurado: result.rows[0].configurado > 0,
-      mensaje: result.rows[0].configurado > 0 ? 'Empresa configurada correctamente' : 'Configuración de empresa pendiente'
+      estado: hasMeaningfulConfig ? 'Configurado' : 'Pendiente',
+      configurado: hasMeaningfulConfig,
+      logo_configurado: Boolean(row?.logo_url),
+      mensaje: hasMeaningfulConfig
+        ? 'Empresa configurada correctamente'
+        : 'Configuración de empresa pendiente'
     };
   } catch (error) {
     console.error('Error verificando estado de empresa:', error);
@@ -81,7 +101,7 @@ async function checkEmpresaStatus() {
 }/**
  * Verificar estado de Google Calendar
  */
-async function checkGoogleCalendarStatus() {
+async function checkGoogleCalendarStatus(tenantId) {
   try {
     const result = await query(`
       SELECT 
@@ -96,8 +116,9 @@ async function checkGoogleCalendarStatus() {
         END as estado
       FROM vetplus_auth.google_calendar_config
       WHERE is_active = true
+        AND configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)
       LIMIT 1
-    `);
+    `, [tenantId]);
     
     if (result.rows.length === 0) {
       return {
@@ -125,17 +146,17 @@ async function checkGoogleCalendarStatus() {
 }/**
  * Verificar estado de configuración de correo SMTP
  */
-async function checkCorreoStatus() {
+async function checkCorreoStatus(tenantId) {
   try {
     const result = await query(`
       SELECT
         auth_mode,
         oauth_refresh_token
       FROM system.configuracion_correo
-      WHERE activa = true
+      WHERE activa = true AND id_tenant = $1
       ORDER BY created_at DESC
       LIMIT 1
-    `);
+    `, [tenantId]);
 
     const row = result.rows[0] || null;
 
@@ -178,10 +199,72 @@ async function checkCorreoStatus() {
     };
   }
 }
+
+async function checkConsentimientoStatus(tenantId) {
+  try {
+    const result = await query(
+      `SELECT id_version, texto_legal
+       FROM clinical.versiones_consentimiento
+       WHERE activa = true AND id_tenant = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [tenantId]
+    );
+
+    const row = result.rows[0] || null;
+    const hasText = Boolean(row?.texto_legal && String(row.texto_legal).trim().length > 0);
+
+    return {
+      estado: hasText ? 'Configurado' : 'Pendiente',
+      configurado: hasText,
+      mensaje: hasText
+        ? 'Texto de consentimiento activo'
+        : 'Texto de consentimiento pendiente'
+    };
+  } catch (error) {
+    console.error('Error verificando estado de consentimiento:', error);
+    return {
+      estado: 'Error',
+      configurado: false,
+      mensaje: 'Error al verificar configuración de consentimiento'
+    };
+  }
+}
+
+async function checkUsuariosStatus(tenantId) {
+  try {
+    const result = await query(
+      `SELECT COUNT(*)::int AS total
+       FROM vetplus_auth.usuarios
+       WHERE id_tenant = $1
+         AND activo = true
+         AND rol IN ('vet', 'aux')`,
+      [tenantId]
+    );
+
+    const total = Number(result.rows[0]?.total || 0);
+    return {
+      estado: total > 0 ? 'Configurado' : 'Pendiente',
+      configurado: total > 0,
+      total,
+      mensaje: total > 0
+        ? 'Usuarios clinicos activos configurados'
+        : 'Sin usuarios clinicos activos'
+    };
+  } catch (error) {
+    console.error('Error verificando estado de usuarios:', error);
+    return {
+      estado: 'Error',
+      configurado: false,
+      total: 0,
+      mensaje: 'Error al verificar usuarios'
+    };
+  }
+}
 /**
  * Verificar estado general del sistema
  */
-async function checkSistemaStatus() {
+async function checkSistemaStatus(tenantId) {
   try {
     // Verificar versión de la base de datos
     const dbVersion = await query('SELECT version()');
@@ -193,14 +276,15 @@ async function checkSistemaStatus() {
         MAX(fecha) as ultima_actividad
       FROM system.log_auditoria
       WHERE fecha > NOW() - INTERVAL '24 hours'
-    `);
+        AND id_usuario IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)
+    `, [tenantId]);
     
     // Verificar si hay usuarios activos
     const activeUsers = await query(`
       SELECT COUNT(*) as usuarios_activos
       FROM vetplus_auth.usuarios 
-      WHERE activo = true
-    `);
+      WHERE activo = true AND id_tenant = $1
+    `, [tenantId]);
     
     const logs = lastActivity.rows[0] || { total_logs: 0 };
     const users = activeUsers.rows[0] || { usuarios_activos: 0 };
@@ -232,14 +316,18 @@ export const getConfigSummary = async (req, res) => {
             });
         }
 
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+
         const status = {
-            empresa: await checkEmpresaStatus(),
-            google_calendar: await checkGoogleCalendarStatus(),
-            correo: await checkCorreoStatus(),
-            sistema: await checkSistemaStatus()
+            empresa: await checkEmpresaStatus(tenantId),
+            google_calendar: await checkGoogleCalendarStatus(tenantId),
+            correo: await checkCorreoStatus(tenantId),
+            consentimiento: await checkConsentimientoStatus(tenantId),
+            usuarios: await checkUsuariosStatus(tenantId),
+            sistema: await checkSistemaStatus(tenantId)
         };
 
-        const totalModules = 4;
+        const totalModules = 6;
         const configuredModules = Object.values(status).filter(
           module => module.estado === 'Configurado' || module.estado === 'Conectado' || module.estado === 'Operativo'
         ).length;

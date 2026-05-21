@@ -68,14 +68,16 @@ function resolveConsentText(textoLegal, empresa) {
 /**
  * Obtiene los datos de la empresa para el encabezado del PDF
  */
-async function getEmpresaData() {
+async function getEmpresaData(tenantId) {
   try {
     const result = await query(
       `SELECT nombre_empresa, nit, direccion, telefono, email, ciudad,
               logo_url, eslogan
        FROM system.configuracion_empresa
        WHERE activa = true
+         AND id_tenant = $1
        LIMIT 1`
+      , [tenantId]
     );
     return result.rows[0] || {
       nombre_empresa: 'VetPlus - Clínica Veterinaria',
@@ -124,10 +126,10 @@ async function generarNumeroPDF() {
  * @param {string}   params.pdfNumero      - Número único del documento
  * @returns {Promise<string>} Ruta relativa del PDF guardado
  */
-export async function generarPDFConsentimiento({ consentimiento, cliente, textoLegal, pdfNumero }) {
+export async function generarPDFConsentimiento({ consentimiento, cliente, textoLegal, pdfNumero, tenantId }) {
   ensurePDFDir();
 
-  const empresa = await getEmpresaData();
+  const empresa = await getEmpresaData(tenantId);
   const clientSlug = safeSlug(cliente?.nombre) || 'cliente';
   const filename = `${pdfNumero}-${clientSlug}.pdf`;
   const filepath = path.join(PDF_DIR, filename);

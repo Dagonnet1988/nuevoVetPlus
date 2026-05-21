@@ -22,7 +22,7 @@ const SA_JWT_CONFIG = {
  */
 export function generateSuperadminToken(sa) {
   return jwt.sign(
-    { id: sa.id_superadmin, email: sa.email, nombre: sa.nombre, rol: 'superadmin' },
+    { id: sa.id_superadmin, email: sa.email, documento: sa.documento, nombre: sa.nombre, rol: 'superadmin' },
     SA_JWT_CONFIG.secret,
     { expiresIn: SA_JWT_CONFIG.expiresIn, issuer: SA_JWT_CONFIG.issuer, audience: SA_JWT_CONFIG.audience }
   );
@@ -51,7 +51,7 @@ export async function authenticateSuperadmin(req, res, next) {
 
     // Verificar que el superadmin sigue activo en BD
     const result = await query(
-      'SELECT id_superadmin, email, nombre, activo FROM system.superadmins WHERE id_superadmin = $1',
+      'SELECT id_superadmin, email, documento, nombre, activo FROM system.superadmins WHERE id_superadmin = $1',
       [payload.id]
     );
 

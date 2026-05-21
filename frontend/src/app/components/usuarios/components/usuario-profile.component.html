@@ -121,31 +121,6 @@
       </div>
     </div>
 
-    <!-- Estadísticas Rápidas -->
-    @if (usuario()!.rol === 'vet') {
-      <div class="stats-section">
-        <h2 class="section-title">
-          <mat-icon>analytics</mat-icon>
-          Estadísticas de Rendimiento
-        </h2>
-        <div class="stats-grid">
-          @for (stat of estadisticasResumen(); track stat.label) {
-            <mat-card class="stat-card">
-              <mat-card-content>
-                <div class="stat-content">
-                  <mat-icon class="stat-icon" [style.color]="stat.color">{{ stat.icon }}</mat-icon>
-                  <div class="stat-info">
-                    <span class="stat-number">{{ stat.value }}</span>
-                    <span class="stat-label">{{ stat.label }}</span>
-                  </div>
-                </div>
-              </mat-card-content>
-            </mat-card>
-          }
-        </div>
-      </div>
-    }
-
     <!-- Tabs de Información -->
     <mat-tab-group class="profile-tabs" animationDuration="300ms">
 
@@ -273,25 +248,12 @@
                 <mat-icon>devices</mat-icon>
                 Accesos recientes
               </mat-card-title>
-              <mat-card-subtitle>Listado de inicios de sesión registrados para este usuario</mat-card-subtitle>
+              <mat-card-subtitle>Historial de inicios de sesión auditados para este usuario</mat-card-subtitle>
             </mat-card-header>
             <mat-card-content>
               <div class="config-warning" style="margin-bottom: 12px;">
                 <mat-icon>info</mat-icon>
-                <span>Esta vista muestra accesos registrados (logins). No representa conexiones en tiempo real.</span>
-              </div>
-
-              <div class="sessions-actions">
-                @if (sesionesActivas().length > 0) {
-                  <button mat-stroked-button
-                          color="warn"
-                          disabled
-                          matTooltip="Próximamente disponible"
-                          class="close-all-sessions">
-                    <mat-icon>logout</mat-icon>
-                    Cerrar Todas las Sesiones
-                  </button>
-                }
+                <span>Esta vista muestra eventos de login registrados. No representa conexiones en tiempo real ni sesiones activas.</span>
               </div>
 
               @if (loadingSesiones()) {
@@ -304,7 +266,7 @@
                   @for (sesion of sesionesActivas(); track sesion.id_sesion) {
                     <mat-list-item class="session-item">
                       <mat-icon matListItemIcon class="device-icon">
-                        {{ sesion.dispositivo.includes('iPhone') || sesion.dispositivo.includes('Android') ? 'smartphone' : 'computer' }}
+                        {{ getIconoDispositivoAcceso(sesion.dispositivo) }}
                       </mat-icon>
                       <div matListItemTitle class="session-title">{{ sesion.dispositivo }}</div>
                       <div matListItemLine class="session-browser">{{ sesion.navegador }}</div>
@@ -317,16 +279,13 @@
                         {{ sesion.ip_address }}
                       </div>
                       <div matListItemLine class="session-time">
-                        <span>Iniciada: {{ formatearFechaRelativa(sesion.fecha_inicio) }}</span>
-                        <span>Última actividad: {{ formatearFechaRelativa(sesion.ultima_actividad) }}</span>
+                        <span>Login: {{ formatearFecha(sesion.fecha_inicio) }}</span>
+                        <span>
+                          Logout:
+                          {{ sesion.fecha_logout ? formatearFecha(sesion.fecha_logout) : 'Sesión en curso' }}
+                        </span>
+                        <span>Duración: {{ formatearDuracionSesion(sesion) }}</span>
                       </div>
-                      <button matListItemMeta
-                              mat-icon-button
-                              color="warn"
-                              disabled
-                              matTooltip="Próximamente disponible">
-                        <mat-icon>logout</mat-icon>
-                      </button>
                     </mat-list-item>
                     @if (!$last) {
                       <mat-divider></mat-divider>
@@ -342,16 +301,12 @@
                   </div>
                 }
 
-                @if (sesionesActivas().length > 0) {
-                  <div class="view-more">
-                    <button mat-stroked-button
-                            disabled
-                            matTooltip="Próximamente disponible">
-                      <mat-icon>visibility</mat-icon>
-                      Ver historial completo de sesiones
-                    </button>
-                  </div>
-                }
+                <div class="view-more">
+                  <button mat-stroked-button (click)="verMasSesiones()">
+                    <mat-icon>open_in_new</mat-icon>
+                    Ver vista completa de accesos
+                  </button>
+                </div>
               }
             </mat-card-content>
           </mat-card>

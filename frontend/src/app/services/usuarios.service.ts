@@ -169,10 +169,19 @@ export interface SesionActiva {
   user_agent: string;
   ubicacion?: string;
   fecha_inicio: string;
+  fecha_logout?: string | null;
   ultima_actividad: string;
+  duracion_segundos?: number;
   dispositivo: string;
   navegador: string;
   activa: boolean;
+}
+
+export interface FiltroSesiones {
+  id_usuario?: string;
+  estado?: 'activas' | 'cerradas' | 'todas';
+  search?: string;
+  exclude_admins?: boolean;
 }
 
 export interface ConfiguracionSeguridad {
@@ -410,10 +419,19 @@ export class UsuariosService {
   // SESIONES ACTIVAS
   // ===============================
 
-  getSesionesActivas(id_usuario?: string): Observable<SesionActiva[]> {
+  getSesionesActivas(filtros?: FiltroSesiones): Observable<SesionActiva[]> {
     let params = new HttpParams();
-    if (id_usuario) {
-      params = params.set('id_usuario', id_usuario);
+    if (filtros?.id_usuario) {
+      params = params.set('id_usuario', filtros.id_usuario);
+    }
+    if (filtros?.estado) {
+      params = params.set('estado', filtros.estado);
+    }
+    if (filtros?.search) {
+      params = params.set('search', filtros.search);
+    }
+    if (filtros?.exclude_admins !== undefined) {
+      params = params.set('exclude_admins', String(filtros.exclude_admins));
     }
 
     return this.http.get<any>(`${this.API_URL}/sesiones-activas`, { params }).pipe(

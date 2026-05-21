@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { query } from '../config/database.js';
-import { generateToken, generateRefreshToken, verifyRefreshToken } from '../middleware/auth.js';
+import { generateToken, generateRefreshToken, verifyRefreshToken, decodeToken } from '../middleware/auth.js';
 import { validationResult } from 'express-validator/lib/index.js';
 
 /**
@@ -26,12 +26,62 @@ class AuthController {
       const { documento, password } = req.body;
       const ip = req.ip || req.connection.remoteAddress;
       const userAgent = req.get('User-Agent');
+      const rawTenantSlug = req.headers['x-tenant-slug'];
+      const tenantSlug = typeof rawTenantSlug === 'string' ? rawTenantSlug.trim().toLowerCase() : '';
+      const requireTenantContext = process.env.NODE_ENV === 'production' || process.env.REQUIRE_TENANT_ON_LOGIN === 'true';
 
-      // Buscar usuario por documento
-      const userResult = await query(
-        'SELECT id_usuario, id_tenant, nombre, apellido, email, documento, password_hash, rol, activo, intentos_login, bloqueado_hasta, password_temporal, debe_cambiar_password, avatar_url FROM vetplus_auth.usuarios WHERE documento = $1',
-        [documento]
-      );
+      let resolvedTenant = null;
+
+      if (tenantSlug) {
+        const tenantResult = await query(
+          `SELECT id_tenant, slug, nombre
+           FROM system.tenants
+           WHERE slug = $1 AND estado = 'active'
+           LIMIT 1`,
+          [tenantSlug]
+        );
+
+        if (tenantResult.rows.length === 0) {
+          return res.status(403).json({
+            success: false,
+            message: 'Tenant inválido o inactivo',
+            error: 'INVALID_TENANT_SLUG'
+          });
+        }
+
+        resolvedTenant = tenantResult.rows[0];
+      } else if (requireTenantContext) {
+        return res.status(400).json({
+          success: false,
+          message: 'Se requiere contexto de tenant para iniciar sesión',
+          error: 'MISSING_TENANT_SLUG'
+        });
+      }
+
+      // Buscar usuario por documento y tenant (cuando aplica por subdominio)
+      const userResult = resolvedTenant
+        ? await query(
+          `SELECT id_usuario, id_tenant, nombre, apellido, email, documento, password_hash, rol, activo,
+                  intentos_login, bloqueado_hasta, password_temporal, debe_cambiar_password, avatar_url
+           FROM vetplus_auth.usuarios
+           WHERE documento = $1 AND id_tenant = $2`,
+          [documento, resolvedTenant.id_tenant]
+        )
+        : await query(
+          `SELECT id_usuario, id_tenant, nombre, apellido, email, documento, password_hash, rol, activo,
+                  intentos_login, bloqueado_hasta, password_temporal, debe_cambiar_password, avatar_url
+           FROM vetplus_auth.usuarios
+           WHERE documento = $1`,
+          [documento]
+        );
+
+      if (!resolvedTenant && userResult.rows.length > 1) {
+        return res.status(400).json({
+          success: false,
+          message: 'Documento asociado a múltiples clínicas. Inicia sesión desde el subdominio correcto.',
+          error: 'AMBIGUOUS_TENANT_CONTEXT'
+        });
+      }
 
       if (userResult.rows.length === 0) {
         return res.status(401).json({
@@ -131,7 +181,10 @@ class AuthController {
             email: user.email,
             documento: user.documento,
             rol: user.rol,
-            avatar_url: user.avatar_url
+            avatar_url: user.avatar_url,
+            tenant_id: user.id_tenant,
+            tenant_slug: resolvedTenant?.slug || null,
+            tenant_nombre: resolvedTenant?.nombre || null
           },
           must_change_password: needsPasswordChange
         }
@@ -156,11 +209,21 @@ class AuthController {
        const token = authHeader && authHeader.split(' ')[1];
 
        if (token) {
+         const decoded = decodeToken(token);
+         const jtiMarker = decoded?.jti ? `jti:${decoded.jti}` : null;
+
          // Agregar token a blacklist
          await query(
            'INSERT INTO vetplus_auth.blacklisted_tokens (token, id_usuario, razon) VALUES ($1, $2, $3)',
            [token, req.user?.id_usuario, 'logout']
          );
+
+         if (jtiMarker) {
+           await query(
+             'INSERT INTO vetplus_auth.blacklisted_tokens (token, id_usuario, razon) VALUES ($1, $2, $3)',
+             [jtiMarker, req.user?.id_usuario, 'logout_jti']
+           );
+         }
 
          // Log de logout (simplificado)
          if (req.user) {
@@ -222,6 +285,25 @@ class AuthController {
            success: false,
            message: 'Usuario desactivado',
            error: 'USER_DISABLED'
+         });
+       }
+
+       const forcedLogout = await query(
+         `SELECT 1
+          FROM system.session_audit
+          WHERE id_usuario = $1
+            AND tipo_evento = 'FORCE_LOGOUT'
+            AND $2::bigint IS NOT NULL
+            AND timestamp >= to_timestamp($2)
+          LIMIT 1`,
+         [user.id_usuario, decoded?.iat || null]
+       );
+
+       if (forcedLogout.rows.length > 0) {
+         return res.status(401).json({
+           success: false,
+           message: 'Sesión cerrada por administrador. Debe iniciar sesión nuevamente.',
+           error: 'FORCE_LOGOUT'
          });
        }
 

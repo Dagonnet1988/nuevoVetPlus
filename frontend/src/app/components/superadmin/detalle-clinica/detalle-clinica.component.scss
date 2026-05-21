@@ -88,6 +88,21 @@
 .sa-date { color: #78909c; font-size: 12px; }
 .sa-empty-text { color: #78909c; text-align: center; padding: 24px 0; }
 
+.sa-users-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 12px;
+}
+
+.sa-provision-btn {
+  border-radius: 8px !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #1565c0 !important;
+  border-color: #1565c0 !important;
+}
+
 // ── Badges ────────────────────────────────────────────────────────────────────
 .sa-badge {
   display: inline-block; padding: 2px 8px; border-radius: 12px;

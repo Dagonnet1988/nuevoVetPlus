@@ -70,6 +70,7 @@ CREATE TABLE clinical.historias_clinicas (
     fecha           DATE NOT NULL DEFAULT CURRENT_DATE,
     estado          VARCHAR(20) NOT NULL DEFAULT 'Completado'
                       CHECK (estado IN ('Borrador','Completado','Cancelado')),
+    motivo_modificacion TEXT,
     motivo_anulacion TEXT,
     id_tenant       UUID NOT NULL DEFAULT system.get_default_tenant()
                       REFERENCES system.tenants(id_tenant) ON DELETE RESTRICT,

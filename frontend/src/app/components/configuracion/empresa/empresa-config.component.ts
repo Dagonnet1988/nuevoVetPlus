@@ -32,6 +32,7 @@ export class EmpresaConfigComponent implements OnInit {
   empresaConfig = computed(() => this.configuracionService.empresaConfig());
   horarios = signal<HorarioAtencion[]>([]);
   private currentConfig = signal<EmpresaConfig | null>(null);
+  private pendingLogoUrl = signal<string>('');
 
   empresaForm: FormGroup;
 
@@ -53,6 +54,7 @@ export class EmpresaConfigComponent implements OnInit {
       nombre: ['', [Validators.required, Validators.minLength(3)]],
       nit: ['', [Validators.required]],
       direccion: ['', [Validators.required]],
+      ciudad: [''],
       telefono: ['', [Validators.required]],
       email: ['', [Validators.required, Validators.email]],
       sitio_web: [''],
@@ -78,12 +80,14 @@ export class EmpresaConfigComponent implements OnInit {
 
   private populateForm(config: EmpresaConfig): void {
     this.currentConfig.set(config);
+    this.pendingLogoUrl.set('');
 
     // Llenar formulario de empresa
     this.empresaForm.patchValue({
       nombre: config.nombre_empresa,
       nit: config.nit,
       direccion: config.direccion,
+      ciudad: config.ciudad || '',
       telefono: config.telefono,
       email: config.email,
       sitio_web: config.sitio_web || '',
@@ -122,6 +126,7 @@ export class EmpresaConfigComponent implements OnInit {
       nombre_empresa: this.empresaForm.value.nombre,
       nit: this.empresaForm.value.nit,
       direccion: this.empresaForm.value.direccion,
+      ciudad: this.empresaForm.value.ciudad,
       telefono: this.empresaForm.value.telefono,
       email: this.empresaForm.value.email,
       sitio_web: this.empresaForm.value.sitio_web,
@@ -139,12 +144,13 @@ export class EmpresaConfigComponent implements OnInit {
         cita_siguiente: 1,
         cita_digitos: 6
       },
-      logo_url: this.empresaConfig()?.logo_url
+      logo_url: this.pendingLogoUrl() || this.empresaConfig()?.logo_url
     };
 
     this.configuracionService.updateEmpresaConfig(empresaConfig).subscribe({
       next: (updatedConfig) => {
         this.currentConfig.set(updatedConfig);
+        this.pendingLogoUrl.set('');
         this.snackBar.open('Configuración guardada exitosamente', 'Cerrar', { duration: 3000 });
         this.loading.set(false);
       },
@@ -173,7 +179,8 @@ export class EmpresaConfigComponent implements OnInit {
 
       this.loading.set(true);
       this.configuracionService.uploadLogo(file).subscribe({
-        next: () => {
+        next: (logoUrl) => {
+          this.pendingLogoUrl.set(logoUrl);
           this.snackBar.open('Logo subido exitosamente', 'Cerrar', { duration: 3000 });
           this.loading.set(false);
         },
@@ -187,7 +194,9 @@ export class EmpresaConfigComponent implements OnInit {
   }
 
   getLogoPreviewUrl(): string {
-    return this.configuracionService.getAbsoluteAssetUrl(this.empresaConfig()?.logo_url);
+    return this.configuracionService.getAbsoluteAssetUrl(
+      this.pendingLogoUrl() || this.empresaConfig()?.logo_url
+    );
   }
 
   removeLogo(): void {

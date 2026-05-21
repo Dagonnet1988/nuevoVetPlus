@@ -511,12 +511,13 @@ export async function obtenerFormularioPublico(req, res) {
   try {
     const result = await query(
       `SELECT c.id_consentimiento, c.estado, c.token_expires_at,
+          c.id_tenant,
               cl.id_cliente AS id_cliente, cl.nombre AS cliente_nombre, cl.cedula,
               v.titulo, v.texto_legal, v.id_version,
               emp.nombre_empresa, emp.nit, emp.direccion, emp.email AS email_empresa, emp.logo_url
        FROM clinical.consentimientos c
-       JOIN clinical.clientes cl ON cl.id_cliente = c.id_cliente
-       JOIN clinical.versiones_consentimiento v ON v.id_version = c.id_version
+        JOIN clinical.clientes cl ON cl.id_cliente = c.id_cliente AND cl.id_tenant = c.id_tenant
+        JOIN clinical.versiones_consentimiento v ON v.id_version = c.id_version AND v.id_tenant = c.id_tenant
        LEFT JOIN system.configuracion_empresa emp ON emp.activa = true AND emp.id_tenant = c.id_tenant
        WHERE c.token = $1`,
       [token]
@@ -610,11 +611,12 @@ export async function firmarConsentimiento(req, res) {
     // Cargar consentimiento con datos del cliente y versión
     const consentResult = await query(
       `SELECT c.id_consentimiento, c.estado, c.token_expires_at, c.id_cliente, c.id_version,
+          c.id_tenant,
               cl.nombre AS cliente_nombre, cl.cedula, cl.email, cl.telefono,
               v.texto_legal, v.id_version AS ver_id
        FROM clinical.consentimientos c
-       JOIN clinical.clientes cl ON cl.id_cliente = c.id_cliente
-       JOIN clinical.versiones_consentimiento v ON v.id_version = c.id_version
+        JOIN clinical.clientes cl ON cl.id_cliente = c.id_cliente AND cl.id_tenant = c.id_tenant
+        JOIN clinical.versiones_consentimiento v ON v.id_version = c.id_version AND v.id_tenant = c.id_tenant
        WHERE c.token = $1`,
       [token]
     );
@@ -674,7 +676,8 @@ export async function firmarConsentimiento(req, res) {
         telefono: row.telefono
       },
       textoLegal: row.texto_legal,
-      pdfNumero
+      pdfNumero,
+      tenantId: row.id_tenant
     });
 
     // Marcar consentimiento como firmado y guardar PDF

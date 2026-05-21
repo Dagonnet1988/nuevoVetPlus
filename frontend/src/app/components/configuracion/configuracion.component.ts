@@ -74,7 +74,7 @@ export class ConfiguracionComponent implements OnInit {
       route: '/configuracion/consentimiento-texto',
       color: '#6a1b9a',
       adminOnly: true,
-      status: 'active'
+      status: 'loading'
     },
     {
       title: 'Usuarios y Roles',
@@ -99,6 +99,7 @@ export class ConfiguracionComponent implements OnInit {
     empresa_configurada: false,
     google_calendar_conectado: false,
     correo_configurado: false,
+    consentimiento_configurado: false,
     usuarios_activos: 0,
     total_configuraciones: 0
   });
@@ -147,6 +148,8 @@ export class ConfiguracionComponent implements OnInit {
     this.updateSectionStatus('Empresa', getUIStatus(status.empresa?.estado || 'pending'));
     this.updateSectionStatus('Google Calendar', getUIStatus(status.google_calendar?.estado || 'pending'));
     this.updateSectionStatus('Correo', getUIStatus(status.correo?.estado || 'pending'));
+    this.updateSectionStatus('Texto de Consentimiento', getUIStatus(status.consentimiento?.estado || 'pending'));
+    this.updateSectionStatus('Usuarios y Roles', 'active');
   }
 
   private updateQuickStats(status: any): void {
@@ -154,11 +157,13 @@ export class ConfiguracionComponent implements OnInit {
       empresa_configurada: status.empresa?.configurado || false,
       google_calendar_conectado: status.google_calendar?.conectado || false,
       correo_configurado: status.correo?.configurado || false,
-      usuarios_activos: status.sistema?.usuarios_activos || 0,
+      consentimiento_configurado: status.consentimiento?.configurado || false,
+      usuarios_activos: status.usuarios?.total || 0,
       total_configuraciones: [
         status.empresa?.configurado,
         status.google_calendar?.conectado,
-        status.correo?.configurado
+        status.correo?.configurado,
+        status.consentimiento?.configurado
       ].filter(Boolean).length
     };
 
@@ -206,5 +211,20 @@ export class ConfiguracionComponent implements OnInit {
       case 'error': return 'Error';
       default: return 'Pendiente';
     }
+  }
+
+  getSectionDescription(section: any): string {
+    if (section.title === 'Usuarios y Roles') {
+      const totalUsuariosClinicos = this.quickStats().usuarios_activos;
+      return totalUsuariosClinicos === 1
+        ? '1 usuario clinico activo (sin admins)'
+        : `${totalUsuariosClinicos} usuarios clinicos activos (sin admins)`;
+    }
+
+    return section.description;
+  }
+
+  shouldShowSectionStatus(section: any): boolean {
+    return section.title !== 'Usuarios y Roles';
   }
 }

@@ -151,11 +151,14 @@ function formatDosisPaciente(value) {
 
 // ─── data loaders ────────────────────────────────────────────────────────────
 
-async function getEmpresa() {
+async function getEmpresa(tenantId) {
   try {
     const r = await query(
       `SELECT nombre_empresa, nit, direccion, telefono, email, ciudad, logo_url, eslogan
-       FROM system.configuracion_empresa WHERE activa = true LIMIT 1`
+       FROM system.configuracion_empresa
+       WHERE activa = true AND id_tenant = $1
+       LIMIT 1`,
+      [tenantId]
     );
     return r.rows[0] || {};
   } catch { return {}; }
@@ -777,7 +780,7 @@ function drawSeguimientoChecklist(doc, rawEjercicios = '') {
  */
 export async function generarPDFHistoria(idHistoria, tenantId) {
   const [empresa, historia] = await Promise.all([
-    getEmpresa(),
+    getEmpresa(tenantId),
     getHistoriaFull(idHistoria, tenantId),
   ]);
 

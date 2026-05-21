@@ -4,6 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import fs from 'fs';
+import { randomUUID } from 'crypto';
 import DBInit from './src/database/DBInit.js';
 
 // ── Handlers globales: evitar reinicios por errores no capturados ──────────────
@@ -51,6 +52,16 @@ const PORT = process.env.PORT || 3000;
 // Configurar trust proxy para obtener IP real
 app.set('trust proxy', 1);
 
+// Request ID para trazabilidad mínima en logs y respuestas
+app.use((req, res, next) => {
+  const headerRequestId = req.headers['x-request-id'];
+  req.id = typeof headerRequestId === 'string' && headerRequestId.trim()
+    ? headerRequestId.trim()
+    : randomUUID();
+  res.setHeader('X-Request-Id', req.id);
+  next();
+});
+
 // Middleware de seguridad
 app.use(helmet({
   crossOriginResourcePolicy: false,
@@ -63,11 +74,17 @@ app.use('/api', cors({
     process.env.FRONTEND_URL || 'http://localhost:4200',
     'http://localhost:4201'
   ],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Tenant-Slug', 'X-Request-Id'],
+  exposedHeaders: ['X-Request-Id'],
   credentials: true
 }));
 
 // Middleware de logging
-app.use(morgan('combined'));
+morgan.token('reqId', (req) => req.id || 'unknown');
+const noisyAuthValidationRoutes = ['/api/auth/validar-email', '/api/auth/validar-documento', '/api/auth/check-email', '/api/auth/check-documento'];
+app.use(morgan(process.env.HTTP_LOG_FORMAT || (process.env.NODE_ENV === 'development' ? 'tiny' : 'combined'), {
+  skip: (req) => req.method === 'GET' && noisyAuthValidationRoutes.some((route) => req.originalUrl.startsWith(route))
+}));
 
 // Middleware para parsing JSON
 app.use(express.json({ limit: '10mb' }));
@@ -95,7 +112,24 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'OK',
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    requestId: req.id
+  });
+});
+
+app.get('/health/live', (req, res) => {
+  res.json({
+    status: 'alive',
+    timestamp: new Date().toISOString(),
+    requestId: req.id
+  });
+});
+
+app.get('/health/ready', (req, res) => {
+  res.json({
+    status: 'ready',
+    timestamp: new Date().toISOString(),
+    requestId: req.id
   });
 });
 
@@ -155,6 +189,7 @@ app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({
     message: 'Error interno del servidor',
+    requestId: req.id,
     error: process.env.NODE_ENV === 'development' ? err.message : {}
   });
 });
@@ -163,7 +198,8 @@ app.use((err, req, res, next) => {
 app.use((req, res) => {
   res.status(404).json({
     message: 'Ruta no encontrada',
-    endpoint: req.originalUrl
+    endpoint: req.originalUrl,
+    requestId: req.id
   });
 });
 

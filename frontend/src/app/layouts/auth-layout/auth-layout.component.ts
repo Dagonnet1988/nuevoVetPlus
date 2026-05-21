@@ -26,6 +26,17 @@ import { AuthService } from '../../services/auth.service';
       <!-- Footer con información adicional -->
       <footer class="auth-footer">
         <div class="footer-content">
+          <div class="footer-da footer-da-left">
+            <img src="DA logo.png" alt="DA Developments" class="footer-da-logo" />
+            <p class="footer-da-line">
+              <span>D.A. developments</span>
+              <span>Desarrollo web</span>
+              <span>Soporte y mantenimiento</span>
+              <a class="footer-da-link" href="https://wa.me/573150752312" target="_blank" rel="noopener noreferrer">WhatsApp: +57 315 075 2312</a>
+              <a class="footer-da-link" href="mailto:contacto@dadev.co">contacto@dadev.co</a>
+            </p>
+          </div>
+
           <div class="company-info">
             <p class="company-name">VetPlus - Sistema de Gestión Veterinaria</p>
             <p class="company-description">
@@ -126,6 +137,52 @@ import { AuthService } from '../../services/auth.service';
       align-items: center;
     }
 
+    .footer-da {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0;
+      min-width: 0;
+    }
+
+    .footer-da-left {
+      flex: 1;
+      justify-content: flex-start;
+    }
+
+    .footer-da-logo {
+      width: 52px;
+      height: 52px;
+      object-fit: contain;
+      border-radius: 10px;
+      background: #fff;
+      border: 1px solid #d9e7da;
+      padding: 6px;
+      flex-shrink: 0;
+    }
+
+    .footer-da-line {
+      margin: 0;
+      color: #244f7a;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.35;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 1px;
+    }
+
+    .footer-da-link {
+      color: #1760a5;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .footer-da-link:hover {
+      text-decoration: underline;
+    }
+
     .footer-link {
       color: #666 !important;
       font-size: 14px;
@@ -218,6 +275,24 @@ import { AuthService } from '../../services/auth.service';
       color: #b3b3b3 !important;
     }
 
+    .dark-theme .footer-da {
+      background: transparent;
+      border-color: transparent;
+    }
+
+    .dark-theme .footer-da-logo {
+      background: rgba(255, 255, 255, 0.92);
+      border-color: rgba(190, 212, 240, 0.45);
+    }
+
+    .dark-theme .footer-da-line {
+      color: #9bc3f2;
+    }
+
+    .dark-theme .footer-da-link {
+      color: #8ec4ff;
+    }
+
     .dark-theme .footer-link:hover {
       color: #81c784 !important;
       background-color: rgba(129, 199, 132, 0.1);
@@ -273,6 +348,11 @@ import { AuthService } from '../../services/auth.service';
         flex-wrap: wrap;
       }
 
+      .footer-da {
+        width: 100%;
+        justify-content: center;
+      }
+
       .footer-bottom {
         flex-direction: column;
         gap: 8px;
@@ -309,6 +389,11 @@ import { AuthService } from '../../services/auth.service';
       .footer-link {
         font-size: 12px;
         padding: 6px 8px;
+      }
+
+      .footer-da-line {
+        text-align: center;
+        align-items: center;
       }
     }
   `]

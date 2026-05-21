@@ -10,12 +10,20 @@ const sql = `
       id_superadmin UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
       nombre        VARCHAR(100) NOT NULL,
       email         VARCHAR(150) UNIQUE NOT NULL,
+      documento     VARCHAR(20)  UNIQUE NOT NULL,
       password_hash VARCHAR(255) NOT NULL,
       activo        BOOLEAN      NOT NULL DEFAULT true,
       ultimo_login  TIMESTAMPTZ,
       created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
       updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
   );
+
+  ALTER TABLE system.superadmins
+    ADD COLUMN IF NOT EXISTS documento VARCHAR(20);
+
+  CREATE UNIQUE INDEX IF NOT EXISTS superadmins_documento_unique
+    ON system.superadmins(documento)
+    WHERE documento IS NOT NULL;
 
   DROP TRIGGER IF EXISTS update_superadmins_updated_at ON system.superadmins;
   CREATE TRIGGER update_superadmins_updated_at

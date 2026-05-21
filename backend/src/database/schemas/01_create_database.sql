@@ -70,6 +70,9 @@ CREATE TRIGGER update_tenants_updated_at
 
 CREATE INDEX IF NOT EXISTS idx_tenants_estado ON system.tenants(estado);
 
+-- No crear tenants automáticamente en instalaciones limpias.
+-- El primer tenant debe crearlo explícitamente el superadmin.
+
 -- Función helper: devuelve el UUID del tenant por defecto.
 -- Retorna NULL si no existe ningún tenant (instalación limpia).
 -- Se usa como DEFAULT en todas las columnas id_tenant de las tablas core,
@@ -89,6 +92,7 @@ CREATE TABLE IF NOT EXISTS system.superadmins (
     id_superadmin UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
     nombre        VARCHAR(100) NOT NULL,
     email         VARCHAR(150) UNIQUE NOT NULL,
+    documento     VARCHAR(20)  UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     activo        BOOLEAN      NOT NULL DEFAULT true,
     ultimo_login  TIMESTAMPTZ,

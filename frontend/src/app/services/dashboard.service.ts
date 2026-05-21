@@ -14,6 +14,7 @@ export interface DashboardStats {
     hoy: number;
     semana: number;
     pendientes: number;
+    canceladas_semana: number;
   };
 }
 
@@ -182,7 +183,8 @@ export class DashboardService {
       citas: {
         hoy: citasData.citas_hoy || 0,
         semana: citasData.total_citas || 0,
-        pendientes: citasData.citas_pendientes || 0
+        pendientes: citasData.citas_pendientes || 0,
+        canceladas_semana: citasData.citas_canceladas_semana || 0
       }
     };
   }
@@ -197,7 +199,8 @@ export class DashboardService {
       citas: {
         hoy: 0,
         semana: 0,
-        pendientes: 0
+        pendientes: 0,
+        canceladas_semana: 0
       }
     };
   }

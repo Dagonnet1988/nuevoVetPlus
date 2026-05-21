@@ -1784,6 +1784,10 @@ export const getAppointmentStats = async (req, res) => {
                     WHERE DATE(c.fecha_inicio) = b.today
                       AND c.estado = 'completada'
                 )::int AS citas_completadas
+                                ,COUNT(*) FILTER (
+                                        WHERE DATE(c.fecha_inicio) BETWEEN b.week_start AND b.week_end
+                                            AND c.estado = 'no_asistio'
+                                )::int AS citas_canceladas_semana
             FROM clinical.calendario_citas c
             CROSS JOIN bounds b
             WHERE c.id_tenant = $1`,
@@ -1794,13 +1798,21 @@ export const getAppointmentStats = async (req, res) => {
         const citasHoy = parseInt(summaryResult.rows[0].citas_hoy || 0, 10);
         const citasPendientes = parseInt(summaryResult.rows[0].citas_pendientes || 0, 10);
         const citasCompletadas = parseInt(summaryResult.rows[0].citas_completadas || 0, 10);
+        const citasCanceladasSemana = parseInt(summaryResult.rows[0].citas_canceladas_semana || 0, 10);
         const tasaOcupacion = totalCitas > 0 ? Math.round((citasCompletadas / totalCitas) * 100) : 0;
         
         // Obtener estadísticas por estado
         const estadosQuery = `
+            WITH bounds AS (
+                SELECT
+                    date_trunc('week', CURRENT_DATE)::date AS week_start,
+                    (date_trunc('week', CURRENT_DATE)::date + INTERVAL '6 day')::date AS week_end
+            )
             SELECT estado, COUNT(*) as cantidad 
             FROM clinical.calendario_citas 
+            CROSS JOIN bounds b
             WHERE id_tenant = $1
+              AND DATE(fecha_inicio) BETWEEN b.week_start AND b.week_end
             GROUP BY estado 
             ORDER BY cantidad DESC
         `;
@@ -1811,11 +1823,13 @@ export const getAppointmentStats = async (req, res) => {
             citas_hoy: citasHoy,
             citas_pendientes: citasPendientes,
             citas_completadas: citasCompletadas,
+            citas_canceladas_semana: citasCanceladasSemana,
             tasa_ocupacion: tasaOcupacion,
             estados: estadosResult.rows.map(row => ({
                 estado: row.estado,
                 cantidad: parseInt(row.cantidad)
-            }))
+            })),
+            periodo_estados: 'semana_actual'
         };
         
         res.json({

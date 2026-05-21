@@ -8,6 +8,7 @@ import {
   getEmailModuleStatus,
   getGoogleEmailAuthUrl,
   handleGoogleEmailCallback,
+  serveGoogleEmailCallbackScript,
   disconnectGoogleEmail
 } from '../controllers/emailConfigController.js';
 
@@ -34,6 +35,7 @@ router.put('/config', authenticateToken, authorize(['admin']), validateConfig, u
 router.post('/test', authenticateToken, authorize(['admin']), testEmailConfig);
 router.get('/status', authenticateToken, authorize(['admin']), getEmailModuleStatus);
 router.get('/google/auth-url', authenticateToken, authorize(['admin']), getGoogleEmailAuthUrl);
+router.get('/google/callback-script.js', serveGoogleEmailCallbackScript);
 router.get('/google/callback', handleGoogleEmailCallback);
 router.post('/google/disconnect', authenticateToken, authorize(['admin']), disconnectGoogleEmail);
 

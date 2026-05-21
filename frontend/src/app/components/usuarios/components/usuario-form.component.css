@@ -300,9 +300,15 @@
 }
 
 .rol-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 2.5rem !important;
   width: 2.5rem !important;
   height: 2.5rem !important;
+  line-height: 1 !important;
+  vertical-align: middle;
+  text-align: center;
   padding: 16px;
   border-radius: 12px;
   background: rgba(255,255,255,0.9);
@@ -554,13 +560,13 @@
   .form-container {
     padding: 16px;
   }
-  
+
   .floating-actions {
     bottom: 16px;
     right: 16px;
     flex-direction: column;
   }
-  
+
   .floating-cancel,
   .floating-save {
     width: 100%;
@@ -573,43 +579,44 @@
     flex-direction: column;
     align-items: stretch;
   }
-  
+
   .actions-section {
     justify-content: stretch;
   }
-  
+
   .cancel-button,
   .save-button {
     flex: 1;
     min-width: unset;
   }
-  
+
   .form-title {
     font-size: 1.8rem;
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
   }
-  
+
   .title-icon {
     font-size: 2rem !important;
   }
-  
+
   .rol-options {
     grid-template-columns: 1fr;
   }
-  
+
   .rol-content {
     gap: 12px;
   }
-  
+
   .rol-icon {
     font-size: 2rem !important;
     width: 2rem !important;
     height: 2rem !important;
+    line-height: 1 !important;
     padding: 12px;
   }
-  
+
   .floating-actions {
     position: relative;
     bottom: unset;
@@ -623,30 +630,30 @@
   .form-container {
     padding: 12px;
   }
-  
+
   .step-card mat-card-header {
     padding: 16px;
   }
-  
+
   .step-card mat-card-title {
     font-size: 1.2rem;
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
   }
-  
+
   .section-title {
     font-size: 1.1rem;
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
   }
-  
+
   .rol-content {
     flex-direction: column;
     text-align: center;
   }
-  
+
   .estado-section,
   .notification-section,
   .security-section,

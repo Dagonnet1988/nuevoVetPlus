@@ -51,12 +51,12 @@ export class QuickActionsComponent {
       description: 'Registrar mascota'
     },
     {
-      title: 'Consulta Médica',
+      title: 'Historia Clínica',
       icon: 'medical_services',
       route: '/historia-clinica/nueva',
       color: 'info',
       roles: ['admin', 'vet'],
-      description: 'Nueva consulta'
+      description: 'Registrar valoración o consulta'
     },
     {
       title: 'Usuarios',

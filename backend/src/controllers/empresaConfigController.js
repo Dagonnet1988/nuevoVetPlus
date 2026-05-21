@@ -30,30 +30,7 @@ export const getEmpresaConfig = async (req, res) => {
             LIMIT 1
         `, [tenantId]);
 
-        let empresaConfig = configResult.rows[0];
-        if (!empresaConfig) {
-            const defaultConfig = await query(`
-                INSERT INTO system.configuracion_empresa (
-                    nombre_empresa, nit, direccion, telefono, email, ciudad, sitio_web, eslogan,
-                    id_tenant, created_by, updated_by, activa
-                ) VALUES (
-                    'Mi Clínica Veterinaria',
-                    'POR-DEFINIR',
-                    'Por definir',
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    $1,
-                    $2,
-                    $2,
-                    true
-                )
-                RETURNING *
-            `, [tenantId, req.user?.id_usuario || null]);
-            empresaConfig = defaultConfig.rows[0];
-        }
+        const empresaConfig = configResult.rows[0] || null;
 
         res.json({
             success: true,
@@ -102,6 +79,7 @@ export const updateEmpresaConfig = async (req, res) => {
             sitio_web,
             eslogan,
             ciudad,
+            logo_url,
             configuracion_numeracion,
             configuracion_general
         } = req.body;
@@ -140,11 +118,12 @@ export const updateEmpresaConfig = async (req, res) => {
                     sitio_web = $6,
                     eslogan = $7,
                     ciudad = $8,
-                    configuracion_general = $9,
-                    configuracion_numeracion = $10,
+                    logo_url = COALESCE($9, logo_url),
+                    configuracion_general = $10,
+                    configuracion_numeracion = $11,
                     updated_at = CURRENT_TIMESTAMP,
-                    updated_by = $11
-                WHERE activa = true AND id_tenant = $12
+                    updated_by = $12
+                WHERE activa = true AND id_tenant = $13
                 RETURNING id_config
             `, [
                 nombre_empresa,
@@ -155,6 +134,7 @@ export const updateEmpresaConfig = async (req, res) => {
                 sitio_web || null,
                 eslogan || null,
                 ciudad || null,
+                logo_url || null,
                 configGeneral,
                 configNumeracion,
                 req.user.id_usuario,
@@ -173,6 +153,8 @@ export const updateEmpresaConfig = async (req, res) => {
                         sitio_web,
                         eslogan,
                         ciudad,
+                        logo_url,
+                        logo_filename,
                         configuracion_general,
                         configuracion_numeracion,
                         activa,
@@ -180,7 +162,7 @@ export const updateEmpresaConfig = async (req, res) => {
                         created_by,
                         updated_by
                     ) VALUES (
-                        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true,$11,$12,$12
+                        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,true,$13,$14,$15
                     )
                     RETURNING id_config
                 `, [
@@ -192,9 +174,12 @@ export const updateEmpresaConfig = async (req, res) => {
                     sitio_web || null,
                     eslogan || null,
                     ciudad || null,
+                    logo_url || null,
+                    logo_url ? path.basename(String(logo_url)) : null,
                     configGeneral,
                     configNumeracion,
                     tenantId,
+                    req.user.id_usuario,
                     req.user.id_usuario
                 ]);
                 configId = insertResult.rows[0].id_config;
@@ -267,31 +252,31 @@ export const uploadLogo = async (req, res) => {
         // Generar URL del logo
         const logoUrl = `/uploads/logos/${file.filename}`;
 
-        // Actualizar configuración con la nueva URL del logo
+        // Si ya existe configuración activa, persistimos de inmediato.
+        // Si no existe, devolvemos logo_url para aplicarlo al guardar el formulario.
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
         const result = await query(`
-            UPDATE system.configuracion_empresa 
-            SET 
+            UPDATE system.configuracion_empresa
+            SET
                 logo_url = $1,
                 logo_filename = $2,
                 updated_at = CURRENT_TIMESTAMP,
                 updated_by = $3
             WHERE activa = true AND id_tenant = $4
             RETURNING logo_url, logo_filename
-        `, [logoUrl, file.originalname, req.user.id_usuario, req.tenantId ?? req.user?.tenant_id]);
+        `, [logoUrl, file.originalname, req.user.id_usuario, tenantId]);
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'No se encontró configuración activa'
-            });
-        }
+        const persisted = result.rows.length > 0;
 
         res.json({
             success: true,
-            message: 'Logo subido exitosamente',
+            message: persisted
+              ? 'Logo subido y aplicado exitosamente'
+              : 'Logo subido. Guarda la configuración de empresa para aplicarlo',
             data: {
-                logo_url: result.rows[0].logo_url,
-                logo_filename: result.rows[0].logo_filename,
+                logo_url: persisted ? result.rows[0].logo_url : logoUrl,
+                logo_filename: persisted ? result.rows[0].logo_filename : file.originalname,
+                pending_save: !persisted,
                 file_size: file.size,
                 mime_type: file.mimetype
             }

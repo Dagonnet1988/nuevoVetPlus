@@ -45,21 +45,8 @@ async function resolveGoogleOAuthCredentials(tenantId, configRow = null) {
 }
 
 async function ensureEmailConfigStructure() {
-  await query(`
-    ALTER TABLE system.configuracion_correo
-      ADD COLUMN IF NOT EXISTS auth_mode VARCHAR(20) NOT NULL DEFAULT 'smtp',
-      ADD COLUMN IF NOT EXISTS oauth_client_id TEXT,
-      ADD COLUMN IF NOT EXISTS oauth_client_secret TEXT,
-      ADD COLUMN IF NOT EXISTS oauth_refresh_token TEXT,
-      ADD COLUMN IF NOT EXISTS oauth_access_token TEXT,
-      ADD COLUMN IF NOT EXISTS oauth_token_expiry TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS oauth_email VARCHAR(150),
-      ADD COLUMN IF NOT EXISTS oauth_redirect_uri TEXT
-  `);
-
-  await query(`ALTER TABLE system.configuracion_correo ALTER COLUMN smtp_host DROP NOT NULL`);
-  await query(`ALTER TABLE system.configuracion_correo ALTER COLUMN smtp_usuario DROP NOT NULL`);
-  await query(`ALTER TABLE system.configuracion_correo ALTER COLUMN smtp_password DROP NOT NULL`);
+  // No-op: en despliegues nuevos, la estructura vive en schemas/06_empresa_config.sql.
+  return true;
 }
 
 function getOAuthRedirectUri() {
@@ -481,30 +468,60 @@ export async function handleGoogleEmailCallback(req, res) {
     );
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:4200';
-    return res.send(`<!doctype html><html><body><script>
-      (function () {
-        try {
-          if (window.opener && !window.opener.closed) {
-            window.opener.postMessage({ type: 'email-google-oauth', status: 'ok' }, '*');
-          }
-        } catch (e) {}
-
-        function tryClose() {
-          try { window.close(); } catch (e) {}
-          setTimeout(function () {
-            if (!window.closed) {
-              window.location.replace('${frontendUrl}/configuracion/correo?google_oauth=ok');
-            }
-          }, 350);
-        }
-
-        tryClose();
-      })();
-    </script><p>Autorizacion completada. Cerrando ventana...</p></body></html>`);
+    const target = `${frontendUrl}/configuracion/correo?google_oauth=ok`;
+    return res.send(`<!doctype html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Autorización de Correo - VetPlus</title>
+        <meta http-equiv="refresh" content="5;url=${target}">
+      </head>
+      <body data-target="${target}" data-status="ok" data-type="email-google-oauth">
+        <p>Autorización completada. Cerrando ventana...</p>
+        <p>Si no se cierra automáticamente, serás redirigido en unos segundos.</p>
+        <script src="/api/admin/email/google/callback-script.js"></script>
+      </body>
+      </html>`);
   } catch (error) {
     console.error('Error en callback OAuth de correo:', error);
     return res.status(400).send('<html><body><h3>No se pudo completar la autorización de Google.</h3></body></html>');
   }
+}
+
+export async function serveGoogleEmailCallbackScript(req, res) {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+
+  res.send(`
+    (function () {
+      const body = document.body || {};
+      const target = body.dataset?.target || '/';
+      const type = body.dataset?.type || 'email-google-oauth';
+      const status = body.dataset?.status || 'ok';
+
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage({ type, status }, '*');
+        }
+      } catch (_) {}
+
+      try {
+        localStorage.setItem('vetplus-email-oauth-result', JSON.stringify({ type, status, timestamp: new Date().toISOString() }));
+      } catch (_) {}
+
+      function closeOrRedirect() {
+        try { window.close(); } catch (_) {}
+        setTimeout(function () {
+          if (!window.closed) {
+            window.location.replace(target);
+          }
+        }, 400);
+      }
+
+      closeOrRedirect();
+      setTimeout(closeOrRedirect, 2200);
+    })();
+  `);
 }
 
 export async function disconnectGoogleEmail(req, res) {

@@ -10,6 +10,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatCardModule } from '@angular/material/card';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { SuperadminAuthService, CreateTenantPayload } from '../../../services/superadmin-auth.service';
 
 @Component({
@@ -19,7 +20,7 @@ import { SuperadminAuthService, CreateTenantPayload } from '../../../services/su
     CommonModule, FormsModule, RouterLink,
     MatFormFieldModule, MatInputModule, MatSelectModule,
     MatButtonModule, MatIconModule, MatProgressSpinnerModule,
-    MatCardModule, MatDividerModule
+    MatCardModule, MatDividerModule, MatSlideToggleModule
   ],
   templateUrl: './nueva-clinica.component.html',
   styleUrls: ['./nueva-clinica.component.scss']
@@ -38,6 +39,7 @@ export class NuevaClinicaComponent {
   adminDocumento = '';
   adminPassword = '';
   showPassword  = false;
+  usarReplicaSuperadmin = true;
 
   loading = signal(false);
   error   = signal('');
@@ -58,12 +60,18 @@ export class NuevaClinicaComponent {
 
   submit(): void {
     this.error.set('');
-    if (!this.nombre || !this.slug || !this.adminNombre || !this.adminApellido ||
-        !this.adminEmail || !this.adminDocumento || !this.adminPassword) {
+    if (!this.nombre || !this.slug) {
       this.error.set('Completa todos los campos obligatorios.');
       return;
     }
-    if (this.adminPassword.length < 8) {
+
+    if (!this.usarReplicaSuperadmin &&
+      (!this.adminNombre || !this.adminApellido || !this.adminEmail || !this.adminDocumento || !this.adminPassword)) {
+      this.error.set('Completa todos los campos del administrador manual.');
+      return;
+    }
+
+    if (!this.usarReplicaSuperadmin && this.adminPassword.length < 8) {
       this.error.set('La contraseña del admin debe tener al menos 8 caracteres.');
       return;
     }
@@ -73,14 +81,18 @@ export class NuevaClinicaComponent {
       nombre: this.nombre,
       plan: this.plan,
       max_usuarios: this.max_usuarios,
-      admin: {
+      replicar_superadmin_como_admin: this.usarReplicaSuperadmin
+    };
+
+    if (!this.usarReplicaSuperadmin) {
+      payload.admin = {
         nombre:    this.adminNombre,
         apellido:  this.adminApellido,
         email:     this.adminEmail,
         documento: this.adminDocumento,
         password:  this.adminPassword
-      }
-    };
+      };
+    }
 
     this.loading.set(true);
     this.svc.createTenant(payload).subscribe({

@@ -78,12 +78,14 @@ const validateEmpresaConfig = [
         .withMessage('La dirección no puede exceder 500 caracteres'),
     
     body('telefono')
-        .optional()
+        .notEmpty()
+        .withMessage('El teléfono es requerido')
         .matches(/^[\+]?[0-9\s\-\(\)]{7,20}$/)
         .withMessage('Formato de teléfono inválido'),
     
     body('email')
-        .optional()
+        .notEmpty()
+        .withMessage('El email es requerido')
         .isEmail()
         .withMessage('Formato de email inválido'),
     
@@ -138,6 +140,8 @@ router.get('/config', authenticateToken, requireAuthenticatedTenantUser, getEmpr
  *               - nombre_empresa
  *               - nit  
  *               - direccion
+ *               - telefono
+ *               - email
  *             properties:
  *               nombre_empresa:
  *                 type: string

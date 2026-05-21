@@ -2,7 +2,7 @@ import { Component, OnInit, Input, Output, EventEmitter, signal, computed, injec
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule, AbstractControl } from '@angular/forms';
 import { of } from 'rxjs';
-import { map, debounceTime, catchError } from 'rxjs/operators';
+import { map, catchError } from 'rxjs/operators';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -90,10 +90,18 @@ export class UsuarioFormComponent implements OnInit {
     this.personalForm = this.fb.group({
       nombre: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(50)]],
       apellido: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(50)]],
-      email: ['', [Validators.required, Validators.email], [this.emailAsyncValidator.bind(this)]],
+      email: this.fb.control('', {
+        validators: [Validators.required, Validators.email],
+        asyncValidators: [this.emailAsyncValidator.bind(this)],
+        updateOn: 'blur'
+      }),
       telefono: ['', [Validators.pattern(/^[\+]?[0-9\s\-\(\)]{10,15}$/)]],
       direccion: ['', [Validators.maxLength(200)]],
-      documento: ['', [Validators.required, Validators.minLength(5), Validators.maxLength(20)], [this.documentoAsyncValidator.bind(this)]],
+      documento: this.fb.control('', {
+        validators: [Validators.required, Validators.minLength(5), Validators.maxLength(20)],
+        asyncValidators: [this.documentoAsyncValidator.bind(this)],
+        updateOn: 'blur'
+      }),
       tipo_documento: ['CC', [Validators.required]]
     });
 
@@ -217,7 +225,6 @@ export class UsuarioFormComponent implements OnInit {
     }
 
     return this.usuariosService.validarEmail(control.value, this.usuarioId).pipe(
-      debounceTime(500), // Esperar 500ms antes de hacer la petición
       map(disponible => disponible ? null : { emailTaken: true }),
       catchError(() => of(null)) // Si hay error, no bloquear el formulario
     );
@@ -229,7 +236,6 @@ export class UsuarioFormComponent implements OnInit {
     }
 
     return this.usuariosService.validarDocumento(control.value, this.usuarioId).pipe(
-      debounceTime(500), // Esperar 500ms antes de hacer la petición
       map(disponible => disponible ? null : { documentoTaken: true }),
       catchError(() => of(null)) // Si hay error, no bloquear el formulario
     );

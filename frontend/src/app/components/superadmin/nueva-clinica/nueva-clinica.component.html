@@ -1,11 +1,11 @@
-<div class="sa-page">
+ando ggole<div class="sa-page">
   <header class="sa-page-header">
     <a mat-icon-button routerLink="/superadmin/dashboard">
       <mat-icon>arrow_back</mat-icon>
     </a>
     <div>
       <h2>Nueva clínica</h2>
-      <p>Crea un tenant con su usuario administrador inicial.</p>
+      <p>Crea un tenant y define cómo se provisiona su administrador inicial.</p>
     </div>
   </header>
 
@@ -57,39 +57,50 @@
         <mat-divider />
 
         <div class="sa-fields">
-          <div class="sa-row">
+          <mat-slide-toggle [(ngModel)]="usarReplicaSuperadmin" name="usarReplicaSuperadmin" color="primary">
+            Replicar superadmin actual como admin de esta clínica
+          </mat-slide-toggle>
+
+          @if (usarReplicaSuperadmin) {
+            <div class="sa-info-box">
+              <mat-icon>info</mat-icon>
+              <p>Se creará automáticamente un admin con las credenciales del superadmin actual.</p>
+            </div>
+          } @else {
+            <div class="sa-row">
+              <mat-form-field appearance="outline">
+                <mat-label>Nombre *</mat-label>
+                <input matInput [(ngModel)]="adminNombre" name="adminNombre" required />
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Apellido *</mat-label>
+                <input matInput [(ngModel)]="adminApellido" name="adminApellido" required />
+              </mat-form-field>
+            </div>
+
             <mat-form-field appearance="outline">
-              <mat-label>Nombre *</mat-label>
-              <input matInput [(ngModel)]="adminNombre" name="adminNombre" required />
+              <mat-label>Email del admin *</mat-label>
+              <input matInput type="email" [(ngModel)]="adminEmail"
+                     name="adminEmail" autocomplete="off" required />
             </mat-form-field>
+
             <mat-form-field appearance="outline">
-              <mat-label>Apellido *</mat-label>
-              <input matInput [(ngModel)]="adminApellido" name="adminApellido" required />
+              <mat-label>Documento (cédula) *</mat-label>
+              <input matInput [(ngModel)]="adminDocumento" name="adminDocumento" required />
             </mat-form-field>
-          </div>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Email del admin *</mat-label>
-            <input matInput type="email" [(ngModel)]="adminEmail"
-                   name="adminEmail" autocomplete="off" required />
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>Documento (cédula) *</mat-label>
-            <input matInput [(ngModel)]="adminDocumento" name="adminDocumento" required />
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>Contraseña inicial *</mat-label>
-            <input matInput [type]="showPassword ? 'text' : 'password'"
-                   [(ngModel)]="adminPassword" name="adminPassword"
-                   autocomplete="new-password" minlength="8" required />
-            <button mat-icon-button matSuffix type="button"
-                    (click)="showPassword = !showPassword">
-              <mat-icon>{{ showPassword ? 'visibility_off' : 'visibility' }}</mat-icon>
-            </button>
-            <mat-hint>Mínimo 8 caracteres</mat-hint>
-          </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Contraseña inicial *</mat-label>
+              <input matInput [type]="showPassword ? 'text' : 'password'"
+                     [(ngModel)]="adminPassword" name="adminPassword"
+                     autocomplete="new-password" minlength="8" required />
+              <button mat-icon-button matSuffix type="button"
+                      (click)="showPassword = !showPassword">
+                <mat-icon>{{ showPassword ? 'visibility_off' : 'visibility' }}</mat-icon>
+              </button>
+              <mat-hint>Mínimo 8 caracteres</mat-hint>
+            </mat-form-field>
+          }
         </div>
       </mat-card>
     </div>

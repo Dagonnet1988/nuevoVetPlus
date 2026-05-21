@@ -7,7 +7,7 @@ export const USUARIOS_ROUTES: Routes = [
     path: '',
     loadComponent: () => import('./usuarios.component').then(m => m.UsuariosComponent),
     canActivate: [AuthGuard, RoleGuard],
-    data: { 
+    data: {
       roles: ['admin'],
       title: 'Gestión de Usuarios'
     }
@@ -16,16 +16,25 @@ export const USUARIOS_ROUTES: Routes = [
     path: 'nuevo',
     loadComponent: () => import('./components/usuario-form.component').then(m => m.UsuarioFormComponent),
     canActivate: [AuthGuard, RoleGuard],
-    data: { 
+    data: {
       roles: ['admin'],
       title: 'Nuevo Usuario'
+    }
+  },
+  {
+    path: 'sesiones',
+    loadComponent: () => import('./components/usuario-sesiones.component').then(m => m.UsuarioSesionesComponent),
+    canActivate: [AuthGuard, RoleGuard],
+    data: {
+      roles: ['admin'],
+      title: 'Sesiones de la Clínica'
     }
   },
   {
     path: ':id',
     loadComponent: () => import('./components/usuario-profile.component').then(m => m.UsuarioProfileComponent),
     canActivate: [AuthGuard, RoleGuard],
-    data: { 
+    data: {
       roles: ['admin'],
       title: 'Perfil de Usuario'
     }
@@ -34,7 +43,7 @@ export const USUARIOS_ROUTES: Routes = [
     path: ':id/editar',
     loadComponent: () => import('./components/usuario-form.component').then(m => m.UsuarioFormComponent),
     canActivate: [AuthGuard, RoleGuard],
-    data: { 
+    data: {
       roles: ['admin'],
       title: 'Editar Usuario'
     }
@@ -43,7 +52,7 @@ export const USUARIOS_ROUTES: Routes = [
     path: ':id/sesiones',
     loadComponent: () => import('./components/usuario-sesiones.component').then(m => m.UsuarioSesionesComponent),
     canActivate: [AuthGuard, RoleGuard],
-    data: { 
+    data: {
       roles: ['admin'],
       title: 'Sesiones del Usuario'
     }
@@ -54,7 +63,7 @@ export const USUARIOS_ROUTES: Routes = [
     path: ':id/actividad',
     loadComponent: () => import('./components/usuario-actividad.component').then(m => m.UsuarioActividadComponent),
     canActivate: [AuthGuard, RoleGuard],
-    data: { 
+    data: {
       roles: ['admin'],
       title: 'Actividad del Usuario'
     }
@@ -63,7 +72,7 @@ export const USUARIOS_ROUTES: Routes = [
     path: 'roles',
     loadComponent: () => import('./components/roles-management.component').then(m => m.RolesManagementComponent),
     canActivate: [AuthGuard, RoleGuard],
-    data: { 
+    data: {
       roles: ['admin'],
       title: 'Gestión de Roles'
     }
@@ -72,7 +81,7 @@ export const USUARIOS_ROUTES: Routes = [
     path: 'permisos',
     loadComponent: () => import('./components/permisos-management.component').then(m => m.PermisosManagementComponent),
     canActivate: [AuthGuard, RoleGuard],
-    data: { 
+    data: {
       roles: ['admin'],
       title: 'Gestión de Permisos'
     }
@@ -81,7 +90,7 @@ export const USUARIOS_ROUTES: Routes = [
     path: 'configuracion-seguridad',
     loadComponent: () => import('./components/security-config.component').then(m => m.SecurityConfigComponent),
     canActivate: [AuthGuard, RoleGuard],
-    data: { 
+    data: {
       roles: ['admin'],
       title: 'Configuración de Seguridad'
     }

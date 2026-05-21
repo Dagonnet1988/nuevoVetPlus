@@ -31,6 +31,13 @@
   min-width: 300px;
 }
 
+.back-button {
+  margin-bottom: 10px;
+  color: #1a365d;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #dbe5f0;
+}
+
 .page-title {
   display: flex;
   align-items: center;
@@ -126,12 +133,26 @@
   padding: 4px;
 }
 
-.stat-icon {
-  font-size: 3rem !important;
-  padding: 16px;
+.stat-icon-wrap {
+  width: 64px;
+  height: 64px;
+  min-width: 64px;
   border-radius: 16px;
-  background: rgba(255,255,255,0.9);
+  background: rgba(255,255,255,0.92);
   box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-icon {
+  font-size: 32px !important;
+  width: 32px;
+  height: 32px;
+  line-height: 1 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .primary-color { color: #3182ce; }
@@ -399,11 +420,16 @@
   font-weight: 600;
   padding: 8px 16px;
   border-radius: 20px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);
   transition: all 0.2s ease;
+}
+
+.chip-role-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  line-height: 1;
 }
 
 .usuarios-table mat-chip:hover {
@@ -413,6 +439,13 @@
 
 .usuarios-table mat-chip mat-icon {
   font-size: 18px !important;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1 !important;
+  vertical-align: middle;
 }
 
 /* Especialidad */

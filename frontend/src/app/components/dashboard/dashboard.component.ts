@@ -73,7 +73,6 @@ export class DashboardComponent implements OnInit {
           subtitle: `${stats.pacientes.nuevos_mes} nuevos este mes`,
           icon: 'pets',
           color: 'primary',
-          trend: { value: 12, isPositive: true },
           route: '/pacientes',
           category: 'citas-pacientes'
         },
@@ -83,17 +82,15 @@ export class DashboardComponent implements OnInit {
           subtitle: `${stats.citas.pendientes} pendientes`,
           icon: 'schedule',
           color: 'accent',
-          trend: { value: 5, isPositive: true },
           route: '/citas',
           category: 'citas-pacientes'
         },
         {
           title: 'Citas Esta Semana',
           value: stats.citas.semana,
-          subtitle: '2 canceladas esta semana',
+          subtitle: `${stats.citas.canceladas_semana} canceladas esta semana`,
           icon: 'event',
           color: 'warn',
-          trend: { value: 8, isPositive: false },
           route: '/citas',
           category: 'citas-pacientes'
         }
@@ -102,7 +99,9 @@ export class DashboardComponent implements OnInit {
   }
 
   private loadChartData() {
-    this.citasPorEstadoData = this.dashboardService.getCitasPorEstado();
+    this.dashboardService.getCitasPorEstado().subscribe((data) => {
+      this.citasPorEstadoData = data;
+    });
   }
 
   private loadTodayAppointments() {

@@ -20,10 +20,8 @@ class GoogleCalendarSimpleController {
   }
 
   async ensureConfigSchema() {
-    await query(`
-      ALTER TABLE vetplus_auth.google_calendar_config
-      ADD COLUMN IF NOT EXISTS sync_preferences JSONB DEFAULT '{}'::jsonb
-    `);
+    // No-op: en despliegues nuevos, el schema canónico ya incluye sync_preferences.
+    return true;
   }
 
   getDefaultSyncPreferences(tenantId = null) {

@@ -1,9 +1,13 @@
 import { Component, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { MatTableModule } from '@angular/material/table';
 import { MatPaginatorModule, MatPaginator, PageEvent } from '@angular/material/paginator';
 import { MatSortModule } from '@angular/material/sort';
@@ -18,17 +22,23 @@ import { ViewChild } from '@angular/core';
 import {
   UsuariosService,
   Usuario,
-  SesionActiva
+  SesionActiva,
+  FiltroSesiones
 } from '../../../services/usuarios.service';
+import { AuthService } from '../../../services/auth.service';
 
 @Component({
   selector: 'app-usuario-sesiones',
   standalone: true,
   imports: [
     CommonModule,
+    FormsModule,
     MatCardModule,
     MatButtonModule,
     MatIconModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
     MatTableModule,
     MatPaginatorModule,
     MatSortModule,
@@ -48,15 +58,20 @@ export class UsuarioSesionesComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private usuariosService = inject(UsuariosService);
+  private authService = inject(AuthService);
   private snackBar = inject(MatSnackBar);
 
   // Signals
   loading = signal(false);
   usuario = signal<Usuario | null>(null);
+  usuariosFiltro = signal<Usuario[]>([]);
   sesiones = signal<SesionActiva[]>([]);
   sesionesActivas = signal<SesionActiva[]>([]);
   totalSesiones = 0;
   pageSize = 25;
+  estadoFiltro = signal<'activas' | 'cerradas' | 'todas'>('activas');
+  usuarioFiltroId = signal('');
+  textoFiltro = signal('');
 
   // Table configuration
   displayedColumns = [
@@ -71,36 +86,53 @@ export class UsuarioSesionesComponent implements OnInit {
   ];
 
   // Computed
-  usuarioId = computed(() => this.route.snapshot.paramMap.get('id') || '');
-  sesionesActivasCount = computed(() => this.sesionesActivas().length);
-
-  estadisticasSesiones = computed(() => {
-    const todas = this.sesiones();
-    const activas = this.sesionesActivas();
-
-    const dispositivos = new Set(todas.map(s => this.getDeviceType(s.dispositivo)));
-    const navegadores = new Set(todas.map(s => s.navegador.split(' ')[0]));
-    const ubicaciones = new Set(todas.map(s => s.ubicacion).filter(Boolean));
-
-    return {
-      total_sesiones: todas.length,
-      sesiones_activas: activas.length,
-      dispositivos_unicos: dispositivos.size,
-      navegadores_unicos: navegadores.size,
-      ubicaciones_unicas: ubicaciones.size,
-      sesion_mas_larga: this.getSesionMasLarga(todas)
-    };
+  private explicitUsuarioId = computed(() => {
+    const fromParam = this.route.snapshot.paramMap.get('id');
+    const fromQuery = this.route.snapshot.queryParamMap.get('id');
+    return fromParam || fromQuery || '';
   });
 
+  usuarioId = computed(() => {
+    const explicit = this.explicitUsuarioId();
+    if (explicit) return explicit;
+    if (this.authService.hasRole('admin')) return '';
+    return this.authService.currentUser()?.id_usuario || '';
+  });
+
+  isGlobalView = computed(() => this.authService.hasRole('admin') && !this.explicitUsuarioId());
+  canManageSessions = computed(() => this.authService.hasRole('admin'));
+  sesionesActivasCount = computed(() => this.sesionesActivas().length);
+
   ngOnInit(): void {
-    this.loadUsuario();
+    if (!this.isGlobalView()) {
+      this.loadUsuario();
+    }
+    if (this.canManageSessions()) {
+      this.loadUsuariosFiltro();
+    }
     this.loadSesiones();
+  }
+
+  private loadUsuariosFiltro(): void {
+    this.usuariosService.getUsuarios(1, 200).subscribe({
+      next: (usuarios) => {
+        const list = Array.isArray(usuarios) ? usuarios : [];
+        this.usuariosFiltro.set(
+          list
+            .filter((u: Usuario) => u.rol !== 'admin')
+            .sort((a: Usuario, b: Usuario) => (`${a.nombre} ${a.apellido}`).localeCompare(`${b.nombre} ${b.apellido}`))
+        );
+      },
+      error: () => {
+        this.usuariosFiltro.set([]);
+      }
+    });
   }
 
   private loadUsuario(): void {
     const id = this.usuarioId();
     if (!id) {
-      this.router.navigate(['/usuarios']);
+      this.router.navigate(['/dashboard']);
       return;
     }
 
@@ -111,22 +143,35 @@ export class UsuarioSesionesComponent implements OnInit {
       error: (error) => {
         console.error('Error cargando usuario:', error);
         this.snackBar.open('Error cargando información del usuario', 'Cerrar', { duration: 3000 });
-        this.router.navigate(['/usuarios']);
+        this.router.navigate(['/dashboard']);
       }
     });
   }
 
   private loadSesiones(): void {
     const id = this.usuarioId();
-    if (!id) return;
 
     this.loading.set(true);
 
-    // Cargar sesiones activas
-    this.usuariosService.getSesionesActivas(id).subscribe({
-      next: (sesionesActivas) => {
-        const accesos = Array.isArray(sesionesActivas) ? sesionesActivas : [];
-        this.sesionesActivas.set(accesos);
+    const filtros: FiltroSesiones = {
+      estado: this.estadoFiltro(),
+      exclude_admins: true
+    };
+
+    if (id) {
+      filtros.id_usuario = id;
+    } else if (this.usuarioFiltroId()) {
+      filtros.id_usuario = this.usuarioFiltroId();
+    }
+
+    if (this.textoFiltro().trim()) {
+      filtros.search = this.textoFiltro().trim();
+    }
+
+    this.usuariosService.getSesionesActivas(filtros).subscribe({
+      next: (sesionesResponse) => {
+        const accesos = Array.isArray(sesionesResponse) ? sesionesResponse : [];
+        this.sesionesActivas.set(accesos.filter(s => s.activa));
         this.sesiones.set(accesos);
         this.totalSesiones = accesos.length;
         this.loading.set(false);
@@ -140,6 +185,17 @@ export class UsuarioSesionesComponent implements OnInit {
         this.snackBar.open('No se pudieron cargar los accesos del usuario', 'Cerrar', { duration: 3000 });
       }
     });
+  }
+
+  aplicarFiltros(): void {
+    this.loadSesiones();
+  }
+
+  limpiarFiltros(): void {
+    this.estadoFiltro.set('activas');
+    this.usuarioFiltroId.set('');
+    this.textoFiltro.set('');
+    this.loadSesiones();
   }
 
   // Acciones
@@ -188,10 +244,19 @@ export class UsuarioSesionesComponent implements OnInit {
   }
 
   volverAlPerfil(): void {
-    const id = this.usuarioId();
-    if (id) {
-      this.router.navigate(['/usuarios', id]);
+    if (this.isGlobalView()) {
+      this.router.navigate(['/usuarios']);
+      return;
     }
+
+    if (this.authService.hasRole('admin')) {
+      const id = this.usuarioId();
+      if (id) {
+        this.router.navigate(['/usuarios', id]);
+        return;
+      }
+    }
+    this.router.navigate(['/perfil']);
   }
 
   onPageChange(event: PageEvent): void {
@@ -240,6 +305,18 @@ export class UsuarioSesionesComponent implements OnInit {
     return `${hours}h ${minutes}m`;
   }
 
+  formatearDuracionSesion(sesion: SesionActiva): string {
+    if (typeof sesion.duracion_segundos === 'number') {
+      const totalMinutes = Math.max(0, Math.floor(sesion.duracion_segundos / 60));
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      if (hours > 0) return `${hours}h ${minutes}m`;
+      return `${minutes} min`;
+    }
+
+    return this.calcularDuracionSesion(sesion.fecha_inicio, sesion.fecha_logout || undefined);
+  }
+
   getDeviceType(dispositivo: string): string {
     if (dispositivo.includes('iPhone') || dispositivo.includes('Android')) return 'Móvil';
     if (dispositivo.includes('iPad') || dispositivo.includes('Tablet')) return 'Tablet';
@@ -271,25 +348,6 @@ export class UsuarioSesionesComponent implements OnInit {
     if (ubicacion.includes('España')) return '🇪🇸';
     if (ubicacion.includes('Argentina')) return '🇦🇷';
     return '🌍';
-  }
-
-  private getSesionMasLarga(sesiones: SesionActiva[]): string {
-    if (sesiones.length === 0) return '0 min';
-
-    let maxDuration = 0;
-    sesiones.forEach(sesion => {
-      const duracion = this.calcularDuracionEnMinutos(sesion.fecha_inicio, sesion.ultima_actividad);
-      if (duracion > maxDuration) {
-        maxDuration = duracion;
-      }
-    });
-
-    if (maxDuration < 60) return `${maxDuration} min`;
-
-    const hours = Math.floor(maxDuration / 60);
-    const minutes = maxDuration % 60;
-
-    return `${hours}h ${minutes}m`;
   }
 
   private calcularDuracionEnMinutos(fechaInicio: string, fechaFin: string): number {

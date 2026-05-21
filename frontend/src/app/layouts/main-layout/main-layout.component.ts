@@ -59,7 +59,7 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
             @if (empresaLogoUrl()) {
               <img [src]="empresaLogoUrl()" alt="Logo" class="logo-img" />
             } @else {
-              <mat-icon class="logo-icon">pets</mat-icon>
+              <img src="logo.svg" alt="Logo VetPlus" class="logo-img logo-img-fallback" />
             }
             @if (!collapsed() || isMobile()) {
               <div class="brand-text">
@@ -256,6 +256,14 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
     .sidenav.collapsed .logo-img {
       width: 38px;
       height: 38px;
+    }
+
+    .logo-img-fallback {
+      object-fit: contain;
+      padding: 6px;
+      border-radius: 10px;
+      border: 1px solid rgba(46, 125, 50, 0.25);
+      background: #f5fbf5;
     }
 
     .sidenav.collapsed .logo-icon {
@@ -652,12 +660,6 @@ export class MainLayoutComponent {
       icon: 'settings',
       route: '/configuracion',
       roles: ['admin']
-    },
-    {
-      label: 'Auditoría',
-      icon: 'security',
-      route: '/auditoria',
-      roles: ['admin']
     }
   ];
 
@@ -685,6 +687,13 @@ export class MainLayoutComponent {
   }
 
   private applyEmpresaConfig(cfg: any): void {
+    if (!cfg) {
+      this.empresaNombre.set('VetPlus');
+      this.empresaEslogan.set('');
+      this.empresaLogoUrl.set('');
+      return;
+    }
+
     this.empresaNombre.set(cfg.nombre_empresa || 'VetPlus');
     this.empresaEslogan.set(cfg.eslogan || '');
     const logo = cfg.logo_url
