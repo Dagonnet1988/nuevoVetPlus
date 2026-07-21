@@ -473,6 +473,17 @@ function tableReflejos(doc, reflejosData) {
     });
     doc.moveDown(0.4);
   });
+
+  const observacionesPalpacion = String(reflejosData?.observaciones_palpacion || '').trim();
+  if (observacionesPalpacion) {
+    ensureSpace(doc, 36);
+    doc.font('Helvetica-Bold').fontSize(8).fillColor(COLORS.accent)
+      .text('Observaciones a la palpación', MARGIN, doc.y, { width: CONTENT });
+    doc.moveDown(0.2);
+    doc.font('Helvetica').fontSize(8).fillColor(COLORS.dark)
+      .text(observacionesPalpacion, MARGIN, doc.y, { width: CONTENT, lineGap: 2 });
+    doc.moveDown(0.4);
+  }
 }
 
 /** Tabla de medicamentos (fórmula) */

@@ -18,6 +18,11 @@ export interface DashboardStats {
   };
 }
 
+export interface DashboardNavigation {
+  route: string;
+  queryParams?: Record<string, string>;
+}
+
 export interface ChartData {
   labels: string[];
   datasets: any[];
@@ -58,16 +63,30 @@ export class DashboardService {
   // Estadísticas generales del dashboard
   getDashboardStats(): Observable<DashboardStats> {
     return forkJoin({
-      pacientes: this.http.get<any>(`${this.API_URL}/clinical/pacientes/stats`),
-      citas: this.http.get<any>(`${this.API_URL}/clinical/appointments/stats`)
+      pacientes: this.getPacientesDashboardStats(),
+      citas: this.getCitasDashboardStats()
     }).pipe(
-      map(({ pacientes, citas }) => {
-        if (pacientes.success && pacientes.data && citas.success && citas.data) {
-          return this.mapBackendStatsToFrontend(pacientes.data, citas.data);
-        }
-        throw new Error('Error obteniendo estadísticas del dashboard');
-      }),
-      catchError(() => of(this.getDefaultStats()))
+      map(({ pacientes, citas }) => ({ pacientes, citas }))
+    );
+  }
+
+  getPacientesDashboardStats(): Observable<DashboardStats['pacientes']> {
+    return this.http.get<any>(`${this.API_URL}/clinical/pacientes/stats`).pipe(
+      map((response: any) => this.mapPacientesStats(response?.success && response?.data ? response.data : null)),
+      catchError((error) => {
+        console.warn('No se pudieron cargar estadísticas de pacientes para el dashboard:', error);
+        return of(this.getDefaultStats().pacientes);
+      })
+    );
+  }
+
+  getCitasDashboardStats(): Observable<DashboardStats['citas']> {
+    return this.http.get<any>(`${this.API_URL}/clinical/appointments/stats`).pipe(
+      map((response: any) => this.mapCitasStats(response?.success && response?.data ? response.data : null)),
+      catchError((error) => {
+        console.warn('No se pudieron cargar estadísticas de citas para el dashboard:', error);
+        return of(this.getDefaultStats().citas);
+      })
     );
   }
 
@@ -75,8 +94,22 @@ export class DashboardService {
   getCitasPorEstado(): Observable<ChartData> {
     return this.http.get<any>(`${this.API_URL}/clinical/appointments/stats`).pipe(
       map((response: any) => {
-        if (response.success && response.data && response.data.estados) {
-          const estados = response.data.estados;
+        if (response.success && response.data && Array.isArray(response.data.estados) && response.data.estados.length > 0) {
+          const acumulado = new Map<string, number>();
+
+          response.data.estados.forEach((e: any) => {
+            const estadoOriginal = String(e?.estado || '').trim();
+            if (estadoOriginal === 'en_curso') {
+              return;
+            }
+
+            const estado = estadoOriginal;
+            const cantidad = Number(e?.cantidad || 0);
+            acumulado.set(estado, (acumulado.get(estado) || 0) + cantidad);
+          });
+
+          const estados = Array.from(acumulado.entries()).map(([estado, cantidad]) => ({ estado, cantidad }));
+
           return {
             labels: estados.map((e: any) => this.formatEstadoCita(e.estado)),
             datasets: [{
@@ -109,12 +142,18 @@ export class DashboardService {
 
   // Actividad reciente - usar próximas citas como actividad
   getRecentActivity(limit: number = 10): Observable<RecentActivity[]> {
+    const today = this.toLocalDateString(new Date());
     return this.http.get<any>(`${this.API_URL}/clinical/appointments`, {
-      params: { limit: limit.toString(), status: 'confirmada' }
+      params: {
+        limit: '50',
+        offset: '0',
+        fecha_inicio: today,
+        estado: 'confirmada'
+      }
     }).pipe(
       map((response: any) => {
-        if (response.success && response.data) {
-          return this.mapCitasToActivity(response.data);
+        if (response.success && Array.isArray(response.data)) {
+          return this.mapCitasToActivity(response.data, limit);
         }
         return [];
       }),
@@ -127,17 +166,24 @@ export class DashboardService {
 
   // Próximas citas
   getProximasCitas(limit: number = 5): Observable<any[]> {
-    const today = new Date().toISOString().split('T')[0];
+    const today = this.toLocalDateString(new Date());
     return this.http.get<any>(`${this.API_URL}/clinical/appointments`, {
       params: {
-        limit: limit.toString(),
-        fecha_desde: today,
-        status: 'confirmada'
+        limit: '200',
+        offset: '0',
+        fecha_inicio: today
       }
     }).pipe(
       map((response: any) => {
-        if (response.success && response.data) {
-          return response.data;
+        if (response.success && Array.isArray(response.data)) {
+          return response.data
+            .filter((cita: any) => ['confirmada', 'en_curso'].includes(cita.estado))
+            .sort((a: any, b: any) => {
+              const aTime = new Date(a.fecha_inicio).getTime();
+              const bTime = new Date(b.fecha_inicio).getTime();
+              return aTime - bTime;
+            })
+            .slice(0, limit);
         }
         return [];
       }),
@@ -175,18 +221,32 @@ export class DashboardService {
   // Funciones de mapeo para convertir datos del backend al formato del frontend
   private mapBackendStatsToFrontend(pacientesData: any, citasData: any): DashboardStats {
     return {
-      pacientes: {
-        total: pacientesData.totalPacientes || 0,
-        nuevos_mes: pacientesData.nuevosUltimoMes || 0,
-        activos: pacientesData.totalPacientes || 0
-      },
-      citas: {
-        hoy: citasData.citas_hoy || 0,
-        semana: citasData.total_citas || 0,
-        pendientes: citasData.citas_pendientes || 0,
-        canceladas_semana: citasData.citas_canceladas_semana || 0
-      }
+      pacientes: this.mapPacientesStats(pacientesData),
+      citas: this.mapCitasStats(citasData)
     };
+  }
+
+  private mapPacientesStats(pacientesData: any): DashboardStats['pacientes'] {
+    const total = this.toNumber(pacientesData?.totalPacientes ?? pacientesData?.total_pacientes);
+    return {
+      total,
+      nuevos_mes: this.toNumber(pacientesData?.nuevosUltimoMes ?? pacientesData?.nuevos_ultimo_mes),
+      activos: total
+    };
+  }
+
+  private mapCitasStats(citasData: any): DashboardStats['citas'] {
+    return {
+      hoy: this.toNumber(citasData?.citas_hoy),
+      semana: this.toNumber(citasData?.total_citas),
+      pendientes: this.toNumber(citasData?.citas_pendientes),
+      canceladas_semana: this.toNumber(citasData?.citas_canceladas_semana)
+    };
+  }
+
+  private toNumber(value: unknown): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
   }
 
   private getDefaultStats(): DashboardStats {
@@ -206,12 +266,20 @@ export class DashboardService {
   }
 
 
-  private mapCitasToActivity(citasData: any[]): RecentActivity[] {
-    return citasData.slice(0, 10).map((cita: any, index: number) => ({
-      id: cita.id || index.toString(),
+  private mapCitasToActivity(citasData: any[], limit: number): RecentActivity[] {
+    const onlyScheduled = citasData.filter((cita: any) => cita?.estado === 'confirmada');
+
+    const sorted = [...onlyScheduled].sort((a: any, b: any) => {
+      const dateA = new Date(a.created_at || a.fecha_inicio).getTime();
+      const dateB = new Date(b.created_at || b.fecha_inicio).getTime();
+      return dateB - dateA;
+    });
+
+    return sorted.slice(0, limit).map((cita: any, index: number) => ({
+      id: cita.id_cita || cita.id || index.toString(),
       tipo: 'cita' as const,
-      descripcion: `Cita programada para ${cita.mascota_nombre || 'mascota'} - ${cita.tipo_cita || 'consulta'}`,
-      fecha: cita.fecha_inicio || new Date().toISOString(),
+      descripcion: `Cita agendada para ${cita.mascota_nombre || 'mascota'} - ${cita.tipo || cita.tipo_cita || 'consulta'}`,
+      fecha: cita.created_at || cita.fecha_inicio || new Date().toISOString(),
       usuario: cita.veterinario_nombre || 'Veterinario',
       icono: 'event',
       color: '#2e7d32'
@@ -235,9 +303,9 @@ export class DashboardService {
     const estados: { [key: string]: string } = {
       'pendiente': 'Pendiente',
       'confirmada': 'Confirmada',
-      'en_progreso': 'En Progreso',
+      'en_curso': 'En Curso',
       'completada': 'Completada',
-      'cancelada': 'Cancelada'
+      'no_asistio': 'No Asistio'
     };
     return estados[estado] || estado;
   }
@@ -246,10 +314,17 @@ export class DashboardService {
     const colores: { [key: string]: string } = {
       'pendiente': '#FF9800',
       'confirmada': '#2196F3',
-      'en_progreso': '#4CAF50',
+      'en_curso': '#4CAF50',
       'completada': '#8BC34A',
-      'cancelada': '#f44336'
+      'no_asistio': '#f44336'
     };
     return colores[estado] || '#9E9E9E';
+  }
+
+  private toLocalDateString(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 }

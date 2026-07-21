@@ -196,6 +196,11 @@ export class UsuariosComponent implements OnInit {
   }
 
   goBack(): void {
+    if (window.history.length <= 1) {
+      this.router.navigate(['/dashboard']);
+      return;
+    }
+
     this.location.back();
   }
 

@@ -4,7 +4,6 @@ import { RouterOutlet } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { AuthService } from '../../services/auth.service';
 
 @Component({
   selector: 'app-auth-layout',
@@ -32,7 +31,6 @@ import { AuthService } from '../../services/auth.service';
               <span>D.A. developments</span>
               <span>Desarrollo web</span>
               <span>Soporte y mantenimiento</span>
-              <a class="footer-da-link" href="https://wa.me/573150752312" target="_blank" rel="noopener noreferrer">WhatsApp: +57 315 075 2312</a>
               <a class="footer-da-link" href="mailto:contacto@dadev.co">contacto@dadev.co</a>
             </p>
           </div>
@@ -53,13 +51,6 @@ import { AuthService } from '../../services/auth.service';
               <mat-icon>help</mat-icon>
               Ayuda
             </button>
-            <button mat-button
-                    (click)="authService.toggleTheme()"
-                    class="footer-link"
-                    [matTooltip]="'Cambiar tema visual'">
-              <mat-icon>palette</mat-icon>
-              Tema
-            </button>
           </div>
         </div>
 
@@ -68,13 +59,6 @@ import { AuthService } from '../../services/auth.service';
           <p class="version">Versión 1.0.0</p>
         </div>
       </footer>
-
-      <!-- Indicador de tema actual -->
-      <div class="theme-indicator">
-        <mat-icon [matTooltip]="getThemeTooltip()">
-          {{ getThemeIcon() }}
-        </mat-icon>
-      </div>
     </div>
   `,
   styles: [`
@@ -83,7 +67,7 @@ import { AuthService } from '../../services/auth.service';
       display: flex;
       flex-direction: column;
       position: relative;
-      background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 50%, #a5d6a7 100%);
+      background: linear-gradient(135deg, #e8f5e8 0%, #d9f0da 50%, #c8e6c9 100%);
     }
 
     .auth-main {
@@ -120,13 +104,13 @@ import { AuthService } from '../../services/auth.service';
     .company-name {
       font-size: 16px;
       font-weight: 600;
-      color: #2e7d32;
+      color: var(--vp-primary);
       margin: 0 0 8px 0;
     }
 
     .company-description {
       font-size: 14px;
-      color: #666;
+      color: var(--vp-text-secondary);
       margin: 0;
       line-height: 1.4;
     }
@@ -174,7 +158,7 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .footer-da-link {
-      color: #1760a5;
+      color: var(--vp-link);
       text-decoration: none;
       font-weight: 600;
     }
@@ -184,7 +168,7 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .footer-link {
-      color: #666 !important;
+      color: var(--vp-text-secondary) !important;
       font-size: 14px;
       min-width: auto;
       padding: 8px 12px;
@@ -193,7 +177,7 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .footer-link:hover {
-      color: #2e7d32 !important;
+      color: var(--vp-primary) !important;
       background-color: rgba(46, 125, 50, 0.1);
     }
 
@@ -227,109 +211,6 @@ import { AuthService } from '../../services/auth.service';
       font-family: monospace;
     }
 
-    .theme-indicator {
-      position: fixed;
-      top: 24px;
-      right: 24px;
-      background: rgba(255, 255, 255, 0.9);
-      backdrop-filter: blur(10px);
-      border-radius: 50%;
-      width: 48px;
-      height: 48px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      z-index: 1000;
-      color: #2e7d32;
-      transition: all 0.3s ease;
-    }
-
-    .theme-indicator:hover {
-      transform: scale(1.1);
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-    }
-
-    .theme-indicator mat-icon {
-      font-size: 20px;
-      width: 20px;
-      height: 20px;
-    }
-
-    /* Dark theme */
-    .dark-theme .auth-layout {
-      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 50%, #1e1e1e 100%);
-    }
-
-    .dark-theme .auth-footer {
-      background: rgba(30, 30, 30, 0.9);
-      border-top-color: rgba(255, 255, 255, 0.1);
-    }
-
-    .dark-theme .company-name {
-      color: #81c784;
-    }
-
-    .dark-theme .company-description,
-    .dark-theme .footer-link {
-      color: #b3b3b3 !important;
-    }
-
-    .dark-theme .footer-da {
-      background: transparent;
-      border-color: transparent;
-    }
-
-    .dark-theme .footer-da-logo {
-      background: rgba(255, 255, 255, 0.92);
-      border-color: rgba(190, 212, 240, 0.45);
-    }
-
-    .dark-theme .footer-da-line {
-      color: #9bc3f2;
-    }
-
-    .dark-theme .footer-da-link {
-      color: #8ec4ff;
-    }
-
-    .dark-theme .footer-link:hover {
-      color: #81c784 !important;
-      background-color: rgba(129, 199, 132, 0.1);
-    }
-
-    .dark-theme .footer-bottom {
-      border-top-color: rgba(255, 255, 255, 0.1);
-    }
-
-    .dark-theme .copyright,
-    .dark-theme .version {
-      color: #666;
-    }
-
-    .dark-theme .theme-indicator {
-      background: rgba(30, 30, 30, 0.9);
-      color: #81c784;
-    }
-
-    /* Blue theme */
-    .blue-theme .auth-layout {
-      background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 50%, #90caf9 100%);
-    }
-
-    .blue-theme .company-name {
-      color: #1976d2;
-    }
-
-    .blue-theme .footer-link:hover {
-      color: #1976d2 !important;
-      background-color: rgba(25, 118, 210, 0.1);
-    }
-
-    .blue-theme .theme-indicator {
-      color: #1976d2;
-    }
-
     /* Responsive */
     @media (max-width: 768px) {
       .auth-main {
@@ -359,18 +240,6 @@ import { AuthService } from '../../services/auth.service';
         text-align: center;
       }
 
-      .theme-indicator {
-        top: 16px;
-        right: 16px;
-        width: 40px;
-        height: 40px;
-      }
-
-      .theme-indicator mat-icon {
-        font-size: 18px;
-        width: 18px;
-        height: 18px;
-      }
     }
 
     @media (max-width: 480px) {
@@ -400,24 +269,4 @@ import { AuthService } from '../../services/auth.service';
 })
 export class AuthLayoutComponent {
   currentYear = new Date().getFullYear();
-
-  constructor(public authService: AuthService) {}
-
-  getThemeIcon(): string {
-    const theme = this.authService.currentTheme();
-    switch (theme) {
-      case 'dark': return 'dark_mode';
-      case 'blue': return 'water_drop';
-      default: return 'wb_sunny';
-    }
-  }
-
-  getThemeTooltip(): string {
-    const theme = this.authService.currentTheme();
-    switch (theme) {
-      case 'dark': return 'Tema oscuro activo';
-      case 'blue': return 'Tema azul activo';
-      default: return 'Tema claro activo';
-    }
-  }
 }

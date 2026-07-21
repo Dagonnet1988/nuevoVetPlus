@@ -4,8 +4,11 @@ import { authenticateToken, authorize } from '../middleware/auth.js';
 import { authRateLimit } from '../middleware/rateLimiter.js';
 import { 
   validateLogin, 
-  validateChangePassword
+  validateChangePassword,
+  validateForgotPassword,
+  validateResetPasswordByToken
 } from '../validators/authValidators.js';
+import { validateRequest } from '../middleware/validateRequest.js';
 import userRoutes from './users.js';
 
 const router = express.Router();
@@ -44,6 +47,20 @@ router.get('/me', authenticateToken, authController.me);
  * @access  Public (con refresh token válido)
  */
 router.post('/refresh', authRateLimit, authController.refreshToken);
+
+/**
+ * @route   POST /api/auth/forgot-password
+ * @desc    Solicitar recuperación de contraseña por correo
+ * @access  Public
+ */
+router.post('/forgot-password', authRateLimit, validateForgotPassword, validateRequest, authController.forgotPassword);
+
+/**
+ * @route   POST /api/auth/reset-password
+ * @desc    Restablecer contraseña usando token de recuperación
+ * @access  Public
+ */
+router.post('/reset-password', authRateLimit, validateResetPasswordByToken, validateRequest, authController.resetPasswordWithToken);
 
 /**
  * @route   GET /api/auth/check-email

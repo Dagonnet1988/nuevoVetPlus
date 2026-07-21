@@ -8,6 +8,8 @@ import {
   CitaFormData,
   CitaFilter,
   CitaStats,
+  RecurringAppointmentPayload,
+  RecurringPreviewItem,
   VeterinarioDisponibilidad,
   SugerenciaHorario,
   CalendarView
@@ -51,6 +53,16 @@ export class CitasService {
     // Transformar los datos para que sean compatibles con el backend
     const citaTransformada = this.transformarCitaParaBackend(cita);
     return this.http.post<any>(`${this.API_URL}/appointments`, citaTransformada);
+  }
+
+  previewCitasPeriodicas(payload: RecurringAppointmentPayload): Observable<RecurringPreviewItem[]> {
+    return this.http.post<any>(`${this.API_URL}/appointments/recurring/preview`, payload).pipe(
+      map((response: any) => response?.data?.ocurrencias || [])
+    );
+  }
+
+  createCitasPeriodicas(payload: RecurringAppointmentPayload): Observable<any> {
+    return this.http.post<any>(`${this.API_URL}/appointments/recurring`, payload);
   }
 
   updateCita(id: string, cita: Partial<CitaFormData>): Observable<any> {
@@ -178,8 +190,11 @@ export class CitasService {
     startDate?: string;
     endDate?: string;
   } = {}): Observable<any> {
+    const hasExplicitRange = Boolean(options.startDate && options.endDate);
+    const onlyToday = hasExplicitRange ? false : (options.onlyToday ?? true);
+
     return this.http.post<any>(`${environment.apiUrl}/google-calendar/sync-changes`, {
-      only_today: options.onlyToday ?? true,
+      only_today: onlyToday,
       start_date: options.startDate ?? null,
       end_date: options.endDate ?? null
     });

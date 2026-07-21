@@ -4,7 +4,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatListModule } from '@angular/material/list';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { RecentActivity } from '../../../services/dashboard.service';
 
 @Component({
@@ -23,6 +23,10 @@ import { RecentActivity } from '../../../services/dashboard.service';
 })
 export class RecentActivityComponent {
   @Input() activities: RecentActivity[] = [];
+  @Input() historyRoute = '/citas';
+  @Input() historyQueryParams: Record<string, string> = {};
+
+  constructor(private router: Router) {}
 
   getIconBgColor(color: string): string {
     // Convertir color hex a rgba con opacidad 0.1
@@ -63,5 +67,19 @@ export class RecentActivityComponent {
         month: '2-digit'
       });
     }
+  }
+
+  isActivityClickable(activity: RecentActivity): boolean {
+    return activity.tipo === 'cita' && Boolean(activity.id);
+  }
+
+  openActivity(activity: RecentActivity): void {
+    if (!this.isActivityClickable(activity)) {
+      return;
+    }
+
+    this.router.navigate(['/citas', activity.id], {
+      queryParams: { from: 'dashboard' }
+    });
   }
 }

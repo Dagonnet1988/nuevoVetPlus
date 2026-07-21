@@ -1,5 +1,5 @@
 import { Component, OnInit, signal, computed, inject, Inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -48,6 +48,7 @@ import { environment } from '../../../../environments/environment';
 export class UsuarioProfileComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private location = inject(Location);
   private usuariosService = inject(UsuariosService);
   private authService = inject(AuthService);
   private snackBar = inject(MatSnackBar);
@@ -77,6 +78,11 @@ export class UsuarioProfileComponent implements OnInit {
   }
 
   volver(): void {
+    if (window.history.length > 1) {
+      this.location.back();
+      return;
+    }
+
     const openedFromUsersList = !!this.route.snapshot.paramMap.get('id');
     if (openedFromUsersList && this.authService.hasRole('admin')) {
       this.router.navigate(['/usuarios']);

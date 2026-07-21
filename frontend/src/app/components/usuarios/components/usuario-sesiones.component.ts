@@ -1,5 +1,5 @@
 import { Component, OnInit, signal, computed, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
@@ -57,6 +57,7 @@ export class UsuarioSesionesComponent implements OnInit {
 
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private location = inject(Location);
   private usuariosService = inject(UsuariosService);
   private authService = inject(AuthService);
   private snackBar = inject(MatSnackBar);
@@ -244,6 +245,11 @@ export class UsuarioSesionesComponent implements OnInit {
   }
 
   volverAlPerfil(): void {
+    if (window.history.length > 1) {
+      this.location.back();
+      return;
+    }
+
     if (this.isGlobalView()) {
       this.router.navigate(['/usuarios']);
       return;

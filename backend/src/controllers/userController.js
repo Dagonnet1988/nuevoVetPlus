@@ -2,6 +2,8 @@ import bcrypt from 'bcryptjs';
 import { query } from '../config/database.js';
 import { validationResult } from 'express-validator/lib/index.js';
 import { v4 as uuidv4 } from 'uuid';
+import { sendEmail } from '../services/emailService.js';
+import { renderEmailTemplate } from '../services/emailTemplateService.js';
 
 /**
  * Controlador para gestión de usuarios
@@ -36,7 +38,7 @@ export const createUser = async (req, res) => {
         if (!tenantId) {
             return res.status(403).json({
                 success: false,
-                message: 'No se pudo resolver el tenant del usuario autenticado'
+                message: 'No se pudo resolver la clínica del usuario autenticado'
             });
         }
 
@@ -110,6 +112,41 @@ export const createUser = async (req, res) => {
         ]);
 
         const newUser = result.rows[0];
+
+        if (enviar_credenciales && newUser.email) {
+            try {
+                const rendered = await renderEmailTemplate({
+                    tenantId,
+                    key: 'usuario_credenciales',
+                    variables: {
+                        usuario_nombre: `${newUser.nombre} ${newUser.apellido || ''}`.trim(),
+                        usuario_email: newUser.email,
+                        password_temporal: finalPassword
+                    },
+                    userId: req.user?.id_usuario || req.user?.id || null
+                });
+
+                if (rendered) {
+                    await sendEmail({
+                        tenantId,
+                        to: newUser.email,
+                        subject: rendered.asunto_render,
+                        html: rendered.cuerpo_html_render,
+                        text: rendered.cuerpo_text_render || undefined,
+                        logContext: {
+                            tipo_envio: 'usuario_credenciales',
+                            userId: req.user?.id_usuario || req.user?.id || null,
+                            metadata: {
+                                id_usuario: newUser.id_usuario,
+                                rol: newUser.rol
+                            }
+                        }
+                    });
+                }
+            } catch (emailError) {
+                console.error('No se pudo enviar correo de credenciales al usuario nuevo:', emailError.message);
+            }
+        }
 
         console.log(`✅ Usuario creado: ${newUser.email} (${newUser.documento}) con rol ${newUser.rol} por ${req.user.email || req.user.documento}`);
 

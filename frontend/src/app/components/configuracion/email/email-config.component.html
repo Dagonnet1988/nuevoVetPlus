@@ -18,11 +18,15 @@
       <span>Cargando configuración...</span>
     </div>
   } @else {
-    <mat-card class="form-card">
-      <mat-card-header>
-        <mat-card-title>Canal de envío de correos</mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
+    <div class="section-shell">
+      <button class="section-toggle" type="button" (click)="toggleSection('channel')">
+        <span>Canal de envío de correos</span>
+        <mat-icon>{{ showChannelSection() ? 'expand_less' : 'expand_more' }}</mat-icon>
+      </button>
+
+      @if (showChannelSection()) {
+      <mat-card class="form-card">
+        <mat-card-content>
         <form [formGroup]="form" class="form-grid">
           <mat-form-field appearance="outline">
             <mat-label>Nombre remitente</mat-label>
@@ -41,6 +45,18 @@
             <mat-label>Correo respuesta (opcional)</mat-label>
             <input matInput formControlName="correo_respuesta" placeholder="recepcion@tuclinica.com">
           </mat-form-field>
+
+          @if (!showSmtpConfig() && !oauthConnected()) {
+            <mat-form-field appearance="outline">
+              <mat-label>Google Client ID</mat-label>
+              <input matInput formControlName="oauth_client_id" placeholder="xxxx.apps.googleusercontent.com">
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Google Client Secret</mat-label>
+              <input matInput type="password" formControlName="oauth_client_secret" placeholder="Ingresa el Client Secret">
+            </mat-form-field>
+          }
 
           @if (showSmtpConfig()) {
             <mat-form-field appearance="outline">
@@ -81,11 +97,11 @@
               } @else {
                 <span class="oauth-bad">No conectado</span>
               }
-              <p class="oauth-help">Se abrirá una pestaña de Google para validar tu cuenta y habilitar envíos por correo.</p>
+              <p class="oauth-help">Al conectar, VetPlus guarda la configuración actual y luego abre Google para autorizar.</p>
             </div>
 
             <div class="oauth-actions">
-              <button class="oauth-btn" mat-stroked-button color="primary" (click)="connectGoogle()" [disabled]="oauthLoading() || saving()">
+              <button class="oauth-btn" mat-stroked-button color="primary" (click)="connectGoogle()" [disabled]="oauthLoading() || saving() || oauthConnected()">
                 @if (oauthLoading()) {
                   <mat-spinner diameter="18"></mat-spinner>
                 } @else {
@@ -117,47 +133,262 @@
             </div>
           </div>
         }
-      </mat-card-content>
-      <mat-card-actions class="actions">
-        <button mat-stroked-button (click)="testConnection()" [disabled]="testing() || saving()">
-          @if (testing()) {
-            <mat-spinner diameter="18"></mat-spinner>
-          } @else {
-            <mat-icon>mark_email_read</mat-icon>
-          }
-          Probar envío
-        </button>
+        </mat-card-content>
+        <mat-card-actions class="actions">
+          <button mat-stroked-button (click)="testConnection()" [disabled]="testing() || saving()">
+            @if (testing()) {
+              <mat-spinner diameter="18"></mat-spinner>
+            } @else {
+              <mat-icon>mark_email_read</mat-icon>
+            }
+            Probar envío
+          </button>
 
-        <button mat-raised-button color="primary" (click)="save()" [disabled]="saving() || testing()">
-          @if (saving()) {
-            <mat-spinner diameter="18"></mat-spinner>
-          } @else {
-            <mat-icon>save</mat-icon>
-          }
-          Guardar
-        </button>
-      </mat-card-actions>
+          <button mat-raised-button color="primary" (click)="save()" [disabled]="saving() || testing()">
+            @if (saving()) {
+              <mat-spinner diameter="18"></mat-spinner>
+            } @else {
+              <mat-icon>save</mat-icon>
+            }
+            Guardar
+          </button>
+        </mat-card-actions>
+      </mat-card>
+      }
+    </div>
+
+    <mat-card class="stats-card">
+      <mat-card-content>
+        <div class="stats-grid">
+          <div>
+            <span class="label">Total envíos</span>
+            <strong>{{ stats().total }}</strong>
+          </div>
+          <div>
+            <span class="label">Enviados</span>
+            <strong class="ok">{{ stats().enviados }}</strong>
+          </div>
+          <div>
+            <span class="label">Fallidos</span>
+            <strong class="bad">{{ stats().fallidos }}</strong>
+          </div>
+        </div>
+      </mat-card-content>
     </mat-card>
 
-    @if (stats()) {
-      <mat-card class="stats-card">
+    <div class="section-shell">
+      <button class="section-toggle" type="button" (click)="toggleSection('templates')">
+        <span>Plantillas de correo</span>
+        <mat-icon>{{ showTemplatesSection() ? 'expand_less' : 'expand_more' }}</mat-icon>
+      </button>
+
+      @if (showTemplatesSection()) {
+      <mat-card class="form-card">
         <mat-card-content>
-          <div class="stats-grid">
-            <div>
-              <span class="label">Total envíos</span>
-              <strong>{{ stats()!.total }}</strong>
+        @if (templateLoading()) {
+          <div class="loading-wrap">
+            <mat-spinner diameter="28"></mat-spinner>
+            <span>Cargando plantillas...</span>
+          </div>
+        } @else {
+          <div class="form-grid" [formGroup]="templateForm">
+            <mat-form-field appearance="outline">
+              <mat-label>Plantilla</mat-label>
+              <mat-select [value]="selectedTemplateKey()" (selectionChange)="onTemplateSelected($event.value)">
+                @for (tpl of templates(); track tpl.clave_template) {
+                  <mat-option [value]="tpl.clave_template">{{ tpl.nombre_template }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Asunto</mat-label>
+              <input matInput formControlName="asunto" placeholder="Asunto del correo">
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Mensaje del correo</mat-label>
+              <textarea matInput formControlName="mensaje" rows="8" placeholder="Escribe el mensaje que recibirá el propietario"></textarea>
+              <mat-hint>Usa las variables de abajo para personalizar el mensaje. VetPlus aplica el diseño del correo automáticamente.</mat-hint>
+            </mat-form-field>
+
+            <div class="toggle-wrap">
+              <mat-slide-toggle formControlName="activa">Plantilla activa</mat-slide-toggle>
             </div>
+
             <div>
-              <span class="label">Enviados</span>
-              <strong class="ok">{{ stats()!.enviados }}</strong>
+              <strong>Variables permitidas:</strong>
+              @if (getSelectedTemplateVariables().length) {
+                <div class="variable-list">
+                  @for (variable of getSelectedTemplateVariables(); track variable) {
+                    <button mat-stroked-button type="button" class="variable-token" (click)="insertVariable(variable)">
+                      {{ '{{' + variable + '}}' }}
+                    </button>
+                  }
+                </div>
+              } @else {
+                <p>Sin variables registradas</p>
+              }
             </div>
-            <div>
-              <span class="label">Fallidos</span>
-              <strong class="bad">{{ stats()!.fallidos }}</strong>
+
+            <div class="template-preview full-width">
+              <strong>Vista previa</strong>
+              <div class="preview-shell">
+                <div class="preview-box" [innerHTML]="getTemplatePreview()"></div>
+                <p class="preview-footer">Este mensaje fue enviado desde VetPlus.</p>
+              </div>
             </div>
           </div>
+        }
         </mat-card-content>
+        <mat-card-actions class="actions">
+          <button mat-stroked-button (click)="resetTemplate()" [disabled]="templateSaving() || templateLoading()">
+            Restaurar predeterminada
+          </button>
+          <button mat-raised-button color="primary" (click)="saveTemplate()" [disabled]="templateSaving() || templateLoading()">
+            @if (templateSaving()) {
+              <mat-spinner diameter="18"></mat-spinner>
+            } @else {
+              <mat-icon>save</mat-icon>
+            }
+            Guardar plantilla
+          </button>
+        </mat-card-actions>
       </mat-card>
-    }
+      }
+    </div>
+
+    <div class="section-shell">
+      <button class="section-toggle" type="button" (click)="toggleSection('history')">
+        <span>Historial de envíos</span>
+        <mat-icon>{{ showHistorySection() ? 'expand_less' : 'expand_more' }}</mat-icon>
+      </button>
+
+      @if (showHistorySection()) {
+      <mat-card class="form-card">
+        <mat-card-content>
+        <form [formGroup]="deliveriesFilterForm" class="deliveries-filters-grid">
+          <mat-form-field appearance="outline">
+            <mat-label>Estado</mat-label>
+            <mat-select formControlName="estado">
+              <mat-option value="">Todos</mat-option>
+              <mat-option value="enviado">Enviado</mat-option>
+              <mat-option value="fallido">Fallido</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Receptor</mat-label>
+            <input matInput formControlName="receptor" placeholder="correo@dominio.com">
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Fecha desde</mat-label>
+            <input matInput type="date" formControlName="fecha_desde">
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Fecha hasta</mat-label>
+            <input matInput type="date" formControlName="fecha_hasta">
+          </mat-form-field>
+        </form>
+
+        <div class="filter-actions-row">
+          <button mat-stroked-button (click)="applyDeliveriesFilters()" [disabled]="deliveriesLoading()">Aplicar filtros</button>
+          <button mat-button (click)="clearDeliveriesFilters()" [disabled]="deliveriesLoading()">Limpiar</button>
+        </div>
+
+        @if (deliveriesLoading()) {
+          <div class="loading-wrap">
+            <mat-spinner diameter="24"></mat-spinner>
+            <span>Cargando historial...</span>
+          </div>
+        } @else if (!deliveries().length) {
+          <p class="empty-state">Aún no hay envíos registrados para esta clínica.</p>
+        } @else {
+          <div class="deliveries-table-wrap">
+            <table class="deliveries-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Estado</th>
+                  <th>Tipo</th>
+                  <th>Para</th>
+                  <th>Propietario</th>
+                  <th>Asunto</th>
+                  <th>Adjuntos</th>
+                  <th>Error</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (item of deliveries(); track item.id) {
+                  <tr>
+                    <td>{{ formatDeliveryDate(item.created_at) }}</td>
+                    <td>
+                      <span class="state-chip" [class.ok]="item.estado === 'enviado'" [class.bad]="item.estado === 'fallido'">
+                        {{ item.estado }}
+                      </span>
+                    </td>
+                    <td>{{ item.tipo_envio }} <span class="source-label">({{ item.fuente }})</span></td>
+                    <td>{{ item.destinatario_email }}</td>
+                    <td>{{ item.propietario_nombre || '-' }}</td>
+                    <td>{{ item.asunto }}</td>
+                    <td>{{ item.adjuntos_count || 0 }}</td>
+                    <td>{{ item.detalle_error || '-' }}</td>
+                    <td class="actions-cell">
+                      <button mat-stroked-button type="button" (click)="viewDeliveryCopy(item)" [disabled]="detailLoading()">
+                        Ver copia
+                      </button>
+                      <button mat-stroked-button color="primary" type="button" (click)="retryDelivery(item)" [disabled]="!canRetryDelivery(item) || isRetrying(item)">
+                        @if (isRetrying(item)) {
+                          <mat-spinner diameter="16"></mat-spinner>
+                        } @else {
+                          Reenviar
+                        }
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+        }
+        </mat-card-content>
+        <mat-card-actions class="actions deliveries-actions">
+          <div class="pager-group">
+            <button mat-stroked-button (click)="previousDeliveriesPage()" [disabled]="deliveriesLoading() || deliveriesPagination().offset === 0">Anterior</button>
+            <span class="page-label">{{ deliveriesPageLabel() }}</span>
+            <button mat-stroked-button (click)="nextDeliveriesPage()" [disabled]="deliveriesLoading() || !deliveriesPagination().hasMore">Siguiente</button>
+          </div>
+
+          <button mat-button (click)="loadDeliveries(deliveriesPagination().offset)" [disabled]="deliveriesLoading()">Actualizar</button>
+        </mat-card-actions>
+      </mat-card>
+      }
+    </div>
+  }
+
+  @if (selectedDeliveryDetail()) {
+    <div class="copy-modal-backdrop" (click)="clearDeliveryCopy()">
+      <div class="copy-modal-sheet" (click)="$event.stopPropagation()">
+        <div class="copy-header">
+          <strong>Copia del correo</strong>
+          <button mat-button type="button" (click)="clearDeliveryCopy()">Cerrar</button>
+        </div>
+
+        <p><strong>Para:</strong> {{ selectedDeliveryDetail()!.destinatario_email }}</p>
+        <p><strong>Asunto:</strong> {{ selectedDeliveryDetail()!.asunto }}</p>
+
+        @if (selectedDeliveryDetail()!.copy?.html) {
+          <div class="copy-html" [innerHTML]="getCopyPreviewHtml()"></div>
+        } @else if (selectedDeliveryDetail()!.copy?.text) {
+          <pre class="copy-text">{{ selectedDeliveryDetail()!.copy?.text }}</pre>
+        } @else {
+          <p class="empty-state">Este registro no tiene una copia completa del contenido del correo.</p>
+        }
+      </div>
+    </div>
   }
 </div>

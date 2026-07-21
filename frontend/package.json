@@ -49,6 +49,7 @@
     "@types/chart.js": "^2.9.41",
     "@types/jasmine": "~5.1.0",
     "@types/qrcode": "^1.5.5",
+    "baseline-browser-mapping": "^2.10.31",
     "jasmine-core": "~5.7.0",
     "karma": "~6.4.0",
     "karma-chrome-launcher": "~3.2.0",

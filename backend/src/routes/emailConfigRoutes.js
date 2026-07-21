@@ -6,11 +6,20 @@ import {
   upsertEmailConfig,
   testEmailConfig,
   getEmailModuleStatus,
+  getEmailDeliveries,
+  getEmailDeliveryDetail,
+  retryEmailDelivery,
   getGoogleEmailAuthUrl,
   handleGoogleEmailCallback,
   serveGoogleEmailCallbackScript,
   disconnectGoogleEmail
 } from '../controllers/emailConfigController.js';
+import {
+  getEmailTemplates,
+  getEmailTemplate,
+  updateEmailTemplate,
+  resetEmailTemplate
+} from '../controllers/emailTemplateController.js';
 
 const router = express.Router();
 
@@ -34,6 +43,13 @@ router.get('/config', authenticateToken, authorize(['admin']), getEmailConfig);
 router.put('/config', authenticateToken, authorize(['admin']), validateConfig, upsertEmailConfig);
 router.post('/test', authenticateToken, authorize(['admin']), testEmailConfig);
 router.get('/status', authenticateToken, authorize(['admin']), getEmailModuleStatus);
+router.get('/deliveries', authenticateToken, authorize(['admin']), getEmailDeliveries);
+router.get('/deliveries/:source/:id', authenticateToken, authorize(['admin']), getEmailDeliveryDetail);
+router.post('/deliveries/:source/:id/retry', authenticateToken, authorize(['admin']), retryEmailDelivery);
+router.get('/templates', authenticateToken, authorize(['admin']), getEmailTemplates);
+router.get('/templates/:key', authenticateToken, authorize(['admin']), getEmailTemplate);
+router.put('/templates/:key', authenticateToken, authorize(['admin']), updateEmailTemplate);
+router.post('/templates/:key/reset', authenticateToken, authorize(['admin']), resetEmailTemplate);
 router.get('/google/auth-url', authenticateToken, authorize(['admin']), getGoogleEmailAuthUrl);
 router.get('/google/callback-script.js', serveGoogleEmailCallbackScript);
 router.get('/google/callback', handleGoogleEmailCallback);

@@ -19,9 +19,9 @@ export const environment = {
   },
 
   // Configuración de fecha y hora
-  dateFormat: 'dd/MM/yyyy',
-  timeFormat: 'HH:mm',
-  dateTimeFormat: 'dd/MM/yyyy HH:mm',
+  dateFormat: 'dd-MM-yy',
+  timeFormat: 'h:mm a',
+  dateTimeFormat: 'dd-MM-yy h:mm a',
 
   // Configuración de la aplicación
   features: {

@@ -1,5 +1,5 @@
 import { Component, OnInit, Input, Output, EventEmitter, signal, computed, inject, ViewChild } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule, AbstractControl } from '@angular/forms';
 import { of } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
@@ -58,6 +58,7 @@ export class UsuarioFormComponent implements OnInit {
   private snackBar = inject(MatSnackBar);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
+  private location = inject(Location);
 
   // Signals
   loading = signal(false);
@@ -306,10 +307,18 @@ export class UsuarioFormComponent implements OnInit {
     if (this.hasUnsavedChanges()) {
       if (confirm('¿Estás seguro de que quieres cancelar? Se perderán los cambios no guardados.')) {
         this.cancelar.emit();
+        if (window.history.length > 1) {
+          this.location.back();
+          return;
+        }
         this.router.navigate(['/usuarios']);
       }
     } else {
       this.cancelar.emit();
+      if (window.history.length > 1) {
+        this.location.back();
+        return;
+      }
       this.router.navigate(['/usuarios']);
     }
   }

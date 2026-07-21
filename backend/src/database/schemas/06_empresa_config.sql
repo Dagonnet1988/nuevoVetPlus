@@ -138,3 +138,60 @@ CREATE TRIGGER update_configuracion_correo_updated_at
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 COMMENT ON TABLE system.configuracion_correo IS 'Configuracion de proveedor SMTP por tenant (independiente de Google Calendar)';
+
+-- Plantillas de correo editables por tenant
+CREATE TABLE IF NOT EXISTS system.email_templates (
+    id_template UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    clave_template VARCHAR(100) NOT NULL,
+    nombre_template VARCHAR(150) NOT NULL,
+    descripcion TEXT,
+    asunto TEXT NOT NULL,
+    cuerpo_html TEXT NOT NULL,
+    cuerpo_text TEXT,
+    variables_permitidas JSONB NOT NULL DEFAULT '[]'::jsonb,
+    activa BOOLEAN NOT NULL DEFAULT true,
+    id_tenant UUID NOT NULL DEFAULT system.get_default_tenant()
+        REFERENCES system.tenants(id_tenant) ON DELETE RESTRICT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_by UUID REFERENCES vetplus_auth.usuarios(id_usuario),
+    updated_by UUID REFERENCES vetplus_auth.usuarios(id_usuario),
+    UNIQUE (id_tenant, clave_template)
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_templates_tenant
+    ON system.email_templates(id_tenant);
+
+DROP TRIGGER IF EXISTS update_email_templates_updated_at ON system.email_templates;
+CREATE TRIGGER update_email_templates_updated_at
+    BEFORE UPDATE ON system.email_templates
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+COMMENT ON TABLE system.email_templates IS 'Plantillas de correo configurables por tenant para notificaciones operativas';
+
+CREATE TABLE IF NOT EXISTS system.email_delivery_log (
+    id_log UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tipo_envio VARCHAR(60) NOT NULL,
+    destinatario_email VARCHAR(200) NOT NULL,
+    asunto TEXT,
+    estado VARCHAR(20) NOT NULL CHECK (estado IN ('enviado', 'fallido')),
+    provider_message_id TEXT,
+    detalle_error TEXT,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    id_tenant UUID NOT NULL DEFAULT system.get_default_tenant()
+        REFERENCES system.tenants(id_tenant) ON DELETE RESTRICT,
+    created_by UUID REFERENCES vetplus_auth.usuarios(id_usuario),
+    sent_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_delivery_log_tenant
+    ON system.email_delivery_log(id_tenant);
+
+CREATE INDEX IF NOT EXISTS idx_email_delivery_log_tipo
+    ON system.email_delivery_log(tipo_envio);
+
+CREATE INDEX IF NOT EXISTS idx_email_delivery_log_fecha
+    ON system.email_delivery_log(created_at DESC);
+
+COMMENT ON TABLE system.email_delivery_log IS 'Bitácora general de envíos de correo operativos (usuarios, citas, recordatorios, etc.)';

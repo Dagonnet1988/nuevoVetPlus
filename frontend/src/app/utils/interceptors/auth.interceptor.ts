@@ -60,6 +60,12 @@ export class AuthInterceptor implements HttpInterceptor {
 
     return next.handle(authReq).pipe(
       catchError((error: HttpErrorResponse) => {
+        // Error funcional de Google Calendar (OAuth invalid_grant):
+        // no implica sesión inválida de VetPlus, por lo tanto NO cerrar sesión.
+        if (this.isGoogleCalendarReauthError(error, req)) {
+          return throwError(() => error);
+        }
+
         // Manejar errores de autenticación
         if (error.status === 401 && !this.isLoggingOut) {
           // Verificar si es un error de token expirado (no de credenciales inválidas)
@@ -127,6 +133,22 @@ export class AuthInterceptor implements HttpInterceptor {
     return errorCode === 'INVALID_TOKEN' ||
            errorMessage.includes('expirado') ||
            errorMessage.includes('expired');
+  }
+
+  // Detecta errores de OAuth de Google Calendar sin afectar la sesión de VetPlus
+  private isGoogleCalendarReauthError(error: HttpErrorResponse, req: HttpRequest<any>): boolean {
+    const isGoogleCalendarEndpoint = req.url.includes('/google-calendar/');
+    if (!isGoogleCalendarEndpoint) return false;
+
+    const backendCode = String(error?.error?.code || '').toUpperCase();
+    const backendRequiresReauth = error?.error?.requires_reauth === true;
+    const backendError = String(error?.error?.error || '').toLowerCase();
+    const backendMessage = String(error?.error?.message || '').toLowerCase();
+
+    return backendCode === 'GOOGLE_REAUTH_REQUIRED'
+      || backendRequiresReauth
+      || backendError.includes('invalid_grant')
+      || backendMessage.includes('invalid_grant');
   }
 
   // Manejar token expirado intentando refresh

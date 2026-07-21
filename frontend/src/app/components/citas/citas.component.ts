@@ -19,6 +19,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 
 // FullCalendar imports
 import { FullCalendarModule } from '@fullcalendar/angular';
@@ -31,6 +32,7 @@ import esLocale from '@fullcalendar/core/locales/es';
 import { CitasService } from '../../services/citas.service';
 import { ExportService, ExportOptions } from '../../services/export.service';
 import { AuthService } from '../../services/auth.service';
+import { ConfiguracionService, DiaEspecial } from '../../services/configuracion.service';
 import { ExportDialogComponent } from './export-dialog.component';
 import {
   Cita,
@@ -82,9 +84,11 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
   citas = signal<Cita[]>([]);
   veterinarios = signal<any[]>([]);
   currentView = signal<string>('timeGridFiveDay');
+  currentCalendarDate = signal<Date>(new Date());
 
   // Signal para controlar si mostrar el botón de sincronización manual
   showManualSyncButton = signal(true);
+  diasEspeciales = signal<DiaEspecial[]>([]);
 
   // Signal para controlar el modo de vista (plana vs calendario)
   viewMode = signal<'plana' | 'calendario'>('plana');
@@ -93,6 +97,10 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Timestamp de cuando se carga la vista
   private viewLoadTime: number = 0;  // Formulario de filtros
+  private dashboardStartDate: string | null = null;
+  private dashboardEndDate: string | null = null;
+  private dashboardFocus: 'dia' | 'semana' | null = null;
+
   filterForm: FormGroup;
 
   // Constantes
@@ -113,17 +121,22 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
       timeGridFiveDay: {
         type: 'timeGrid',
         duration: { days: 5 },
-        buttonText: 'Semana'
+        buttonText: 'Semana',
+        dayHeaderFormat: { weekday: 'short', day: 'numeric' }
+      },
+      timeGridDay: {
+        dayHeaders: false
       }
     },
-    // El día actual siempre es el 2do día visible: la semana arranca desde ayer
-    firstDay: (new Date().getDay() - 1 + 7) % 7,
+    // Semana inicia en lunes para evitar encabezados desalineados por día actual.
+    firstDay: 1,
     height: 'auto', // Cambiar a auto para que se ajuste automáticamente
     contentHeight: 'auto',
     aspectRatio: 1.35, // Ratio más amplio para mejor visualización
     editable: true,
     selectable: true,
     selectMirror: true,
+    dateClick: this.handleDateClick.bind(this),
     dayMaxEvents: false, // Mostrar todos los eventos sin scroll
     weekends: true,
     businessHours: {
@@ -160,14 +173,20 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
       start: '2020-01-01',
       end: '2030-12-31'
     },
+    selectAllow: this.isCalendarSlotSelectable.bind(this),
     select: this.handleDateSelect.bind(this),
     eventClick: this.handleEventClick.bind(this),
     eventDrop: this.handleEventDrop.bind(this),
     eventResize: this.handleEventResize.bind(this),
+    dayCellClassNames: this.getDayCellClassNames.bind(this),
+    dayHeaderClassNames: this.getDayHeaderClassNames.bind(this),
+    dayCellDidMount: this.onDayCellDidMount.bind(this),
+    dayHeaderDidMount: this.onDayHeaderDidMount.bind(this),
+    datesSet: this.onCalendarDatesSet.bind(this),
     events: [],
     eventContent: this.renderEventContent.bind(this),
     // Configuraciones específicas para timeGrid
-    dayHeaderFormat: { weekday: 'short', day: 'numeric' },
+    dayHeaderFormat: { weekday: 'short' },
     slotEventOverlap: true, // Permitir visualizar eventos solapados
     eventMaxStack: 4,
     eventMinHeight: 20,
@@ -183,9 +202,11 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
     height: 'auto',
     contentHeight: 'auto',
     allDaySlot: false,
+    dayHeaders: false,
     nowIndicator: true,
     editable: false,
     selectable: false,
+    dateClick: this.handleDateClick.bind(this),
     slotMinTime: '07:00:00',
     slotMaxTime: '18:00:00',
     slotDuration: '00:30:00',
@@ -207,6 +228,10 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
     eventMinHeight: 20,
     eventShortHeight: 16,
     events: [],
+    dayCellClassNames: this.getDayCellClassNames.bind(this),
+    dayHeaderClassNames: this.getDayHeaderClassNames.bind(this),
+    dayCellDidMount: this.onDayCellDidMount.bind(this),
+    dayHeaderDidMount: this.onDayHeaderDidMount.bind(this),
     eventClick: this.handleEventClick.bind(this),
     eventContent: this.renderEventContent.bind(this)
   };
@@ -217,9 +242,11 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
     private citasService: CitasService,
     private exportService: ExportService,
     private authService: AuthService,
+    private configuracionService: ConfiguracionService,
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
-    private router: Router
+    private router: Router,
+    private route: ActivatedRoute
   ) {
     this.filterForm = this.fb.group({
       id_veterinario: [''],
@@ -231,10 +258,36 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
   ngOnInit(): void {
     this.viewLoadTime = Date.now();
 
+    const query = this.route.snapshot.queryParamMap;
+
+    this.dashboardStartDate = query.get('fecha_inicio');
+    this.dashboardEndDate = query.get('fecha_fin');
+    const foco = query.get('foco');
+    this.dashboardFocus = foco === 'dia' || foco === 'semana' ? foco : null;
+    const estado = query.get('estado');
+
+    if (estado) {
+      this.filterForm.patchValue({ estado });
+    }
+
     // Verificar si se solicita vista de calendario desde URL
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('view') === 'calendario') {
+    if (query.get('view') === 'calendario') {
       this.viewMode.set('calendario');
+
+      if (this.dashboardFocus === 'dia') {
+        this.currentView.set('timeGridDay');
+        this.calendarOptions = {
+          ...this.calendarOptions,
+          initialView: 'timeGridDay'
+        };
+      } else if (this.dashboardFocus === 'semana') {
+        this.currentView.set('timeGridFiveDay');
+        this.calendarOptions = {
+          ...this.calendarOptions,
+          initialView: 'timeGridFiveDay'
+        };
+      }
+
       // Aplicar clase al body para ocultar sidebar cuando estamos en modo calendario
       document.body.classList.add('fullscreen-calendar-mode');
     }
@@ -242,6 +295,7 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
     // Defer initial load to next tick to avoid ExpressionChangedAfterItHasBeenCheckedError
     setTimeout(() => {
       this.loadInitialData();
+      this.loadDiasEspeciales();
       this.loadCalendarEvents();
       this.loadStats();
       this.setupFilters();
@@ -275,6 +329,342 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
     this.loadVeterinarios();
   }
 
+  private loadDiasEspeciales(): void {
+    this.configuracionService.getDiasEspeciales().subscribe({
+      next: (dias) => {
+        this.diasEspeciales.set((dias || []).filter((d) => d?.activo !== false));
+        this.refreshCalendarDecorators();
+        this.updateToolbarSpecialBadge();
+      },
+      error: (error) => {
+        console.warn('No fue posible cargar días especiales para calendario:', error);
+        this.diasEspeciales.set([]);
+        this.refreshCalendarDecorators();
+        this.updateToolbarSpecialBadge();
+      }
+    });
+  }
+
+  private refreshCalendarDecorators(): void {
+    this.calendarOptions = {
+      ...this.calendarOptions,
+      dayCellClassNames: this.getDayCellClassNames.bind(this),
+      dayHeaderClassNames: this.getDayHeaderClassNames.bind(this),
+      dayCellDidMount: this.onDayCellDidMount.bind(this),
+      dayHeaderDidMount: this.onDayHeaderDidMount.bind(this)
+    };
+
+    this.dayCalendarOptions = {
+      ...this.dayCalendarOptions,
+      dayCellClassNames: this.getDayCellClassNames.bind(this),
+      dayHeaderClassNames: this.getDayHeaderClassNames.bind(this),
+      dayCellDidMount: this.onDayCellDidMount.bind(this),
+      dayHeaderDidMount: this.onDayHeaderDidMount.bind(this)
+    };
+
+    this.applyCalendarEventLayers();
+    this.queueCalendarResize();
+  }
+
+  private onCalendarDatesSet(arg: any): void {
+    if (arg?.view?.type) {
+      this.currentView.set(arg.view.type);
+    }
+    if (arg?.view?.currentStart instanceof Date) {
+      this.currentCalendarDate.set(new Date(arg.view.currentStart));
+    }
+
+    this.updateToolbarSpecialBadge();
+  }
+
+  private updateToolbarSpecialBadge(): void {
+    setTimeout(() => {
+      const calendarApi = this.calendarComponent?.getApi?.();
+      const root = calendarApi?.el as HTMLElement | undefined;
+      if (!root) return;
+
+      const titleEl = root.querySelector('.fc-toolbar-title');
+      if (!titleEl) return;
+
+      titleEl.querySelectorAll('.calendar-toolbar-special').forEach((el) => el.remove());
+
+      const dia = this.getCurrentCalendarSpecial();
+      if (!dia) return;
+
+      const badge = document.createElement('span');
+      badge.className = 'calendar-toolbar-special';
+      badge.textContent = this.getCurrentCalendarSpecialLabel();
+      titleEl.appendChild(badge);
+    }, 0);
+  }
+
+  private getDateYmd(value: Date): string {
+    const yyyy = value.getFullYear();
+    const mm = String(value.getMonth() + 1).padStart(2, '0');
+    const dd = String(value.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  private normalizeDiaEspecialDate(value: unknown): string | null {
+    if (!value) return null;
+    if (typeof value === 'string') {
+      const ymdMatch = value.match(/^(\d{4}-\d{2}-\d{2})/);
+      return ymdMatch ? ymdMatch[1] : null;
+    }
+
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return this.getDateYmd(value);
+    }
+
+    return null;
+  }
+
+  private getSpecialDaysForDate(date: Date): DiaEspecial[] {
+    const ymd = this.getDateYmd(date);
+    const items = this.diasEspeciales();
+    if (!items || items.length === 0) return [];
+
+    const priority: Record<string, number> = {
+      no_laborable: 0,
+      horario_especial: 1,
+      ausencia: 2,
+      cumpleanos: 3,
+      festivo: 4
+    };
+
+    return items
+      .filter((d) => this.normalizeDiaEspecialDate(d.fecha) === ymd)
+      .sort((a, b) => (priority[a.tipo] ?? 99) - (priority[b.tipo] ?? 99));
+  }
+
+  private getSpecialDayForDate(date: Date): DiaEspecial | null {
+    return this.getSpecialDaysForDate(date)[0] || null;
+  }
+
+  private parseHmToMinutes(value: string): number | null {
+    const raw = String(value || '').trim();
+    const match = raw.match(/^(\d{2}):(\d{2})/);
+    if (!match) return null;
+    return Number(match[1]) * 60 + Number(match[2]);
+  }
+
+  private timeToMinutes(value: Date): number {
+    return value.getHours() * 60 + value.getMinutes();
+  }
+
+  private getHorarioEspecialForDate(date: Date): DiaEspecial | null {
+    return this.getSpecialDaysForDate(date).find((d) => d.tipo === 'horario_especial') || null;
+  }
+
+  private buildNotAllowedRangeOverlays(startDate: Date, endDate: Date): EventInput[] {
+    const overlays: EventInput[] = [];
+    const cursor = new Date(startDate);
+    cursor.setHours(0, 0, 0, 0);
+
+    const endBoundary = new Date(endDate);
+    endBoundary.setHours(23, 59, 59, 999);
+
+    while (cursor <= endBoundary) {
+      const current = new Date(cursor);
+      const ymd = this.getDateYmd(current);
+      const dias = this.getSpecialDaysForDate(current);
+
+      const noLaborable = dias.find((d) => d.tipo === 'no_laborable');
+      if (noLaborable) {
+        overlays.push({
+          id: `overlay-no-laborable-${ymd}`,
+          start: `${ymd}T00:00:00`,
+          end: `${ymd}T23:59:59`,
+          display: 'background',
+          classNames: ['overlay-not-allowed', 'overlay-no-laborable'],
+          extendedProps: { overlayType: 'no_laborable' }
+        });
+
+        cursor.setDate(cursor.getDate() + 1);
+        continue;
+      }
+
+      const horario = dias.find((d) => d.tipo === 'horario_especial');
+      if (horario) {
+        const allowedStart = this.parseHmToMinutes(horario.horario_especial?.hora_inicio || '');
+        const allowedEnd = this.parseHmToMinutes(horario.horario_especial?.hora_fin || '');
+
+        if (allowedStart !== null && allowedEnd !== null) {
+          const startHour = String(Math.floor(allowedStart / 60)).padStart(2, '0');
+          const startMinute = String(allowedStart % 60).padStart(2, '0');
+          const endHour = String(Math.floor(allowedEnd / 60)).padStart(2, '0');
+          const endMinute = String(allowedEnd % 60).padStart(2, '0');
+
+          overlays.push({
+            id: `overlay-horario-early-${ymd}`,
+            start: `${ymd}T00:00:00`,
+            end: `${ymd}T${startHour}:${startMinute}:00`,
+            display: 'background',
+            classNames: ['overlay-not-allowed', 'overlay-horario-especial'],
+            extendedProps: { overlayType: 'horario_especial' }
+          });
+
+          overlays.push({
+            id: `overlay-horario-late-${ymd}`,
+            start: `${ymd}T${endHour}:${endMinute}:00`,
+            end: `${ymd}T23:59:59`,
+            display: 'background',
+            classNames: ['overlay-not-allowed', 'overlay-horario-especial'],
+            extendedProps: { overlayType: 'horario_especial' }
+          });
+        }
+      }
+
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return overlays;
+  }
+
+  private getDateTimeBlockReason(start: Date, end?: Date): string | null {
+    const ymd = this.getDateYmd(start);
+    const dias = this.getSpecialDaysForDate(start);
+
+    const noLaborable = dias.find((d) => d.tipo === 'no_laborable');
+    if (noLaborable) {
+      return `No se puede agendar en ${ymd} (día no laborable).`;
+    }
+
+    const horario = dias.find((d) => d.tipo === 'horario_especial');
+    if (!horario) {
+      return null;
+    }
+
+    const allowedStart = this.parseHmToMinutes(horario.horario_especial?.hora_inicio || '');
+    const allowedEnd = this.parseHmToMinutes(horario.horario_especial?.hora_fin || '');
+    if (allowedStart === null || allowedEnd === null) {
+      return `No se puede agendar en ${ymd} por configuración de horario reducido.`;
+    }
+
+    const slotStart = this.timeToMinutes(start);
+    const slotEnd = end ? this.timeToMinutes(end) : (slotStart + 60);
+    if (slotStart < allowedStart || slotEnd > allowedEnd) {
+      return `No se puede agendar fuera del horario permitido (${horario.horario_especial?.hora_inicio}-${horario.horario_especial?.hora_fin}) en ${ymd}.`;
+    }
+
+    return null;
+  }
+
+  private isCalendarSlotSelectable(selectInfo: any): boolean {
+    const start = selectInfo?.start instanceof Date ? selectInfo.start : null;
+    const end = selectInfo?.end instanceof Date ? selectInfo.end : null;
+    if (!start) return false;
+    return !this.getDateTimeBlockReason(start, end || undefined);
+  }
+
+  private getDayCellClassNames(arg: any): string[] {
+    const dias = this.getSpecialDaysForDate(arg?.date);
+    if (dias.length === 0) return [];
+    return dias.map((d) => `dia-${d.tipo}`);
+  }
+
+  private getDayHeaderClassNames(arg: any): string[] {
+    const dias = this.getSpecialDaysForDate(arg?.date);
+    if (dias.length === 0) return [];
+    return dias.map((d) => `dia-${d.tipo}`);
+  }
+
+  private getSpecialDayBadgeLabel(dia: DiaEspecial): string {
+    if (dia.tipo === 'no_laborable') return 'NO LABORABLE';
+    if (dia.tipo === 'horario_especial') return 'HORARIO REDUCIDO';
+    if (dia.tipo === 'ausencia') return 'AUSENCIA';
+    if (dia.tipo === 'cumpleanos') return 'CUMPLEAÑOS';
+    return 'FESTIVO';
+  }
+
+  private getSpecialDayBadgeLabels(dias: DiaEspecial[]): string {
+    return dias.map((d) => this.getSpecialDayBadgeLabel(d)).join(' | ');
+  }
+
+  private onDayCellDidMount(arg: any): void {
+    const dias = this.getSpecialDaysForDate(arg?.date);
+    if (dias.length === 0) return;
+
+    dias.forEach((dia) => arg.el.classList.add(`dia-${dia.tipo}`));
+
+    // Etiqueta de festivo en vista mes sobre el número del día (1, 18, etc.).
+    if (arg?.view?.type === 'dayGridMonth') {
+      const dayTop = arg.el.querySelector('.fc-daygrid-day-top');
+      if (dayTop && !dayTop.querySelector('.day-special-dot')) {
+        const dot = document.createElement('span');
+        dot.className = 'day-special-dot';
+        dot.textContent = this.getSpecialDayBadgeLabels(dias);
+        dayTop.appendChild(dot);
+      }
+    }
+  }
+
+  private onDayHeaderDidMount(arg: any): void {
+    const dias = this.getSpecialDaysForDate(arg?.date);
+    if (dias.length === 0) return;
+
+    dias.forEach((dia) => arg.el.classList.add(`dia-${dia.tipo}`));
+
+    if (arg.el.querySelector('.day-special-badge')) {
+      return;
+    }
+
+    const badge = document.createElement('span');
+    badge.className = 'day-special-badge';
+    badge.textContent = this.getSpecialDayBadgeLabels(dias);
+
+    const inner = arg.el.querySelector('.fc-col-header-cell-cushion');
+    if (inner) {
+      inner.appendChild(badge);
+    }
+  }
+
+  getSelectedDaySpecial(): DiaEspecial | null {
+    return this.getSpecialDayForDate(this.selectedDate());
+  }
+
+  getSelectedDaySpecials(): DiaEspecial[] {
+    return this.getSpecialDaysForDate(this.selectedDate());
+  }
+
+  getSelectedDaySpecialLabel(): string {
+    const dias = this.getSelectedDaySpecials();
+    if (dias.length === 0) return '';
+    return dias
+      .map((dia) => {
+        const base = this.getSpecialDayBadgeLabel(dia);
+        return dia.descripcion ? `${base}: ${dia.descripcion}` : base;
+      })
+      .join(' | ');
+  }
+
+  getCurrentCalendarSpecial(): DiaEspecial | null {
+    if (this.currentView() !== 'timeGridDay') return null;
+    return this.getSpecialDayForDate(this.currentCalendarDate());
+  }
+
+  getCurrentCalendarSpecials(): DiaEspecial[] {
+    if (this.currentView() !== 'timeGridDay') return [];
+    return this.getSpecialDaysForDate(this.currentCalendarDate());
+  }
+
+  getCurrentCalendarSpecialLabel(): string {
+    const dias = this.getCurrentCalendarSpecials();
+    if (dias.length === 0) return '';
+    return dias
+      .map((dia) => {
+        const base = this.getSpecialDayBadgeLabel(dia);
+        return dia.descripcion ? `${base}: ${dia.descripcion}` : base;
+      })
+      .join(' | ');
+  }
+
+  calendarDateClass = (date: Date): string[] => {
+    const dias = this.getSpecialDaysForDate(date);
+    if (dias.length === 0) return [];
+    return dias.map((d) => `dia-${d.tipo}-mini`);
+  }
+
   private loadVeterinarios(): void {
     this.citasService.getVeterinarios().subscribe({
       next: (response) => {
@@ -297,11 +687,7 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private loadCalendarEvents(): void {
     this.loading.set(true);
-
-    // Usar un rango amplio que cubra varios meses para que FullCalendar maneje la navegación
-    const now = new Date();
-    const startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1); // 2 meses atrás
-    const endDate = new Date(now.getFullYear(), now.getMonth() + 4, 0);   // 4 meses adelante
+    const { startDate, endDate } = this.getCalendarFetchRange();
 
     const filters: CitaFilter = {
       id_veterinario: this.filterForm.value.id_veterinario || undefined,
@@ -315,22 +701,8 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
       next: (response) => {
         const data = response?.data;
         const citasArray = Array.isArray(data) ? data : [];
-
-        const events = this.transformCitasToEvents(citasArray);
-
-        // Calcular rango horario dinámico (base 07:00-18:00, ampliar si hay citas fuera)
-        const { slotMinTime, slotMaxTime } = this.calcularRangoHorario(citasArray);
-
-        // Actualizar eventos
-        this.calendarOptions = {
-          ...this.calendarOptions,
-          events: events,
-          slotMinTime,
-          slotMaxTime
-        };
-
         this.citas.set(citasArray);
-        this.updateDayCalendar();
+        this.applyCalendarEventLayers();
         this.loading.set(false);
       },
       error: (error) => {
@@ -348,10 +720,42 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
         }
 
         this.citas.set([]);
-        this.updateDayCalendar();
+        this.applyCalendarEventLayers();
         this.loading.set(false);
       }
     });
+  }
+
+  private getCalendarFetchRange(): { startDate: Date; endDate: Date } {
+    const now = new Date();
+    const startDate = this.dashboardStartDate
+      ? new Date(`${this.dashboardStartDate}T00:00:00`)
+      : new Date(now.getFullYear(), now.getMonth() - 2, 1);
+    const endDate = this.dashboardEndDate
+      ? new Date(`${this.dashboardEndDate}T23:59:59`)
+      : new Date(now.getFullYear(), now.getMonth() + 4, 0);
+
+    return { startDate, endDate };
+  }
+
+  private applyCalendarEventLayers(): void {
+    const citasArray = this.citas();
+    const { startDate, endDate } = this.getCalendarFetchRange();
+    const citaEvents = this.transformCitasToEvents(citasArray);
+    const overlayEvents = this.buildNotAllowedRangeOverlays(startDate, endDate);
+
+    // Calcular rango horario dinámico (base 07:00-18:00, ampliar si hay citas fuera)
+    const { slotMinTime, slotMaxTime } = this.calcularRangoHorario(citasArray);
+    const forceDayRange = this.currentView() === 'timeGridDay';
+
+    this.calendarOptions = {
+      ...this.calendarOptions,
+      events: [...overlayEvents, ...citaEvents],
+      slotMinTime: forceDayRange ? '07:00:00' : slotMinTime,
+      slotMaxTime: forceDayRange ? '18:00:00' : slotMaxTime
+    };
+
+    this.updateDayCalendar();
   }
 
 
@@ -489,8 +893,34 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Event Handlers del Calendario
   handleDateSelect(selectInfo: any): void {
+    const reason = this.getDateTimeBlockReason(selectInfo.start, selectInfo.end);
+    if (reason) {
+      this.snackBar.open(reason, 'Cerrar', { duration: 4500 });
+      return;
+    }
+
     // Abrir diálogo para crear nueva cita
     this.openCreateDialog(selectInfo.start, selectInfo.end);
+  }
+
+  handleDateClick(clickInfo: any): void {
+    const start = clickInfo?.date instanceof Date ? new Date(clickInfo.date) : new Date();
+
+    // En vista mes (all-day), precargar una hora razonable para creación rápida.
+    if (clickInfo?.allDay || clickInfo?.view?.type === 'dayGridMonth') {
+      const horario = this.getHorarioEspecialForDate(start);
+      const firstAllowed = this.parseHmToMinutes(horario?.horario_especial?.hora_inicio || '08:00');
+      const minutes = firstAllowed ?? (8 * 60);
+      start.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+    }
+
+    const end = new Date(start.getTime() + 60 * 60 * 1000);
+    const reason = this.getDateTimeBlockReason(start, end);
+    if (reason) {
+      this.snackBar.open(reason, 'Cerrar', { duration: 4500 });
+      return;
+    }
+    this.openCreateDialog(start, end);
   }
 
   handleEventClick(clickInfo: EventClickArg): void {
@@ -544,6 +974,10 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   renderEventContent(eventInfo: any): any {
+    if (eventInfo?.event?.extendedProps?.overlayType) {
+      return { html: '' };
+    }
+
     const cita = eventInfo.event.extendedProps['cita'] as Cita;
     const estado = eventInfo.event.extendedProps['estado'] || 'confirmada';
     const tipoToken = eventInfo.event.extendedProps['tipoToken'] || this.getTipoToken(cita?.tipo || '');
@@ -551,13 +985,12 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
     // Validar que cita existe
     if (!cita) {
       const fallbackHour = this.formatearHoraEvento(eventInfo.event.start ?? new Date());
+      const dot = this.getEstadoDot('confirmada');
       return {
         html: `
           <div class="event-simple event-type-general event-state-confirmada">
             <div class="event-header-simple">
-              <span class="event-status-dot state-confirmada"></span>
-              <span class="event-time">${fallbackHour}</span>
-            </div>
+              <span class="event-time">${dot}&nbsp;${fallbackHour}</span>
             <div class="event-patient">${eventInfo.event.title || ''}</div>
           </div>
         `
@@ -567,20 +1000,30 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
     const estadoNormalizado = this.normalizeEstado(estado);
     const nombreMascota = this.sanitizeInlineText(cita.mascota_nombre || 'Mascota');
     const horaInicio = this.formatearHoraEvento(cita.fecha_inicio);
+    const dot = this.getEstadoDot(estadoNormalizado);
 
     return {
       html: `
         <div class="event-simple event-type-${tipoToken} event-state-${estadoNormalizado}">
           <div class="event-header-simple">
-            <span class="event-status-dot state-${estadoNormalizado}"></span>
-            <span class="event-time">${horaInicio}</span>
-          </div>
+            <span class="event-time">${dot}&nbsp;${horaInicio}</span>
           <div class="event-patient">${nombreMascota}</div>
         </div>
       `
     };
   }
 
+
+  private getEstadoDot(estado: 'confirmada' | 'en_curso' | 'completada' | 'no_asistio'): string {
+    const dots: Record<'confirmada' | 'en_curso' | 'completada' | 'no_asistio', string> = {
+      confirmada: '🔵',
+      en_curso: '🟣',
+      completada: '🟢',
+      no_asistio: '🔴'
+    };
+
+    return dots[estado] || '⚪';
+  }
 
   private extraerHoraInicio(timeText: string): string {
     // Si el formato es "8:00 - 8:30", extraer solo "8:00"
@@ -631,9 +1074,14 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
     const newView = event.value;
     this.currentView.set(newView);
     // Update calendar options to force view change
+    const dayViewRange = newView === 'timeGridDay'
+      ? { slotMinTime: '07:00:00', slotMaxTime: '18:00:00' }
+      : {};
+
     this.calendarOptions = {
       ...this.calendarOptions,
-      initialView: newView as any
+      initialView: newView as any,
+      ...dayViewRange
     };
   }
 
@@ -698,10 +1146,20 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
     console.error(message + ':', error);
 
     let userMessage = message;
-    if (error.status === 404) {
+    const backendCode = error?.error?.code;
+    const backendError = String(error?.error?.error || '').toLowerCase();
+    const requiresReauth = error?.error?.requires_reauth === true
+      || backendCode === 'GOOGLE_REAUTH_REQUIRED'
+      || backendError.includes('invalid_grant');
+
+    if (requiresReauth) {
+      userMessage = 'La autorización de Google Calendar expiró o fue revocada. Reautoriza la integración en Configuración > Google Calendar.';
+    } else if (error.status === 404) {
       userMessage = 'Servicio de sincronización no disponible';
-    } else if (error.status === 401) {
+    } else if (error.status === 403) {
       userMessage = 'No tienes permisos para sincronizar';
+    } else if (error.status === 401) {
+      userMessage = 'Sesión no autorizada. Inicia sesión nuevamente.';
     } else if (error.status === 500) {
       userMessage = 'Error interno del servidor';
     } else if (error.status === 0) {
@@ -768,6 +1226,7 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
       setTimeout(() => {
         if (this.calendarComponent?.getApi) {
           this.calendarComponent.getApi().updateSize();
+          this.updateToolbarSpecialBadge();
         }
       }, 150);
       return;
@@ -858,7 +1317,9 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
   private updateDayCalendar(): void {
     const selected = new Date(this.selectedDate());
     const citasVisibles = this.citasVisiblesDelDiaSeleccionado();
-    const events = this.transformCitasToEvents(citasVisibles as Cita[]);
+    const citaEvents = this.transformCitasToEvents(citasVisibles as Cita[]);
+    const overlayEvents = this.buildNotAllowedRangeOverlays(selected, selected);
+    const events = [...overlayEvents, ...citaEvents];
     const { slotMinTime, slotMaxTime } = this.calcularRangoHorarioVistaDia(citasVisibles as Cita[]);
 
     this.dayCalendarOptions = {
@@ -1186,7 +1647,7 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
     const textos: { [key: string]: string } = {
       'domicilio': 'Domicilio',
       'sin_clasificar': 'Sin Clasificar',
-      'valoracion': 'Valoración (Primera Vez)',
+      'valoracion': 'Valoración',
       'hidroterapia': 'Hidroterapia',
       'terapia': 'Terapia',
       'control': 'Control',

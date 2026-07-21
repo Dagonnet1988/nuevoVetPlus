@@ -6,6 +6,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
+import { applyColombiaHolidaysSeed } from './seeds/colombiaHolidaysSeed.js';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -373,7 +374,8 @@ class DBInit {
       { name: 'historias_clinicas', schema: 'clinical' },
       { name: 'calendario_citas', schema: 'clinical' },
       { name: 'configuracion_empresa', schema: 'system' },
-      { name: 'log_auditoria', schema: 'system' }
+      { name: 'log_auditoria', schema: 'system' },
+      { name: 'dias_especiales', schema: 'system' }
     ];
     
     for (const table of tables) {
@@ -382,6 +384,16 @@ class DBInit {
     }
     
     console.log('='.repeat(50));
+  }
+
+  async applyPerformanceIndexes() {
+    const filePath = path.join(this.schemasPath, '12_performance_indexes.sql');
+    try {
+      await fs.access(filePath);
+      await this.executeSQL(filePath, 'Índices de performance');
+    } catch (error) {
+      console.log('⚠️  Archivo de índices de performance no encontrado, saltando...');
+    }
   }
 
   /**
@@ -415,6 +427,8 @@ class DBInit {
         console.log('✅ Sistema ya está completamente inicializado');
         // Crear superadmin si aún no existe (upgrade desde versión anterior)
         await this.createInitialSuperadmin();
+        await this.seedColombiaHolidays();
+        await this.applyPerformanceIndexes();
         console.log('⏭️  Saltando inicialización completa de schemas base...');
         
         // Mostrar estado del sistema
@@ -439,7 +453,9 @@ class DBInit {
         { file: '06_empresa_config.sql', desc: 'Configuración de empresa' },
         { file: '07_workflow_integration.sql', desc: 'Integraciones de workflow y notificaciones' },
         { file: '08_audit_expansion.sql', desc: 'Expansión sistema auditoría' },
-        { file: '10_consentimientos.sql', desc: 'Módulo de consentimiento de datos' }
+        { file: '09_holidays.sql', desc: 'Tabla de festivos nacionales (Colombia)' },
+        { file: '10_consentimientos.sql', desc: 'Módulo de consentimiento de datos' },
+        { file: '12_performance_indexes.sql', desc: 'Índices de performance' }
       ];
       
       for (const { file, desc } of schemaFiles) {
@@ -463,6 +479,7 @@ class DBInit {
 
       // 6. Crear superadmin automáticamente desde variables de entorno
       await this.createInitialSuperadmin();
+      await this.seedColombiaHolidays();
       
       // 6. Mostrar estado final
       await this.checkSystemStatus();
@@ -569,6 +586,88 @@ class DBInit {
       console.log('   Puedes iniciar sesión en /superadmin/login');
     } catch (error) {
       console.error('❌ Error creando superadmin inicial:', error.message);
+    }
+  }
+
+  /**
+   * Crea/actualiza la tabla unificada de dias especiales y carga seed global de festivos.
+   * Se ejecuta en cada arranque de forma idempotente.
+   */
+  async seedColombiaHolidays() {
+    const client = new Client(this.config);
+    try {
+      await client.connect();
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS system.dias_especiales (
+          id_dia_especial UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          id_tenant UUID NULL,
+          fecha DATE NOT NULL,
+          descripcion VARCHAR(180) NOT NULL,
+          tipo VARCHAR(30) NOT NULL,
+          hora_inicio TIME NULL,
+          hora_fin TIME NULL,
+          metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+          activo BOOLEAN NOT NULL DEFAULT true,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          created_by UUID NULL,
+          updated_by UUID NULL
+        )
+      `);
+
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_dias_especiales_scope_fecha_tipo_desc
+          ON system.dias_especiales (
+            COALESCE(id_tenant, '00000000-0000-0000-0000-000000000000'::uuid),
+            fecha,
+            tipo,
+            descripcion
+          )
+      `);
+
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_dias_especiales_fecha
+          ON system.dias_especiales(fecha)
+      `);
+
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_dias_especiales_tenant
+          ON system.dias_especiales(id_tenant)
+      `);
+
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_dias_especiales_tipo
+          ON system.dias_especiales(tipo)
+      `);
+
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_dias_especiales_activo
+          ON system.dias_especiales(activo)
+      `);
+
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_trigger
+            WHERE tgname = 'update_dias_especiales_updated_at'
+          ) THEN
+            CREATE TRIGGER update_dias_especiales_updated_at
+            BEFORE UPDATE ON system.dias_especiales
+            FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+          END IF;
+        END;
+        $$;
+      `);
+
+      const { inserted, updated } = await applyColombiaHolidaysSeed(client);
+
+      console.log(`✅ Festivos Colombia seed aplicado: insertados=${inserted}, actualizados=${updated}`);
+    } catch (error) {
+      console.error('❌ Error cargando seed de festivos Colombia:', error.message);
+    } finally {
+      try { await client.end(); } catch {}
     }
   }
 

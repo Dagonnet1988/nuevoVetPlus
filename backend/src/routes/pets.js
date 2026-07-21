@@ -19,8 +19,13 @@ import {
 
 import { authenticateToken, authorize } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validateRequest.js';
+import { cacheInvalidation, intelligentCaching, reportsCache } from '../middleware/performance.js';
 
 const router = express.Router();
+
+router.use(cacheInvalidation(['.*pets.*', '.*pacientes.*', '.*clients.*', '.*clientes.*']));
+
+const petsReadCache = intelligentCaching({ ttl: 60 });
 
 // 🔒 Todas las rutas requieren autenticación
 router.use(authenticateToken);
@@ -40,6 +45,7 @@ router.get('/',
     authorize(['admin', 'vet', 'aux']),
     validatePetSearch,
     validateRequest,
+    petsReadCache,
     getPets
 );
 
@@ -47,6 +53,7 @@ router.get('/',
 // GET /api/clinical/pets/stats
 router.get('/stats',
     authorize(['admin', 'vet']),
+    reportsCache,
     getPetStats
 );
 
@@ -56,6 +63,7 @@ router.get('/client/:id',
     authorize(['admin', 'vet', 'aux']),
     validateClientId,
     validateRequest,
+    petsReadCache,
     getPetsByClient
 );
 
@@ -65,6 +73,7 @@ router.get('/:id',
     authorize(['admin', 'vet', 'aux']),
     validatePetId,
     validateRequest,
+    petsReadCache,
     getPetById
 );
 

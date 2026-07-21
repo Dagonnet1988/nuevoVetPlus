@@ -195,14 +195,52 @@ CREATE TABLE clinical.calendario_citas (
     -- Multi-tenancy
     id_tenant UUID NOT NULL DEFAULT system.get_default_tenant()
         REFERENCES system.tenants(id_tenant) ON DELETE RESTRICT,
+    id_serie UUID,
+    indice_serie INTEGER,
+    es_excepcion_serie BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by UUID REFERENCES vetplus_auth.usuarios(id_usuario)
 );
 
+-- Tabla de series para citas periódicas
+CREATE TABLE clinical.calendario_series (
+    id_serie UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    codigo_serie VARCHAR(24) UNIQUE NOT NULL DEFAULT generate_unique_code('SER-'),
+    id_mascota UUID NOT NULL REFERENCES clinical.mascotas(id_mascota),
+    id_veterinario UUID NOT NULL REFERENCES vetplus_auth.usuarios(id_usuario),
+    tipo VARCHAR(30) NOT NULL,
+    estado_inicial VARCHAR(20) NOT NULL DEFAULT 'confirmada'
+        CHECK (estado_inicial IN ('confirmada', 'en_curso', 'completada', 'no_asistio')),
+    motivo TEXT,
+    notas TEXT,
+    duracion_minutos INTEGER NOT NULL CHECK (duracion_minutos > 0 AND duracion_minutos <= 480),
+    fecha_inicio_base TIMESTAMP NOT NULL,
+    frecuencia VARCHAR(20) NOT NULL CHECK (frecuencia IN ('daily', 'weekly')),
+    intervalo INTEGER NOT NULL DEFAULT 1 CHECK (intervalo >= 1 AND intervalo <= 12),
+    dias_semana SMALLINT[] NOT NULL DEFAULT ARRAY[]::SMALLINT[],
+    total_ocurrencias INTEGER CHECK (total_ocurrencias >= 1 AND total_ocurrencias <= 200),
+    fecha_hasta DATE,
+    activa BOOLEAN NOT NULL DEFAULT true,
+    id_tenant UUID NOT NULL DEFAULT system.get_default_tenant()
+        REFERENCES system.tenants(id_tenant) ON DELETE RESTRICT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by UUID REFERENCES vetplus_auth.usuarios(id_usuario),
+    updated_by UUID REFERENCES vetplus_auth.usuarios(id_usuario)
+);
+
+ALTER TABLE clinical.calendario_citas
+    ADD CONSTRAINT fk_citas_serie
+    FOREIGN KEY (id_serie) REFERENCES clinical.calendario_series(id_serie) ON DELETE SET NULL;
+
 -- Trigger para updated_at
 CREATE TRIGGER update_calendario_updated_at 
     BEFORE UPDATE ON clinical.calendario_citas 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_calendario_series_updated_at
+    BEFORE UPDATE ON clinical.calendario_series
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Tabla de auditoría para Google Calendar
@@ -225,6 +263,7 @@ COMMENT ON TABLE clinical.historia_formula IS 'Fórmulas y recetas médicas';
 COMMENT ON TABLE clinical.historia_remision IS 'Remisiones a otros especialistas';
 COMMENT ON TABLE clinical.archivos_historia IS 'Archivos adjuntos de historias clínicas';
 COMMENT ON TABLE clinical.calendario_citas IS 'Agenda de citas y terapias';
+COMMENT ON TABLE clinical.calendario_series IS 'Reglas y metadatos de series de citas periódicas';
 COMMENT ON TABLE clinical.google_calendar_audit_log IS 'Auditoría de eventos y respuestas de Google Calendar';
 
 -- =====================================================
@@ -254,6 +293,10 @@ CREATE INDEX idx_citas_historia     ON clinical.calendario_citas(id_historia);
 CREATE INDEX idx_clientes_tenant    ON clinical.clientes(id_tenant);
 CREATE INDEX idx_mascotas_tenant    ON clinical.mascotas(id_tenant);
 CREATE INDEX idx_citas_tenant       ON clinical.calendario_citas(id_tenant);
+CREATE INDEX idx_citas_serie        ON clinical.calendario_citas(id_serie);
+CREATE INDEX idx_series_tenant      ON clinical.calendario_series(id_tenant);
+CREATE INDEX idx_series_mascota     ON clinical.calendario_series(id_mascota);
+CREATE INDEX idx_series_veterinario ON clinical.calendario_series(id_veterinario);
 -- Google Calendar
 CREATE INDEX idx_google_audit_appointment ON clinical.google_calendar_audit_log(appointment_id);
 CREATE INDEX idx_google_audit_action      ON clinical.google_calendar_audit_log(action_type);

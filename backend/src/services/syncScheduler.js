@@ -2,12 +2,74 @@ import cron from 'node-cron';
 import bidirectionalSyncService from './bidirectionalSyncService.js';
 import googleCalendarService from './googleCalendar.js';
 import { query } from '../config/database.js';
+import { sendEmail } from './emailService.js';
+import { renderEmailTemplate } from './emailTemplateService.js';
 
 class SyncScheduler {
     constructor() {
         this.jobs = new Map();
         this.isRunning = false;
         this.lastAutoSyncAt = null;
+    }
+
+    getBogotaDateString(date = new Date()) {
+        return new Date(date).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+    }
+
+    addDays(baseDate, days) {
+        const date = new Date(baseDate);
+        date.setDate(date.getDate() + days);
+        return date;
+    }
+
+    getSyncWindow() {
+        const lookbackDaysRaw = Number(process.env.GOOGLE_SYNC_LOOKBACK_DAYS ?? 7);
+        const lookaheadDaysRaw = Number(process.env.GOOGLE_SYNC_LOOKAHEAD_DAYS ?? 30);
+
+        const lookbackDays = Number.isFinite(lookbackDaysRaw) ? Math.max(0, lookbackDaysRaw) : 7;
+        const lookaheadDays = Number.isFinite(lookaheadDaysRaw) ? Math.max(0, lookaheadDaysRaw) : 30;
+
+        const now = new Date();
+        const startDate = this.getBogotaDateString(this.addDays(now, -lookbackDays));
+        const endDate = this.getBogotaDateString(this.addDays(now, lookaheadDays));
+
+        return {
+            lookbackDays,
+            lookaheadDays,
+            startDate,
+            endDate
+        };
+    }
+
+    async getClinicName(tenantId) {
+        try {
+            const result = await query(
+                `SELECT nombre_empresa
+                 FROM system.configuracion_empresa
+                 WHERE activa = true
+                   AND id_tenant = $1
+                 ORDER BY updated_at DESC NULLS LAST, created_at DESC
+                 LIMIT 1`,
+                [tenantId]
+            );
+            return result.rows[0]?.nombre_empresa || 'VetPlus Clínica';
+        } catch {
+            return 'VetPlus Clínica';
+        }
+    }
+
+    formatDateTimeForEmail(value) {
+        if (!value) return '';
+        const d = new Date(value);
+        return d.toLocaleString('es-CO', {
+            timeZone: 'America/Bogota',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
     }
 
     async getRuntimeSyncConfig() {
@@ -47,16 +109,56 @@ class SyncScheduler {
         }
     }
 
+    async handleGoogleReauthRequired(source = 'unknown') {
+        try {
+            const disconnectResult = await query(`
+                UPDATE vetplus_auth.google_calendar_config
+                SET
+                    access_token = NULL,
+                    refresh_token = NULL,
+                    token_expiry = NULL,
+                    notification_email = false,
+                    webhook_channel_id = NULL,
+                    webhook_url = NULL,
+                    webhook_expiration = NULL,
+                    webhook_resource_id = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE is_active = true
+            `);
+
+            if (disconnectResult.rowCount > 0) {
+                // Limpiar estado en memoria para evitar nuevos intentos con tokens obsoletos.
+                googleCalendarService.config = null;
+                googleCalendarService.auth = null;
+                googleCalendarService.calendar = null;
+
+                await this.logSyncActivity('google_auto_disconnected', {
+                    source,
+                    reason: 'requires_reauth'
+                });
+
+                console.warn(`⚠️ Google Calendar desconectado automáticamente por requires_reauth (source=${source})`);
+            }
+        } catch (disconnectError) {
+            console.error('❌ Error desconectando Google Calendar tras requires_reauth:', disconnectError);
+        }
+    }
+
     /**
      * Inicializar el scheduler de sincronización
      */
     async initialize() {
         try {
             console.log('🔄 Inicializando scheduler de sincronización Google Calendar...');
+
+            // Recordatorios por correo independientes de Google Calendar.
+            this.scheduleAppointmentReminders();
             
             // Verificar si Google Calendar está configurado
             if (!await googleCalendarService.hasValidTokens()) {
                 console.log('⏸️  Google Calendar no configurado - scheduler en espera');
+                this.scheduleLogCleanup();
+                this.isRunning = true;
                 return;
             }
 
@@ -72,6 +174,88 @@ class SyncScheduler {
         } catch (error) {
             console.error('❌ Error inicializando scheduler de sincronización:', error);
         }
+    }
+
+    scheduleAppointmentReminders() {
+        const reminderJob = cron.schedule('*/5 * * * *', async () => {
+            try {
+                const reminders = await query(
+                    `SELECT c.id_cita,
+                            c.id_tenant,
+                            c.codigo_cita,
+                            c.fecha_inicio,
+                            c.id_mascota,
+                            cl.nombre AS cliente_nombre,
+                            cl.email AS cliente_email,
+                            m.nombre AS mascota_nombre
+                     FROM clinical.calendario_citas c
+                     JOIN clinical.mascotas m ON m.id_mascota = c.id_mascota
+                     JOIN clinical.clientes cl ON cl.id_cliente = m.id_cliente
+                     WHERE c.estado = 'confirmada'
+                       AND COALESCE(c.recordatorio_enviado, false) = false
+                       AND cl.email IS NOT NULL
+                       AND btrim(cl.email) <> ''
+                       AND c.fecha_inicio >= (NOW() + INTERVAL '55 minutes')
+                       AND c.fecha_inicio <= (NOW() + INTERVAL '65 minutes')
+                     ORDER BY c.fecha_inicio ASC`
+                );
+
+                for (const row of reminders.rows) {
+                    try {
+                        const clinicaNombre = await this.getClinicName(row.id_tenant);
+                        const rendered = await renderEmailTemplate({
+                            tenantId: row.id_tenant,
+                            key: 'recordatorio_cita_1h',
+                            variables: {
+                                cliente_nombre: row.cliente_nombre || 'cliente',
+                                mascota_nombre: row.mascota_nombre || 'mascota',
+                                fecha_hora: this.formatDateTimeForEmail(row.fecha_inicio),
+                                clinica_nombre: clinicaNombre
+                            }
+                        });
+
+                        if (!rendered) {
+                            continue;
+                        }
+
+                        await sendEmail({
+                            tenantId: row.id_tenant,
+                            to: row.cliente_email,
+                            subject: rendered.asunto_render,
+                            html: rendered.cuerpo_html_render,
+                            text: rendered.cuerpo_text_render || undefined,
+                            logContext: {
+                                tipo_envio: 'recordatorio_cita_1h',
+                                metadata: {
+                                    id_cita: row.id_cita,
+                                    codigo_cita: row.codigo_cita
+                                }
+                            }
+                        });
+
+                        await query(
+                            `UPDATE clinical.calendario_citas
+                             SET recordatorio_enviado = true,
+                                 fecha_recordatorio = NOW(),
+                                 updated_at = CURRENT_TIMESTAMP
+                             WHERE id_cita = $1`,
+                            [row.id_cita]
+                        );
+                    } catch (rowError) {
+                        console.error(`❌ Error enviando recordatorio de cita ${row.id_cita}:`, rowError.message);
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Error en tarea de recordatorios por correo:', error);
+            }
+        }, {
+            scheduled: false
+        });
+
+        this.jobs.set('email_reminders', reminderJob);
+        reminderJob.start();
+
+        console.log('📬 Recordatorios por correo programados cada 5 minutos');
     }
 
     /**
@@ -94,19 +278,34 @@ class SyncScheduler {
                     }
                 }
 
-                const result = await bidirectionalSyncService.syncChangesFromGoogle({ onlyToday: true });
+                const syncWindow = this.getSyncWindow();
+                const result = await bidirectionalSyncService.syncChangesFromGoogle({
+                    onlyToday: false,
+                    startDate: syncWindow.startDate,
+                    endDate: syncWindow.endDate
+                });
 
                 this.lastAutoSyncAt = new Date();
                 
                 if (result.success) {
                     // Registrar estadísticas y log solo cuando hubo cambios
                     if (result.results.total_changes > 0) {
-                        console.log(`✅ Sincronización automática: ${result.results.total_changes} cambios procesados`);
+                        console.log(
+                            `✅ Sincronización automática: ${result.results.total_changes} cambios procesados ` +
+                            `(rango ${syncWindow.startDate} -> ${syncWindow.endDate})`
+                        );
                         await this.logSyncActivity('auto_sync', result.results);
                     }
                 } else {
                     console.error('❌ Error en sincronización automática:', result.error);
-                    await this.logSyncActivity('auto_sync_error', { error: result.error });
+                    if (result.requires_reauth === true) {
+                        await this.handleGoogleReauthRequired('auto_sync');
+                    }
+                    await this.logSyncActivity('auto_sync_error', {
+                        error: result.error,
+                        code: result.code || null,
+                        requires_reauth: result.requires_reauth === true
+                    });
                 }
                 
             } catch (error) {
@@ -120,7 +319,11 @@ class SyncScheduler {
         this.jobs.set('sync', syncJob);
         syncJob.start();
         
-        console.log('📅 Sincronización automática programada con intervalo dinámico');
+        const syncWindow = this.getSyncWindow();
+        console.log(
+            `📅 Sincronización automática programada con intervalo dinámico ` +
+            `(ventana ${syncWindow.lookbackDays}d atrás / ${syncWindow.lookaheadDays}d adelante)`
+        );
     }
 
     /**
@@ -293,14 +496,28 @@ class SyncScheduler {
     async runManualSync() {
         try {
             console.log('🔄 Ejecutando sincronización manual...');
-            
-            const result = await bidirectionalSyncService.syncChangesFromGoogle({ onlyToday: true });
+            const syncWindow = this.getSyncWindow();
+
+            const result = await bidirectionalSyncService.syncChangesFromGoogle({
+                onlyToday: false,
+                startDate: syncWindow.startDate,
+                endDate: syncWindow.endDate
+            });
             
             if (result.success) {
                 await this.logSyncActivity('manual_sync', result.results);
-                console.log('✅ Sincronización manual completada');
+                console.log(
+                    `✅ Sincronización manual completada (rango ${syncWindow.startDate} -> ${syncWindow.endDate})`
+                );
             } else {
-                await this.logSyncActivity('manual_sync_error', { error: result.error });
+                if (result.requires_reauth === true) {
+                    await this.handleGoogleReauthRequired('manual_sync');
+                }
+                await this.logSyncActivity('manual_sync_error', {
+                    error: result.error,
+                    code: result.code || null,
+                    requires_reauth: result.requires_reauth === true
+                });
                 console.error('❌ Error en sincronización manual:', result.error);
             }
 

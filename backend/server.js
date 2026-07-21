@@ -37,6 +37,7 @@ import superadminRoutes from './src/routes/superadmin.js';
 import emailConfigRoutes from './src/routes/emailConfigRoutes.js';
 import documentEmailRoutes from './src/routes/documentEmailRoutes.js';
 import { generalRateLimit, rateLimitStats } from './src/middleware/rateLimiter.js';
+import { intelligentCompression, performanceHeaders } from './src/middleware/performance.js';
 
 // Importar middleware de auditoría
 import { setAuditContext, auditActivity, auditAuthActivity } from './src/middleware/auditMiddleware.js';
@@ -68,6 +69,8 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false
 }));
 
+app.use(intelligentCompression);
+
 // Aplicar CORS SOLO a rutas API
 app.use('/api', cors({
   origin: [
@@ -78,6 +81,7 @@ app.use('/api', cors({
   exposedHeaders: ['X-Request-Id'],
   credentials: true
 }));
+app.use('/api', performanceHeaders);
 
 // Middleware de logging
 morgan.token('reqId', (req) => req.id || 'unknown');

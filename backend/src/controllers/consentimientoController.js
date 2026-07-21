@@ -1,9 +1,11 @@
 import { v4 as uuidv4 } from 'uuid';
 import QRCode from 'qrcode';
+import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import { query } from '../config/database.js';
 import { generarPDFConsentimiento, generarNumeroPDF } from '../services/consentimientoPDFService.js';
+import { sendEmail } from '../services/emailService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,6 +58,46 @@ function toAbsoluteAssetUrl(req, assetPath) {
   const base = process.env.BACKEND_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
   const clean = String(assetPath).startsWith('/') ? assetPath : `/${assetPath}`;
   return `${base}${clean}`;
+}
+
+async function logConsentEmailDelivery({
+  tenantId,
+  userId = null,
+  tipoDocumento,
+  idCliente = null,
+  idConsentimiento = null,
+  destinatarioEmail,
+  asunto,
+  estado,
+  providerMessageId = null,
+  detalleError = null,
+  metadata = {}
+}) {
+  await query(
+    `INSERT INTO clinical.envios_documentos (
+       tipo_documento, canal, id_cliente, id_historia, id_consentimiento,
+       destinatario_email, asunto, estado, provider_message_id, detalle_error,
+       metadata, id_tenant, created_by, sent_at
+     ) VALUES (
+       $1, 'email', $2, NULL, $3,
+       $4, $5, $6, $7, $8,
+       $9::jsonb, $10, $11,
+       CASE WHEN $6::varchar = 'enviado'::varchar THEN NOW() ELSE NULL END
+     )`,
+    [
+      tipoDocumento,
+      idCliente,
+      idConsentimiento,
+      destinatarioEmail,
+      asunto,
+      estado,
+      providerMessageId,
+      detalleError,
+      JSON.stringify(metadata || {}),
+      tenantId,
+      userId
+    ]
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -455,9 +497,11 @@ export async function revocarConsentimiento(req, res) {
   try {
     // Buscar el consentimiento firmado vigente del cliente (filtrado por tenant)
     const result = await query(
-      `SELECT id_consentimiento FROM clinical.consentimientos
-       WHERE id_cliente = $1 AND id_tenant = $2 AND estado IN ('firmado', 'desactualizado')
-       ORDER BY firmado_en DESC
+      `SELECT c.id_consentimiento, c.pdf_numero, cl.nombre AS cliente_nombre, cl.email AS cliente_email
+       FROM clinical.consentimientos c
+       JOIN clinical.clientes cl ON cl.id_cliente = c.id_cliente AND cl.id_tenant = c.id_tenant
+      WHERE c.id_cliente = $1 AND c.id_tenant = $2 AND c.estado IN ('firmado', 'desactualizado')
+       ORDER BY c.firmado_en DESC
        LIMIT 1`,
       [id, tenantId]
     );
@@ -466,7 +510,8 @@ export async function revocarConsentimiento(req, res) {
       return res.status(404).json({ message: 'No hay consentimiento vigente para revocar.' });
     }
 
-    const idConsentimiento = result.rows[0].id_consentimiento;
+    const consent = result.rows[0];
+    const idConsentimiento = consent.id_consentimiento;
 
     await query(
       `UPDATE clinical.consentimientos
@@ -483,6 +528,69 @@ export async function revocarConsentimiento(req, res) {
        WHERE id_cliente = $1`,
       [id]
     );
+
+    if (consent.cliente_email) {
+      const subject = 'Notificación de revocación de consentimiento';
+      const textBody =
+        `Hola ${consent.cliente_nombre || 'propietario'},\n\n` +
+        `Te informamos que tu consentimiento de tratamiento de datos personales fue revocado.\n` +
+        `Si deseas otorgar nuevamente tu consentimiento, comunícate con la clínica.`;
+      const htmlBody =
+        `<p>Hola ${consent.cliente_nombre || 'propietario'},</p>` +
+        `<p>Te informamos que tu consentimiento de tratamiento de datos personales fue <strong>revocado</strong>.</p>` +
+        `<p>Si deseas otorgar nuevamente tu consentimiento, comunícate con la clínica.</p>`;
+
+      try {
+        const sendResult = await sendEmail({
+          tenantId,
+          to: consent.cliente_email,
+          subject,
+          text: textBody,
+          html: htmlBody,
+          attachments: []
+        });
+
+        await logConsentEmailDelivery({
+          tenantId,
+          userId: req.user?.id_usuario || req.user?.id || null,
+          tipoDocumento: 'consentimiento_pdf',
+          idCliente: id,
+          idConsentimiento,
+          destinatarioEmail: consent.cliente_email,
+          asunto: subject,
+          estado: 'enviado',
+          providerMessageId: sendResult?.messageId || null,
+          metadata: {
+            mode: 'revocacion',
+            motivo_revocacion: motivo.trim(),
+            email_snapshot: sendResult?.emailSnapshot || null,
+            id_cliente: id,
+            id_consentimiento: idConsentimiento,
+            pdf_numero: consent.pdf_numero || null
+          }
+        });
+      } catch (mailError) {
+        console.error('No se pudo enviar correo de revocación:', mailError);
+        await logConsentEmailDelivery({
+          tenantId,
+          userId: req.user?.id_usuario || req.user?.id || null,
+          tipoDocumento: 'consentimiento_pdf',
+          idCliente: id,
+          idConsentimiento,
+          destinatarioEmail: consent.cliente_email,
+          asunto: subject,
+          estado: 'fallido',
+          detalleError: mailError?.message || 'Error enviando correo de revocación',
+          metadata: {
+            mode: 'revocacion',
+            motivo_revocacion: motivo.trim(),
+            id_cliente: id,
+            id_consentimiento: idConsentimiento,
+            pdf_numero: consent.pdf_numero || null
+          }
+        });
+      }
+    }
 
     return res.json({ message: 'Consentimiento revocado correctamente.' });
   } catch (error) {
@@ -610,7 +718,7 @@ export async function firmarConsentimiento(req, res) {
   try {
     // Cargar consentimiento con datos del cliente y versión
     const consentResult = await query(
-      `SELECT c.id_consentimiento, c.estado, c.token_expires_at, c.id_cliente, c.id_version,
+        `SELECT c.id_consentimiento, c.estado, c.token_expires_at, c.id_cliente, c.id_version,
           c.id_tenant,
               cl.nombre AS cliente_nombre, cl.cedula, cl.email, cl.telefono,
               v.texto_legal, v.id_version AS ver_id
@@ -699,6 +807,83 @@ export async function firmarConsentimiento(req, res) {
        WHERE id_cliente = $2`,
       [row.id_consentimiento, row.id_cliente]
     );
+
+    if (row.email) {
+      const absolutePath = path.join(__dirname, '../../', pdfPath);
+      const pdfBuffer = await fs.readFile(absolutePath);
+      const fileName = `consentimiento-${pdfNumero || row.id_consentimiento}.pdf`;
+      const subject = 'Consentimiento firmado - copia del documento';
+      const textBody =
+        `Hola ${row.cliente_nombre || 'propietario'},\n\n` +
+        `Adjuntamos la copia de tu consentimiento firmado en formato PDF.\n` +
+        `Número de documento: ${pdfNumero}.`;
+      const htmlBody =
+        `<p>Hola ${row.cliente_nombre || 'propietario'},</p>` +
+        `<p>Adjuntamos la copia de tu consentimiento firmado en formato PDF.</p>` +
+        `<p><strong>Número de documento:</strong> ${pdfNumero}</p>`;
+
+      try {
+        const sendResult = await sendEmail({
+          tenantId: row.id_tenant,
+          to: row.email,
+          subject,
+          text: textBody,
+          html: htmlBody,
+          attachments: [
+            {
+              filename: fileName,
+              content: pdfBuffer,
+              contentType: 'application/pdf'
+            }
+          ]
+        });
+
+        await query(
+          `UPDATE clinical.consentimientos
+           SET email_enviado = true
+           WHERE id_consentimiento = $1`,
+          [row.id_consentimiento]
+        );
+
+        await logConsentEmailDelivery({
+          tenantId: row.id_tenant,
+          userId: null,
+          tipoDocumento: 'consentimiento_pdf',
+          idCliente: row.id_cliente,
+          idConsentimiento: row.id_consentimiento,
+          destinatarioEmail: row.email,
+          asunto: subject,
+          estado: 'enviado',
+          providerMessageId: sendResult?.messageId || null,
+          metadata: {
+            mode: 'firma_automatica',
+            pdf_numero: pdfNumero,
+            email_snapshot: sendResult?.emailSnapshot || null,
+            id_cliente: row.id_cliente,
+            id_consentimiento: row.id_consentimiento
+          }
+        });
+      } catch (mailError) {
+        console.error('No se pudo enviar correo automático de consentimiento firmado:', mailError);
+        await logConsentEmailDelivery({
+          tenantId: row.id_tenant,
+          userId: null,
+          tipoDocumento: 'consentimiento_pdf',
+          idCliente: row.id_cliente,
+          idConsentimiento: row.id_consentimiento,
+          destinatarioEmail: row.email,
+          asunto: subject,
+          estado: 'fallido',
+          detalleError: mailError?.message || 'Error enviando consentimiento firmado',
+          metadata: {
+            mode: 'firma_automatica',
+            pdf_numero: pdfNumero,
+            id_cliente: row.id_cliente,
+            id_consentimiento: row.id_consentimiento
+          }
+        });
+      }
+    }
 
     return res.json({
       message: 'Consentimiento firmado exitosamente. Gracias.',

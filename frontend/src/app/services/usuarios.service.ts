@@ -39,7 +39,7 @@ export interface ConfiguracionUsuario {
   timezone: string;
   notificaciones_email: boolean;
   notificaciones_push: boolean;
-  formato_fecha: 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'YYYY-MM-DD';
+  formato_fecha: 'DD-MM-YY' | 'MM-DD-YY' | 'YYYY-MM-DD';
   formato_hora: '12h' | '24h';
   items_por_pagina: number;
   dashboard_personalizado: any[];
@@ -629,7 +629,7 @@ export class UsuariosService {
       timezone: 'America/Bogota',
       notificaciones_email: true,
       notificaciones_push: true,
-      formato_fecha: 'DD/MM/YYYY',
+      formato_fecha: 'DD-MM-YY',
       formato_hora: '24h',
       items_por_pagina: 25,
       dashboard_personalizado: []

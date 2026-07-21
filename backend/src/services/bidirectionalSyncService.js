@@ -463,20 +463,33 @@ class BidirectionalSyncService {
                 return changesResult;
             }
 
-            const filteredChanges = changesResult.changes.filter((change) =>
-                this.isWithinDateRange(change?.parsed_data?.fecha_inicio, rangeStart, rangeEnd)
-            );
+                const filteredChanges = changesResult.changes.filter(change => {
+                    // Los eventos eliminados pueden llegar sin fecha en el payload incremental de Google.
+                    // Deben procesarse igual para reflejar la cancelación en VetPlus.
+                    if (change?.change_type === 'deleted') {
+                        return true;
+                    }
+
+                    return this.isWithinDateRange(change?.parsed_data?.fecha_inicio, rangeStart, rangeEnd);
+                });
 
             let fallbackImport = null;
 
-            // Para sincronización automática diaria, además del incremental
-            // ejecutar importación por rango del día para garantizar cobertura completa.
-            if (onlyToday && rangeStart && rangeEnd) {
-                if (filteredChanges.length === 0) {
-                    console.log(`ℹ️ Sync incremental sin cambios para hoy (${rangeStart}). Ejecutando import por rango diario...`);
+            // Además del incremental, ejecutar importación por rango para cobertura completa.
+            // Esto es crítico en primeras sincronizaciones o cuando Google no retorna cambios recientes.
+            if (rangeStart && rangeEnd) {
+                if (onlyToday) {
+                    if (filteredChanges.length === 0) {
+                        console.log(`ℹ️ Sync incremental sin cambios para hoy (${rangeStart}). Ejecutando import por rango diario...`);
+                    } else {
+                        console.log(`ℹ️ Sync incremental detectó ${filteredChanges.length} cambios para hoy (${rangeStart}). Ejecutando import por rango diario para completar eventos no modificados recientemente...`);
+                    }
+                } else if (filteredChanges.length === 0) {
+                    console.log(`ℹ️ Sync incremental sin cambios para rango ${rangeStart} -> ${rangeEnd}. Ejecutando import de reconciliación por rango...`);
                 } else {
-                    console.log(`ℹ️ Sync incremental detectó ${filteredChanges.length} cambios para hoy (${rangeStart}). Ejecutando import por rango diario para completar eventos no modificados recientemente...`);
+                    console.log(`ℹ️ Sync incremental detectó ${filteredChanges.length} cambios en rango ${rangeStart} -> ${rangeEnd}. Ejecutando import de reconciliación por rango...`);
                 }
+
                 fallbackImport = await this.importFromGoogle(rangeStart, rangeEnd, {
                     autoMatch: true,
                     createMissingData: true,
@@ -1231,7 +1244,7 @@ class BidirectionalSyncService {
             const result = await query(`
                 UPDATE clinical.calendario_citas 
                 SET 
-                    estado = 'cancelada',
+                    estado = 'no_asistio',
                     google_sync_status = 'synced',
                     notas = COALESCE(notas, '') || ' | Cancelada desde Google Calendar',
                     updated_at = CURRENT_TIMESTAMP

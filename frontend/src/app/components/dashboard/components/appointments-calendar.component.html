@@ -18,74 +18,50 @@
 
   <mat-card-content class="appointments-content">
     @if (appointments && appointments.length > 0) {
-      <div class="appointments-summary">
-        <div class="summary-stats">
-          <div class="stat-item">
-            <span class="stat-value">{{ getTotalAppointments() }}</span>
-            <span class="stat-label">Total</span>
+      @for (group of groupedAppointments; track group.key) {
+        <section class="day-group">
+          <div class="day-header">
+            <h4 class="day-title">{{ group.title }}</h4>
+            <div class="day-separator"></div>
           </div>
-          <div class="stat-item">
-            <span class="stat-value confirmed">{{ getAppointmentsByStatus('confirmada') }}</span>
-            <span class="stat-label">Confirmadas</span>
+
+          <div class="appointments-grid">
+            @for (appointment of group.appointments; track appointment.id) {
+              <article class="appointment-card">
+                <div class="appointment-card-header">
+                  <span class="time">{{ appointment.hora }}</span>
+                  <span class="status-chip" [class]="'status-' + appointment.estado">{{ getStatusLabel(appointment.estado) }}</span>
+                </div>
+
+                <div class="appointment-card-body">
+                  <p class="patient-name">{{ appointment.paciente_nombre }}</p>
+                  <p class="client-name">{{ appointment.cliente_nombre }}</p>
+                  <div class="appointment-meta">
+                    <span class="appointment-type">{{ appointment.tipo }}</span>
+                    <span class="appointment-vet">{{ appointment.veterinario }}</span>
+                  </div>
+                </div>
+
+                <div class="appointment-card-actions">
+                  <button
+                    mat-icon-button
+                    class="view-appointment"
+                    [routerLink]="['/citas', appointment.id]"
+                    [disabled]="!canOpenAppointment(appointment)"
+                    matTooltip="Ver detalle">
+                    <mat-icon>visibility</mat-icon>
+                  </button>
+                </div>
+              </article>
+            }
           </div>
-          <div class="stat-item">
-            <span class="stat-value pending">{{ getAppointmentsByStatus('pendiente') }}</span>
-            <span class="stat-label">Pendientes</span>
-          </div>
-        </div>
-      </div>
-
-      <mat-list class="appointments-list">
-        @for (appointment of appointments.slice(0, 5); track $index) {
-          <mat-list-item class="appointment-item">
-            <div class="appointment-time">
-              <span class="time">{{ appointment.hora }}</span>
-              <div class="status-indicator" [class]="'status-' + appointment.estado"></div>
-            </div>
-            
-            <div class="appointment-info">
-              <p class="patient-name">{{ appointment.paciente_nombre }}</p>
-              <p class="client-name">{{ appointment.cliente_nombre }}</p>
-              <div class="appointment-meta">
-                <span class="appointment-type">{{ appointment.tipo }}</span>
-                <span class="appointment-vet">{{ appointment.veterinario }}</span>
-              </div>
-            </div>
-
-            <div class="appointment-actions">
-              <button mat-icon-button [routerLink]="['/citas', appointment.id]" class="view-appointment">
-                <mat-icon>visibility</mat-icon>
-              </button>
-            </div>
-          </mat-list-item>
-        }
-      </mat-list>
-
-      @if (appointments.length > 5) {
-        <div class="more-appointments">
-          <p class="more-text">Y {{ appointments.length - 5 }} citas más...</p>
-        </div>
+        </section>
       }
     } @else {
       <div class="no-appointments">
         <mat-icon>event_available</mat-icon>
-        <p>No hay citas programadas para hoy</p>
-        <button mat-stroked-button routerLink="/citas/nueva" color="primary">
-          <mat-icon>add</mat-icon>
-          Agendar Nueva Cita
-        </button>
+        <p>No hay próximas citas desde la hora actual</p>
       </div>
     }
   </mat-card-content>
-
-  <mat-card-actions class="appointments-actions">
-    <button mat-button routerLink="/citas" color="primary">
-      <mat-icon>calendar_month</mat-icon>
-      Ver Calendario Completo
-    </button>
-    <button mat-button routerLink="/citas/nueva" color="primary">
-      <mat-icon>add</mat-icon>
-      Nueva Cita
-    </button>
-  </mat-card-actions>
 </mat-card>

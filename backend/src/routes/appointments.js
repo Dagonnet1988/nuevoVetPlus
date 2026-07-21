@@ -2,6 +2,8 @@ import express from 'express';
 import { query } from '../config/database.js';
 import { 
     createAppointment,
+    previewRecurringAppointments,
+    createRecurringAppointments,
     getAppointments,
     getAppointmentById,
     updateAppointment,
@@ -21,6 +23,8 @@ import {
 
 import {
     validateCreateAppointment,
+    validatePreviewRecurringAppointments,
+    validateCreateRecurringAppointments,
     validateUpdateAppointment,
     validateUpdateAppointmentStatus,
     validateGetAppointments,
@@ -29,8 +33,14 @@ import {
 
 import { authenticateToken, authorize } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validateRequest.js';
+import { cacheInvalidation, intelligentCaching } from '../middleware/performance.js';
 
 const router = express.Router();
+
+router.use(cacheInvalidation(['.*appointments.*', '.*calendar.*', '.*stats.*']));
+
+const appointmentsListCache = intelligentCaching({ ttl: 30 });
+const calendarViewCache = intelligentCaching({ ttl: 30 });
 
 // Nota: authenticateToken y tenantContext ya están aplicados en clinical.js
 
@@ -48,6 +58,32 @@ router.post(
 );
 
 /**
+ * @route   POST /api/clinical/appointments/recurring/preview
+ * @desc    Previsualizar ocurrencias de citas periódicas
+ * @access  Veterinario, Admin, Auxiliar
+ */
+router.post(
+    '/recurring/preview',
+    authorize(['admin', 'vet', 'aux']),
+    validatePreviewRecurringAppointments,
+    validateRequest,
+    previewRecurringAppointments
+);
+
+/**
+ * @route   POST /api/clinical/appointments/recurring
+ * @desc    Crear serie de citas periódicas
+ * @access  Veterinario, Admin, Auxiliar
+ */
+router.post(
+    '/recurring',
+    authorize(['admin', 'vet', 'aux']),
+    validateCreateRecurringAppointments,
+    validateRequest,
+    createRecurringAppointments
+);
+
+/**
  * @route   GET /api/clinical/appointments
  * @desc    Obtener lista de citas con filtros
  * @access  Veterinario, Admin, Auxiliar
@@ -57,6 +93,7 @@ router.get(
     authorize(['admin', 'vet', 'aux']),
     validateGetAppointments,
     validateRequest,
+    appointmentsListCache,
     getAppointments
 );
 
@@ -68,6 +105,7 @@ router.get(
 router.get(
     '/calendar',
     authorize(['admin', 'vet', 'aux']),
+    calendarViewCache,
     getCalendarView
 );
 

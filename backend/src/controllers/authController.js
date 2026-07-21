@@ -1,12 +1,221 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { query } from '../config/database.js';
 import { generateToken, generateRefreshToken, verifyRefreshToken, decodeToken } from '../middleware/auth.js';
 import { validationResult } from 'express-validator/lib/index.js';
+import { sendEmail } from '../services/emailService.js';
+import { renderEmailTemplate } from '../services/emailTemplateService.js';
 
 /**
  * Controlador de autenticación
  */
 class AuthController {
+
+  buildResetPasswordUrl(token) {
+    const frontendBase = process.env.FRONTEND_URL || 'http://localhost:4200';
+    return `${frontendBase}/reset-password?token=${encodeURIComponent(token)}`;
+  }
+
+  async forgotPassword(req, res) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Datos de entrada inválidos',
+          errors: errors.array()
+        });
+      }
+
+      const email = String(req.body?.email || '').trim().toLowerCase();
+      const documento = String(req.body?.documento || '').trim();
+      const genericResponse = {
+        success: true,
+        message: 'Si el usuario existe, recibirá instrucciones para restablecer su contraseña'
+      };
+
+      const rawTenantSlug = req.headers['x-tenant-slug'];
+      const tenantSlug = typeof rawTenantSlug === 'string' ? rawTenantSlug.trim().toLowerCase() : '';
+
+      let tenantFilter = '';
+      const params = [];
+      let paramCount = 0;
+
+      if (tenantSlug) {
+        paramCount++;
+        tenantFilter = ` AND u.id_tenant = (
+          SELECT t.id_tenant
+          FROM system.tenants t
+          WHERE t.slug = $${paramCount}
+            AND t.estado = 'active'
+          LIMIT 1
+        )`;
+        params.push(tenantSlug);
+      }
+
+      paramCount++;
+      const identifierClause = email
+        ? `LOWER(u.email) = $${paramCount}`
+        : `u.documento = $${paramCount}`;
+      params.push(email || documento);
+
+      const userResult = await query(
+        `SELECT u.id_usuario, u.id_tenant, u.nombre, u.email
+         FROM vetplus_auth.usuarios u
+         WHERE ${identifierClause}
+           AND u.activo = true
+           ${tenantFilter}
+         LIMIT 1`,
+        params
+      );
+
+      if (!userResult.rows.length) {
+        return res.json(genericResponse);
+      }
+
+      const user = userResult.rows[0];
+      if (!user.email) {
+        return res.json(genericResponse);
+      }
+
+      const plainToken = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(plainToken).digest('hex');
+      const expirationMinutes = 30;
+      const expiresAt = new Date(Date.now() + expirationMinutes * 60 * 1000);
+
+      await query(
+        `DELETE FROM vetplus_auth.password_reset_tokens
+         WHERE id_usuario = $1
+            OR expires_at < NOW()
+            OR used_at IS NOT NULL`,
+        [user.id_usuario]
+      );
+
+      await query(
+        `INSERT INTO vetplus_auth.password_reset_tokens (
+           id_usuario, token_hash, expires_at, created_by_ip
+         ) VALUES ($1, $2, $3, $4)`,
+        [user.id_usuario, tokenHash, expiresAt, req.ip || null]
+      );
+
+      const resetUrl = this.buildResetPasswordUrl(plainToken);
+      const rendered = await renderEmailTemplate({
+        tenantId: user.id_tenant,
+        key: 'auth_reset_link',
+        variables: {
+          usuario_nombre: user.nombre || 'usuario',
+          reset_url: resetUrl,
+          expiracion_minutos: String(expirationMinutes)
+        }
+      });
+
+      if (rendered) {
+        try {
+          await sendEmail({
+            tenantId: user.id_tenant,
+            to: user.email,
+            subject: rendered.asunto_render,
+            html: rendered.cuerpo_html_render,
+            text: rendered.cuerpo_text_render || undefined,
+            logContext: {
+              tipo_envio: 'auth_reset_link',
+              metadata: {
+                id_usuario: user.id_usuario
+              }
+            }
+          });
+        } catch (mailError) {
+          console.error('No se pudo enviar correo de recuperación:', mailError.message);
+        }
+      }
+
+      return res.json(genericResponse);
+    } catch (error) {
+      console.error('Error en forgotPassword:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor',
+        error: 'INTERNAL_ERROR'
+      });
+    }
+  }
+
+  async resetPasswordWithToken(req, res) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Datos de entrada inválidos',
+          errors: errors.array()
+        });
+      }
+
+      const token = String(req.body?.token || '').trim();
+      const newPassword = String(req.body?.newPassword || '');
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+      const tokenResult = await query(
+        `SELECT prt.id_token, prt.id_usuario
+         FROM vetplus_auth.password_reset_tokens prt
+         WHERE prt.token_hash = $1
+           AND prt.used_at IS NULL
+           AND prt.expires_at > NOW()
+         LIMIT 1`,
+        [tokenHash]
+      );
+
+      if (!tokenResult.rows.length) {
+        return res.status(400).json({
+          success: false,
+          message: 'El enlace de recuperación es inválido o ha expirado',
+          error: 'INVALID_RESET_TOKEN'
+        });
+      }
+
+      const tokenRow = tokenResult.rows[0];
+      const saltRounds = 12;
+      const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
+
+      await query(
+        `UPDATE vetplus_auth.usuarios
+         SET password_hash = $1,
+             password_temporal = false,
+             debe_cambiar_password = false,
+             intentos_login = 0,
+             bloqueado_hasta = NULL,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id_usuario = $2`,
+        [newPasswordHash, tokenRow.id_usuario]
+      );
+
+      await query(
+        `UPDATE vetplus_auth.password_reset_tokens
+         SET used_at = NOW()
+         WHERE id_token = $1`,
+        [tokenRow.id_token]
+      );
+
+      await query(
+        `INSERT INTO vetplus_auth.password_resets (
+           id_usuario, tipo_reset, motivo, completado, completed_at
+         ) VALUES ($1, 'user_change', 'Recuperación por enlace', true, NOW())`,
+        [tokenRow.id_usuario]
+      );
+
+      return res.json({
+        success: true,
+        message: 'Contraseña restablecida exitosamente'
+      });
+    } catch (error) {
+      console.error('Error en resetPasswordWithToken:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor',
+        error: 'INTERNAL_ERROR'
+      });
+    }
+  }
   
   /**
    * Login de usuario
@@ -44,7 +253,7 @@ class AuthController {
         if (tenantResult.rows.length === 0) {
           return res.status(403).json({
             success: false,
-            message: 'Tenant inválido o inactivo',
+            message: 'Clínica inválida o inactiva',
             error: 'INVALID_TENANT_SLUG'
           });
         }
@@ -53,7 +262,7 @@ class AuthController {
       } else if (requireTenantContext) {
         return res.status(400).json({
           success: false,
-          message: 'Se requiere contexto de tenant para iniciar sesión',
+          message: 'Se requiere contexto de clínica para iniciar sesión',
           error: 'MISSING_TENANT_SLUG'
         });
       }

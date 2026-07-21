@@ -40,64 +40,71 @@
     </div>
 
     @if ((estado()!.estado === 'firmado' || estado()!.estado === 'desactualizado') && estado()!.consentimiento?.firmadoEn) {
-      <span class="cs-date">Firmado {{ estado()!.consentimiento!.firmadoEn | date:'dd/MM/yyyy' }}</span>
+      <span class="cs-date">Firmado {{ estado()!.consentimiento!.firmadoEn | date:'dd-MM-yy' }}</span>
     }
   </div>
 
   <!-- Acciones -->
   <div class="cs-actions">
 
-    <!-- Sin consentimiento, expirado, desactualizado o revocado → Enviar -->
-    @if (['sin_consentimiento', 'expirado', 'desactualizado', 'revocado'].includes(estado()!.estado)) {
+    <!-- Estados no firmados → Enviar enlace de firma (correo + QR) -->
+    @if (['sin_consentimiento', 'pendiente', 'expirado', 'desactualizado', 'revocado'].includes(estado()!.estado)) {
       <button
         mat-stroked-button
         color="primary"
         [disabled]="actuando()"
-        (click)="enviarPorCanal()"
-        matTooltip="Elegir canal de envío"
+        (click)="enviarPorCorreo()"
+        matTooltip="Envía por correo el enlace de firma y el código QR"
       >
         <ng-container>
           @if (actuando()) { <mat-spinner diameter="18" class="btn-spinner"></mat-spinner> }
           @if (!actuando()) { <mat-icon>send</mat-icon> }
-          Enviar
+          Enviar link para firmar
         </ng-container>
       </button>
-    }
 
-    <!-- Pendiente → Enviar + Ver enlace -->
-    @if (estado()!.estado === 'pendiente') {
       <button
         mat-stroked-button
+        color="accent"
         [disabled]="actuando()"
-        (click)="enviarPorCanal()"
-        matTooltip="Elegir canal de envío"
+        (click)="enviarLinkPorWhatsApp()"
+        matTooltip="Abre WhatsApp Web/App con el link de firma"
       >
-        <ng-container>
-          @if (actuando()) { <mat-spinner diameter="18" class="btn-spinner"></mat-spinner> }
-          @if (!actuando()) { <mat-icon>send</mat-icon> }
-          Enviar
-        </ng-container>
+        <mat-icon>chat</mat-icon>
+        Enviar link por WhatsApp
       </button>
+
       @if (estado()!.consentimiento?.expiresAt && isLinkVigente(estado()!.consentimiento!.expiresAt!)) {
-        <button mat-icon-button (click)="verQR()" matTooltip="Copiar enlace">
+        <button mat-icon-button (click)="copiarEnlaceFirma()" matTooltip="Copiar link de firma">
           <mat-icon>link</mat-icon>
         </button>
       }
     }
 
-    <!-- Firmado → Enviar + Ver PDF + Revocar -->
+    <!-- Firmado → Enviar consentimiento firmado (PDF) + Ver PDF + Revocar -->
     @if (estado()!.estado === 'firmado') {
       <button
         mat-stroked-button
         [disabled]="actuando()"
-        (click)="enviarPorCanal()"
-        matTooltip="Elegir canal de envío"
+        (click)="enviarPorCorreo()"
+        matTooltip="Envía por correo el consentimiento firmado en PDF"
       >
         <ng-container>
           @if (actuando()) { <mat-spinner diameter="18" class="btn-spinner"></mat-spinner> }
           @if (!actuando()) { <mat-icon>send</mat-icon> }
-          Enviar
+          Enviar consentimiento por correo
         </ng-container>
+      </button>
+
+      <button
+        mat-stroked-button
+        color="accent"
+        [disabled]="actuando()"
+        (click)="enviarConfirmacionPdfPorWhatsApp()"
+        matTooltip="Abre WhatsApp Web/App para confirmar envío del consentimiento"
+      >
+        <mat-icon>chat</mat-icon>
+        Enviar por WhatsApp
       </button>
 
       @if (estado()!.consentimiento?.pdfDisponible) {
@@ -140,33 +147,4 @@
     }
 
   </div>
-
-  @if (mostrandoCanales()) {
-    <div class="cs-channel-panel">
-      <div class="cs-channel-title">¿Por dónde deseas enviar?</div>
-      <div class="cs-channel-subtitle">
-        @if (debeEnviarPdf()) {
-          Se descargará el PDF para adjuntarlo en el canal seleccionado.
-        } @else {
-          Se compartirá el enlace de firma y QR.
-        }
-      </div>
-
-      <div class="cs-channel-buttons">
-        <button mat-stroked-button color="primary" [disabled]="actuando()" (click)="enviarPorCanal('whatsapp')">
-          <mat-icon>chat</mat-icon>
-          WhatsApp
-        </button>
-        <button mat-stroked-button color="primary" [disabled]="actuando()" (click)="enviarPorCanal('correo')">
-          <mat-icon>mail</mat-icon>
-          Correo
-        </button>
-        <button mat-stroked-button [disabled]="actuando()" (click)="enviarPorCanal('ambos')">
-          <mat-icon>send</mat-icon>
-          Ambos
-        </button>
-      </div>
-    </div>
-  }
-
 }

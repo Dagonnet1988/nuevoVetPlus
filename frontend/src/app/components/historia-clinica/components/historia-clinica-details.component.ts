@@ -1,5 +1,5 @@
 import { Component, OnInit, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -35,6 +35,7 @@ import { AnularHistoriaDialogComponent } from './anular-historia-dialog.componen
 })
 export class HistoriaClinicaDetailsComponent implements OnInit {
   loading  = signal(true);
+  sendingEmail = signal(false);
   historia = signal<HistoriaClinica | null>(null);
   private returnMascotaId: string | null = null;
 
@@ -43,6 +44,7 @@ export class HistoriaClinicaDetailsComponent implements OnInit {
     private snackBar: MatSnackBar,
     private router: Router,
     private route: ActivatedRoute,
+    private location: Location,
     private dialog: MatDialog,
     private sanitizer: DomSanitizer
   ) {}
@@ -187,6 +189,11 @@ export class HistoriaClinicaDetailsComponent implements OnInit {
   }
 
   volver(): void {
+    if (window.history.length > 1) {
+      this.location.back();
+      return;
+    }
+
     this.router.navigate(['/historia-clinica'], {
       queryParams: this.returnMascotaId ? { id_mascota: this.returnMascotaId } : undefined
     });
@@ -195,6 +202,66 @@ export class HistoriaClinicaDetailsComponent implements OnInit {
   verPDF(): void {
     const h = this.historia();
     if (h) this.historiaService.openPDF(h.id_historia);
+  }
+
+  enviarAlPropietario(): void {
+    const h = this.historia();
+    if (!h || this.sendingEmail()) return;
+
+    if (h.estado === 'Cancelado') {
+      this.snackBar.open('No se puede enviar un documento anulado', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    this.sendingEmail.set(true);
+    this.historiaService.sendHistoriaByEmail(h.id_historia).subscribe({
+      next: (response) => {
+        this.snackBar.open(response?.message || 'Documento enviado por correo', 'Cerrar', { duration: 3500 });
+        this.sendingEmail.set(false);
+      },
+      error: (error) => {
+        this.snackBar.open(error?.error?.message || 'No se pudo enviar el documento', 'Cerrar', { duration: 4000 });
+        this.sendingEmail.set(false);
+      }
+    });
+  }
+
+  enviarResumenPorWhatsApp(): void {
+    const h = this.historia();
+    if (!h) return;
+    if (h.estado === 'Cancelado') {
+      this.snackBar.open('No se puede compartir un documento anulado por WhatsApp', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    const tipo = this.getTipoLabel(h.tipo_documento);
+    const fecha = this.formatFecha(h.fecha);
+    const mensaje =
+      `Hola ${h.cliente_nombre || 'propietario'}, te compartimos el resumen de ${tipo} (${h.codigo_historia})` +
+      ` de ${h.mascota_nombre || 'tu mascota'} con fecha ${fecha}.` +
+      ` Si necesitas el PDF, te lo reenviamos por correo desde VetPlus.`;
+
+    const numero = this.normalizarTelefonoWhatsApp((h as any).cliente_telefono || null);
+    const waUrl = numero
+      ? `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`
+      : `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
+    const popup = window.open(waUrl, '_blank', 'noopener');
+    if (!popup) {
+      this.snackBar.open('No se pudo abrir WhatsApp', 'Cerrar', { duration: 3500 });
+      return;
+    }
+
+    this.snackBar.open('Abriendo WhatsApp Web/App…', 'Cerrar', { duration: 2200 });
+  }
+
+  private normalizarTelefonoWhatsApp(raw: string | null | undefined): string | null {
+    const digits = String(raw || '').replace(/\D+/g, '');
+    if (!digits) return null;
+
+    const withoutZeros = digits.startsWith('00') ? digits.slice(2) : digits;
+    if (withoutZeros.length === 10) return `57${withoutZeros}`;
+    if (withoutZeros.length >= 11 && withoutZeros.length <= 15) return withoutZeros;
+    return null;
   }
 
   imprimir(): void {
@@ -394,6 +461,12 @@ export class HistoriaClinicaDetailsComponent implements OnInit {
         };
       })
       .filter((group) => group.rows.length > 0);
+  }
+
+  get observacionesPalpacion(): string {
+    const r = this.datosVI?.reflejos;
+    if (!r || typeof r !== 'object') return '';
+    return String(r['observaciones_palpacion'] || '').trim();
   }
 
   get datosCompletos(): Array<{ campo: string; valor: string }> {

@@ -9,6 +9,7 @@ import { getEspecies, getRazasByEspecie } from '../controllers/pacientesControll
 import { authenticateToken, authorize } from '../middleware/auth.js';
 import { tenantContext } from '../middleware/tenantContext.js';
 import { uploadHistoriaClinicaArchivos, handleUploadError } from '../middleware/uploadMiddleware.js';
+import { configCache } from '../middleware/performance.js';
 
 const router = express.Router();
 
@@ -40,6 +41,7 @@ router.get('/veterinarians',
   authenticateToken,
   tenantContext,
   authorize(['admin', 'vet', 'aux']),
+  configCache,
   async (req, res) => {
     try {
       const tenantId = req.tenantId;

@@ -205,8 +205,8 @@
                     <div class="contact-item">
                       <mat-icon class="contact-icon">email</mat-icon>
                       <span>{{ paciente()?.cliente?.email }}</span>
-                      <button mat-icon-button (click)="emailOwner()" matTooltip="Enviar email">
-                        <mat-icon>mail</mat-icon>
+                      <button mat-icon-button (click)="emailOwner()" matTooltip="Copiar correo">
+                        <mat-icon>content_copy</mat-icon>
                       </button>
                     </div>
                   }
@@ -238,6 +238,7 @@
                   <app-consentimiento-status
                     [idCliente]="paciente()!.cliente!.id_cliente!"
                     [clienteNombre]="paciente()!.cliente!.nombre!"
+                    [clienteTelefono]="paciente()!.cliente!.telefono || null"
                   />
                 </div>
               }
@@ -307,8 +308,9 @@
               <div class="group-row">
                 <div class="group-date">{{ formatDate(grupo.fecha) }}</div>
 
-                <div class="group-columns">
-                  <div
+                <div class="group-columns" [class.single-column]="!shouldShowCitaColumn(grupo) || !shouldShowHistoriaColumn(grupo)">
+                  @if (shouldShowCitaColumn(grupo)) {
+                    <div
                     class="group-compact-item cita-item"
                     [class.muted-card]="!grupo.cita"
                     [class.is-clickable]="!!grupo.cita"
@@ -320,33 +322,40 @@
                     <div class="compact-main">
                       <mat-icon class="compact-icon">event</mat-icon>
                       <span class="compact-label">Cita</span>
-                      <span class="compact-sep">-</span>
-                      <span class="compact-value">{{ grupo.cita ? grupo.cita.titulo : 'Sin cita vinculada' }}</span>
+                      @if (grupo.cita) {
+                        <span class="compact-sep">-</span>
+                        <span class="compact-value">{{ grupo.cita.titulo }}</span>
+                      }
                     </div>
                     @if (grupo.cita) {
                       <mat-icon class="compact-eye">visibility</mat-icon>
                     }
-                  </div>
+                    </div>
+                  }
 
-                  <div
+                  @if (shouldShowHistoriaColumn(grupo)) {
+                    <div
                     class="group-compact-item historia-item"
-                    [class.muted-card]="!grupo.historia"
-                    [class.is-clickable]="!!grupo.historia"
-                    [attr.tabindex]="grupo.historia ? 0 : -1"
-                    role="button"
-                    (click)="grupo.historia && viewEventDetails(grupo.historia)"
-                    (keydown.enter)="grupo.historia && viewEventDetails(grupo.historia)"
-                    (keydown.space)="grupo.historia && viewEventDetails(grupo.historia)">
+                    [class.muted-card]="!grupo.historias || grupo.historias.length === 0">
                     <div class="compact-main">
                       <mat-icon class="compact-icon">description</mat-icon>
                       <span class="compact-label">Historia clínica</span>
-                      <span class="compact-sep">-</span>
-                      <span class="compact-value">{{ grupo.historia ? grupo.historia.tipo : 'Sin historia vinculada' }}</span>
                     </div>
-                    @if (grupo.historia) {
-                      <mat-icon class="compact-eye">visibility</mat-icon>
+                    @if (grupo.historias && grupo.historias.length > 0) {
+                      <div class="historia-links">
+                        @for (historia of grupo.historias; track historia.id) {
+                          <button
+                            type="button"
+                            class="historia-link"
+                            (click)="viewEventDetails(historia)">
+                            {{ getHistoriaTitulo(historia.tipo) }}
+                            <mat-icon>visibility</mat-icon>
+                          </button>
+                        }
+                      </div>
                     }
-                  </div>
+                    </div>
+                  }
                 </div>
               </div>
             } @empty {

@@ -70,6 +70,17 @@ CREATE TABLE vetplus_auth.password_resets (
     completed_at TIMESTAMP
 );
 
+CREATE TABLE vetplus_auth.password_reset_tokens (
+    id_token UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id_usuario UUID NOT NULL REFERENCES vetplus_auth.usuarios(id_usuario) ON DELETE CASCADE,
+    token_hash VARCHAR(128) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    used_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by_ip INET,
+    UNIQUE (token_hash)
+);
+
 -- Tabla de auditoría del sistema
 
 -- Índice para búsqueda rápida de tokens
@@ -160,6 +171,8 @@ CREATE INDEX idx_password_resets_admin ON vetplus_auth.password_resets(realizado
 CREATE INDEX idx_password_resets_usuario ON vetplus_auth.password_resets(id_usuario);
 CREATE INDEX idx_password_resets_target ON vetplus_auth.password_resets(id_usuario);
 CREATE INDEX idx_password_resets_date ON vetplus_auth.password_resets(created_at);
+CREATE INDEX idx_password_reset_tokens_user ON vetplus_auth.password_reset_tokens(id_usuario);
+CREATE INDEX idx_password_reset_tokens_exp ON vetplus_auth.password_reset_tokens(expires_at);
 CREATE INDEX idx_auditoria_usuario ON system.log_auditoria(id_usuario);
 CREATE INDEX idx_auditoria_tabla ON system.log_auditoria(tabla_afectada);
 CREATE INDEX idx_auditoria_fecha ON system.log_auditoria(fecha);

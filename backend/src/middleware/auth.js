@@ -174,7 +174,11 @@ const authenticateToken = async (req, res, next) => {
 
     // Verificar que el usuario existe y está activo
     const userResult = await query(
-      'SELECT id_usuario, email, nombre, rol, activo, id_tenant FROM vetplus_auth.usuarios WHERE id_usuario = $1',
+      `SELECT u.id_usuario, u.email, u.nombre, u.rol, u.activo, u.id_tenant,
+              t.estado AS tenant_estado
+       FROM vetplus_auth.usuarios u
+       LEFT JOIN system.tenants t ON t.id_tenant = u.id_tenant
+       WHERE u.id_usuario = $1`,
       [decoded.id]
     );
 
@@ -193,6 +197,14 @@ const authenticateToken = async (req, res, next) => {
         success: false,
         message: 'Usuario desactivado',
         error: 'USER_DISABLED'
+      });
+    }
+
+    if (user.id_tenant && user.tenant_estado !== 'active') {
+      return res.status(403).json({
+        success: false,
+        message: 'La clínica está suspendida o inactiva',
+        error: 'TENANT_INACTIVE'
       });
     }
 
@@ -286,11 +298,19 @@ const optionalAuth = async (req, res, next) => {
         
         // Verificar que el usuario existe y está activo
         const userResult = await query(
-          'SELECT id_usuario, email, nombre, rol, activo, id_tenant FROM vetplus_auth.usuarios WHERE id_usuario = $1',
+          `SELECT u.id_usuario, u.email, u.nombre, u.rol, u.activo, u.id_tenant,
+                  t.estado AS tenant_estado
+           FROM vetplus_auth.usuarios u
+           LEFT JOIN system.tenants t ON t.id_tenant = u.id_tenant
+           WHERE u.id_usuario = $1`,
           [decoded.id]
         );
 
-        if (userResult.rows.length > 0 && userResult.rows[0].activo) {
+        if (
+          userResult.rows.length > 0 &&
+          userResult.rows[0].activo &&
+          (!userResult.rows[0].id_tenant || userResult.rows[0].tenant_estado === 'active')
+        ) {
           const user = userResult.rows[0];
           req.user = {
             id: user.id_usuario,

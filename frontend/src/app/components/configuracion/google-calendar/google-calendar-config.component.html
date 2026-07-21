@@ -41,7 +41,7 @@
                 <p class="calendar-name">{{ status()!.calendar_name }}</p>
               }
               @if (status()?.last_sync) {
-                <p class="last-sync">Última sincronización: {{ status()!.last_sync | date:'short' }}</p>
+                <p class="last-sync">Última sincronización: {{ status()!.last_sync | date:'dd-MM-yy h:mm a' }}</p>
               }
               @if (status()?.error_message) {
                 <p class="error-message">Error: {{ status()!.error_message }}</p>

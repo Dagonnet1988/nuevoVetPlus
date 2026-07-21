@@ -7,19 +7,17 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import {
   ConsentimientosService,
+  ConsentimientoCreado,
   ConsentimientoEstado
 } from '../../services/consentimientos.service';
-import {
-  QRModalComponent,
-  QRModalData
-} from '../qr-modal/qr-modal.component';
+import { QRModalComponent, QRModalData } from '../qr-modal/qr-modal.component';
 
 @Component({
   selector: 'app-consentimiento-status',
@@ -27,10 +25,10 @@ import {
   imports: [
     CommonModule,
     MatButtonModule,
+    MatDialogModule,
     MatIconModule,
     MatProgressSpinnerModule,
-    MatTooltipModule,
-    MatDialogModule
+    MatTooltipModule
   ],
   templateUrl: './consentimiento-status.component.html',
   styleUrls: ['./consentimiento-status.component.scss']
@@ -38,10 +36,10 @@ import {
 export class ConsentimientoStatusComponent implements OnInit {
   @Input({ required: true }) idCliente!: string;
   @Input() clienteNombre: string = '';
+  @Input() clienteTelefono: string | null = null;
 
   cargando = signal(true);
   actuando = signal(false);
-  mostrandoCanales = signal(false);
   estado = signal<ConsentimientoEstado | null>(null);
 
   constructor(
@@ -54,52 +52,75 @@ export class ConsentimientoStatusComponent implements OnInit {
     this.cargarEstado();
   }
 
-  enviarPorCanal(canal?: 'whatsapp' | 'correo' | 'ambos'): void {
-    if (!canal) {
-      this.mostrandoCanales.update((prev) => !prev);
-      return;
-    }
-
-    this.mostrandoCanales.set(false);
-
-    const st = this.estado()?.estado;
-    const consentimiento = this.estado()?.consentimiento;
-    const enviarComoPdf = this.debeEnviarPdf();
-
-    if (enviarComoPdf) {
-      this.prepararEnvioPdf(canal);
-      return;
-    }
-
-    // Si ya hay un enlace pendiente y vigente, reutilizarlo.
-    if (st === 'pendiente' && consentimiento?.firmaUrl && consentimiento.expiresAt && this.isLinkVigente(consentimiento.expiresAt)) {
-      this.compartirEnlace(consentimiento.firmaUrl, canal);
-      return;
-    }
-
+  enviarPorCorreo(): void {
     this.actuando.set(true);
 
-    const op$ = st === 'pendiente'
-      ? this.service.reenviar(this.idCliente)
-      : this.service.crear(this.idCliente);
-
-    op$.subscribe({
+    this.service.enviarPorCorreo(this.idCliente).subscribe({
       next: (resp) => {
         this.actuando.set(false);
         this.cargarEstado();
-        this.compartirEnlace(resp.firmaUrl, canal);
-        this.abrirQR(resp.qrBase64, resp.firmaUrl, resp.expiresAt);
+
+        const data = resp?.data;
+        if (data?.mode === 'link' && data?.firmaUrl && data?.qrBase64 && data?.expiresAt) {
+          this.abrirModalQR({
+            qrBase64: data.qrBase64,
+            firmaUrl: data.firmaUrl,
+            expiresAt: data.expiresAt,
+            idCliente: this.idCliente,
+            clienteNombre: this.clienteNombre || data?.clienteNombre || ''
+          });
+        }
+
+        this.snackBar.open(resp?.message || 'Correo de consentimiento enviado correctamente', 'Cerrar', { duration: 3500 });
       },
       error: (err) => {
         this.actuando.set(false);
-        this.snackBar.open(err.error?.message ?? 'Error al enviar consentimiento', 'Cerrar', { duration: 4000 });
+        this.snackBar.open(extractError(err, 'No fue posible enviar el consentimiento por correo'), 'Cerrar', { duration: 4500 });
       }
     });
   }
 
-  debeEnviarPdf(): boolean {
+  enviarLinkPorWhatsApp(): void {
     const consentimiento = this.estado()?.consentimiento;
-    return Boolean(consentimiento?.pdfDisponible);
+
+    if (consentimiento?.firmaUrl && consentimiento?.expiresAt && this.isLinkVigente(consentimiento.expiresAt)) {
+      this.abrirWhatsAppConLink(consentimiento.firmaUrl, consentimiento.expiresAt);
+      return;
+    }
+
+    this.actuando.set(true);
+    const estadoActual = this.estado()?.estado;
+    const request$ = estadoActual === 'sin_consentimiento'
+      ? this.service.crear(this.idCliente)
+      : this.service.reenviar(this.idCliente);
+
+    request$.subscribe({
+      next: (resp: ConsentimientoCreado) => {
+        this.actuando.set(false);
+        this.cargarEstado();
+        this.abrirModalQR({
+          qrBase64: resp.qrBase64,
+          firmaUrl: resp.firmaUrl,
+          expiresAt: resp.expiresAt,
+          idCliente: this.idCliente,
+          clienteNombre: this.clienteNombre || resp?.cliente?.nombre || ''
+        });
+        this.abrirWhatsAppConLink(resp.firmaUrl, resp.expiresAt);
+      },
+      error: (err) => {
+        this.actuando.set(false);
+        this.snackBar.open(extractError(err, 'No fue posible preparar el link para WhatsApp'), 'Cerrar', { duration: 4500 });
+      }
+    });
+  }
+
+  enviarConfirmacionPdfPorWhatsApp(): void {
+    const nombre = this.clienteNombre || 'propietario';
+    const mensaje =
+      `Hola ${nombre}, te compartimos por este medio la confirmación de tu consentimiento firmado. ` +
+      `Si no recibiste el PDF por correo, por favor responde este mensaje para reenviarlo.`;
+
+    this.abrirWhatsApp(mensaje, this.clienteTelefono, 'No se pudo abrir WhatsApp en el navegador');
   }
 
   cargarEstado(): void {
@@ -107,7 +128,6 @@ export class ConsentimientoStatusComponent implements OnInit {
     this.service.obtenerEstado(this.idCliente).subscribe({
       next: (resp) => {
         this.estado.set(resp);
-        this.mostrandoCanales.set(false);
         this.cargando.set(false);
       },
       error: (err) => {
@@ -117,55 +137,23 @@ export class ConsentimientoStatusComponent implements OnInit {
     });
   }
 
-  enviarConsentimiento(): void {
-    this.actuando.set(true);
-    this.service.crear(this.idCliente).subscribe({
-      next: (resp) => {
-        this.actuando.set(false);
-        this.cargarEstado();
-        this.abrirQR(resp.qrBase64, resp.firmaUrl, resp.expiresAt);
-      },
-      error: (err) => {
-        this.actuando.set(false);
-        this.snackBar.open(err.error?.message ?? 'Error al crear consentimiento', 'Cerrar', { duration: 4000 });
-      }
-    });
-  }
-
-  reenviarConsentimiento(): void {
-    this.actuando.set(true);
-    this.service.reenviar(this.idCliente).subscribe({
-      next: (resp) => {
-        this.actuando.set(false);
-        this.cargarEstado();
-        this.abrirQR(resp.qrBase64, resp.firmaUrl, resp.expiresAt);
-        this.snackBar.open('Enlace renovado', 'Cerrar', { duration: 3000 });
-      },
-      error: (err) => {
-        this.actuando.set(false);
-        this.snackBar.open(err.error?.message ?? 'Error al reenviar', 'Cerrar', { duration: 4000 });
-      }
-    });
-  }
-
-  verQR(): void {
+  copiarEnlaceFirma(): void {
     const c = this.estado()?.consentimiento;
     if (!c?.firmaUrl) {
-      this.snackBar.open('No hay enlace disponible', 'Cerrar', { duration: 3000 });
+      this.snackBar.open('No hay link de firma disponible', 'Cerrar', { duration: 3000 });
       return;
     }
 
-    // Verificar expiración en cliente antes de copiar
     if (c.expiresAt && new Date(c.expiresAt) < new Date()) {
       this.snackBar.open('El enlace ha vencido. Genera uno nuevo.', 'Cerrar', { duration: 4000 });
-      this.cargarEstado(); // Actualizar badge a 'expirado'
+      this.cargarEstado();
       return;
     }
 
     const firmaUrl = c.firmaUrl;
 
     if (!navigator.clipboard) {
-      this.snackBar.open(`Copia este enlace: ${firmaUrl}`, 'Cerrar', { duration: 8000 });
+      this.snackBar.open(`Copia este link de firma: ${firmaUrl}`, 'Cerrar', { duration: 8000 });
       return;
     }
 
@@ -249,31 +237,6 @@ export class ConsentimientoStatusComponent implements OnInit {
     });
   }
 
-  private prepararEnvioPdf(canal: 'whatsapp' | 'correo' | 'ambos'): void {
-    this.actuando.set(true);
-    this.service.descargarPDF(this.idCliente).subscribe({
-      next: (resp) => {
-        this.actuando.set(false);
-        const blob = resp.body;
-        if (!blob) {
-          this.snackBar.open('No se recibió el archivo PDF', 'Cerrar', { duration: 3000 });
-          return;
-        }
-
-        const header = resp.headers.get('Content-Disposition') || '';
-        const fileName = this.extractFileName(header) || this.buildFriendlyPdfName();
-        const url = URL.createObjectURL(blob);
-
-        this.fallbackDownload(url, fileName);
-        this.compartirPdfPorCanal(fileName, canal);
-      },
-      error: (err) => {
-        this.actuando.set(false);
-        this.snackBar.open(extractError(err, 'Error al preparar PDF'), 'Cerrar', { duration: 3000 });
-      }
-    });
-  }
-
   private extractFileName(contentDisposition: string): string | null {
     if (!contentDisposition) return null;
 
@@ -326,44 +289,6 @@ export class ConsentimientoStatusComponent implements OnInit {
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
 
-  private compartirEnlace(firmaUrl: string, canal: 'whatsapp' | 'correo' | 'ambos'): void {
-    const nombre = this.clienteNombre || 'propietario';
-    const mensaje = `Hola ${nombre}, por favor firma tu consentimiento en este enlace: ${firmaUrl}`;
-
-    if (canal === 'whatsapp' || canal === 'ambos') {
-      const waUrl = `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
-      window.open(waUrl, '_blank', 'noopener');
-    }
-
-    if (canal === 'correo' || canal === 'ambos') {
-      const subject = 'Firma de consentimiento - VetPlus';
-      const mailto = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(mensaje)}`;
-      window.open(mailto, '_blank', 'noopener');
-    }
-
-    this.snackBar.open('Enlace preparado para envío.', 'Cerrar', { duration: 3000 });
-  }
-
-  private compartirPdfPorCanal(fileName: string, canal: 'whatsapp' | 'correo' | 'ambos'): void {
-    const nombre = this.clienteNombre || 'propietario';
-    const mensaje =
-      `Hola ${nombre}, te envío el consentimiento firmado en PDF (${fileName}). ` +
-      'El archivo ya se descargó para adjuntarlo en este mensaje.';
-
-    if (canal === 'whatsapp' || canal === 'ambos') {
-      const waUrl = `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
-      window.open(waUrl, '_blank', 'noopener');
-    }
-
-    if (canal === 'correo' || canal === 'ambos') {
-      const subject = `Consentimiento firmado en PDF - ${nombre}`;
-      const mailto = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(mensaje)}`;
-      window.open(mailto, '_blank', 'noopener');
-    }
-
-    this.snackBar.open('PDF descargado. Adjunta el archivo en el canal elegido.', 'Cerrar', { duration: 5000 });
-  }
-
   solicitarRevocacion(): void {
     const motivo = window.prompt(
       `¿Por qué se revoca el consentimiento de ${this.clienteNombre || 'este propietario'}?\n` +
@@ -385,20 +310,48 @@ export class ConsentimientoStatusComponent implements OnInit {
     });
   }
 
-  private abrirQR(qrBase64: string, firmaUrl: string, expiresAt: string): void {
-    const data: QRModalData = {
-      qrBase64,
-      firmaUrl,
-      expiresAt,
-      idCliente: this.idCliente,
-      clienteNombre: this.clienteNombre
-    };
-    this.dialog.open(QRModalComponent, {
-      data,
-      disableClose: false,
-      width: '420px'
-    }).afterClosed().subscribe((firmado) => {
-      if (firmado) this.cargarEstado();
-    });
+  private abrirModalQR(data: QRModalData): void {
+    this.dialog.open(QRModalComponent, { data, width: '420px' });
+  }
+
+  private abrirWhatsAppConLink(firmaUrl: string, expiresAt: string): void {
+    const nombre = this.clienteNombre || 'propietario';
+    const vence = new Date(expiresAt).toLocaleString('es-CO');
+    const mensaje =
+      `Hola ${nombre}, este es tu link para firmar el consentimiento: ${firmaUrl}\n` +
+      `Vigente hasta: ${vence}`;
+
+    this.abrirWhatsApp(mensaje, this.clienteTelefono, 'No se pudo abrir WhatsApp. Copia el link manualmente.');
+  }
+
+  private abrirWhatsApp(mensaje: string, telefono: string | null, errorMsg: string): void {
+    const numero = this.normalizarTelefonoWhatsApp(telefono);
+    const waUrl = numero
+      ? `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`
+      : `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
+    const popup = window.open(waUrl, '_blank', 'noopener');
+
+    if (!popup) {
+      this.snackBar.open(errorMsg, 'Cerrar', { duration: 4000 });
+      return;
+    }
+
+    this.snackBar.open('Abriendo WhatsApp Web/App…', 'Cerrar', { duration: 2200 });
+  }
+
+  private normalizarTelefonoWhatsApp(raw: string | null | undefined): string | null {
+    const digits = String(raw || '').replace(/\D+/g, '');
+    if (!digits) return null;
+
+    const withoutZeros = digits.startsWith('00') ? digits.slice(2) : digits;
+    if (withoutZeros.length === 10) {
+      return `57${withoutZeros}`;
+    }
+
+    if (withoutZeros.length >= 11 && withoutZeros.length <= 15) {
+      return withoutZeros;
+    }
+
+    return null;
   }
 }

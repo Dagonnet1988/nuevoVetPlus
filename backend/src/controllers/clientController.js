@@ -211,11 +211,19 @@ export async function getClients(req, res) {
     }
 
     // Ordenamiento
-    const allowedSortFields = ['nombre', 'telefono', 'email', 'created_at'];
-    const sortField = allowedSortFields.includes(sortBy) ? sortBy : 'nombre';
+    const sortFieldMap = {
+      nombre: "LOWER(COALESCE(nombre, ''))",
+      telefono: "LOWER(COALESCE(telefono, ''))",
+      email: "LOWER(COALESCE(email, ''))",
+      created_at: 'created_at'
+    };
+    const sortField = Object.prototype.hasOwnProperty.call(sortFieldMap, sortBy)
+      ? sortFieldMap[sortBy]
+      : "LOWER(COALESCE(nombre, ''))";
     const order = sortOrder.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
-    
-    queryText += ` ORDER BY ${sortField} ${order}`;
+
+    // Orden case-insensitive para textos y consistente para empates.
+    queryText += ` ORDER BY ${sortField} ${order}, created_at DESC`;
 
     // Paginación
     paramCount++;
@@ -366,6 +374,25 @@ export async function updateClient(req, res) {
       activo
     } = req.body;
 
+    if (activo === false) {
+      const activePetsResult = await query(
+        `SELECT COUNT(*) AS active_pets
+         FROM clinical.mascotas
+         WHERE id_cliente = $1
+           AND id_tenant = $2
+           AND activo = true`,
+        [id, tenantId]
+      );
+
+      const activePets = parseInt(activePetsResult.rows[0]?.active_pets || '0', 10);
+      if (activePets > 0) {
+        return res.status(409).json({
+          success: false,
+          message: `No se puede desactivar el propietario porque tiene ${activePets} mascota(s) activa(s).`
+        });
+      }
+    }
+
     const canUseUpdatedBy = await hasClientesUpdatedByColumn();
 
     const queryText = canUseUpdatedBy
@@ -485,13 +512,23 @@ export async function deleteClient(req, res) {
 
     // Si tiene mascotas asociadas no se elimina físicamente; se desactiva.
     const checkPetsQuery = `
-      SELECT COUNT(*) as pets_count 
-      FROM clinical.mascotas 
+      SELECT
+        COUNT(*) AS pets_count,
+        COUNT(*) FILTER (WHERE activo = true) AS active_pets_count
+      FROM clinical.mascotas
       WHERE id_cliente = $1 AND id_tenant = $2
     `;
     
     const petsResult = await query(checkPetsQuery, [id, tenantId]);
     const totalPets = parseInt(petsResult.rows[0].pets_count, 10);
+    const activePets = parseInt(petsResult.rows[0].active_pets_count, 10);
+
+    if (activePets > 0) {
+      return res.status(409).json({
+        success: false,
+        message: `No se puede desactivar el propietario porque tiene ${activePets} mascota(s) activa(s).`
+      });
+    }
 
     if (totalPets > 0) {
       if (!client.activo) {

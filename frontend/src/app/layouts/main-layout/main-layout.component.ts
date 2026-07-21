@@ -1,4 +1,4 @@
-import { Component, signal, ViewChild } from '@angular/core';
+import { Component, signal, ViewChild, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { MatSidenavModule, MatSidenavContainer } from '@angular/material/sidenav';
@@ -12,6 +12,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { AuthService } from '../../services/auth.service';
 import { Router } from '@angular/router';
 import { ConfiguracionService } from '../../services/configuracion.service';
+import { CitasService } from '../../services/citas.service';
 import { environment } from '../../../environments/environment';
 
 interface MenuItem {
@@ -105,29 +106,13 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
 
         <!-- Footer del sidebar -->
         <div class="sidebar-footer" [class.footer-collapsed]="collapsed() && !isMobile()">
-          <button mat-icon-button
-                  (click)="authService.toggleTheme()"
-                  [matTooltip]="collapsed() && !isMobile() ? 'Cambiar tema' : ''"
-                  matTooltipPosition="right"
-                  class="theme-btn-icon">
-            <mat-icon>palette</mat-icon>
-          </button>
-          @if (!collapsed() || isMobile()) {
-            <span class="theme-label">Cambiar tema</span>
-          }
-        </div>
-      </mat-sidenav>
-
-      <!-- Contenido principal -->
-      <mat-sidenav-content>
-        <div class="top-user-strip">
           <button
-                  class="toolbar-user-chip"
-                  [class.toolbar-user-chip-compact]="isMobile()"
+                  class="sidebar-user-chip"
+                  [class.sidebar-user-chip-compact]="collapsed() && !isMobile()"
                   [matMenuTriggerFor]="userMenu"
-                  [matTooltip]="'Opciones de usuario'"
+                  [matTooltip]="collapsed() && !isMobile() ? 'Opciones de usuario' : ''"
+                  matTooltipPosition="right"
                   type="button"
-                  (click)="openUserMenu()"
                   aria-label="Abrir menú de usuario">
             <span class="toolbar-user-main">
               <span class="toolbar-avatar-wrap">
@@ -137,17 +122,23 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
                   <span class="toolbar-avatar-fallback">{{ getCurrentUserInitials() }}</span>
                 }
               </span>
-              @if (!isMobile()) {
+              @if ((!collapsed() || isMobile())) {
                 <span class="toolbar-user-text">
                   <span class="toolbar-user-name">{{ authService.getCurrentUserName() }}</span>
                   <span class="toolbar-user-role">{{ authService.getCurrentUserRole() }}</span>
                 </span>
               }
             </span>
-            <mat-icon class="toolbar-user-arrow">expand_more</mat-icon>
+            @if ((!collapsed() || isMobile())) {
+              <mat-icon class="toolbar-user-arrow">expand_more</mat-icon>
+            }
           </button>
-        </div>
 
+        </div>
+      </mat-sidenav>
+
+      <!-- Contenido principal -->
+      <mat-sidenav-content>
         <!-- Toolbar superior -->
         <mat-toolbar color="primary" class="main-toolbar">
           <!-- Botón de menú para móvil -->
@@ -187,6 +178,21 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
         <main class="main-content">
           <router-outlet></router-outlet>
         </main>
+
+        <footer class="app-footer-mini" aria-label="Información de la aplicación">
+          <div class="app-footer-mini-left">
+            <span>{{ empresaNombre() }} © {{ currentYear }}</span>
+            <span class="footer-separator">•</span>
+            <span>v{{ appVersion }}</span>
+            @if (!environment.production) {
+              <span class="env-pill">DEV</span>
+            }
+          </div>
+
+          <div class="app-footer-mini-right">
+            <a class="footer-link-inline" href="mailto:contacto@dadev.co">Soporte</a>
+          </div>
+        </footer>
       </mat-sidenav-content>
     </mat-sidenav-container>
   `,
@@ -194,13 +200,18 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
     .sidenav-container { height: 100%; }
 
     /* Animar el contenido cuando el sidebar cambia de tamaño */
-    mat-sidenav-content { transition: margin-left 0.25s ease !important; }
+    mat-sidenav-content {
+      transition: margin-left 0.25s ease !important;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
 
     /* ── Sidebar base ── */
     .sidenav {
       width: 280px;
-      background: #fafafa;
-      border-right: 1px solid #e0e0e0;
+      background: var(--vp-surface);
+      border-right: 1px solid var(--vp-border);
       transition: width 0.25s ease;
       overflow-x: hidden;
     }
@@ -212,7 +223,7 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
     /* ── Header ── */
     .sidebar-header {
       padding: 16px 12px;
-      border-bottom: 1px solid #e0e0e0;
+      border-bottom: 1px solid var(--vp-border);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -282,7 +293,7 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
       margin: 0;
       font-size: 17px;
       font-weight: 600;
-      color: #2e7d32;
+      color: var(--vp-primary);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -292,7 +303,7 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
       margin: 2px 0 0 0;
       font-size: 11px;
       line-height: 1.2;
-      color: #5f6368;
+      color: var(--vp-text-secondary);
       overflow: hidden;
       text-overflow: ellipsis;
       display: -webkit-box;
@@ -468,24 +479,91 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
     }
 
     /* ── Nav list ── */
-    .nav-list { padding: 8px 0; }
+    .nav-list {
+      padding: 8px 0;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
 
     .nav-item {
       margin: 2px 8px;
       border-radius: 8px;
       transition: background 0.2s;
+      width: fit-content;
+      max-width: calc(100% - 16px);
+      padding-right: 14px;
+    }
+
+    ::ng-deep .nav-item.mdc-list-item {
+      width: fit-content;
+      max-width: calc(100% - 16px);
     }
 
     .nav-item:hover { background-color: rgba(46, 125, 50, 0.1); }
 
     .nav-item-collapsed {
-      margin: 2px 4px;
+      width: 44px;
+      min-height: 44px;
+      margin: 4px auto;
+      padding: 0 !important;
+      border-radius: 12px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center !important;
+      --mdc-list-list-item-leading-icon-start-space: 0px;
+      --mdc-list-list-item-leading-icon-end-space: 0px;
+      --mdc-list-list-item-one-line-container-height: 44px;
+    }
+
+    ::ng-deep .nav-item-collapsed.mdc-list-item {
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+    }
+
+    ::ng-deep .nav-item-collapsed .mdc-list-item__start {
+      margin-inline-start: 0 !important;
+      margin-inline-end: 0 !important;
+      width: 24px;
+      height: 24px;
+      display: inline-flex;
+      align-items: center;
       justify-content: center;
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    ::ng-deep .nav-item-collapsed .mdc-list-item__content {
+      display: none !important;
+    }
+
+    ::ng-deep .nav-item-collapsed .mat-mdc-list-item-icon {
+      margin: 0 !important;
     }
 
     .active-link {
       background-color: rgba(46, 125, 50, 0.15) !important;
-      color: #2e7d32 !important;
+      color: var(--vp-primary) !important;
+    }
+
+    .sidenav.collapsed .nav-list {
+      align-items: center;
+    }
+
+    .sidenav.collapsed .nav-item,
+    .sidenav.collapsed ::ng-deep .nav-item.mdc-list-item {
+      width: 44px;
+      max-width: 44px;
+      padding-right: 0 !important;
+    }
+
+    .sidenav.collapsed .nav-item.active-link {
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     /* ── Footer ── */
@@ -495,23 +573,39 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
       left: 0;
       right: 0;
       padding: 12px 16px;
-      border-top: 1px solid #e0e0e0;
+      border-top: 1px solid var(--vp-border);
       display: flex;
       align-items: center;
       gap: 8px;
     }
 
+    .sidebar-user-chip {
+      height: 36px;
+      min-width: 0;
+      width: 100%;
+      padding: 0 8px;
+      border-radius: 12px;
+      border: 1px solid var(--vp-border);
+      background: var(--vp-surface);
+      color: var(--vp-text-primary);
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      cursor: pointer;
+      overflow: hidden;
+    }
+
+    .sidebar-user-chip-compact {
+      width: 36px;
+      padding: 0;
+      justify-content: center;
+    }
+
     .footer-collapsed {
       justify-content: center;
       padding: 12px 0;
-    }
-
-    .theme-btn-icon { color: #666; flex-shrink: 0; }
-
-    .theme-label {
-      font-size: 13px;
-      color: #666;
-      white-space: nowrap;
+      flex-direction: column;
     }
 
     /* ── Toolbar ── */
@@ -520,24 +614,6 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
       top: 0;
       z-index: 1000;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-
-    .top-user-strip {
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-      padding: 8px 16px;
-      background: linear-gradient(90deg, #0f3d68 0%, #155288 100%);
-      border-bottom: 1px solid #0b2f4f;
-    }
-
-    .toolbar-user-chip {
-      border-color: rgba(255, 255, 255, 0.5);
-      background: rgba(255, 255, 255, 0.24);
-    }
-
-    .toolbar-user-chip:hover {
-      background: rgba(255, 255, 255, 0.34);
     }
 
     .page-title {
@@ -552,9 +628,56 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
     .spacer { flex: 1 1 auto; }
 
     .main-content {
+      flex: 1;
       padding: 24px;
-      min-height: calc(100vh - 64px);
-      background: #f5f5f5;
+      background: var(--vp-page-bg);
+    }
+
+    .app-footer-mini {
+      height: 32px;
+      padding: 0 16px;
+      border-top: 1px solid var(--vp-border);
+      background: var(--vp-surface);
+      color: var(--vp-text-secondary);
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .app-footer-mini-left,
+    .app-footer-mini-right {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .footer-separator {
+      opacity: 0.55;
+    }
+
+    .env-pill {
+      padding: 1px 6px;
+      border-radius: 999px;
+      border: 1px solid #bfdbfe;
+      background: #eff6ff;
+      color: #1d4ed8;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      font-size: 10px;
+    }
+
+    .footer-link-inline {
+      color: var(--vp-link);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .footer-link-inline:hover {
+      color: var(--vp-link-hover);
+      text-decoration: underline;
     }
 
     /* ── Menú usuario ── */
@@ -574,44 +697,13 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
     @media (max-width: 768px) {
       .sidenav { width: 100%; }
       .main-content { padding: 16px; }
+      .app-footer-mini { display: none; }
       .page-title { font-size: 16px; }
-      .top-user-strip {
-        padding: 6px 10px;
-      }
-      .toolbar-user-chip {
-        min-width: auto;
-        width: 44px;
-        height: 36px;
-        padding: 0 4px;
-        justify-content: center;
-        gap: 4px;
-      }
-      .toolbar-user-chip-compact .toolbar-user-main {
-        flex: 0 0 auto;
-      }
-      .toolbar-user-chip-compact .toolbar-user-arrow {
-        width: 16px;
-        height: 16px;
-        font-size: 16px;
-      }
-      .toolbar-user-chip-compact .toolbar-avatar-wrap,
-      .toolbar-user-chip-compact .toolbar-avatar {
-        width: 26px;
-        height: 26px;
-      }
     }
 
-    /* ── Dark theme ── */
-    .dark-theme .sidenav { background: #1e1e1e; border-right-color: #333; }
-    .dark-theme .user-info,
-    .dark-theme .user-info-collapsed,
-    .dark-theme .sidebar-header,
-    .dark-theme .sidebar-footer { border-color: #333; }
-    .dark-theme .user-name { color: #fff; }
-    .dark-theme .main-content { background: #121212; }
   `]
 })
-export class MainLayoutComponent {
+export class MainLayoutComponent implements OnDestroy {
   @ViewChild(MatMenuTrigger) userMenuTrigger!: MatMenuTrigger;
   @ViewChild(MatSidenavContainer) sidenavContainer!: MatSidenavContainer;
 
@@ -623,6 +715,11 @@ export class MainLayoutComponent {
   empresaNombre = signal<string>('VetPlus');
   empresaEslogan = signal<string>('');
   empresaLogoUrl = signal<string>('');
+  readonly environment = environment;
+  readonly appVersion = environment.version;
+  readonly currentYear = new Date().getFullYear();
+  private googleSyncMonitorTimer: ReturnType<typeof setInterval> | null = null;
+  private googleReauthAlertShown = false;
 
   private readonly menuItems: MenuItem[] = [
     {
@@ -666,11 +763,70 @@ export class MainLayoutComponent {
   constructor(
     public authService: AuthService,
     private router: Router,
-    private configuracionService: ConfiguracionService
+    private configuracionService: ConfiguracionService,
+    private citasService: CitasService
   ) {
     this.checkScreenSize();
     window.addEventListener('resize', () => this.checkScreenSize());
     this.loadEmpresaData();
+    this.startGoogleSyncMonitor();
+  }
+
+  private startGoogleSyncMonitor(): void {
+    // Solo en área autenticada de app clínica
+    if (!this.authService.hasAnyRole(['admin', 'vet', 'aux'])) {
+      return;
+    }
+
+    this.checkGoogleSyncHealth();
+
+    this.googleSyncMonitorTimer = setInterval(() => {
+      this.checkGoogleSyncHealth();
+    }, 120000);
+  }
+
+  private checkGoogleSyncHealth(): void {
+    this.citasService.getSyncStatus().subscribe({
+      next: (response) => {
+        const authIssue = response?.data?.google_auth;
+        const requiresReauth = authIssue?.requires_reauth === true;
+
+        if (!requiresReauth) {
+          this.googleReauthAlertShown = false;
+          return;
+        }
+
+        if (this.googleReauthAlertShown) {
+          return;
+        }
+        this.googleReauthAlertShown = true;
+
+        if (this.authService.isAdmin()) {
+          const goNow = window.confirm(
+            'La sincronización automática con Google Calendar falló por autorización vencida o revocada.\n\n¿Deseas ir ahora a reautorizar Google Calendar?'
+          );
+
+          if (goNow) {
+            this.router.navigate(['/configuracion/google-calendar']);
+          }
+          return;
+        }
+
+        window.alert(
+          'La sincronización automática con Google Calendar requiere reautorización.\n\nPor favor contacta a un administrador para reautorizar la integración.'
+        );
+      },
+      error: () => {
+        // Evitar ruido de red en layout; el monitor reintentará en el siguiente ciclo.
+      }
+    });
+  }
+
+  ngOnDestroy(): void {
+    if (this.googleSyncMonitorTimer) {
+      clearInterval(this.googleSyncMonitorTimer);
+      this.googleSyncMonitorTimer = null;
+    }
   }
 
   private loadEmpresaData(): void {

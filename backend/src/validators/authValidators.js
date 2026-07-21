@@ -39,6 +39,49 @@ export const validateChangePassword = [
     })
 ];
 
+export const validateForgotPassword = [
+  body('email')
+    .optional({ values: 'falsy' })
+    .isEmail()
+    .withMessage('Email inválido'),
+
+  body('documento')
+    .optional({ values: 'falsy' })
+    .isLength({ min: 5, max: 20 })
+    .withMessage('Documento inválido'),
+
+  body().custom((value) => {
+    const hasEmail = Boolean(String(value?.email || '').trim());
+    const hasDocumento = Boolean(String(value?.documento || '').trim());
+    if (!hasEmail && !hasDocumento) {
+      throw new Error('Debes enviar email o documento');
+    }
+    return true;
+  })
+];
+
+export const validateResetPasswordByToken = [
+  body('token')
+    .notEmpty()
+    .withMessage('Token es requerido')
+    .isLength({ min: 32 })
+    .withMessage('Token inválido'),
+
+  body('newPassword')
+    .isLength({ min: 8 })
+    .withMessage('Nueva contraseña debe tener al menos 8 caracteres')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage('Nueva contraseña debe contener al menos una minúscula, una mayúscula y un número'),
+
+  body('confirmPassword')
+    .custom((value, { req }) => {
+      if (value !== req.body.newPassword) {
+        throw new Error('Confirmación de contraseña no coincide');
+      }
+      return true;
+    })
+];
+
 // Validación para crear usuario
 export const validateCreateUser = [
   body('nombre')

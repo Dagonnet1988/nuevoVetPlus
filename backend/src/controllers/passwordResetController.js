@@ -2,6 +2,8 @@ import bcrypt from 'bcryptjs';
 import { query } from '../config/database.js';
 import { validationResult } from 'express-validator/lib/index.js';
 import { v4 as uuidv4 } from 'uuid';
+import { sendEmail } from '../services/emailService.js';
+import { renderEmailTemplate } from '../services/emailTemplateService.js';
 
 /**
  * Controlador para reset de contraseñas por administrador
@@ -75,6 +77,68 @@ class PasswordResetController {
 
       console.log(`🔑 Contraseña temporal generada para ${targetUser.email} por admin ${req.user.email}`);
 
+      let emailStatus = {
+        attempted: false,
+        sent: false,
+        status: 'not_attempted',
+        message: 'No se intentó envío por correo'
+      };
+
+      if (targetUser.email) {
+        emailStatus.attempted = true;
+        try {
+          const tenantId = req.tenantId ?? req.user?.tenant_id;
+          const rendered = await renderEmailTemplate({
+            tenantId,
+            key: 'usuario_reset_temporal',
+            variables: {
+              usuario_nombre: targetUser.nombre,
+              password_temporal: tempPassword
+            },
+            userId: adminId
+          });
+
+          if (rendered) {
+            await sendEmail({
+              tenantId,
+              to: targetUser.email,
+              subject: rendered.asunto_render,
+              html: rendered.cuerpo_html_render,
+              text: rendered.cuerpo_text_render || undefined,
+              logContext: {
+                tipo_envio: 'usuario_reset_temporal',
+                userId: adminId,
+                metadata: {
+                  id_usuario: targetUser.id_usuario,
+                  tipo_reset: 'temp_password'
+                }
+              }
+            });
+
+            emailStatus = {
+              attempted: true,
+              sent: true,
+              status: 'sent',
+              message: 'Correo de restablecimiento enviado correctamente'
+            };
+          } else {
+            emailStatus = {
+              attempted: true,
+              sent: false,
+              status: 'template_missing',
+              message: 'No se encontró plantilla activa para enviar correo de restablecimiento'
+            };
+          }
+        } catch (mailError) {
+          emailStatus = {
+            attempted: true,
+            sent: false,
+            status: 'failed',
+            message: mailError.message || 'No se pudo enviar correo de restablecimiento'
+          };
+        }
+      }
+
       res.json({
         success: true,
         message: `Contraseña temporal generada para ${targetUser.nombre}`,
@@ -87,12 +151,7 @@ class PasswordResetController {
           tempPassword: tempPassword,
           expiresIn: '24 horas',
           mustChangeOnLogin: true,
-          email: {
-            attempted: true,
-            sent: false,
-            status: 'not_configured',
-            message: 'Envio por email pendiente de configuracion SMTP'
-          }
+          email: emailStatus
         }
       });
 

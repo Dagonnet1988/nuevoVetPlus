@@ -1,6 +1,6 @@
 import { extractError } from '../../utils/error.utils';
 import { Component, OnInit, OnDestroy, signal, Inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -17,6 +17,7 @@ import { MatExpansionModule } from '@angular/material/expansion';
 import { sexoDbToFrontend } from '../../utils/paciente.utils';
 import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
+import { HttpClient } from '@angular/common/http';
 
 import { PacientesService } from '../../services/pacientes.service';
 import { CitasService } from '../../services/citas.service';
@@ -72,6 +73,7 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
   constructor(
     private route: ActivatedRoute,
     private router: Router,
+    private location: Location,
     private pacientesService: PacientesService,
     private citasService: CitasService,
     private consultasService: ConsultasService,
@@ -251,7 +253,7 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
             id_historia: c.id_historia || null,
             codigo_cita: c.codigo_cita || null,
             estado: String(c.estado || '').toLowerCase().replace(' ', '_'),
-            titulo: c.motivo || c.tipo || 'Cita',
+            titulo: c.tipo || c.motivo || 'Cita',
             fecha: citaDate(c),
             profesional: c.veterinario_nombre || 'Veterinario',
             descripcion: `Cita ${String(c.estado || '').replace('_', ' ')}`,
@@ -392,6 +394,11 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
 
   // Acciones
   goBack(): void {
+    if (window.history.length > 1) {
+      this.location.back();
+      return;
+    }
+
     this.router.navigate(['/pacientes']);
   }
 
@@ -522,7 +529,20 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
   }
 
   viewOwnerDetails(): void {
-    this.snackBar.open('Funcionalidad en desarrollo - Detalles del propietario', 'Cerrar', { duration: 3000 });
+    const ownerId = this.paciente()?.cliente?.id_cliente;
+    const ownerName = this.paciente()?.cliente?.nombre || '';
+
+    if (!ownerId) {
+      this.snackBar.open('No se encontró información del propietario', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    this.router.navigate(['/propietarios'], {
+      queryParams: {
+        ownerId,
+        search: ownerName
+      }
+    });
   }
 
   callOwner(): void {
@@ -534,9 +554,21 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
 
   emailOwner(): void {
     const email = this.paciente()?.cliente?.email;
-    if (email) {
-      window.open(`mailto:${email}`);
+    if (!email) {
+      this.snackBar.open('El propietario no tiene correo registrado', 'Cerrar', { duration: 3000 });
+      return;
     }
+
+    if (!navigator.clipboard) {
+      this.snackBar.open(`Correo del propietario: ${email}`, 'Cerrar', { duration: 5000 });
+      return;
+    }
+
+    navigator.clipboard.writeText(email).then(() => {
+      this.snackBar.open('Correo del propietario copiado', 'Cerrar', { duration: 2500 });
+    }).catch(() => {
+      this.snackBar.open(`Correo del propietario: ${email}`, 'Cerrar', { duration: 5000 });
+    });
   }
 
   showMap(): void {
@@ -708,14 +740,36 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
     }
   }
 
-  private getHistoriaTitulo(tipo: string): string {
+  getHistoriaTitulo(tipo: string): string {
     const labels: Record<string, string> = {
-      valoracion_inicial: 'Valoración Inicial',
-      seguimiento: 'Seguimiento',
+      valoracion_inicial: 'Valoración',
+      seguimiento: 'Terapia / Hidroterapia',
       formula: 'Fórmula',
       remision: 'Remisión'
     };
     return labels[tipo] || 'Historia Clínica';
+  }
+
+  shouldShowCitaColumn(grupo: any): boolean {
+    return Boolean(grupo?.cita);
+  }
+
+  shouldShowHistoriaColumn(grupo: any): boolean {
+    const historias = Array.isArray(grupo?.historias) ? grupo.historias : [];
+    if (historias.length > 0) return true;
+
+    const cita = grupo?.cita;
+    if (!cita) return false;
+
+    const estado = String(cita?.estado || '').toLowerCase();
+    const noAtendida = ['pendiente', 'confirmada', 'programada'].includes(estado);
+    const fecha = new Date(cita?.fecha || 0);
+    const esFutura = !Number.isNaN(fecha.getTime()) && fecha.getTime() > Date.now();
+
+    // Citas futuras no atendidas no muestran columna de historia.
+    if (noAtendida && esFutura) return false;
+
+    return true;
   }
 
   private rebuildHistorialEventos(): void {
@@ -727,7 +781,7 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
     const citas = [...this.citasEventos()].sort((a: any, b: any) => new Date(b.fecha || 0).getTime() - new Date(a.fecha || 0).getTime());
 
     const historiaById = new Map<string, any>();
-    const historiaByCitaId = new Map<string, any>();
+    const historiaByCitaId = new Map<string, any[]>();
     const usedHistoriaIds = new Set<string>();
 
     for (const historia of historias) {
@@ -735,30 +789,41 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
         historiaById.set(historia.id, historia);
       }
       if (historia?.id_cita) {
-        historiaByCitaId.set(historia.id_cita, historia);
+        const existentes = historiaByCitaId.get(historia.id_cita) || [];
+        existentes.push(historia);
+        historiaByCitaId.set(historia.id_cita, existentes);
       }
     }
 
     const grupos: any[] = [];
 
     for (const cita of citas) {
-      let historiaRelacionada = null;
+      const historiasRelacionadas: any[] = [];
 
       if (cita?.id_historia && historiaById.has(cita.id_historia)) {
-        historiaRelacionada = historiaById.get(cita.id_historia);
-      } else if (cita?.id && historiaByCitaId.has(cita.id)) {
-        historiaRelacionada = historiaByCitaId.get(cita.id);
+        historiasRelacionadas.push(historiaById.get(cita.id_historia));
       }
 
-      if (historiaRelacionada?.id) {
-        usedHistoriaIds.add(historiaRelacionada.id);
+      if (cita?.id && historiaByCitaId.has(cita.id)) {
+        const historiasPorCita = historiaByCitaId.get(cita.id) || [];
+        for (const historia of historiasPorCita) {
+          if (!historiasRelacionadas.some((h: any) => h?.id === historia?.id)) {
+            historiasRelacionadas.push(historia);
+          }
+        }
+      }
+
+      for (const historiaRelacionada of historiasRelacionadas) {
+        if (historiaRelacionada?.id) {
+          usedHistoriaIds.add(historiaRelacionada.id);
+        }
       }
 
       grupos.push({
         key: `cita-${cita.id}`,
         fecha: cita.fecha,
         cita,
-        historia: historiaRelacionada,
+        historias: historiasRelacionadas,
       });
     }
 
@@ -768,7 +833,7 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
           key: `historia-${historia.id}`,
           fecha: historia.fecha,
           cita: null,
-          historia,
+          historias: [historia],
         });
       }
     }
@@ -917,7 +982,20 @@ export class ImageViewerDialog {
         @if (isImage()) {
           <img [src]="data.url" [alt]="data.title" class="preview-image" />
         } @else if (isPdf()) {
-          <iframe [src]="data.url" class="preview-pdf" title="Vista previa de documento"></iframe>
+          @if (pdfLoading) {
+            <div class="preview-fallback">
+              <mat-icon>hourglass_top</mat-icon>
+              <p>Cargando PDF...</p>
+            </div>
+          } @else if (pdfLoadError || !safePdfUrl) {
+            <div class="preview-fallback">
+              <mat-icon>error_outline</mat-icon>
+              <p>No se pudo cargar la vista previa del PDF.</p>
+              <button mat-raised-button color="primary" (click)="openNewTab()">Abrir archivo</button>
+            </div>
+          } @else {
+            <iframe [src]="safePdfUrl" class="preview-pdf" title="Vista previa de documento"></iframe>
+          }
         } @else {
           <div class="preview-fallback">
             <mat-icon>description</mat-icon>
@@ -979,12 +1057,51 @@ export class ImageViewerDialog {
   `]
 })
 export class DocumentPreviewDialog {
+  safePdfUrl: SafeResourceUrl | null = null;
+  private objectUrl: string | null = null;
+  pdfLoading = false;
+  pdfLoadError = false;
+
   constructor(
     public dialogRef: MatDialogRef<DocumentPreviewDialog>,
-    @Inject(MAT_DIALOG_DATA) public data: { title: string; url: string; mimeType: string }
-  ) {}
+    @Inject(MAT_DIALOG_DATA) public data: { title: string; url: string; mimeType: string },
+    private sanitizer: DomSanitizer,
+    private http: HttpClient
+  ) {
+    if (this.isPdf()) {
+      this.loadPdfAsBlob();
+    }
+  }
+
+  private loadPdfAsBlob(): void {
+    this.pdfLoading = true;
+    this.pdfLoadError = false;
+
+    this.http.get(this.data.url, { responseType: 'blob' }).subscribe({
+      next: (blob) => {
+        if (!blob || blob.size === 0) {
+          this.pdfLoadError = true;
+          this.pdfLoading = false;
+          return;
+        }
+
+        const pdfBlob = blob.type ? blob : new Blob([blob], { type: 'application/pdf' });
+        this.objectUrl = URL.createObjectURL(pdfBlob);
+        this.safePdfUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.objectUrl);
+        this.pdfLoading = false;
+      },
+      error: () => {
+        this.pdfLoadError = true;
+        this.pdfLoading = false;
+      }
+    });
+  }
 
   close(): void {
+    if (this.objectUrl) {
+      URL.revokeObjectURL(this.objectUrl);
+      this.objectUrl = null;
+    }
     this.dialogRef.close();
   }
 

@@ -110,4 +110,167 @@
       </form>
     </div>
   </mat-card>
+
+  <mat-card class="config-card">
+    <div class="tab-content">
+      <div class="dias-especiales-header">
+        <h3>Días especiales</h3>
+        <p>Configura festivos, días no laborables y horarios reducidos.</p>
+      </div>
+
+      <div class="dias-summary">
+        <div class="summary-item">
+          <span class="summary-value">{{ getDiasEspecialesStats().total }}</span>
+          <span class="summary-label">Total</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-value">{{ getDiasEspecialesStats().tenant }}</span>
+          <span class="summary-label">Personalizados</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-value">{{ getDiasEspecialesStats().nacional }}</span>
+          <span class="summary-label">Globales</span>
+        </div>
+        <button mat-raised-button color="primary" type="button" (click)="openDiasEspecialesModal()">
+          <mat-icon>event</mat-icon>
+          Gestionar días especiales
+        </button>
+      </div>
+    </div>
+  </mat-card>
+
+  @if (showDiasEspecialesModal()) {
+    <div class="dias-modal-backdrop" (click)="closeDiasEspecialesModal()"></div>
+    <section class="dias-modal" role="dialog" aria-modal="true" aria-label="Gestionar días especiales">
+      <header class="dias-modal-header">
+        <div>
+          <h3>Gestión de días especiales</h3>
+          <p>Usa filtros por año, origen y tipo para encontrar rápidamente una fecha.</p>
+        </div>
+        <button mat-icon-button type="button" (click)="closeDiasEspecialesModal()">
+          <mat-icon>close</mat-icon>
+        </button>
+      </header>
+
+      <div class="dias-modal-filters">
+        <mat-form-field appearance="outline" class="filter-field">
+          <mat-label>Año</mat-label>
+          <mat-select [value]="yearFilter()" (valueChange)="setYearFilter($event)">
+            <mat-option value="todos">Todos</mat-option>
+            @for (year of availableYears(); track year) {
+              <mat-option [value]="year">{{ year }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="filter-field">
+          <mat-label>Origen</mat-label>
+          <mat-select [value]="origenFilter()" (valueChange)="setOrigenFilter($event)">
+            <mat-option value="todos">Todos</mat-option>
+            <mat-option value="global">Global</mat-option>
+            <mat-option value="tenant">Personalizado</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="filter-field">
+          <mat-label>Tipo</mat-label>
+          <mat-select [value]="tipoFilter()" (valueChange)="setTipoFilter($event)">
+            <mat-option value="todos">Todos</mat-option>
+            @for (tipo of tiposDiaEspecial; track tipo.value) {
+              <mat-option [value]="tipo.value">{{ tipo.label }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="filter-field filter-search">
+          <mat-label>Buscar</mat-label>
+          <input matInput [value]="searchFilter()" (input)="setSearchFilter($any($event.target).value)" placeholder="Descripción o fecha DD-MM-YYYY">
+          <mat-icon matSuffix>search</mat-icon>
+        </mat-form-field>
+      </div>
+
+      <form [formGroup]="diaEspecialForm" class="dias-form">
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Fecha</mat-label>
+            <input matInput type="text" formControlName="fecha" placeholder="DD-MM-YYYY">
+            <button mat-icon-button matSuffix type="button" (click)="nativeDatePicker.showPicker()" aria-label="Seleccionar fecha">
+              <mat-icon>calendar_month</mat-icon>
+            </button>
+            <input #nativeDatePicker class="native-date-picker" type="date" (change)="onDatePicked($any($event.target).value)">
+            <mat-hint>Formato: DD-MM-YYYY</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Tipo</mat-label>
+            <mat-select formControlName="tipo">
+              @for (tipo of tiposDiaEspecial; track tipo.value) {
+                <mat-option [value]="tipo.value">{{ tipo.label }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Descripción</mat-label>
+            <input matInput formControlName="descripcion" placeholder="Ej: Día de la Independencia">
+          </mat-form-field>
+        </div>
+
+        @if (isHorarioEspecial()) {
+          <div class="form-row">
+            <mat-form-field appearance="outline" class="form-field">
+              <mat-label>Hora inicio</mat-label>
+              <input matInput type="time" formControlName="hora_inicio">
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="form-field">
+              <mat-label>Hora fin</mat-label>
+              <input matInput type="time" formControlName="hora_fin">
+            </mat-form-field>
+          </div>
+        }
+
+        <div class="dias-actions">
+          <button mat-raised-button color="primary" type="button" (click)="saveDiaEspecial()" [disabled]="savingDiaEspecial()">
+            <mat-icon>{{ editingDiaEspecialId() ? 'save' : 'add' }}</mat-icon>
+            {{ editingDiaEspecialId() ? 'Actualizar' : 'Agregar' }}
+          </button>
+
+          @if (editingDiaEspecialId()) {
+            <button mat-button type="button" (click)="cancelDiaEspecialEdit()" [disabled]="savingDiaEspecial()">
+              <mat-icon>close</mat-icon>
+              Cancelar edición
+            </button>
+          }
+        </div>
+      </form>
+
+      <div class="dias-list">
+        @if (filteredDiasEspeciales().length === 0) {
+          <p class="empty-text">No hay resultados con los filtros actuales.</p>
+        } @else {
+          @for (dia of filteredDiasEspeciales(); track dia.id || (dia.fecha + '-' + dia.descripcion)) {
+            <div class="dia-item">
+              <div class="dia-main">
+                <strong>{{ formatDiaEspecialFecha(dia.fecha) }}</strong>
+                <span class="dia-type" [class]="'dia-type ' + getTipoDiaEspecialClass(dia.tipo)">{{ getTipoDiaEspecialLabel(dia.tipo) }}</span>
+                <span>{{ dia.descripcion }}</span>
+                @if (dia.tipo === 'horario_especial' && dia.horario_especial) {
+                  <span class="dia-hours">{{ dia.horario_especial.hora_inicio }} - {{ dia.horario_especial.hora_fin }}</span>
+                }
+              </div>
+              <div class="dia-item-actions">
+                <button mat-icon-button type="button" (click)="editDiaEspecial(dia)" [disabled]="savingDiaEspecial()">
+                  <mat-icon>edit</mat-icon>
+                </button>
+                <button mat-icon-button color="warn" type="button" (click)="removeDiaEspecial(dia)" [disabled]="savingDiaEspecial()">
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </div>
+            </div>
+          }
+        }
+      </div>
+    </section>
+  }
 </div>

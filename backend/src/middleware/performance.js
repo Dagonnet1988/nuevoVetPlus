@@ -203,10 +203,12 @@ export const intelligentCaching = (options = {}) => {
     } = options;
     
     return async (req, res, next) => {
+        const tenantKey = req.tenantId || req.user?.tenant_id || 'no-tenant';
+
         // Generar clave de cache
         const cacheKey = keyGenerator ? 
             keyGenerator(req) : 
-            `${req.method}:${req.originalUrl}:${JSON.stringify(req.query)}:${req.user?.id || 'anonymous'}`;
+            `${tenantKey}:${req.method}:${req.originalUrl}:${JSON.stringify(req.query)}:${req.user?.id || 'anonymous'}`;
         
         // Verificar si debe saltar el cache
         if (skipCache && skipCache(req)) {
@@ -278,6 +280,7 @@ export const reportsCache = intelligentCaching({
     keyGenerator: (req) => {
         const params = {
             ...req.query,
+            tenant: req.tenantId || req.user?.tenant_id || 'no-tenant',
             endpoint: req.route?.path || req.originalUrl,
             user: req.user?.id
         };
@@ -289,7 +292,7 @@ export const reportsCache = intelligentCaching({
 export const configCache = intelligentCaching({
     ttl: 86400, // 24 horas
     cacheType: 'config',
-    keyGenerator: (req) => `config:${req.originalUrl}:${req.user?.rol}`
+    keyGenerator: (req) => `config:${req.tenantId || req.user?.tenant_id || 'no-tenant'}:${req.originalUrl}:${req.user?.rol}`
 });
 
 // Cache específico para listas paginadas
@@ -297,7 +300,7 @@ export const paginatedCache = intelligentCaching({
     ttl: 600, // 10 minutos
     keyGenerator: (req) => {
         const { page = 1, limit = 10, sortBy, sortOrder, ...filters } = req.query;
-        return `paginated:${req.originalUrl}:${page}:${limit}:${sortBy}:${sortOrder}:${JSON.stringify(filters)}`;
+        return `paginated:${req.tenantId || req.user?.tenant_id || 'no-tenant'}:${req.originalUrl}:${page}:${limit}:${sortBy}:${sortOrder}:${JSON.stringify(filters)}`;
     }
 });
 

@@ -85,6 +85,40 @@ export interface CitaFormData {
   observaciones?: string;
 }
 
+export interface RecurrenciaConfig {
+  frecuencia: 'daily' | 'weekly';
+  intervalo?: number;
+  dias_semana?: number[];
+  total_ocurrencias?: number;
+  fecha_hasta?: string;
+}
+
+export interface RecurringAppointmentPayload {
+  id_mascota: string;
+  id_veterinario: string;
+  fecha_inicio: string;
+  fecha_fin: string;
+  tipo?: TipoCita;
+  motivo?: string;
+  notas?: string;
+  observaciones?: string;
+  recurrencia: RecurrenciaConfig;
+  ocurrencias_editadas?: RecurringEditedOccurrence[];
+}
+
+export interface RecurringPreviewItem {
+  indice: number;
+  fecha_inicio: string;
+  fecha_fin: string;
+}
+
+export interface RecurringEditedOccurrence {
+  indice: number;
+  fecha_inicio: string;
+  fecha_fin: string;
+  tipo?: TipoCita;
+}
+
 export interface CitaFilter {
   fecha_inicio?: string;
   fecha_fin?: string;
@@ -147,7 +181,7 @@ export interface CitaStats {
 export const TIPOS_CITA: { value: TipoCita; label: string; color: string }[] = [
   { value: 'domicilio', label: 'Domicilio', color: '#51b749' },
   { value: 'control', label: 'Control', color: '#e09a5f' },
-  { value: 'valoracion', label: 'Valoración (Primera Vez)', color: '#fbd75b' },
+  { value: 'valoracion', label: 'Valoración', color: '#fbd75b' },
   { value: 'terapia', label: 'Terapia', color: '#46d6db' },
   { value: 'hidroterapia', label: 'Hidroterapia', color: '#5484ed' },
   { value: 'sin_clasificar', label: 'Sin clasificar', color: '#c7d0d8' }

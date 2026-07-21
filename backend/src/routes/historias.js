@@ -9,6 +9,7 @@ import {
   updateHistoria,
   deleteHistoria,
   reactivateHistoria,
+  getMedicamentosSugeridos,
   uploadHistoriaArchivos,
   downloadHistoriaPDF,
 } from '../controllers/historiaClinicaController.js';
@@ -18,6 +19,9 @@ const router = express.Router();
 
 // GET  /api/clinical/historias          → listar con filtros + paginación
 router.get('/',    authorize(['admin', 'vet', 'aux']), getHistorias);
+
+// GET  /api/clinical/historias/medicamentos/sugerencias → medicamentos usados en fórmulas previas
+router.get('/medicamentos/sugerencias', authorize(['admin', 'vet', 'aux']), getMedicamentosSugeridos);
 
 // POST /api/clinical/historias          → crear nueva historia
 router.post('/',   authorize(['admin', 'vet']),        createHistoria);
