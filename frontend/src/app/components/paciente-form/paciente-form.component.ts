@@ -1,5 +1,5 @@
 import { Component, OnInit, signal, computed } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
@@ -204,11 +204,18 @@ import { environment } from '../../../environments/environment';
               <div class="form-row">
                 <mat-form-field appearance="outline" class="flex-1">
                   <mat-label>Raza</mat-label>
-                  <mat-select formControlName="raza">
-                    @for (raza of (razasDisponibles() || []); track raza) {
+                  <input matInput
+                         formControlName="raza"
+                         [matAutocomplete]="razaAuto"
+                         placeholder="Escribe para buscar o crear una raza">
+                  <mat-autocomplete #razaAuto="matAutocomplete">
+                    @for (raza of (filteredRazas() || []); track raza) {
                       <mat-option [value]="raza">{{ raza }}</mat-option>
                     }
-                  </mat-select>
+                    @if (filteredRazas().length === 0) {
+                      <mat-option disabled>Sin coincidencias</mat-option>
+                    }
+                  </mat-autocomplete>
                 </mat-form-field>
 
                 <mat-form-field appearance="outline" class="flex-1">
@@ -694,6 +701,7 @@ export class PacienteFormComponent implements OnInit {
   clienteSeleccionado = signal<Cliente | null>(null);
   especies = signal<string[]>(['Perro', 'Gato', 'Ave', 'Hamster', 'Conejo', 'Reptil', 'Pez', 'Otro']); // Inicializar con datos básicos
   razasDisponibles = signal<string[]>(['Mestizo', 'Otro']);
+  filteredRazas = signal<string[]>(['Mestizo', 'Otro']);
   filteredClientes = signal<Cliente[]>([]);
 
   // Signals para manejo de fotos
@@ -716,7 +724,8 @@ export class PacienteFormComponent implements OnInit {
     private dialog: MatDialog,
     private router: Router,
     private route: ActivatedRoute,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private location: Location
   ) {
     this.pacienteForm = this.createForm();
     this.clienteSearchControl = this.fb.control('');
@@ -764,6 +773,11 @@ export class PacienteFormComponent implements OnInit {
       if (especie) {
         this.updateRazas(especie);
       }
+    });
+
+    // Filtrar sugerencias de raza mientras se escribe
+    this.pacienteForm.get('raza')?.valueChanges.subscribe((value) => {
+      this.updateFilteredRazas(typeof value === 'string' ? value : '');
     });
   }
 
@@ -978,16 +992,32 @@ export class PacienteFormComponent implements OnInit {
           }
 
           this.razasDisponibles.set(razasArray);
+          this.updateFilteredRazas(this.pacienteForm.get('raza')?.value || '');
           resolve();
         },
         error: (error) => {
           console.error('Error cargando razas:', error);
           this.razasDisponibles.set(['Mestizo', 'Otro']);
+          this.updateFilteredRazas(this.pacienteForm.get('raza')?.value || '');
           resolve();
         }
       });
     });
   }
+
+    private updateFilteredRazas(rawSearch: string): void {
+      const search = String(rawSearch || '').trim().toLowerCase();
+      const allRazas = this.razasDisponibles() || [];
+
+      if (!search) {
+        this.filteredRazas.set(allRazas);
+        return;
+      }
+
+      this.filteredRazas.set(
+        allRazas.filter((raza) => String(raza || '').toLowerCase().includes(search))
+      );
+    }
 
   onClienteSelected(event: any): void {
     const cliente: Cliente = event.option.value;
@@ -1253,6 +1283,11 @@ export class PacienteFormComponent implements OnInit {
   }
 
   goBack(): void {
+    if (window.history.length > 1) {
+      this.location.back();
+      return;
+    }
+
     this.router.navigate(['/pacientes']);
   }
 

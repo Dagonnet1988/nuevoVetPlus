@@ -97,14 +97,6 @@ export const routes: Routes = [
         data: { roles: ['admin'] }
       },
 
-      // Auditoría - Solo admin
-      {
-        path: 'auditoria',
-        loadComponent: () => import('./components/auditoria/auditoria.component').then(m => m.AuditoriaComponent),
-        canActivate: [RoleGuard],
-        data: { roles: ['admin'] }
-      },
-
       // Configuración - Solo admin
       {
         path: 'configuracion',
@@ -117,6 +109,12 @@ export const routes: Routes = [
       {
         path: 'perfil',
         loadComponent: () => import('./components/usuarios/components/usuario-profile.component').then(m => m.UsuarioProfileComponent),
+        canActivate: [RoleGuard],
+        data: { roles: ['admin', 'vet'] }
+      },
+      {
+        path: 'perfil/sesiones',
+        loadComponent: () => import('./components/usuarios/components/usuario-sesiones.component').then(m => m.UsuarioSesionesComponent),
         canActivate: [RoleGuard],
         data: { roles: ['admin', 'vet'] }
       }

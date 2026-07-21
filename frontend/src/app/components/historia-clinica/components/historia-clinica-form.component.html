@@ -6,7 +6,7 @@
       <mat-icon>arrow_back</mat-icon>
     </button>
     <div class="header-titles">
-      <h1>{{ isEdit() ? 'Editar Historia Clínica' : 'Nueva Historia Clínica' }}</h1>
+      <h1>{{ isEdit() ? 'Editar Historia Clínica' : 'Historia Clínica' }}</h1>
       <p>Completa todos los campos requeridos</p>
     </div>
   </div>
@@ -118,7 +118,7 @@
                       </div>
                       <div class="summary-item">
                         <span class="summary-label">Nacimiento</span>
-                        <span class="summary-value">{{ mascotaSeleccionada().fecha_nacimiento ? (mascotaSeleccionada().fecha_nacimiento | date:'dd/MM/yyyy') : 'No disponible' }}</span>
+                        <span class="summary-value">{{ mascotaSeleccionada().fecha_nacimiento ? (mascotaSeleccionada().fecha_nacimiento | date:'dd-MM-yy') : 'No disponible' }}</span>
                       </div>
                       <div class="summary-item">
                         <span class="summary-label">Peso</span>
@@ -173,7 +173,7 @@
           <mat-card-header>
             <mat-card-title>
               <mat-icon>assignment</mat-icon>
-              Valoración Inicial
+              Valoración
             </mat-card-title>
           </mat-card-header>
           <mat-card-content>
@@ -437,6 +437,13 @@
                       <mat-form-field appearance="outline"><input matInput formControlName="reflejo_flexor_pelv_i"></mat-form-field>
                     </div>
                   </div>
+
+                  <div class="form-grid" style="margin-top: 12px">
+                    <mat-form-field appearance="outline" class="full-width">
+                      <mat-label>Observaciones a la palpación</mat-label>
+                      <textarea matInput formControlName="observaciones_palpacion" cdkTextareaAutosize cdkAutosizeMinRows="2"></textarea>
+                    </mat-form-field>
+                  </div>
                 </div>
               </mat-expansion-panel>
 
@@ -514,7 +521,7 @@
           <mat-card-header>
             <mat-card-title>
               <mat-icon>repeat</mat-icon>
-              Seguimiento
+              Terapia / Hidroterapia
             </mat-card-title>
           </mat-card-header>
           <mat-card-content>
@@ -620,7 +627,21 @@
                   <div class="form-grid">
                     <mat-form-field appearance="outline" class="med-inline med-main">
                       <mat-label>Medicamento *</mat-label>
-                      <input matInput formControlName="medicamento">
+                      <input
+                        matInput
+                        formControlName="medicamento"
+                        [matAutocomplete]="medicamentoAuto"
+                        (focus)="updateMedicamentosFiltrados($any(med).get('medicamento')?.value || '')">
+                      <mat-autocomplete #medicamentoAuto="matAutocomplete">
+                        @for (medicamento of medicamentosFiltrados(); track medicamento) {
+                          <mat-option [value]="medicamento">{{ medicamento }}</mat-option>
+                        }
+                        @if (medicamentosSugeridos().length === 0) {
+                          <mat-option disabled>Sin medicamentos guardados todavía</mat-option>
+                        } @else if (medicamentosFiltrados().length === 0) {
+                          <mat-option disabled>Sin coincidencias</mat-option>
+                        }
+                      </mat-autocomplete>
                     </mat-form-field>
                     <mat-form-field appearance="outline" class="med-inline">
                       <mat-label>Dosis por toma</mat-label>

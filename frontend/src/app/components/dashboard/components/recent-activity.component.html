@@ -4,7 +4,7 @@
       <mat-icon>history</mat-icon>
       Actividad Reciente
     </mat-card-title>
-    <button mat-icon-button routerLink="/actividad" class="header-action">
+    <button mat-icon-button [routerLink]="historyRoute" [queryParams]="historyQueryParams" class="header-action">
       <mat-icon>more_vert</mat-icon>
     </button>
   </mat-card-header>
@@ -13,11 +13,16 @@
     @if (activities && activities.length > 0) {
       <mat-list class="activity-list">
         @for (activity of activities; track activity.id) {
-          <mat-list-item class="activity-item">
+          <mat-list-item
+            class="activity-item"
+            [class.clickable]="isActivityClickable(activity)"
+            (click)="openActivity(activity)"
+            (keydown.enter)="openActivity(activity)"
+            [attr.tabindex]="isActivityClickable(activity) ? 0 : -1">
             <div class="activity-icon" [style.background-color]="getIconBgColor(activity.color)">
               <mat-icon [style.color]="activity.color">{{ activity.icono }}</mat-icon>
             </div>
-            
+
             <div class="activity-info">
               <p class="activity-description">{{ activity.descripcion }}</p>
               <div class="activity-meta">
@@ -43,7 +48,7 @@
   </mat-card-content>
 
   <mat-card-actions class="activity-actions">
-    <button mat-button routerLink="/actividad" color="primary">
+    <button mat-button [routerLink]="historyRoute" [queryParams]="historyQueryParams" color="primary">
       <mat-icon>visibility</mat-icon>
       Ver Todo el Historial
     </button>

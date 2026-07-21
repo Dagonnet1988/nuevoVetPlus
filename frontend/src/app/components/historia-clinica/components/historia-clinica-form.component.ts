@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy, HostListener, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { FormBuilder, FormGroup, FormArray, Validators, ReactiveFormsModule, FormControl } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
 import { Observable } from 'rxjs';
@@ -308,6 +308,8 @@ export class HistoriaClinicaFormComponent implements OnInit, OnDestroy, CanCompo
   mascotaSeleccionada = signal<any>(null);
   expandDiagnostico   = signal(false);
   imagenesDiagnosticasFiles = signal<File[]>([]);
+  medicamentosSugeridos = signal<string[]>([]);
+  medicamentosFiltrados = signal<string[]>([]);
   pacienteSearchCtrl = new FormControl<any>('', { nonNullable: true });
 
   readonly ejerciciosChecklistConfig: Array<{ key: EjercicioCategoriaKey; label: string; ejercicios: string[] }> = [
@@ -418,7 +420,8 @@ export class HistoriaClinicaFormComponent implements OnInit, OnDestroy, CanCompo
     private citasService: CitasService,
     private snackBar: MatSnackBar,
     private router: Router,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private location: Location
   ) {}
 
   /** Advertencia nativa del navegador al cerrar pestaña / F5 con formulario sucio */
@@ -435,6 +438,7 @@ export class HistoriaClinicaFormComponent implements OnInit, OnDestroy, CanCompo
     this.syncGroupsToTipo(this.tipoActual);
     this.loadVeterinarios();
     this.loadMascotas();
+    this.loadMedicamentosSugeridos();
 
     this.pacienteSearchCtrl.valueChanges.subscribe((value) => {
       if (typeof value === 'string') {
@@ -710,6 +714,7 @@ export class HistoriaClinicaFormComponent implements OnInit, OnDestroy, CanCompo
         reflejo_ciatico_i:         [''],
         reflejo_flexor_pelv_d:     [''],
         reflejo_flexor_pelv_i:     [''],
+        observaciones_palpacion:   [''],
       }),
 
       goniometria: this.fb.group({
@@ -824,7 +829,7 @@ export class HistoriaClinicaFormComponent implements OnInit, OnDestroy, CanCompo
   }
 
   newMedicamento(): FormGroup {
-    return this.fb.group({
+    const group = this.fb.group({
       medicamento:   ['', Validators.required],
       dosis:         [''],
       frecuencia:    [''],
@@ -832,6 +837,40 @@ export class HistoriaClinicaFormComponent implements OnInit, OnDestroy, CanCompo
       cantidad:      [''],
       instrucciones: [''],
     });
+
+    group.get('medicamento')?.valueChanges.subscribe((value) => {
+      this.updateMedicamentosFiltrados(String(value || ''));
+    });
+
+    return group;
+  }
+
+  private loadMedicamentosSugeridos(): void {
+    this.historiaService.getMedicamentosSugeridos().subscribe({
+      next: (response) => {
+        const medicamentos = Array.isArray(response?.data) ? response.data : [];
+        this.medicamentosSugeridos.set(medicamentos);
+        this.updateMedicamentosFiltrados('');
+      },
+      error: () => {
+        this.medicamentosSugeridos.set([]);
+        this.medicamentosFiltrados.set([]);
+      }
+    });
+  }
+
+  updateMedicamentosFiltrados(rawSearch: string): void {
+    const search = String(rawSearch || '').trim().toLowerCase();
+    const source = this.medicamentosSugeridos();
+
+    if (!search) {
+      this.medicamentosFiltrados.set(source);
+      return;
+    }
+
+    this.medicamentosFiltrados.set(
+      source.filter((medicamento) => String(medicamento || '').toLowerCase().includes(search))
+    );
   }
 
   addMedicamento(): void {
@@ -1102,6 +1141,7 @@ export class HistoriaClinicaFormComponent implements OnInit, OnDestroy, CanCompo
               reflejo_ciatico_i:        r['ciatico_i'],
               reflejo_flexor_pelv_d:    r['flexor_pelv_d'],
               reflejo_flexor_pelv_i:    r['flexor_pelv_i'],
+              observaciones_palpacion:  r['observaciones_palpacion'],
             });
           }
           this.gDiagnostico.patchValue(d);
@@ -1319,6 +1359,11 @@ export class HistoriaClinicaFormComponent implements OnInit, OnDestroy, CanCompo
     // Marcamos el formulario como pristine para que el guard no intercepte
     // esta navegación intencional del usuario
     this.form.markAsPristine();
+
+    if (window.history.length > 1) {
+      this.location.back();
+      return;
+    }
 
     const idCitaFromQuery = this.route.snapshot.queryParamMap.get('id_cita');
     const idCitaFromForm = this.gGeneral.get('id_cita')?.value;

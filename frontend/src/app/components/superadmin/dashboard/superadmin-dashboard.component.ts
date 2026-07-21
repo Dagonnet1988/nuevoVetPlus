@@ -30,7 +30,6 @@ export class SuperadminDashboardComponent implements OnInit {
   totalClinicas    = computed(() => this.tenants().length);
   totalActivas     = computed(() => this.tenants().filter(t => t.estado === 'active').length);
   totalSuspendidas = computed(() => this.tenants().filter(t => t.estado === 'suspended').length);
-  totalMascotas    = computed(() => this.tenants().reduce((a, t) => a + +t.total_mascotas, 0));
 
   constructor(private svc: SuperadminAuthService, private snack: MatSnackBar) {}
 

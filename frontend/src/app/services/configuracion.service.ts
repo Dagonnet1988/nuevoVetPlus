@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
+import { AuthService } from './auth.service';
 
 // ===============================
 // INTERFACES DE CONFIGURACIÓN
@@ -15,6 +16,7 @@ export interface EmpresaConfig {
   direccion: string;
   telefono: string;
   email: string;
+  ciudad?: string;
   sitio_web?: string;
   logo_url?: string;
   eslogan?: string;
@@ -53,14 +55,18 @@ export interface HorarioAtencion {
 
 export interface DiaEspecial {
   id?: string;
+  id_tenant?: string | null;
   fecha: string;
   descripcion: string;
-  tipo: 'festivo' | 'no_laborable' | 'horario_especial';
+  tipo: 'festivo' | 'no_laborable' | 'horario_especial' | 'cumpleanos' | 'ausencia';
   horario_especial?: {
     hora_inicio: string;
     hora_fin: string;
   };
   activo: boolean;
+  editable?: boolean;
+  origen?: 'tenant' | 'global';
+  metadata?: Record<string, any>;
 }
 
 // ===============================
@@ -93,6 +99,7 @@ export interface GoogleCalendarConfig {
     incluir_cliente: boolean;
     incluir_mascota: boolean;
     incluir_veterinario: boolean;
+    invitar_propietario_calendario: boolean;
   };
   ultima_sincronizacion?: string;
   estado_oauth?: 'pendiente' | 'autorizado' | 'error';
@@ -154,6 +161,48 @@ export interface EmailModuleStatus {
   };
 }
 
+export interface EmailTemplateConfig {
+  id_template: string;
+  clave_template: string;
+  nombre_template: string;
+  descripcion?: string;
+  asunto: string;
+  cuerpo_html: string;
+  cuerpo_text?: string;
+  mensaje?: string;
+  variables_permitidas: string[];
+  activa: boolean;
+  updated_at?: string;
+}
+
+export interface EmailDeliveryItem {
+  id: string;
+  fuente: 'system' | 'clinical';
+  tipo_envio: string;
+  destinatario_email: string;
+  propietario_nombre?: string | null;
+  asunto: string;
+  estado: 'enviado' | 'fallido';
+  provider_message_id?: string | null;
+  detalle_error?: string | null;
+  metadata?: Record<string, any>;
+  created_at: string;
+  sent_at?: string | null;
+  adjuntos_count?: number;
+}
+
+export interface EmailDeliveryDetail extends EmailDeliveryItem {
+  copy?: {
+    to?: string | null;
+    subject?: string | null;
+    text?: string | null;
+    html?: string | null;
+    reply_to?: string | null;
+    attachments?: Array<{ filename?: string | null; contentType?: string | null; size?: number | null }>;
+  } | null;
+  can_retry?: boolean;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -165,8 +214,12 @@ export class ConfiguracionService {
   public empresaConfig = signal<EmpresaConfig | null>(null);
   public googleCalendarConfig = signal<GoogleCalendarConfig | null>(null);
   public loading = signal<boolean>(false);
+  private bootstrapped = false;
 
-  constructor(private http: HttpClient) {
+  constructor(
+    private http: HttpClient,
+    private authService: AuthService
+  ) {
     this.loadConfigurations();
   }
 
@@ -177,8 +230,10 @@ export class ConfiguracionService {
   getEmpresaConfig(): Observable<EmpresaConfig> {
     return this.http.get<any>(`${this.API_URL}/admin/empresa/config`).pipe(
       map((response: any) => {
-        if (response.success && response.data) {
-          const normalizedConfig = this.normalizeEmpresaConfig(response.data);
+        if (response.success) {
+          const normalizedConfig = response.data
+            ? this.normalizeEmpresaConfig(response.data)
+            : this.createEmptyEmpresaConfig();
           this.empresaConfig.set(normalizedConfig);
           return normalizedConfig;
         }
@@ -246,6 +301,27 @@ export class ConfiguracionService {
     );
   }
 
+  updateDiaEspecial(id: string, dia: DiaEspecial): Observable<DiaEspecial> {
+    return this.http.put<any>(`${this.API_URL}/admin/empresa/dias-especiales/${id}`, dia).pipe(
+      map((response: any) => {
+        if (response.success && response.data) {
+          return response.data;
+        }
+        throw new Error('Error actualizando día especial');
+      })
+    );
+  }
+
+  deleteDiaEspecial(id: string): Observable<void> {
+    return this.http.delete<any>(`${this.API_URL}/admin/empresa/dias-especiales/${id}`).pipe(
+      map((response: any) => {
+        if (!response.success) {
+          throw new Error('Error eliminando día especial');
+        }
+      })
+    );
+  }
+
   // ===============================
   // GOOGLE CALENDAR
   // ===============================
@@ -280,7 +356,8 @@ export class ConfiguracionService {
               recordatorio_default: response.data.configuracion_eventos?.recordatorio_default ?? 30,
               incluir_cliente: response.data.configuracion_eventos?.incluir_cliente ?? true,
               incluir_mascota: response.data.configuracion_eventos?.incluir_mascota ?? true,
-              incluir_veterinario: response.data.configuracion_eventos?.incluir_veterinario ?? true
+              incluir_veterinario: response.data.configuracion_eventos?.incluir_veterinario ?? true,
+              invitar_propietario_calendario: response.data.configuracion_eventos?.invitar_propietario_calendario ?? false
             }
           };
           this.googleCalendarConfig.set(config);
@@ -311,7 +388,8 @@ export class ConfiguracionService {
             recordatorio_default: 30,
             incluir_cliente: true,
             incluir_mascota: true,
-            incluir_veterinario: true
+            incluir_veterinario: true,
+            invitar_propietario_calendario: false
           }
         };
         this.googleCalendarConfig.set(defaultConfig);
@@ -344,7 +422,8 @@ export class ConfiguracionService {
             recordatorio_default: 30,
             incluir_cliente: true,
             incluir_mascota: true,
-            incluir_veterinario: true
+            incluir_veterinario: true,
+            invitar_propietario_calendario: false
           }
         };
         this.googleCalendarConfig.set(defaultConfig);
@@ -396,7 +475,8 @@ export class ConfiguracionService {
               recordatorio_default: response.data.configuracion_eventos?.recordatorio_default ?? config.configuracion_eventos?.recordatorio_default ?? 30,
               incluir_cliente: response.data.configuracion_eventos?.incluir_cliente ?? config.configuracion_eventos?.incluir_cliente ?? true,
               incluir_mascota: response.data.configuracion_eventos?.incluir_mascota ?? config.configuracion_eventos?.incluir_mascota ?? true,
-              incluir_veterinario: response.data.configuracion_eventos?.incluir_veterinario ?? config.configuracion_eventos?.incluir_veterinario ?? true
+              incluir_veterinario: response.data.configuracion_eventos?.incluir_veterinario ?? config.configuracion_eventos?.incluir_veterinario ?? true,
+              invitar_propietario_calendario: response.data.configuracion_eventos?.invitar_propietario_calendario ?? config.configuracion_eventos?.invitar_propietario_calendario ?? false
             }
           };
           this.googleCalendarConfig.set(frontendConfig);
@@ -505,6 +585,104 @@ export class ConfiguracionService {
     );
   }
 
+  getEmailDeliveries(params?: {
+    limit?: number;
+    offset?: number;
+    estado?: 'enviado' | 'fallido';
+    search?: string;
+    receptor?: string;
+    fecha_desde?: string;
+    fecha_hasta?: string;
+  }): Observable<{ data: EmailDeliveryItem[]; pagination: { total: number; limit: number; offset: number; hasMore: boolean } }> {
+    const queryParams: Record<string, string> = {};
+
+    if (typeof params?.limit === 'number') queryParams['limit'] = String(params.limit);
+    if (typeof params?.offset === 'number') queryParams['offset'] = String(params.offset);
+    if (params?.estado) queryParams['estado'] = params.estado;
+    if (params?.search) queryParams['search'] = params.search;
+    if (params?.receptor) queryParams['receptor'] = params.receptor;
+    if (params?.fecha_desde) queryParams['fecha_desde'] = params.fecha_desde;
+    if (params?.fecha_hasta) queryParams['fecha_hasta'] = params.fecha_hasta;
+
+    return this.http.get<any>(`${this.API_URL}/admin/email/deliveries`, { params: queryParams }).pipe(
+      map((response: any) => {
+        if (response.success) {
+          return {
+            data: Array.isArray(response.data) ? response.data as EmailDeliveryItem[] : [],
+            pagination: response.pagination || { total: 0, limit: 20, offset: 0, hasMore: false }
+          };
+        }
+        throw new Error('Error obteniendo historial de correos');
+      })
+    );
+  }
+
+  getEmailDeliveryDetail(source: 'system' | 'clinical', id: string): Observable<EmailDeliveryDetail> {
+    return this.http.get<any>(`${this.API_URL}/admin/email/deliveries/${source}/${id}`).pipe(
+      map((response: any) => {
+        if (response.success && response.data) {
+          return response.data as EmailDeliveryDetail;
+        }
+        throw new Error('Error obteniendo detalle del envío');
+      })
+    );
+  }
+
+  retryEmailDelivery(source: 'system' | 'clinical', id: string): Observable<{ message: string }> {
+    return this.http.post<any>(`${this.API_URL}/admin/email/deliveries/${source}/${id}/retry`, {}).pipe(
+      map((response: any) => {
+        if (response.success) {
+          return { message: response.message || 'Correo reenviado correctamente' };
+        }
+        throw new Error('No fue posible reenviar el correo');
+      })
+    );
+  }
+
+  getEmailTemplates(): Observable<EmailTemplateConfig[]> {
+    return this.http.get<any>(`${this.API_URL}/admin/email/templates`).pipe(
+      map((response: any) => {
+        if (response.success && Array.isArray(response.data)) {
+          return response.data as EmailTemplateConfig[];
+        }
+        return [];
+      })
+    );
+  }
+
+  getEmailTemplate(key: string): Observable<EmailTemplateConfig> {
+    return this.http.get<any>(`${this.API_URL}/admin/email/templates/${key}`).pipe(
+      map((response: any) => {
+        if (response.success && response.data) {
+          return response.data as EmailTemplateConfig;
+        }
+        throw new Error('No se pudo obtener la plantilla solicitada');
+      })
+    );
+  }
+
+  updateEmailTemplate(key: string, payload: Partial<EmailTemplateConfig>): Observable<EmailTemplateConfig> {
+    return this.http.put<any>(`${this.API_URL}/admin/email/templates/${key}`, payload).pipe(
+      map((response: any) => {
+        if (response.success && response.data) {
+          return response.data as EmailTemplateConfig;
+        }
+        throw new Error('No se pudo actualizar la plantilla');
+      })
+    );
+  }
+
+  resetEmailTemplate(key: string): Observable<EmailTemplateConfig> {
+    return this.http.post<any>(`${this.API_URL}/admin/email/templates/${key}/reset`, {}).pipe(
+      map((response: any) => {
+        if (response.success && response.data) {
+          return response.data as EmailTemplateConfig;
+        }
+        throw new Error('No se pudo restaurar la plantilla');
+      })
+    );
+  }
+
   getGoogleEmailAuthUrl(): Observable<string> {
     return this.http.get<any>(`${this.API_URL}/admin/email/google/auth-url`).pipe(
       map((response: any) => {
@@ -568,6 +746,14 @@ export class ConfiguracionService {
   // ===============================
 
   private loadConfigurations(): void {
+    if (this.bootstrapped) return;
+    this.bootstrapped = true;
+
+    // Evita llamadas /admin/empresa/config sin sesión activa.
+    if (!this.authService.isAuthenticated() || !this.authService.getToken()) {
+      return;
+    }
+
     // Cargar configuraciones básicas al inicializar el servicio
     this.getEmpresaConfig().subscribe({
       next: () => {},
@@ -665,8 +851,8 @@ export class ConfiguracionService {
         moneda: 'COP',
         zona_horaria: 'America/Bogota',
         idioma: 'es',
-        formato_fecha: 'DD/MM/YYYY',
-        formato_hora: 'HH:mm'
+        formato_fecha: 'DD-MM-YY',
+        formato_hora: 'h:mm A'
       }),
       configuracion_numeracion: this.safeParseJson(data?.configuracion_numeracion, {
         cita_prefijo: 'CIT',
@@ -674,6 +860,33 @@ export class ConfiguracionService {
         cita_digitos: 6
       })
     } as EmpresaConfig;
+  }
+
+  private createEmptyEmpresaConfig(): EmpresaConfig {
+    return {
+      nombre_empresa: '',
+      nit: '',
+      direccion: '',
+      telefono: '',
+      email: '',
+      ciudad: '',
+      sitio_web: '',
+      eslogan: '',
+      logo_url: '',
+      horarios: this.generateDefaultHorarios(),
+      configuracion_general: {
+        moneda: 'COP',
+        zona_horaria: 'America/Bogota',
+        idioma: 'es',
+        formato_fecha: 'DD-MM-YY',
+        formato_hora: 'h:mm A'
+      },
+      configuracion_numeracion: {
+        cita_prefijo: 'CIT',
+        cita_siguiente: 1,
+        cita_digitos: 6
+      }
+    };
   }
 
   private toApiEmpresaConfig(config: EmpresaConfig): any {

@@ -164,23 +164,6 @@
   color: #f44336;
 }
 
-/* Dark theme */
-.dark-theme .quick-actions-card mat-card-title {
-  color: #fff;
-}
-
-.dark-theme .action-button {
-  border-color: #444 !important;
-}
-
-.dark-theme .action-title {
-  color: #fff;
-}
-
-.dark-theme .action-description {
-  color: #b3b3b3;
-}
-
 /* Responsive */
 @media (max-width: 768px) {
   .actions-grid {

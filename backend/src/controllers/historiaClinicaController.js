@@ -48,6 +48,69 @@ const TABLA_HIJA = {
   remision:           'historia_remision',
 };
 
+export const getMedicamentosSugeridos = async (req, res) => {
+  try {
+    const tenantId = req.tenantId;
+    const search = String(req.query.search || '').trim();
+    const params = [tenantId];
+
+    let searchClause = '';
+    if (search) {
+      params.push(`%${search}%`);
+      searchClause = `AND medicamento ILIKE $${params.length}`;
+    }
+
+    const result = await query(
+      `WITH medicamentos_usados AS (
+         SELECT NULLIF(BTRIM(med->>'medicamento'), '') AS medicamento
+         FROM clinical.historia_formula hf
+         JOIN clinical.historias_clinicas h ON h.id_historia = hf.id_historia
+         CROSS JOIN LATERAL jsonb_array_elements(
+           CASE
+             WHEN jsonb_typeof(hf.medicamentos) = 'array' THEN hf.medicamentos
+             ELSE '[]'::jsonb
+           END
+         ) med
+         WHERE h.id_tenant = $1
+           AND h.estado <> 'Cancelado'
+
+         UNION
+
+         SELECT NULLIF(BTRIM(med->>'nombre'), '') AS medicamento
+         FROM clinical.historia_formula hf
+         JOIN clinical.historias_clinicas h ON h.id_historia = hf.id_historia
+         CROSS JOIN LATERAL jsonb_array_elements(
+           CASE
+             WHEN jsonb_typeof(hf.medicamentos) = 'array' THEN hf.medicamentos
+             ELSE '[]'::jsonb
+           END
+         ) med
+         WHERE h.id_tenant = $1
+           AND h.estado <> 'Cancelado'
+       )
+       SELECT DISTINCT medicamento
+       FROM medicamentos_usados
+       WHERE medicamento IS NOT NULL
+       ${searchClause}
+       ORDER BY medicamento ASC
+       LIMIT 100`,
+      params
+    );
+
+    return res.json({
+      success: true,
+      data: result.rows.map((row) => row.medicamento)
+    });
+  } catch (error) {
+    console.error('Error obteniendo medicamentos sugeridos:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
 /** Genera código legible: VI-20260427-A3F2 */
 function generarCodigo(tipo) {
   const prefijo = TIPO_PREFIJOS[tipo] ?? 'HC';
@@ -126,6 +189,7 @@ function extraerDatosHijo(tipo, body) {
           ciatico_i:        body.reflejo_ciatico_i        ?? null,
           flexor_pelv_d:    body.reflejo_flexor_pelv_d    ?? null,
           flexor_pelv_i:    body.reflejo_flexor_pelv_i    ?? null,
+          observaciones_palpacion: body.observaciones_palpacion ?? null,
         },
         imagenes_diagnosticas:      body.imagenes_diagnosticas      ?? null,
         diagnostico:                body.diagnostico                ?? null,

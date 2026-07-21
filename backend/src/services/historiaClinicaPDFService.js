@@ -151,11 +151,14 @@ function formatDosisPaciente(value) {
 
 // ─── data loaders ────────────────────────────────────────────────────────────
 
-async function getEmpresa() {
+async function getEmpresa(tenantId) {
   try {
     const r = await query(
       `SELECT nombre_empresa, nit, direccion, telefono, email, ciudad, logo_url, eslogan
-       FROM system.configuracion_empresa WHERE activa = true LIMIT 1`
+       FROM system.configuracion_empresa
+       WHERE activa = true AND id_tenant = $1
+       LIMIT 1`,
+      [tenantId]
     );
     return r.rows[0] || {};
   } catch { return {}; }
@@ -470,6 +473,17 @@ function tableReflejos(doc, reflejosData) {
     });
     doc.moveDown(0.4);
   });
+
+  const observacionesPalpacion = String(reflejosData?.observaciones_palpacion || '').trim();
+  if (observacionesPalpacion) {
+    ensureSpace(doc, 36);
+    doc.font('Helvetica-Bold').fontSize(8).fillColor(COLORS.accent)
+      .text('Observaciones a la palpación', MARGIN, doc.y, { width: CONTENT });
+    doc.moveDown(0.2);
+    doc.font('Helvetica').fontSize(8).fillColor(COLORS.dark)
+      .text(observacionesPalpacion, MARGIN, doc.y, { width: CONTENT, lineGap: 2 });
+    doc.moveDown(0.4);
+  }
 }
 
 /** Tabla de medicamentos (fórmula) */
@@ -777,7 +791,7 @@ function drawSeguimientoChecklist(doc, rawEjercicios = '') {
  */
 export async function generarPDFHistoria(idHistoria, tenantId) {
   const [empresa, historia] = await Promise.all([
-    getEmpresa(),
+    getEmpresa(tenantId),
     getHistoriaFull(idHistoria, tenantId),
   ]);
 

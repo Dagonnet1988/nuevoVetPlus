@@ -1,5 +1,5 @@
 import { Component, OnInit, signal, inject, Inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { MatCardModule } from '@angular/material/card';
@@ -45,6 +45,7 @@ import { Cita, TIPOS_CITA, ESTADOS_CITA } from '../../models/cita.interface';
 export class CitaDetailsComponent implements OnInit {
   private router = inject(Router);
   private route = inject(ActivatedRoute);
+  private location = inject(Location);
   private citasService = inject(CitasService);
   private consultasService = inject(ConsultasService);
   private authService = inject(AuthService);
@@ -152,14 +153,17 @@ export class CitaDetailsComponent implements OnInit {
           { duration: 3000 }
         );
 
-        if (nuevoEstado === 'completada' && this.documentosCita().length > 0) {
-          const enviarAhora = await this.openConfirmDialog(
-            'Enviar documentos al propietario',
-            'La cita quedó completada. ¿Deseas enviar ahora los documentos clínicos de esta cita al propietario por correo?',
-            'Enviar ahora'
-          );
-          if (enviarAhora) {
-            await this.onEnviarTodosDocumentos();
+        if (nuevoEstado === 'completada') {
+          const docs = await this.loadDocumentosCitaWithRetry(cita.id_cita);
+
+          if (!docs.length) {
+            this.snackBar.open(
+              'Cita completada. Aún no hay documentos listos para enviar. Intenta en unos segundos desde "Documentos de cita".',
+              'Cerrar',
+              { duration: 5500 }
+            );
+          } else {
+            this.openPostCompletionDeliveryDialog(docs.length);
           }
         }
 
@@ -368,7 +372,8 @@ export class CitaDetailsComponent implements OnInit {
   }
 
   private getHistoriaTipoDocumentoFromCita(cita: Cita): 'valoracion_inicial' | 'seguimiento' {
-    return cita.tipo === 'valoracion' ? 'valoracion_inicial' : 'seguimiento';
+    const tipo = String(cita.tipo || '').toLowerCase();
+    return (tipo === 'valoracion' || tipo === 'control') ? 'valoracion_inicial' : 'seguimiento';
   }
 
   private navigateToHistoriaCreationFromCita(cita: Cita): void {
@@ -415,6 +420,17 @@ export class CitaDetailsComponent implements OnInit {
 
     if (result.action === 'send-all') {
       await this.onEnviarTodosDocumentos();
+      return;
+    }
+
+    if (result.action === 'send-whatsapp-all') {
+      this.enviarDocumentosPorWhatsApp(this.documentosCita());
+      return;
+    }
+
+    if (result.action === 'send-both-all') {
+      await this.onEnviarTodosDocumentos();
+      this.enviarDocumentosPorWhatsApp(this.documentosCita());
     }
   }
 
@@ -449,9 +465,9 @@ export class CitaDetailsComponent implements OnInit {
     }
   }
 
-  async onEnviarTodosDocumentos(): Promise<void> {
+  async onEnviarTodosDocumentos(force = false): Promise<void> {
     const cita = this.cita();
-    if (!cita || this.updating()) return;
+    if (!cita || (!force && this.updating())) return;
     if (cita.estado !== 'completada') {
       this.snackBar.open('Solo puedes enviar documentos cuando la cita esté completada.', 'Cerrar', { duration: 4000 });
       return;
@@ -465,15 +481,8 @@ export class CitaDetailsComponent implements OnInit {
 
     try {
       this.updating.set(true);
-      const ids = docs.map((d) => d.id_historia);
-      const results = await this.historiaClinicaService.sendHistoriasByEmail(ids).toPromise();
-      const ok = (results || []).filter((r) => r.ok).length;
-      const fail = (results || []).length - ok;
-      if (fail === 0) {
-        this.snackBar.open(`Se enviaron ${ok} documento(s) al propietario`, 'Cerrar', { duration: 4000 });
-      } else {
-        this.snackBar.open(`Enviados: ${ok}. Fallidos: ${fail}. Revisa configuración de correo.`, 'Cerrar', { duration: 5000 });
-      }
+      await this.historiaClinicaService.sendCitaDocumentosByEmail(cita.id_cita).toPromise();
+      this.snackBar.open('Correo enviado', 'Cerrar', { duration: 3200 });
     } catch (error: any) {
       this.snackBar.open(error?.error?.message || 'No se pudieron enviar los documentos', 'Cerrar', { duration: 4000 });
     } finally {
@@ -482,6 +491,11 @@ export class CitaDetailsComponent implements OnInit {
   }
 
   onBack(): void {
+    if (window.history.length > 1) {
+      this.location.back();
+      return;
+    }
+
     const from = this.route.snapshot.queryParamMap.get('from');
 
     if (from === 'calendario') {
@@ -558,6 +572,34 @@ export class CitaDetailsComponent implements OnInit {
       }).format(fecha);
     } catch (error) {
       console.error('Error formateando fecha compacta:', error);
+      return 'Fecha no válida';
+    }
+  }
+
+  formatDateWithWeekday(dateString: string | null | undefined): string {
+    if (!dateString) return 'Fecha no disponible';
+
+    try {
+      const fecha = this.parseLocalDate(dateString);
+      const parts = new Intl.DateTimeFormat('es-CO', {
+        weekday: 'long',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+      }).formatToParts(fecha);
+
+      const weekday = (parts.find((p) => p.type === 'weekday')?.value || '').trim();
+      const day = (parts.find((p) => p.type === 'day')?.value || '').trim();
+      const month = (parts.find((p) => p.type === 'month')?.value || '').replace('.', '').trim();
+      const year = (parts.find((p) => p.type === 'year')?.value || '').trim();
+
+      const weekdayCapitalized = weekday
+        ? weekday.charAt(0).toUpperCase() + weekday.slice(1)
+        : '';
+
+      return `${weekdayCapitalized} ${day} de ${month} de ${year}`.trim();
+    } catch (error) {
+      console.error('Error formateando fecha con día:', error);
       return 'Fecha no válida';
     }
   }
@@ -794,6 +836,112 @@ export class CitaDetailsComponent implements OnInit {
     } finally {
       this.loadingDocumentos.set(false);
     }
+  }
+
+  private async loadDocumentosCitaWithRetry(citaId: string, maxAttempts = 3): Promise<HistoriaClinica[]> {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      await this.loadDocumentosCita(citaId);
+      const docs = this.documentosCita();
+      if (docs.length > 0) return docs;
+
+      if (attempt < maxAttempts) {
+        await this.wait(450 * attempt);
+      }
+    }
+
+    return this.documentosCita();
+  }
+
+  private wait(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private openPostCompletionDeliveryDialog(totalDocs: number): void {
+    this.dialog.open(CitaPostCompletionDeliveryDialogComponent, {
+      width: '520px',
+      maxWidth: '94vw',
+      data: {
+        totalDocs,
+        isBusy: () => this.updating(),
+        onEmail: async () => {
+          await this.onEnviarTodosDocumentos(true);
+        },
+        onWhatsapp: () => {
+          this.enviarDocumentosPorWhatsApp(this.documentosCita());
+        },
+        onBoth: async () => {
+          await this.onEnviarTodosDocumentos(true);
+          this.enviarDocumentosPorWhatsApp(this.documentosCita());
+        }
+      }
+    });
+  }
+
+  private enviarDocumentosPorWhatsApp(docs: HistoriaClinica[]): void {
+    if (!docs.length) {
+      this.snackBar.open('No hay documentos para compartir por WhatsApp', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    const cita = this.cita();
+    const mascota = cita?.mascota?.nombre || 'tu mascota';
+    const propietario = cita?.mascota?.cliente?.nombre || 'propietario';
+    const fechaCita = this.formatearFechaWhatsApp(cita?.fecha_inicio || null);
+    const lineasDocs = docs
+      .slice(0, 8)
+      .map((d, idx) => `${idx + 1}. ${this.historiaClinicaService.getTipoLabel(d.tipo_documento)} (${d.codigo_historia})`)
+      .join('\n');
+
+    const mensaje =
+      `Hola ${propietario}, te compartimos los documentos clínicos de la cita de ${mascota}` +
+      `${fechaCita ? ` del ${fechaCita}` : ''}: ${lineasDocs}.\n` +
+      `Si requieres ayuda con algo responde este mensaje y te apoyamos.`;
+
+    const telefono = cita?.mascota?.cliente?.telefono || null;
+    const numero = this.normalizarTelefonoWhatsApp(telefono);
+    const waUrl = numero
+      ? `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`
+      : `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
+    const popup = window.open(waUrl, '_blank', 'noopener');
+    if (!popup) {
+      this.snackBar.open('No se pudo abrir WhatsApp Web/App', 'Cerrar', { duration: 3500 });
+      return;
+    }
+
+    this.snackBar.open('Abriendo WhatsApp Web/App...', 'Cerrar', { duration: 2200 });
+  }
+
+  private normalizarTelefonoWhatsApp(raw: string | null | undefined): string | null {
+    const digits = String(raw || '').replace(/\D+/g, '');
+    if (!digits) return null;
+
+    const withoutZeros = digits.startsWith('00') ? digits.slice(2) : digits;
+    if (withoutZeros.length === 10) return `57${withoutZeros}`;
+    if (withoutZeros.length >= 11 && withoutZeros.length <= 15) return withoutZeros;
+    return null;
+  }
+
+  private formatearFechaWhatsApp(dateString: string | null): string {
+    if (!dateString) return '';
+
+    const date = this.parseLocalDate(dateString);
+    if (Number.isNaN(date.getTime())) return '';
+
+    const parts = new Intl.DateTimeFormat('es-CO', {
+      weekday: 'long',
+      day: '2-digit',
+      month: 'long'
+    }).formatToParts(date);
+
+    const weekdayRaw = (parts.find((p) => p.type === 'weekday')?.value || '').trim();
+    const day = (parts.find((p) => p.type === 'day')?.value || '').trim();
+    const monthRaw = (parts.find((p) => p.type === 'month')?.value || '').trim();
+
+    const weekday = weekdayRaw ? weekdayRaw.charAt(0).toUpperCase() + weekdayRaw.slice(1) : '';
+    const month = monthRaw ? monthRaw.charAt(0).toUpperCase() + monthRaw.slice(1) : '';
+
+    if (!weekday || !day || !month) return '';
+    return `${weekday} ${day} de ${month}`;
   }
 
   private openDocumentoPdfModal(idHistoria: string, codigoHistoria: string): void {
@@ -1076,10 +1224,20 @@ interface CitaDocumentosListDialogData {
     </mat-dialog-content>
     <mat-dialog-actions align="end" class="docs-dialog-actions">
       @if (data.estadoCita === 'completada' && data.documentos.length) {
-        <button mat-stroked-button color="primary" (click)="sendAll()">
-          <mat-icon>send</mat-icon>
-          Enviar todos
-        </button>
+        <div class="docs-actions-group">
+          <button mat-stroked-button color="primary" (click)="sendAll()">
+            <mat-icon>mail</mat-icon>
+            Correo
+          </button>
+          <button mat-stroked-button color="accent" (click)="sendWhatsappAll()">
+            <mat-icon>chat</mat-icon>
+            WhatsApp
+          </button>
+          <button mat-stroked-button (click)="sendBothAll()">
+            <mat-icon>alt_route</mat-icon>
+            Ambos
+          </button>
+        </div>
       } @else {
         <span></span>
       }
@@ -1102,6 +1260,14 @@ interface CitaDocumentosListDialogData {
       display: flex;
       justify-content: space-between;
       width: 100%;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .docs-actions-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
     }
   `]
 })
@@ -1118,4 +1284,67 @@ export class CitaDocumentosListDialogComponent {
   sendAll(): void {
     this.dialogRef.close({ action: 'send-all' });
   }
+
+  sendWhatsappAll(): void {
+    this.dialogRef.close({ action: 'send-whatsapp-all' });
+  }
+
+  sendBothAll(): void {
+    this.dialogRef.close({ action: 'send-both-all' });
+  }
+}
+
+interface CitaPostCompletionDeliveryDialogData {
+  totalDocs: number;
+  isBusy?: () => boolean;
+  onEmail?: () => void | Promise<void>;
+  onWhatsapp?: () => void | Promise<void>;
+  onBoth?: () => void | Promise<void>;
+}
+
+@Component({
+  selector: 'app-cita-post-completion-delivery-dialog',
+  standalone: true,
+  imports: [CommonModule, MatDialogModule, MatButtonModule, MatIconModule],
+  template: `
+    <h2 mat-dialog-title>
+      <mat-icon>mark_email_read</mat-icon>
+      Cita completada
+    </h2>
+    <mat-dialog-content>
+      <p>Hay {{ data.totalDocs }} documento(s) clínico(s) listos para enviar al propietario.</p>
+      <p>Selecciona el medio de envío. Esta ventana solo se cierra con el botón Cerrar.</p>
+    </mat-dialog-content>
+    <mat-dialog-actions align="end" class="delivery-actions">
+      <button mat-stroked-button color="primary" (click)="data.onEmail?.()" [disabled]="data.isBusy?.()">
+        <mat-icon>mail</mat-icon>
+        Correo
+      </button>
+      <button mat-stroked-button color="accent" (click)="data.onWhatsapp?.()" [disabled]="data.isBusy?.()">
+        <mat-icon>chat</mat-icon>
+        WhatsApp Web
+      </button>
+      <button mat-stroked-button (click)="data.onBoth?.()" [disabled]="data.isBusy?.()">
+        <mat-icon>alt_route</mat-icon>
+        Ambos
+      </button>
+      <button mat-button (click)="dialogRef.close()">Cerrar</button>
+    </mat-dialog-actions>
+  `,
+  styles: [`
+    h2[mat-dialog-title] { display:flex; align-items:center; gap:8px; }
+    mat-dialog-content p { margin: 0 0 8px; line-height: 1.45; }
+    .delivery-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+  `]
+})
+export class CitaPostCompletionDeliveryDialogComponent {
+  constructor(
+    public dialogRef: MatDialogRef<CitaPostCompletionDeliveryDialogComponent>,
+    @Inject(MAT_DIALOG_DATA) public data: CitaPostCompletionDeliveryDialogData
+  ) {}
 }

@@ -570,10 +570,26 @@
   font-size: 28px !important;
   width: 28px !important;
   height: 28px !important;
+  line-height: 28px !important;
   color: #3182ce;
   padding: 8px;
   border-radius: 8px;
   background: linear-gradient(135deg, #ebf8ff 0%, #bee3f8 100%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: content-box;
+}
+
+:host ::ng-deep .sessions-list .mat-mdc-list-item-icon {
+  align-self: center;
+  margin-top: 0 !important;
+}
+
+:host ::ng-deep .sessions-list .mdc-list-item__start {
+  align-self: center !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
 }
 
 .session-title {
@@ -920,6 +936,17 @@
   font-size: 18px !important;
   width: 18px !important;
   height: 18px !important;
+  line-height: 18px !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:host ::ng-deep .profile-tabs .mdc-tab__content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 /* ===============================

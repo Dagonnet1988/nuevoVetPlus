@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import QRCode from 'qrcode';
 import { query } from '../config/database.js';
 import { sendEmail } from '../services/emailService.js';
+import { renderEmailTemplate } from '../services/emailTemplateService.js';
 import { generarPDFHistoria } from '../services/historiaClinicaPDFService.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -35,7 +36,7 @@ async function logEmailDelivery({
        $1, 'email', $2, $3, $4,
        $5, $6, $7, $8, $9,
        $10::jsonb, $11, $12,
-       CASE WHEN $7 = 'enviado' THEN NOW() ELSE NULL END
+       CASE WHEN $7::varchar = 'enviado'::varchar THEN NOW() ELSE NULL END
      )`,
     [
       tipoDocumento,
@@ -64,6 +65,59 @@ function buildHistoryPdfName(codigo) {
   return `${safe || 'historia'}.pdf`;
 }
 
+function getTipoDocumentoLabel(tipoDocumento) {
+  return ({
+    valoracion_inicial: 'Valoración inicial',
+    seguimiento: 'Seguimiento',
+    formula: 'Fórmula médica',
+    remision: 'Remisión'
+  })[tipoDocumento] || tipoDocumento || 'Documento clínico';
+}
+
+function formatDocumentDate(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' });
+}
+
+function buildAttachmentsSnapshot(attachments = []) {
+  return (attachments || []).map((attachment) => ({
+    filename: attachment?.filename || null,
+    contentType: attachment?.contentType || null,
+    size: typeof attachment?.content === 'string'
+      ? attachment.content.length
+      : (Buffer.isBuffer(attachment?.content) ? attachment.content.length : null)
+  }));
+}
+
+function buildEmailSnapshot({ to, subject, text, html, attachments = [] }) {
+  return {
+    to: to || null,
+    subject: subject || null,
+    text: text || null,
+    html: html || null,
+    attachments: buildAttachmentsSnapshot(attachments)
+  };
+}
+
+async function getClinicName(tenantId) {
+  try {
+    const result = await query(
+      `SELECT nombre_empresa
+       FROM system.configuracion_empresa
+       WHERE activa = true AND id_tenant = $1
+       ORDER BY updated_at DESC NULLS LAST, created_at DESC
+       LIMIT 1`,
+      [tenantId]
+    );
+
+    return result.rows[0]?.nombre_empresa || process.env.CLINIC_NAME || 'VetPlus Clínica';
+  } catch {
+    return process.env.CLINIC_NAME || 'VetPlus Clínica';
+  }
+}
+
 async function resolveConsentForEmail(idCliente, tenantId, userId) {
   const consentResult = await query(
     `SELECT c.id_consentimiento, c.id_cliente, c.id_version, c.estado, c.token, c.token_expires_at,
@@ -77,11 +131,29 @@ async function resolveConsentForEmail(idCliente, tenantId, userId) {
     [idCliente, tenantId]
   );
 
-  if (!consentResult.rows.length) {
-    return null;
+  let consent = consentResult.rows[0] || null;
+
+  if (!consent) {
+    const clientResult = await query(
+      `SELECT id_cliente, nombre AS cliente_nombre, email AS cliente_email
+       FROM clinical.clientes
+       WHERE id_cliente = $1 AND id_tenant = $2 AND activo = true
+       LIMIT 1`,
+      [idCliente, tenantId]
+    );
+
+    if (!clientResult.rows.length) {
+      return null;
+    }
+
+    consent = {
+      id_cliente: clientResult.rows[0].id_cliente,
+      cliente_nombre: clientResult.rows[0].cliente_nombre,
+      cliente_email: clientResult.rows[0].cliente_email,
+      estado: 'sin_consentimiento'
+    };
   }
 
-  const consent = consentResult.rows[0];
   const now = new Date();
 
   if (consent.estado === 'firmado' && consent.pdf_path) {
@@ -135,6 +207,7 @@ export async function sendConsentEmail(req, res) {
   const tenantId = req.tenantId ?? req.user?.tenant_id;
   const userId = req.user?.id_usuario || req.user?.id || null;
   const { idCliente } = req.params;
+  let retryPayload = null;
 
   try {
     const resolved = await resolveConsentForEmail(idCliente, tenantId, userId);
@@ -154,20 +227,30 @@ export async function sendConsentEmail(req, res) {
       const pdfBuffer = await fs.readFile(absolutePath);
       const fileName = `consentimiento-${resolved.consent.pdf_numero || resolved.consent.id_consentimiento}.pdf`;
       const subject = `Consentimiento firmado - ${nombre}`;
+      const textBody = `Hola ${nombre}, adjuntamos el consentimiento firmado en formato PDF.`;
+      const htmlBody = `<p>Hola ${nombre},</p><p>Adjuntamos el consentimiento firmado en formato PDF.</p>`;
+      const attachments = [
+        {
+          filename: fileName,
+          content: pdfBuffer,
+          contentType: 'application/pdf'
+        }
+      ];
+
+      retryPayload = {
+        to: targetEmail,
+        subject,
+        text: textBody,
+        html: htmlBody
+      };
 
       const sendResult = await sendEmail({
         tenantId,
         to: targetEmail,
         subject,
-        text: `Hola ${nombre}, adjuntamos el consentimiento firmado en formato PDF.`,
-        html: `<p>Hola ${nombre},</p><p>Adjuntamos el consentimiento firmado en formato PDF.</p>`,
-        attachments: [
-          {
-            filename: fileName,
-            content: pdfBuffer,
-            contentType: 'application/pdf'
-          }
-        ]
+        text: textBody,
+        html: htmlBody,
+        attachments
       });
 
       await query(
@@ -185,7 +268,13 @@ export async function sendConsentEmail(req, res) {
         asunto: subject,
         estado: 'enviado',
         providerMessageId: sendResult.messageId,
-        metadata: { mode: 'pdf' }
+        metadata: {
+          mode: 'pdf',
+             email_snapshot: sendResult?.emailSnapshot || null,
+          retry_payload: retryPayload,
+          id_cliente: idCliente,
+          id_consentimiento: resolved.consent.id_consentimiento
+        }
       });
 
       return res.json({
@@ -196,29 +285,38 @@ export async function sendConsentEmail(req, res) {
     }
 
     const firmaUrl = `${FRONTEND_URL}/consentimiento/${resolved.consent.token}`;
-    const qrBuffer = await QRCode.toBuffer(firmaUrl, { width: 256, margin: 1 });
+    const qrBase64 = await QRCode.toDataURL(firmaUrl, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 256
+    });
     const subject = `Firma de consentimiento - ${nombre}`;
+    const textBody =
+      `Hola ${nombre}, por favor firma tu consentimiento en este enlace: ${firmaUrl}` +
+      `\nVigente hasta: ${new Date(resolved.consent.token_expires_at).toLocaleString('es-CO')}`;
+    const htmlBody =
+      `<p>Hola ${nombre},</p>` +
+      `<p>Por favor firma tu consentimiento en este enlace:</p>` +
+      `<p><a href="${firmaUrl}">${firmaUrl}</a></p>` +
+      `<p>También puedes escanear este código QR:</p>` +
+      `<p><img src="${qrBase64}" alt="QR de firma de consentimiento" width="220" height="220" style="max-width:220px;height:auto;border:1px solid #e5e7eb;border-radius:8px;" /></p>` +
+      `<p>Vigente hasta: ${new Date(resolved.consent.token_expires_at).toLocaleString('es-CO')}</p>`;
+    const attachments = [];
+
+    retryPayload = {
+      to: targetEmail,
+      subject,
+      text: textBody,
+      html: htmlBody
+    };
 
     const sendResult = await sendEmail({
       tenantId,
       to: targetEmail,
       subject,
-      text:
-        `Hola ${nombre}, por favor firma tu consentimiento en este enlace: ${firmaUrl}` +
-        `\nVigente hasta: ${new Date(resolved.consent.token_expires_at).toLocaleString('es-CO')}`,
-      html:
-        `<p>Hola ${nombre},</p>` +
-        `<p>Por favor firma tu consentimiento en este enlace:</p>` +
-        `<p><a href="${firmaUrl}">${firmaUrl}</a></p>` +
-        `<p>También adjuntamos el código QR para escanearlo.</p>` +
-        `<p>Vigente hasta: ${new Date(resolved.consent.token_expires_at).toLocaleString('es-CO')}</p>`,
-      attachments: [
-        {
-          filename: 'consentimiento-qr.png',
-          content: qrBuffer,
-          contentType: 'image/png'
-        }
-      ]
+      text: textBody,
+      html: htmlBody,
+      attachments
     });
 
     await query(
@@ -236,7 +334,14 @@ export async function sendConsentEmail(req, res) {
       asunto: subject,
       estado: 'enviado',
       providerMessageId: sendResult.messageId,
-      metadata: { mode: 'link', firmaUrl }
+        metadata: {
+          mode: 'link',
+          firmaUrl,
+           email_snapshot: sendResult?.emailSnapshot || null,
+          retry_payload: retryPayload,
+          id_cliente: idCliente,
+          id_consentimiento: resolved.consent.id_consentimiento
+        }
     });
 
     return res.json({
@@ -245,7 +350,10 @@ export async function sendConsentEmail(req, res) {
       data: {
         mode: 'link',
         to: targetEmail,
-        expiresAt: resolved.consent.token_expires_at
+        expiresAt: resolved.consent.token_expires_at,
+        firmaUrl,
+        qrBase64,
+        clienteNombre: nombre
       }
     });
   } catch (error) {
@@ -261,7 +369,11 @@ export async function sendConsentEmail(req, res) {
         asunto: 'Envío consentimiento',
         estado: 'fallido',
         detalleError: error.message,
-        metadata: { source: 'sendConsentEmail' }
+        metadata: {
+          source: 'sendConsentEmail',
+          retry_payload: retryPayload,
+          id_cliente: idCliente
+        }
       });
     } catch (logError) {
       console.error('Error registrando log de envío fallido:', logError);
@@ -278,10 +390,13 @@ export async function sendHistoriaEmail(req, res) {
   const tenantId = req.tenantId ?? req.user?.tenant_id;
   const userId = req.user?.id_usuario || req.user?.id || null;
   const { idHistoria } = req.params;
+  let retryPayload = null;
 
   try {
     const historiaResult = await query(
       `SELECT h.id_historia, h.codigo_historia, h.tipo_documento,
+              h.fecha,
+              m.nombre AS mascota_nombre,
               cl.id_cliente, cl.nombre AS cliente_nombre, cl.email AS cliente_email
        FROM clinical.historias_clinicas h
        JOIN clinical.mascotas m ON m.id_mascota = h.id_mascota
@@ -303,23 +418,48 @@ export async function sendHistoriaEmail(req, res) {
 
     const pdfBuffer = await generarPDFHistoria(idHistoria, tenantId);
     const fileName = buildHistoryPdfName(historia.codigo_historia);
-    const subject = `Historia clínica ${historia.codigo_historia}`;
+    const tipoDocumentoLabel = getTipoDocumentoLabel(historia.tipo_documento);
+    const rendered = await renderEmailTemplate({
+      tenantId,
+      key: 'documento_clinico_pdf',
+      userId,
+      variables: {
+        cliente_nombre: historia.cliente_nombre || 'propietario',
+        mascota_nombre: historia.mascota_nombre || 'mascota',
+        tipo_documento: tipoDocumentoLabel,
+        codigo_documento: historia.codigo_historia,
+        fecha_documento: formatDocumentDate(historia.fecha),
+        clinica_nombre: await getClinicName(tenantId)
+      }
+    });
+
+    const subject = rendered?.asunto_render || `${tipoDocumentoLabel} ${historia.codigo_historia}`;
+    const textBody = rendered?.cuerpo_text_render || `Hola ${historia.cliente_nombre || 'propietario'}, adjuntamos ${tipoDocumentoLabel} ${historia.codigo_historia}.`;
+    const htmlBody = rendered?.cuerpo_html_render ||
+      `<p>Hola ${historia.cliente_nombre || 'propietario'},</p>` +
+      `<p>Adjuntamos <strong>${tipoDocumentoLabel} ${historia.codigo_historia}</strong> en formato PDF.</p>`;
+    const attachments = [
+      {
+        filename: fileName,
+        content: pdfBuffer,
+        contentType: 'application/pdf'
+      }
+    ];
+
+    retryPayload = {
+      to: targetEmail,
+      subject,
+      text: textBody,
+      html: htmlBody
+    };
 
     const sendResult = await sendEmail({
       tenantId,
       to: targetEmail,
       subject,
-      text: `Hola ${historia.cliente_nombre || 'propietario'}, adjuntamos la historia clínica ${historia.codigo_historia}.`,
-      html:
-        `<p>Hola ${historia.cliente_nombre || 'propietario'},</p>` +
-        `<p>Adjuntamos la historia clínica <strong>${historia.codigo_historia}</strong> en formato PDF.</p>`,
-      attachments: [
-        {
-          filename: fileName,
-          content: pdfBuffer,
-          contentType: 'application/pdf'
-        }
-      ]
+      text: textBody,
+      html: htmlBody,
+      attachments
     });
 
     await logEmailDelivery({
@@ -332,7 +472,14 @@ export async function sendHistoriaEmail(req, res) {
       asunto: subject,
       estado: 'enviado',
       providerMessageId: sendResult.messageId,
-      metadata: { codigo_historia: historia.codigo_historia, tipo_documento: historia.tipo_documento }
+      metadata: {
+        codigo_historia: historia.codigo_historia,
+        tipo_documento: historia.tipo_documento,
+           email_snapshot: sendResult?.emailSnapshot || null,
+        retry_payload: retryPayload,
+        id_historia: idHistoria,
+        id_cliente: historia.id_cliente
+      }
     });
 
     return res.json({
@@ -353,7 +500,11 @@ export async function sendHistoriaEmail(req, res) {
         asunto: 'Envío historia clínica',
         estado: 'fallido',
         detalleError: error.message,
-        metadata: { source: 'sendHistoriaEmail' }
+        metadata: {
+          source: 'sendHistoriaEmail',
+          retry_payload: retryPayload,
+          id_historia: idHistoria
+        }
       });
     } catch (logError) {
       console.error('Error registrando log de envío fallido:', logError);
@@ -362,6 +513,151 @@ export async function sendHistoriaEmail(req, res) {
     return res.status(400).json({
       success: false,
       message: error.message || 'No se pudo enviar la historia clínica por correo'
+    });
+  }
+}
+
+export async function sendAppointmentDocumentsEmail(req, res) {
+  const tenantId = req.tenantId ?? req.user?.tenant_id;
+  const userId = req.user?.id_usuario || req.user?.id || null;
+  const { idCita } = req.params;
+  let retryPayload = null;
+
+  try {
+    const docsResult = await query(
+      `SELECT h.id_historia, h.codigo_historia, h.tipo_documento, h.fecha, h.created_at,
+              m.nombre AS mascota_nombre,
+              cl.id_cliente, cl.nombre AS cliente_nombre, cl.email AS cliente_email
+       FROM clinical.historias_clinicas h
+       JOIN clinical.mascotas m ON m.id_mascota = h.id_mascota
+       JOIN clinical.clientes cl ON cl.id_cliente = m.id_cliente
+       WHERE h.id_tenant = $1
+         AND h.id_cita = $2
+         AND h.estado <> 'Cancelado'
+       ORDER BY h.created_at ASC`,
+      [tenantId, idCita]
+    );
+
+    const docs = docsResult.rows || [];
+    if (!docs.length) {
+      return res.status(404).json({ success: false, message: 'No hay documentos clínicos para esta cita' });
+    }
+
+    const targetEmail = (req.body?.email_destino || docs[0].cliente_email || '').trim();
+    if (!targetEmail) {
+      return res.status(422).json({ success: false, message: 'El cliente no tiene correo para envío' });
+    }
+
+    const clienteNombre = docs[0].cliente_nombre || 'propietario';
+    const mascotaNombre = docs[0].mascota_nombre || 'mascota';
+    const fechaCita = formatDocumentDate(docs[0].fecha);
+    const subject = `Documentos clínicos de cita - ${mascotaNombre}`;
+
+    const attachments = [];
+    for (const doc of docs) {
+      const pdfBuffer = await generarPDFHistoria(doc.id_historia, tenantId);
+      attachments.push({
+        filename: buildHistoryPdfName(doc.codigo_historia),
+        content: pdfBuffer,
+        contentType: 'application/pdf'
+      });
+    }
+
+    const docsListText = docs
+      .map((d, idx) => `${idx + 1}. ${getTipoDocumentoLabel(d.tipo_documento)} (${d.codigo_historia})`)
+      .join('\n');
+    const docsListHtml = docs
+      .map((d, idx) => `<li>${idx + 1}. ${getTipoDocumentoLabel(d.tipo_documento)} (${d.codigo_historia})</li>`)
+      .join('');
+
+    const textBody =
+      `Hola ${clienteNombre},\n` +
+      `Te compartimos los documentos clínicos de la cita de ${mascotaNombre}` +
+      `${fechaCita ? ` del ${fechaCita}` : ''}:\n` +
+      `${docsListText}\n\n` +
+      'Si requieres ayuda con algo responde este mensaje y te apoyamos.';
+
+    const htmlBody =
+      `<p>Hola ${clienteNombre},</p>` +
+      `<p>Te compartimos los documentos clínicos de la cita de <strong>${mascotaNombre}</strong>${fechaCita ? ` del <strong>${fechaCita}</strong>` : ''}:</p>` +
+      `<ol>${docsListHtml}</ol>` +
+      `<p>Si requieres ayuda con algo responde este mensaje y te apoyamos.</p>`;
+
+    retryPayload = {
+      to: targetEmail,
+      subject,
+      text: textBody,
+      html: htmlBody
+    };
+
+    const sendResult = await sendEmail({
+      tenantId,
+      to: targetEmail,
+      subject,
+      text: textBody,
+      html: htmlBody,
+      attachments
+    });
+
+    await logEmailDelivery({
+      tenantId,
+      userId,
+      tipoDocumento: 'historia_pdf',
+      idCliente: docs[0].id_cliente,
+      idHistoria: null,
+      destinatarioEmail: targetEmail,
+      asunto: subject,
+      estado: 'enviado',
+      providerMessageId: sendResult.messageId,
+      metadata: {
+        mode: 'lote_cita',
+        id_cita: idCita,
+        total_documentos: docs.length,
+        documentos: docs.map((d) => ({
+          id_historia: d.id_historia,
+          codigo_historia: d.codigo_historia,
+          tipo_documento: d.tipo_documento
+        })),
+        email_snapshot: sendResult?.emailSnapshot || null,
+        retry_payload: retryPayload,
+        id_cliente: docs[0].id_cliente
+      }
+    });
+
+    return res.json({
+      success: true,
+      message: `Se enviaron ${docs.length} documento(s) en un solo correo`,
+      data: {
+        to: targetEmail,
+        total_documentos: docs.length,
+        id_cita: idCita
+      }
+    });
+  } catch (error) {
+    console.error('Error enviando documentos de cita por correo:', error);
+
+    try {
+      await logEmailDelivery({
+        tenantId,
+        userId,
+        tipoDocumento: 'historia_pdf',
+        destinatarioEmail: req.body?.email_destino || 'sin-destino',
+        asunto: 'Envío documentos de cita',
+        estado: 'fallido',
+        detalleError: error.message,
+        metadata: {
+          source: 'sendAppointmentDocumentsEmail',
+          retry_payload: retryPayload,
+          id_cita: idCita
+        }
+      });
+    } catch (logError) {
+      console.error('Error registrando log de envío fallido de documentos de cita:', logError);
+    }
+
+    return res.status(400).json({
+      success: false,
+      message: error.message || 'No se pudieron enviar los documentos de la cita'
     });
   }
 }

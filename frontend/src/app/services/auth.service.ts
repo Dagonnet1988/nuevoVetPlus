@@ -166,6 +166,14 @@ export class AuthService {
       );
   }
 
+  forgotPassword(payload: { email?: string; documento?: string }): Observable<ApiResponse> {
+    return this.http.post<ApiResponse>(`${this.API_URL}/auth/forgot-password`, payload);
+  }
+
+  resetPasswordWithToken(payload: { token: string; newPassword: string; confirmPassword: string }): Observable<ApiResponse> {
+    return this.http.post<ApiResponse>(`${this.API_URL}/auth/reset-password`, payload);
+  }
+
   mustChangePassword(): boolean {
     const user = this.currentUser();
     return user?.primer_acceso || false;
@@ -354,27 +362,21 @@ export class AuthService {
   // ===============================
 
   setTheme(theme: 'light' | 'dark' | 'blue'): void {
-    this.currentTheme.set(theme);
-    this.storageSet(this.THEME_KEY, theme);
+    // Tema único oficial: siempre light.
+    this.currentTheme.set('light');
+    this.storageSet(this.THEME_KEY, 'light');
 
     // Aplicar clase CSS al body
     document.body.className = document.body.className.replace(/\w*-theme/g, '');
-    if (theme !== 'light') {
-      document.body.classList.add(`${theme}-theme`);
-    }
   }
 
   loadThemeFromStorage(): void {
-    const savedTheme = this.storageGet(this.THEME_KEY) as 'light' | 'dark' | 'blue';
-    this.setTheme(savedTheme || 'light');
+    this.storageRemove(this.THEME_KEY);
+    this.setTheme('light');
   }
 
   toggleTheme(): void {
-    const currentTheme = this.currentTheme();
-    const themes: ('light' | 'dark' | 'blue')[] = ['light', 'dark', 'blue'];
-    const currentIndex = themes.indexOf(currentTheme as any);
-    const nextIndex = (currentIndex + 1) % themes.length;
-    this.setTheme(themes[nextIndex]);
+    this.setTheme('light');
   }
 
   // ===============================

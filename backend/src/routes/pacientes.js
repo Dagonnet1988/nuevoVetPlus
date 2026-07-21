@@ -24,8 +24,13 @@ import {
   descargarPDFConsentimiento,
   revocarConsentimiento
 } from '../controllers/consentimientoController.js';
+import { cacheInvalidation, configCache, intelligentCaching } from '../middleware/performance.js';
 
 const router = express.Router();
+
+router.use(cacheInvalidation(['.*pacientes.*', '.*pets.*', '.*clients.*', '.*clientes.*']));
+
+const pacientesReadCache = intelligentCaching({ ttl: 60 });
 
 /**
  * @route   POST /api/clinical/pacientes
@@ -60,6 +65,7 @@ router.get('/',
   authenticateToken,
   authorize(['admin', 'vet', 'aux']),
   validatePacienteSearch,
+  pacientesReadCache,
   getMascotasConCliente
 );
 
@@ -82,6 +88,7 @@ router.get('/stats',
 router.get('/especies',
   authenticateToken,
   authorize(['admin', 'vet', 'aux']),
+  configCache,
   getEspecies
 );
 
@@ -93,6 +100,7 @@ router.get('/especies',
 router.get('/especies/:especie/razas',
   authenticateToken,
   authorize(['admin', 'vet', 'aux']),
+  configCache,
   getRazasByEspecie
 );
 
@@ -104,6 +112,7 @@ router.get('/especies/:especie/razas',
 router.get('/:id',
   authenticateToken,
   authorize(['admin', 'vet', 'aux']),
+  pacientesReadCache,
   getPacienteById
 );
 

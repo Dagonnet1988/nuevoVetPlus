@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, ViewChild, ElementRef } from '@angular/core';
+import { Component, Input, OnInit, OnChanges, SimpleChanges, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Chart, ChartConfiguration, ChartType, registerables } from 'chart.js';
 
@@ -27,7 +27,7 @@ Chart.register(...registerables);
     }
   `]
 })
-export class DoughnutChartComponent implements OnInit {
+export class DoughnutChartComponent implements OnInit, OnChanges {
   @Input() data: any;
   @Input() options: any;
   @Input() title: string = '';
@@ -39,6 +39,12 @@ export class DoughnutChartComponent implements OnInit {
     this.createChart();
   }
 
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['data'] && !changes['data'].firstChange) {
+      this.updateChart(this.data);
+    }
+  }
+
   ngOnDestroy() {
     if (this.chart) {
       this.chart.destroy();
@@ -47,7 +53,9 @@ export class DoughnutChartComponent implements OnInit {
 
   private createChart() {
     const ctx = this.chartCanvas.nativeElement.getContext('2d');
-    
+
+    const safeData = this.getSafeData(this.data);
+
     const defaultOptions = {
       responsive: true,
       maintainAspectRatio: false,
@@ -69,7 +77,7 @@ export class DoughnutChartComponent implements OnInit {
 
     const config: ChartConfiguration = {
       type: 'doughnut' as ChartType,
-      data: this.data,
+      data: safeData,
       options: { ...defaultOptions, ...this.options }
     };
 
@@ -77,9 +85,29 @@ export class DoughnutChartComponent implements OnInit {
   }
 
   updateChart(newData: any) {
+    const safeData = this.getSafeData(newData);
+
     if (this.chart) {
-      this.chart.data = newData;
+      this.chart.data = safeData;
       this.chart.update();
+    } else {
+      this.createChart();
     }
+  }
+
+  private getSafeData(data: any): any {
+    if (data?.labels?.length && data?.datasets?.length) {
+      return data;
+    }
+
+    return {
+      labels: ['Sin datos'],
+      datasets: [
+        {
+          data: [1],
+          backgroundColor: ['#e0e0e0']
+        }
+      ]
+    };
   }
 }

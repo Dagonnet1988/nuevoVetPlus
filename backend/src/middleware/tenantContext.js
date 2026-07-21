@@ -16,15 +16,28 @@ export async function tenantContext(req, res, next) {
   if (!tenantId) {
     return res.status(403).json({
       success: false,
-      message: 'Contexto de clínica no resuelto. El usuario no tiene tenant asignado.',
+      message: 'Contexto de clínica no resuelto. El usuario no tiene una clínica asignada.',
       error: 'MISSING_TENANT_CONTEXT'
     });
   }
 
-  // Validación opcional de coherencia con X-Tenant-Slug enviado por frontend
-  const tenantSlug = req.headers['x-tenant-slug'];
-  if (tenantSlug && typeof tenantSlug === 'string') {
-    try {
+  try {
+    const activeTenantResult = await query(
+      'SELECT id_tenant FROM system.tenants WHERE id_tenant = $1 AND estado = $2 LIMIT 1',
+      [tenantId, 'active']
+    );
+
+    if (activeTenantResult.rows.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: 'La clínica está suspendida o inactiva.',
+        error: 'TENANT_INACTIVE'
+      });
+    }
+
+    // Validación opcional de coherencia con X-Tenant-Slug enviado por frontend
+    const tenantSlug = req.headers['x-tenant-slug'];
+    if (tenantSlug && typeof tenantSlug === 'string') {
       const tenantResult = await query(
         'SELECT id_tenant FROM system.tenants WHERE slug = $1 AND estado = $2 LIMIT 1',
         [tenantSlug, 'active']
@@ -33,7 +46,7 @@ export async function tenantContext(req, res, next) {
       if (tenantResult.rows.length === 0) {
         return res.status(403).json({
           success: false,
-          message: 'Tenant inválido o inactivo para este entorno.',
+          message: 'Clínica inválida o inactiva para este entorno.',
           error: 'INVALID_TENANT_SLUG'
         });
       }
@@ -41,18 +54,18 @@ export async function tenantContext(req, res, next) {
       if (tenantResult.rows[0].id_tenant !== tenantId) {
         return res.status(403).json({
           success: false,
-          message: 'El tenant del usuario no coincide con el tenant solicitado.',
+          message: 'La clínica del usuario no coincide con la clínica solicitada.',
           error: 'TENANT_MISMATCH'
         });
       }
-    } catch (error) {
-      console.error('Error validando X-Tenant-Slug:', error.message);
-      return res.status(500).json({
-        success: false,
-        message: 'No fue posible validar el contexto de tenant.',
-        error: 'TENANT_VALIDATION_ERROR'
-      });
     }
+  } catch (error) {
+    console.error('Error validando contexto de tenant:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'No fue posible validar el contexto de clínica.',
+      error: 'TENANT_VALIDATION_ERROR'
+    });
   }
 
   req.tenantId = tenantId;

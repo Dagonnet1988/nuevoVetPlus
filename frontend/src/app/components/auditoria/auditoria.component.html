@@ -109,7 +109,7 @@
             <ng-container matColumnDef="timestamp">
               <th mat-header-cell *matHeaderCellDef>Fecha / Hora</th>
               <td mat-cell *matCellDef="let row">
-                <span class="timestamp">{{ row.timestamp | date:'dd/MM/yy HH:mm:ss' }}</span>
+                <span class="timestamp">{{ row.timestamp | date:'dd-MM-yy h:mm:ss a' }}</span>
               </td>
             </ng-container>
 
@@ -251,7 +251,7 @@
             <ng-container matColumnDef="timestamp">
               <th mat-header-cell *matHeaderCellDef>Fecha / Hora</th>
               <td mat-cell *matCellDef="let row">
-                <span class="timestamp">{{ row.timestamp | date:'dd/MM/yy HH:mm:ss' }}</span>
+                <span class="timestamp">{{ row.timestamp | date:'dd-MM-yy h:mm:ss a' }}</span>
               </td>
             </ng-container>
 

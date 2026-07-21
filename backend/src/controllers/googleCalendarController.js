@@ -20,10 +20,8 @@ class GoogleCalendarSimpleController {
   }
 
   async ensureConfigSchema() {
-    await query(`
-      ALTER TABLE vetplus_auth.google_calendar_config
-      ADD COLUMN IF NOT EXISTS sync_preferences JSONB DEFAULT '{}'::jsonb
-    `);
+    // No-op: en despliegues nuevos, el schema canónico ya incluye sync_preferences.
+    return true;
   }
 
   getDefaultSyncPreferences(tenantId = null) {
@@ -40,7 +38,8 @@ class GoogleCalendarSimpleController {
         recordatorio_default: 30,
         incluir_cliente: true,
         incluir_mascota: true,
-        incluir_veterinario: true
+        incluir_veterinario: true,
+        invitar_propietario_calendario: false
       }
     };
 
@@ -65,7 +64,8 @@ class GoogleCalendarSimpleController {
           recordatorio_default: 30,
           incluir_cliente: true,
           incluir_mascota: true,
-          incluir_veterinario: true
+          incluir_veterinario: true,
+          invitar_propietario_calendario: false
         }
       };
     }
@@ -227,7 +227,7 @@ class GoogleCalendarSimpleController {
         resolvedClientId,
         resolvedClientSecret,
         (typeof calendar_id === 'string' && calendar_id.trim().length > 0) ? calendar_id.trim() : 'primary',
-        'UTC', // timezone por defecto
+        'America/Bogota',
         sync_automatico ?? false,
         Number.isFinite(Number(intervalo_sync)) ? Math.max(5, Number(intervalo_sync)) : 30,
         redirect_uri,
@@ -1212,6 +1212,18 @@ export const getSyncStatus = async (req, res) => {
 
         const tenantId = req.tenantId ?? req.user?.tenant_id;
 
+        const currentConfigResult = await query(`
+            SELECT refresh_token
+            FROM vetplus_auth.google_calendar_config
+            WHERE is_active = true
+              AND configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)
+            ORDER BY created_at DESC
+            LIMIT 1
+        `, [tenantId]);
+
+        const currentConfig = currentConfigResult.rows[0] || null;
+        const hasCurrentGoogleToken = Boolean(currentConfig?.refresh_token);
+
         const statsResult = await query(`
             SELECT
                 google_sync_status,
@@ -1239,11 +1251,53 @@ export const getSyncStatus = async (req, res) => {
             LIMIT 10
         `, [tenantId]);
 
+        const authIssueResult = await query(`
+          SELECT
+            created_at,
+            response_data
+          FROM system.activity_log
+          WHERE tipo_actividad = 'SYNC_CALENDAR'
+            AND descripcion IN ('google_calendar_sync:auto_sync_error', 'google_calendar_sync:manual_sync_error')
+            AND created_at >= NOW() - INTERVAL '72 hours'
+          ORDER BY created_at DESC
+          LIMIT 1
+        `);
+
+        let googleAuth = {
+          requires_reauth: false,
+          code: null,
+          message: null,
+          last_error_at: null
+        };
+
+        if (authIssueResult.rows.length > 0) {
+          const row = authIssueResult.rows[0];
+          const payload = row.response_data && typeof row.response_data === 'object'
+            ? row.response_data
+            : {};
+
+          const rawCode = String(payload?.code || '').toUpperCase();
+          const rawError = String(payload?.error || '').toLowerCase();
+          const requiresReauth = payload?.requires_reauth === true
+            || rawCode === 'GOOGLE_REAUTH_REQUIRED'
+            || rawError.includes('invalid_grant');
+
+          if (requiresReauth && !hasCurrentGoogleToken) {
+            googleAuth = {
+              requires_reauth: true,
+              code: rawCode || 'GOOGLE_REAUTH_REQUIRED',
+              message: payload?.error || 'La autorización de Google Calendar expiró o fue revocada.',
+              last_error_at: row.created_at
+            };
+          }
+        }
+
         res.json({
             success: true,
             data: {
                 stats: statsResult.rows,
-                recent_errors: recentErrorsResult.rows
+            recent_errors: recentErrorsResult.rows,
+            google_auth: googleAuth
             }
         });
 
@@ -1444,10 +1498,16 @@ export const importFromGoogleCalendar = async (req, res) => {
         );
 
         if (!importResult.success) {
-            return res.status(500).json({
+          const statusCode = Number.isFinite(Number(importResult?.status))
+            ? Number(importResult.status)
+            : 500;
+
+          return res.status(statusCode).json({
                 success: false,
                 message: 'Error importando desde Google Calendar',
-                error: importResult.error
+            error: importResult.error,
+            code: importResult.code,
+            requires_reauth: importResult.requires_reauth === true
             });
         }
 
@@ -1487,24 +1547,34 @@ export const syncChangesFromGoogle = async (req, res) => {
             end_date = null
         } = req.body || {};
 
+        // Si llega un rango explícito, priorizar sincronización por rango.
+        const hasExplicitRange = Boolean(start_date && end_date);
+        const effectiveOnlyToday = hasExplicitRange ? false : Boolean(only_today);
+
         const syncResult = await bidirectionalSyncService.syncChangesFromGoogle({
-          onlyToday: Boolean(only_today),
+          onlyToday: effectiveOnlyToday,
           startDate: start_date,
           endDate: end_date,
           tenantId: req.tenantId ?? req.user?.tenant_id ?? null
         });
 
         if (!syncResult.success) {
-            return res.status(500).json({
+          const statusCode = Number.isFinite(Number(syncResult?.status))
+            ? Number(syncResult.status)
+            : 500;
+
+          return res.status(statusCode).json({
                 success: false,
                 message: 'Error sincronizando cambios desde Google Calendar',
-                error: syncResult.error
+            error: syncResult.error,
+            code: syncResult.code,
+            requires_reauth: syncResult.requires_reauth === true
             });
         }
 
         res.json({
             success: true,
-          message: only_today
+          message: effectiveOnlyToday
             ? 'Sincronización de cambios de hoy completada'
             : 'Sincronización de cambios por rango completada',
             data: syncResult.results

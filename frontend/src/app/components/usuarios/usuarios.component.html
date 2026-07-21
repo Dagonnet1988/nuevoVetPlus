@@ -3,6 +3,9 @@
   <div class="page-header">
     <div class="header-content">
       <div class="title-section">
+        <button mat-icon-button class="back-button" (click)="goBack()" aria-label="Volver">
+          <mat-icon>arrow_back</mat-icon>
+        </button>
         <h1 class="page-title">
           <mat-icon class="page-icon">people</mat-icon>
           Gestión de Usuarios
@@ -10,6 +13,12 @@
         <p class="page-subtitle">Administración de usuarios del sistema</p>
       </div>
       <div class="actions-section">
+        <button mat-stroked-button
+                (click)="verSesionesGlobales()"
+                class="export-button">
+          <mat-icon>devices</mat-icon>
+          Ver Sesiones
+        </button>
         <button mat-stroked-button
                 (click)="exportarUsuarios()"
                 class="export-button">
@@ -32,7 +41,9 @@
     <mat-card class="stat-card">
       <mat-card-content>
         <div class="stat-content">
-          <mat-icon class="stat-icon primary-color">people</mat-icon>
+          <div class="stat-icon-wrap primary-color">
+            <mat-icon class="stat-icon">people</mat-icon>
+          </div>
           <div class="stat-info">
             <span class="stat-number">{{ resumen().total_usuarios }}</span>
             <span class="stat-label">Total Usuarios</span>
@@ -44,7 +55,9 @@
     <mat-card class="stat-card">
       <mat-card-content>
         <div class="stat-content">
-          <mat-icon class="stat-icon success-color">check_circle</mat-icon>
+          <div class="stat-icon-wrap success-color">
+            <mat-icon class="stat-icon">check_circle</mat-icon>
+          </div>
           <div class="stat-info">
             <span class="stat-number">{{ resumen().usuarios_activos }}</span>
             <span class="stat-label">Usuarios Activos</span>
@@ -56,7 +69,9 @@
     <mat-card class="stat-card">
       <mat-card-content>
         <div class="stat-content">
-          <mat-icon class="stat-icon accent-color">login</mat-icon>
+          <div class="stat-icon-wrap accent-color">
+            <mat-icon class="stat-icon">login</mat-icon>
+          </div>
           <div class="stat-info">
             <span class="stat-number">{{ resumen().sesiones_activas }}</span>
             <span class="stat-label">Usuarios con acceso (7 días)</span>
@@ -177,8 +192,10 @@
               <td mat-cell *matCellDef="let usuario">
                 <mat-chip [style.background-color]="getColorRol(usuario.rol)"
                           [style.color]="'white'">
-                  <mat-icon>{{ getIconoRol(usuario.rol) }}</mat-icon>
-                  {{ formatearRol(usuario.rol) }}
+                  <span class="chip-role-content">
+                    <mat-icon>{{ getIconoRol(usuario.rol) }}</mat-icon>
+                    <span>{{ formatearRol(usuario.rol) }}</span>
+                  </span>
                 </mat-chip>
               </td>
             </ng-container>

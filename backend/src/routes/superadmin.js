@@ -7,6 +7,7 @@ import {
   createTenant,
   getTenant,
   updateTenant,
+  provisionSuperadminAsTenantAdmin,
   getSuperadminProfile,
   changePassword
 } from '../controllers/superadminController.js';
@@ -42,6 +43,7 @@ router.get('/tenants',       authenticateSuperadmin, listTenants);
 router.post('/tenants',      authenticateSuperadmin, createTenant);
 router.get('/tenants/:id',   authenticateSuperadmin, getTenant);
 router.patch('/tenants/:id', authenticateSuperadmin, updateTenant);
+router.post('/tenants/:id/provision-superadmin-admin', authenticateSuperadmin, provisionSuperadminAsTenantAdmin);
 
 export default router;
 

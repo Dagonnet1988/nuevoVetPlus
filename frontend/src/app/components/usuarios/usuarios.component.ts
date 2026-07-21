@@ -1,5 +1,5 @@
 import { Component, OnInit, signal, computed, ViewChild, inject, ElementRef } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -66,6 +66,7 @@ export class UsuariosComponent implements OnInit {
   private snackBar = inject(MatSnackBar);
   private dialog = inject(MatDialog);
   private router = inject(Router);
+  private location = inject(Location);
 
   // Signals
   loading = signal(false);
@@ -112,7 +113,6 @@ export class UsuariosComponent implements OnInit {
 
   private loadInitialData(): void {
     this.loadUsuarios();
-    this.loadResumen();
   }
 
   private loadUsuarios(): void {
@@ -130,28 +130,25 @@ export class UsuariosComponent implements OnInit {
 
         const activos = visibleUsers.filter(u => u.activo).length;
         const inactivos = visibleUsers.length - activos;
+        const sesionesActivas = visibleUsers.filter((u) => {
+          if (!u.ultimo_login) return false;
+          const diffMs = Date.now() - new Date(u.ultimo_login).getTime();
+          const diffDays = diffMs / 86400000;
+          return diffDays <= 7;
+        }).length;
+
         this.resumen.update((current) => ({
           ...current,
           total_usuarios: visibleUsers.length,
           usuarios_activos: activos,
-          usuarios_inactivos: inactivos
+          usuarios_inactivos: inactivos,
+          sesiones_activas: sesionesActivas
         }));
 
         this.loading.set(false);
       },
       error: (error) => {
         console.error('Error cargando usuarios:', error);
-      }
-    });
-  }
-
-  private loadResumen(): void {
-    this.usuariosService.getResumenUsuarios().subscribe({
-      next: (resumen) => {
-        this.resumen.set(resumen);
-      },
-      error: (error) => {
-        console.error('Error cargando resumen:', error);
       }
     });
   }
@@ -198,9 +195,22 @@ export class UsuariosComponent implements OnInit {
     this.loadUsuarios();
   }
 
+  goBack(): void {
+    if (window.history.length <= 1) {
+      this.router.navigate(['/dashboard']);
+      return;
+    }
+
+    this.location.back();
+  }
+
   // Acciones de usuarios
   nuevoUsuario(): void {
     this.router.navigate(['/usuarios/nuevo']);
+  }
+
+  verSesionesGlobales(): void {
+    this.router.navigate(['/usuarios/sesiones']);
   }
 
   verUsuario(usuario: Usuario): void {
@@ -220,7 +230,6 @@ export class UsuariosComponent implements OnInit {
         next: () => {
           this.snackBar.open(`Usuario ${accion}do exitosamente`, 'Cerrar', { duration: 3000 });
           this.loadUsuarios();
-          this.loadResumen();
         },
         error: (error) => {
           console.error(`Error ${accion}ndo usuario:`, error);

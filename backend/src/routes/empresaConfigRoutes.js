@@ -14,12 +14,19 @@ import { authenticateToken, authorize } from '../middleware/auth.js';
 import {
     getEmpresaConfig,
     updateEmpresaConfig,
-    uploadLogo
+    uploadLogo,
+    getDiasEspeciales,
+    addDiaEspecial,
+    updateDiaEspecial,
+    deleteDiaEspecial
 } from '../controllers/empresaConfigController.js';
+import { cacheInvalidation, configCache } from '../middleware/performance.js';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+router.use(cacheInvalidation(['.*empresa.*', '.*config.*', '.*dias-especiales.*', '.*calendar.*', '.*appointments.*']));
 
 // Configuración de multer para subida de archivos
 const storage = multer.diskStorage({
@@ -78,12 +85,14 @@ const validateEmpresaConfig = [
         .withMessage('La dirección no puede exceder 500 caracteres'),
     
     body('telefono')
-        .optional()
+        .notEmpty()
+        .withMessage('El teléfono es requerido')
         .matches(/^[\+]?[0-9\s\-\(\)]{7,20}$/)
         .withMessage('Formato de teléfono inválido'),
     
     body('email')
-        .optional()
+        .notEmpty()
+        .withMessage('El email es requerido')
         .isEmail()
         .withMessage('Formato de email inválido'),
     
@@ -118,7 +127,7 @@ const requireAuthenticatedTenantUser = authorize(['admin', 'vet', 'aux']);
  *       404:
  *         description: Configuración no encontrada
  */
-router.get('/config', authenticateToken, requireAuthenticatedTenantUser, getEmpresaConfig);
+router.get('/config', authenticateToken, requireAuthenticatedTenantUser, configCache, getEmpresaConfig);
 
 /**
  * @swagger
@@ -138,6 +147,8 @@ router.get('/config', authenticateToken, requireAuthenticatedTenantUser, getEmpr
  *               - nombre_empresa
  *               - nit  
  *               - direccion
+ *               - telefono
+ *               - email
  *             properties:
  *               nombre_empresa:
  *                 type: string
@@ -157,6 +168,42 @@ router.get('/config', authenticateToken, requireAuthenticatedTenantUser, getEmpr
  *         description: Acceso denegado
  */
 router.put('/config', authenticateToken, requireAdmin, validateEmpresaConfig, updateEmpresaConfig);
+
+/**
+ * @swagger
+ * /api/admin/empresa/dias-especiales:
+ *   get:
+ *     summary: Obtener días especiales de la empresa
+ *     tags: [Configuración Empresa]
+ */
+router.get('/dias-especiales', authenticateToken, requireAuthenticatedTenantUser, configCache, getDiasEspeciales);
+
+/**
+ * @swagger
+ * /api/admin/empresa/dias-especiales:
+ *   post:
+ *     summary: Crear un día especial (festivo/no laborable/horario especial)
+ *     tags: [Configuración Empresa]
+ */
+router.post('/dias-especiales', authenticateToken, requireAdmin, addDiaEspecial);
+
+/**
+ * @swagger
+ * /api/admin/empresa/dias-especiales/{id}:
+ *   put:
+ *     summary: Actualizar un día especial
+ *     tags: [Configuración Empresa]
+ */
+router.put('/dias-especiales/:id', authenticateToken, requireAdmin, updateDiaEspecial);
+
+/**
+ * @swagger
+ * /api/admin/empresa/dias-especiales/{id}:
+ *   delete:
+ *     summary: Eliminar un día especial
+ *     tags: [Configuración Empresa]
+ */
+router.delete('/dias-especiales/:id', authenticateToken, requireAdmin, deleteDiaEspecial);
 
 /**
  * @swagger

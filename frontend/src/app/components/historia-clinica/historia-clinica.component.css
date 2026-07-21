@@ -633,45 +633,6 @@
   }
 }
 
-/* Dark theme support */
-.dark-theme .historia-clinica-container {
-  background: #121212;
-}
-
-.dark-theme .page-title {
-  color: #4caf50;
-}
-
-.dark-theme .page-subtitle {
-  color: #aaa;
-}
-
-.dark-theme .stat-card,
-.dark-theme .filters-card,
-.dark-theme .table-card,
-.dark-theme .timeline-card,
-.dark-theme .stats-card {
-  background: #1e1e1e;
-  border: 1px solid #333;
-}
-
-.dark-theme .consultas-table {
-  background: #1e1e1e;
-}
-
-.dark-theme .consultas-table .mat-mdc-header-cell {
-  color: #4caf50;
-  border-bottom-color: #4caf50;
-}
-
-.dark-theme .consultas-table .mat-mdc-cell {
-  border-bottom-color: #333;
-}
-
-.dark-theme .consultas-table .mat-mdc-row:hover {
-  background-color: rgba(76, 175, 80, 0.1);
-}
-
 /* Filas clickeables */
 .clickable-row {
   cursor: pointer;

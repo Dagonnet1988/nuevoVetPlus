@@ -15,7 +15,6 @@ export interface ConsentimientoEstado {
     pdfNumero?: string;
     versionTitulo?: string;
     idVersion?: string;
-    whatsappEnviado?: boolean;
     emailEnviado?: boolean;
   } | null;
 }
@@ -35,6 +34,7 @@ export interface ConsentimientoCreado {
 })
 export class ConsentimientosService {
   private readonly BASE = `${environment.apiUrl}/clinical/pacientes/cliente`;
+  private readonly NOTIFICACIONES = `${environment.apiUrl}/clinical/notificaciones`;
 
   constructor(private http: HttpClient) {}
 
@@ -48,6 +48,13 @@ export class ConsentimientosService {
 
   reenviar(idCliente: string): Observable<ConsentimientoCreado> {
     return this.http.post<ConsentimientoCreado>(`${this.BASE}/${idCliente}/consentimiento/reenviar`, {});
+  }
+
+  enviarPorCorreo(idCliente: string, emailDestino?: string): Observable<{ success: boolean; message: string; data?: any }> {
+    return this.http.post<{ success: boolean; message: string; data?: any }>(
+      `${this.NOTIFICACIONES}/consentimiento/${idCliente}/email`,
+      { email_destino: emailDestino || undefined }
+    );
   }
 
   descargarPDF(idCliente: string): Observable<HttpResponse<Blob>> {

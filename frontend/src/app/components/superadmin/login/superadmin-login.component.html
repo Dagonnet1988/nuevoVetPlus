@@ -1,15 +1,17 @@
 <div class="sa-login-page">
   <div class="sa-login-card">
     <div class="sa-login-logo">
-      <mat-icon>pets</mat-icon>
-      <h1>VetPlus<br><span>Platform Admin</span></h1>
+      <img src="DA logo.png" alt="DA" class="sa-logo-icon" />
+      <h1>DA Developments<br><span>Desarrollo web · Soporte y mantenimiento</span></h1>
     </div>
+
+    <p class="sa-login-subtitle">Panel de administración de plataforma</p>
 
     <form (ngSubmit)="submit()" #f="ngForm" autocomplete="off">
       <mat-form-field appearance="outline" class="sa-field">
         <mat-label>Email</mat-label>
         <input matInput type="email" [(ngModel)]="email" name="email"
-               placeholder="admin@vetplus.com" autocomplete="username" required />
+               autocomplete="username" required />
         <mat-icon matSuffix>email</mat-icon>
       </mat-form-field>
 
@@ -35,5 +37,9 @@
         }
       </button>
     </form>
+
+    <div class="sa-footer">
+      <a href="mailto:contacto@dadev.co">contacto@dadev.co</a>
+    </div>
   </div>
 </div>

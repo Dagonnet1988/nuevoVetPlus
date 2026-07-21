@@ -1,5 +1,5 @@
 import { Component, OnInit, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -118,7 +118,7 @@ import { SyncDialogComponent } from '../../citas/sync-dialog.component';
                             }
                             Desconectar Google Calendar
                           </button>
-                          <p class="help-text">Desconecta la integración para reconfigurar Client ID/Secret del tenant.</p>
+                          <p class="help-text">Desconecta la integración para reconfigurar Client ID/Secret de la clínica.</p>
                         </div>
                       } @else {
                         <div class="form-row">
@@ -135,7 +135,7 @@ import { SyncDialogComponent } from '../../citas/sync-dialog.component';
                             <mat-icon matSuffix>lock</mat-icon>
                             <mat-error *ngIf="configForm.get('cliente_secret')?.hasError('required')">Client Secret es requerido</mat-error>
                             @if (hasStoredSecret()) {
-                              <mat-hint>Ya existe un Client Secret guardado para este tenant</mat-hint>
+                              <mat-hint>Ya existe un Client Secret guardado para esta clínica</mat-hint>
                             }
                           </mat-form-field>
                         </div>
@@ -264,6 +264,9 @@ import { SyncDialogComponent } from '../../citas/sync-dialog.component';
                         <mat-slide-toggle formControlName="incluir_veterinario" color="primary">
                           Incluir nombre del veterinario
                         </mat-slide-toggle>
+                        <mat-slide-toggle formControlName="invitar_propietario_calendario" color="primary">
+                          Invitar al propietario al calendario (asistente)
+                        </mat-slide-toggle>
                       </div>
                     </div>
 
@@ -328,7 +331,7 @@ import { SyncDialogComponent } from '../../citas/sync-dialog.component';
                       <mat-icon class="status-icon">schedule</mat-icon>
                       <div>
                         <strong>Última sincronización</strong>
-                        <p>{{ status().ultimo_sync ? (status().ultimo_sync | date:'dd/MM/yyyy HH:mm') : 'Nunca' }}</p>
+                        <p>{{ status().ultimo_sync ? (status().ultimo_sync | date:'dd-MM-yy h:mm a') : 'Nunca' }}</p>
                       </div>
                     </div>
 
@@ -699,7 +702,8 @@ export class GoogleCalendarConfigComponent implements OnInit {
     private snackBar: MatSnackBar,
     private router: Router,
     private dialog: MatDialog,
-    private citasService: CitasService
+    private citasService: CitasService,
+    private location: Location
   ) {
     this.configForm = this.createForm();
 
@@ -771,6 +775,7 @@ export class GoogleCalendarConfigComponent implements OnInit {
       incluir_cliente: [true],
       incluir_mascota: [true],
       incluir_veterinario: [true],
+      invitar_propietario_calendario: [false],
       color_consulta: ['#46d6db'],
       color_cirugia: ['#5484ed'],
       color_vacunacion: ['#51b749'],
@@ -834,6 +839,7 @@ export class GoogleCalendarConfigComponent implements OnInit {
       incluir_cliente: config.configuracion_eventos?.incluir_cliente ?? true,
       incluir_mascota: config.configuracion_eventos?.incluir_mascota ?? true,
       incluir_veterinario: config.configuracion_eventos?.incluir_veterinario ?? true,
+      invitar_propietario_calendario: config.configuracion_eventos?.invitar_propietario_calendario ?? false,
       color_consulta: config.mapeo_colores?.terapia || config.mapeo_colores?.consulta || '#46d6db',
       color_cirugia: config.mapeo_colores?.hidroterapia || config.mapeo_colores?.cirugia || '#5484ed',
       color_vacunacion: config.mapeo_colores?.domicilio || config.mapeo_colores?.vacunacion || '#51b749',
@@ -877,7 +883,8 @@ export class GoogleCalendarConfigComponent implements OnInit {
         recordatorio_default: formValue.recordatorio_default,
         incluir_cliente: formValue.incluir_cliente,
         incluir_mascota: formValue.incluir_mascota,
-        incluir_veterinario: formValue.incluir_veterinario
+        incluir_veterinario: formValue.incluir_veterinario,
+        invitar_propietario_calendario: formValue.invitar_propietario_calendario
       }
     };
 
@@ -1288,10 +1295,20 @@ export class GoogleCalendarConfigComponent implements OnInit {
     console.error(message + ':', error);
 
     let userMessage = message;
-    if (error.status === 404) {
-      userMessage = 'Servicio de sincronización no disponible';
-    } else if (error.status === 401) {
+    const backendCode = error?.error?.code;
+    const backendError = String(error?.error?.error || '').toLowerCase();
+    const requiresReauth = error?.error?.requires_reauth === true
+      || backendCode === 'GOOGLE_REAUTH_REQUIRED'
+      || backendError.includes('invalid_grant');
+
+    if (requiresReauth) {
+      userMessage = 'La autorización de Google Calendar expiró o fue revocada. Desconecta y vuelve a autorizar la cuenta de Google.';
+    } else if (error.status === 403) {
       userMessage = 'No tienes permisos para sincronizar';
+    } else if (error.status === 401) {
+      userMessage = 'Sesión no autorizada. Inicia sesión nuevamente.';
+    } else if (error.status === 404) {
+      userMessage = 'Servicio de sincronización no disponible';
     } else if (error.status === 500) {
       userMessage = 'Error interno del servidor de sincronización';
     } else if (error.status === 0) {
@@ -1312,6 +1329,11 @@ export class GoogleCalendarConfigComponent implements OnInit {
   }
 
   goBack(): void {
+    if (window.history.length > 1) {
+      this.location.back();
+      return;
+    }
+
     this.router.navigate(['/configuracion']);
   }
 

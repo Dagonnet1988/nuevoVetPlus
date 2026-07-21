@@ -6,6 +6,7 @@
  *
  * Variables de entorno necesarias (o en .env):
  *   SUPERADMIN_EMAIL    — email del superadmin
+ *   SUPERADMIN_DOCUMENTO — documento del superadmin
  *   SUPERADMIN_PASSWORD — contraseña (mínimo 8 caracteres)
  *   SUPERADMIN_NOMBRE   — nombre (default: "Super Admin")
  */
@@ -14,8 +15,14 @@ import bcrypt from 'bcryptjs';
 import { query } from '../../config/database.js';
 
 const email    = process.env.SUPERADMIN_EMAIL    || 'admin@vetplus.com';
+const documento = process.env.SUPERADMIN_DOCUMENTO || process.env.SUPERADMIN_DOC || null;
 const password = process.env.SUPERADMIN_PASSWORD || null;
 const nombre   = process.env.SUPERADMIN_NOMBRE   || 'Super Admin';
+
+if (!documento || !String(documento).trim()) {
+  console.error('❌  Define SUPERADMIN_DOCUMENTO en el entorno o en .env');
+  process.exit(1);
+}
 
 if (!password) {
   console.error('❌  Define SUPERADMIN_PASSWORD en el entorno o en .env');
@@ -31,8 +38,8 @@ const passwordHash = await bcrypt.hash(password, 12);
 
 try {
   const existing = await query(
-    'SELECT id_superadmin FROM system.superadmins WHERE email = $1',
-    [email]
+    'SELECT id_superadmin FROM system.superadmins WHERE email = $1 OR documento = $2',
+    [email, String(documento).trim()]
   );
 
   if (existing.rows.length > 0) {
@@ -41,16 +48,17 @@ try {
   }
 
   const result = await query(
-    `INSERT INTO system.superadmins (nombre, email, password_hash)
-     VALUES ($1, $2, $3)
-     RETURNING id_superadmin, nombre, email, created_at`,
-    [nombre, email, passwordHash]
+    `INSERT INTO system.superadmins (nombre, email, documento, password_hash)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id_superadmin, nombre, email, documento, created_at`,
+    [nombre, email, String(documento).trim(), passwordHash]
   );
 
   const sa = result.rows[0];
   console.log(`✅  Superadmin creado:
   id:    ${sa.id_superadmin}
   email: ${sa.email}
+  documento: ${sa.documento}
   nombre: ${sa.nombre}
   creado: ${sa.created_at}`);
 } catch (err) {

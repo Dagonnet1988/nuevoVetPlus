@@ -86,39 +86,3 @@ html {
   // Tema claro por defecto
   color-scheme: light;
 }
-
-// Tema oscuro
-.dark-theme {
-  @include mat.theme((
-    color: (
-      primary: $vetplus-primary,
-      tertiary: $vetplus-accent,
-    ),
-    typography: Roboto,
-    density: 0,
-  ));
-
-  color-scheme: dark;
-  
-  --background-color: #121212;
-  --surface-color: #1e1e1e;
-  --text-primary: #ffffff;
-  --text-secondary: #b3b3b3;
-}
-
-// Tema azul
-.blue-theme {
-  @include mat.theme((
-    color: (
-      primary: mat.$azure-palette,
-      tertiary: mat.$blue-palette,
-    ),
-    typography: Roboto,
-    density: 0,
-  ));
-
-  color-scheme: light;
-  
-  --primary-color: #1976D2;
-  --accent-color: #FFC107;
-}

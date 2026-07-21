@@ -30,15 +30,7 @@ export const validateCreateAppointment = [
         .notEmpty()
         .withMessage('La fecha de inicio es obligatoria')
         .isISO8601()
-        .withMessage('La fecha de inicio debe ser una fecha válida (ISO 8601)')
-        .custom((value) => {
-            const fechaInicio = new Date(value);
-            const ahora = new Date();
-            if (fechaInicio <= ahora) {
-                throw new Error('La fecha de inicio debe ser posterior a la fecha actual');
-            }
-            return true;
-        }),
+        .withMessage('La fecha de inicio debe ser una fecha válida (ISO 8601)'),
     
     body('fecha_fin')
         .notEmpty()
@@ -77,6 +69,118 @@ export const validateCreateAppointment = [
         .optional()
         .isLength({ max: 1000 })
         .withMessage('Las notas no pueden exceder 1000 caracteres')
+];
+
+const recurringBaseValidators = [
+    body('id_mascota')
+        .notEmpty()
+        .withMessage('El ID de la mascota es obligatorio')
+        .isUUID()
+        .withMessage('El ID de la mascota debe ser un UUID válido'),
+
+    body('id_veterinario')
+        .notEmpty()
+        .withMessage('El ID del veterinario es obligatorio')
+        .isUUID()
+        .withMessage('El ID del veterinario debe ser un UUID válido'),
+
+    body('fecha_inicio')
+        .notEmpty()
+        .withMessage('La fecha de inicio es obligatoria')
+        .isISO8601()
+        .withMessage('La fecha de inicio debe ser una fecha válida (ISO 8601)'),
+
+    body('fecha_fin')
+        .notEmpty()
+        .withMessage('La fecha de fin es obligatoria')
+        .isISO8601()
+        .withMessage('La fecha de fin debe ser una fecha válida (ISO 8601)')
+        .custom((value, { req }) => {
+            const fechaInicio = new Date(req.body.fecha_inicio);
+            const fechaFin = new Date(value);
+            if (fechaFin <= fechaInicio) {
+                throw new Error('La fecha de fin debe ser posterior a la fecha de inicio');
+            }
+            return true;
+        }),
+
+    body('recurrencia.frecuencia')
+        .optional()
+        .isIn(['daily', 'weekly'])
+        .withMessage('La frecuencia debe ser daily o weekly'),
+
+    body('recurrencia.intervalo')
+        .optional()
+        .isInt({ min: 1, max: 12 })
+        .withMessage('El intervalo debe ser un número entre 1 y 12'),
+
+    body('recurrencia.total_ocurrencias')
+        .optional()
+        .isInt({ min: 1, max: 200 })
+        .withMessage('El total de ocurrencias debe estar entre 1 y 200'),
+
+    body('recurrencia.fecha_hasta')
+        .optional({ nullable: true })
+        .isISO8601()
+        .withMessage('La fecha_hasta debe ser una fecha válida'),
+
+    body('recurrencia.dias_semana')
+        .optional()
+        .isArray({ min: 1 })
+        .withMessage('dias_semana debe ser un arreglo no vacío')
+];
+
+export const validatePreviewRecurringAppointments = [
+    ...recurringBaseValidators
+];
+
+export const validateCreateRecurringAppointments = [
+    ...recurringBaseValidators,
+    body('tipo')
+        .notEmpty()
+        .withMessage('El tipo de cita es obligatorio')
+        .isIn(TIPOS_CITA_VALIDOS)
+        .withMessage('El tipo de cita no es válido'),
+
+    body('motivo')
+        .optional({ nullable: true })
+        .isLength({ max: 500 })
+        .withMessage('El motivo no puede exceder 500 caracteres'),
+
+    body('notas')
+        .optional({ nullable: true })
+        .isLength({ max: 1000 })
+        .withMessage('Las notas no pueden exceder 1000 caracteres'),
+
+    body('observaciones')
+        .optional({ nullable: true })
+        .isLength({ max: 1000 })
+        .withMessage('Las observaciones no pueden exceder 1000 caracteres'),
+
+    body('ocurrencias_editadas')
+        .optional()
+        .isArray({ min: 1, max: 200 })
+        .withMessage('ocurrencias_editadas debe ser un arreglo entre 1 y 200 elementos'),
+
+    body('ocurrencias_editadas.*.indice')
+        .optional()
+        .isInt({ min: 1, max: 999 })
+        .withMessage('El indice de ocurrencia debe ser un número válido'),
+
+    body('ocurrencias_editadas.*.fecha_inicio')
+        .optional()
+        .isISO8601()
+        .withMessage('La fecha_inicio de la ocurrencia debe ser válida'),
+
+    body('ocurrencias_editadas.*.fecha_fin')
+        .optional()
+        .isISO8601()
+        .withMessage('La fecha_fin de la ocurrencia debe ser válida'),
+
+    body('ocurrencias_editadas.*.tipo')
+        .optional()
+        .isIn(TIPOS_CITA_VALIDOS)
+        .withMessage('El tipo de cita en ocurrencias_editadas no es válido')
 ];
 
 /**

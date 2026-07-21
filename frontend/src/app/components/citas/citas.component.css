@@ -1,4 +1,3 @@
-/* Container principal */
 .citas-container {
   padding: 12px;
   max-width: 100%;
@@ -430,6 +429,22 @@
   font-size: 24px !important;
   font-weight: 600 !important;
   color: #1976d2;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+::ng-deep .fc-toolbar-title .calendar-toolbar-special {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #fff3e0;
+  color: #e65100;
+  border: 1px solid #ffcc80;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 ::ng-deep .fc-button {
@@ -457,6 +472,31 @@
   background-color: rgba(25, 118, 210, 0.08) !important;
 }
 
+::ng-deep .fc-daygrid-day.dia-festivo,
+::ng-deep .fc-timegrid-col.dia-festivo {
+  background-color: rgba(255, 193, 7, 0.18) !important;
+}
+
+::ng-deep .fc-daygrid-day.dia-no_laborable,
+::ng-deep .fc-timegrid-col.dia-no_laborable {
+  background-color: rgba(220, 53, 69, 0.18) !important;
+}
+
+::ng-deep .fc-daygrid-day.dia-horario_especial,
+::ng-deep .fc-timegrid-col.dia-horario_especial {
+  background-color: rgba(255, 152, 0, 0.2) !important;
+}
+
+::ng-deep .fc-daygrid-day.dia-cumpleanos,
+::ng-deep .fc-timegrid-col.dia-cumpleanos {
+  background-color: rgba(255, 182, 193, 0.2) !important;
+}
+
+::ng-deep .fc-daygrid-day.dia-ausencia,
+::ng-deep .fc-timegrid-col.dia-ausencia {
+  background-color: rgba(187, 222, 251, 0.24) !important;
+}
+
 ::ng-deep .fc-day-header {
   background: linear-gradient(135deg, #f8f9fa, #e9ecef);
   font-weight: 600;
@@ -464,6 +504,129 @@
   border-bottom: 2px solid #1976d2;
   text-transform: uppercase;
   font-size: 12px;
+}
+
+::ng-deep .fc-col-header-cell.dia-festivo,
+::ng-deep .fc-col-header-cell.dia-no_laborable,
+::ng-deep .fc-col-header-cell.dia-horario_especial,
+::ng-deep .fc-col-header-cell.dia-cumpleanos,
+::ng-deep .fc-col-header-cell.dia-ausencia {
+  background: #fff8e1;
+}
+
+::ng-deep .fc-col-header-cell.dia-no_laborable {
+  background: #ffebee;
+}
+
+::ng-deep .fc-col-header-cell.dia-horario_especial {
+  background: #fff3e0;
+}
+
+::ng-deep .fc-col-header-cell.dia-cumpleanos {
+  background: #fce4ec;
+}
+
+::ng-deep .fc-col-header-cell.dia-ausencia {
+  background: #e3f2fd;
+}
+
+::ng-deep .day-special-badge {
+  display: inline-flex;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: #ffecb3;
+  color: #795548;
+  vertical-align: middle;
+}
+
+::ng-deep .day-special-dot {
+  position: absolute;
+  left: 50%;
+  top: 4px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 9px;
+  line-height: 1.2;
+  font-weight: 700;
+  background: #ffecb3;
+  color: #795548;
+  white-space: nowrap;
+  z-index: 2;
+}
+
+::ng-deep .fc-daygrid-day-top {
+  position: relative;
+  min-height: 22px;
+}
+
+::ng-deep .fc-col-header-cell.dia-no_laborable .day-special-badge {
+  background: #ffcdd2;
+  color: #b71c1c;
+}
+
+::ng-deep .fc-col-header-cell.dia-horario_especial .day-special-badge {
+  background: #ffe0b2;
+  color: #e65100;
+}
+
+::ng-deep .mat-calendar-body-cell.dia-festivo-mini .mat-calendar-body-cell-content {
+  background: rgba(255, 193, 7, 0.22);
+  border: 1px solid rgba(255, 193, 7, 0.65);
+  border-radius: 50%;
+}
+
+::ng-deep .mat-calendar-body-cell.dia-no_laborable-mini .mat-calendar-body-cell-content {
+  background: rgba(220, 53, 69, 0.2);
+  border: 1px solid rgba(220, 53, 69, 0.6);
+  border-radius: 50%;
+}
+
+::ng-deep .mat-calendar-body-cell.dia-horario_especial-mini .mat-calendar-body-cell-content {
+  background: rgba(255, 152, 0, 0.24);
+  border: 1px solid rgba(255, 152, 0, 0.7);
+  border-radius: 50%;
+}
+
+::ng-deep .mat-calendar-body-cell.dia-cumpleanos-mini .mat-calendar-body-cell-content {
+  background: rgba(255, 182, 193, 0.26);
+  border: 1px solid rgba(240, 98, 146, 0.72);
+  border-radius: 50%;
+}
+
+::ng-deep .mat-calendar-body-cell.dia-ausencia-mini .mat-calendar-body-cell-content {
+  background: rgba(187, 222, 251, 0.3);
+  border: 1px solid rgba(66, 165, 245, 0.72);
+  border-radius: 50%;
+}
+
+.calendar-special-badge {
+  margin: 4px 0 10px;
+  display: inline-flex;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #fff3e0;
+  color: #e65100;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.selected-day-badge {
+  margin-top: 6px;
+  display: inline-flex;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #fff3e0;
+  color: #e65100;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 ::ng-deep .fc-timegrid-slot {
@@ -476,7 +639,10 @@
   font-weight: 500;
 }
 
-/* Eventos mejorados */
+::ng-deep .fc-timegrid-col-bg .fc-bg-event.overlay-not-allowed {
+  background: repeating-linear-gradient(135deg, #c6282847 0 8px, #ffebee66 8px 16px) !important;
+}
+
 ::ng-deep .fc-event {
   border: none !important;
   border-radius: 10px !important;
@@ -1449,6 +1615,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
 }
 
 .dia-info {
@@ -1461,6 +1628,75 @@
   font-size: 20px;
   font-weight: 600;
   margin: 0;
+}
+
+.dia-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.sidebar-legend {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(25, 118, 210, 0.16);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.dia-legend-title {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.sidebar-legend .dia-legend-title {
+  color: #29506f;
+  opacity: 1;
+}
+
+.dia-legend-items {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.sidebar-legend .legend-chip {
+  background: #f4f8fc;
+  border-color: #d8e4f2;
+}
+
+.legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  flex-shrink: 0;
+}
+
+.legend-text {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.95);
+  white-space: nowrap;
+}
+
+.sidebar-legend .legend-text {
+  color: #31506a;
 }
 
 .dia-estadisticas {
@@ -1972,6 +2208,20 @@
     text-align: center;
   }
 
+  .dia-legend {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .sidebar-legend {
+    align-items: stretch;
+    margin-top: 10px;
+  }
+
+  .dia-legend-items {
+    justify-content: center;
+  }
+
   .dia-titulo {
     font-size: 20px;
   }
@@ -2036,6 +2286,121 @@
 
   .filter-field {
     width: 100px;
+  }
+}
+
+/* ===== FIXES RESPONSIVE QUICK OVERVIEW ===== */
+.quick-overview-bar {
+  overflow: hidden;
+}
+
+.quick-overview-content {
+  flex-wrap: wrap;
+}
+
+.overview-stats {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.quick-overview-bar .stat-group {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(70px, 1fr));
+  gap: 10px;
+}
+
+.quick-overview-bar .stat-item {
+  min-width: 0;
+  padding: 6px 4px;
+}
+
+.quick-overview-bar .stat-label {
+  font-size: 11px;
+  text-align: center;
+  white-space: normal;
+  line-height: 1.1;
+}
+
+.quick-overview-bar .stat-number {
+  font-size: 18px;
+}
+
+.overview-create {
+  flex: 0 0 auto;
+}
+
+.overview-filters {
+  flex: 1 1 380px;
+  min-width: 0;
+}
+
+.overview-filter-form {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.overview-field {
+  width: 160px;
+  min-width: 0;
+}
+
+@media (max-width: 1100px) {
+  .quick-overview-content {
+    gap: 12px;
+  }
+
+  .overview-create {
+    order: 3;
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .overview-filters {
+    order: 2;
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .quick-overview-bar {
+    position: static;
+    top: auto;
+  }
+
+  .quick-overview-bar .stat-group {
+    grid-template-columns: repeat(2, minmax(70px, 1fr));
+  }
+
+  .overview-filter-form {
+    width: 100%;
+  }
+
+  .overview-field {
+    flex: 1 1 150px;
+    width: auto;
+  }
+
+  .overview-clear-btn {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 520px) {
+  .quick-overview-bar .stat-number {
+    font-size: 16px;
+  }
+
+  .quick-overview-bar .stat-label {
+    font-size: 10px;
+  }
+
+  .overview-field {
+    flex: 1 1 100%;
+  }
+
+  .quick-create-button {
+    width: 100%;
   }
 }
 

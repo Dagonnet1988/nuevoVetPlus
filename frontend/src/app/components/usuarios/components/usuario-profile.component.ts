@@ -1,5 +1,5 @@
 import { Component, OnInit, signal, computed, inject, Inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -18,8 +18,7 @@ import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angu
 import {
   UsuariosService,
   Usuario,
-  SesionActiva,
-  EstadisticasUsuario
+  SesionActiva
 } from '../../../services/usuarios.service';
 import { AuthService } from '../../../services/auth.service';
 import { environment } from '../../../../environments/environment';
@@ -49,6 +48,7 @@ import { environment } from '../../../../environments/environment';
 export class UsuarioProfileComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private location = inject(Location);
   private usuariosService = inject(UsuariosService);
   private authService = inject(AuthService);
   private snackBar = inject(MatSnackBar);
@@ -68,27 +68,6 @@ export class UsuarioProfileComponent implements OnInit {
 
   isUsuarioActivo = computed(() => this.usuario()?.activo || false);
 
-  estadisticasResumen = computed(() => {
-    const stats = this.usuario()?.estadisticas as EstadisticasUsuario | undefined;
-    if (!stats) {
-      return [
-        { label: 'Consultas realizadas', value: 0, icon: 'medical_services', color: '#3182ce' },
-        { label: 'Pacientes Atendidos', value: 0, icon: 'pets', color: '#805ad5' },
-        { label: 'Horas Trabajadas', value: 0, icon: 'access_time', color: '#ed8936' },
-        { label: 'Calificación', value: '0.0', icon: 'star', color: '#f56565' },
-        { label: 'Accesos 7 días', value: 0, icon: 'login', color: '#38b2ac' }
-      ];
-    }
-
-    return [
-      { label: 'Consultas realizadas', value: stats.total_consultas, icon: 'medical_services', color: '#3182ce' },
-      { label: 'Pacientes Atendidos', value: stats.total_pacientes_atendidos, icon: 'pets', color: '#805ad5' },
-      { label: 'Horas Trabajadas', value: stats.horas_trabajadas, icon: 'access_time', color: '#ed8936' },
-      { label: 'Calificación', value: stats.calificacion_promedio.toFixed(1), icon: 'star', color: '#f56565' },
-      { label: 'Accesos 7 días', value: stats.sesiones_activas, icon: 'login', color: '#38b2ac' }
-    ];
-  });
-
   uploadingFirma = signal(false);
   firmaPreview = signal<string | null>(null);
   uploadingAvatar = signal(false);
@@ -99,6 +78,11 @@ export class UsuarioProfileComponent implements OnInit {
   }
 
   volver(): void {
+    if (window.history.length > 1) {
+      this.location.back();
+      return;
+    }
+
     const openedFromUsersList = !!this.route.snapshot.paramMap.get('id');
     if (openedFromUsersList && this.authService.hasRole('admin')) {
       this.router.navigate(['/usuarios']);
@@ -136,7 +120,11 @@ export class UsuarioProfileComponent implements OnInit {
     if (!id) return;
 
     this.loadingSesiones.set(true);
-    this.usuariosService.getSesionesActivas(id).subscribe({
+    this.usuariosService.getSesionesActivas({
+      id_usuario: id,
+      estado: 'todas',
+      exclude_admins: false
+    }).subscribe({
       next: (sesiones) => {
         this.sesionesActivas.set(Array.isArray(sesiones) ? sesiones : []);
         this.loadingSesiones.set(false);
@@ -263,9 +251,16 @@ export class UsuarioProfileComponent implements OnInit {
 
   verMasSesiones(): void {
     const id = this.usuarioId();
-    if (id) {
-      this.router.navigate(['/usuarios', id, 'sesiones']);
+    if (!id) {
+      return;
     }
+
+    if (this.authService.hasRole('admin')) {
+      this.router.navigate(['/usuarios', id, 'sesiones']);
+      return;
+    }
+
+    this.router.navigate(['/perfil/sesiones'], { queryParams: { id } });
   }
 
   onAvatarSelected(event: Event): void {
@@ -383,9 +378,11 @@ export class UsuarioProfileComponent implements OnInit {
   formatearFechaRelativa(fecha: string): string {
     const now = new Date();
     const date = new Date(fecha);
-    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
+    const diffInMinutes = Math.max(0, Math.floor((now.getTime() - date.getTime()) / (1000 * 60)));
+    const diffInHours = Math.floor(diffInMinutes / 60);
 
-    if (diffInHours < 1) return 'Hace menos de 1 hora';
+    if (diffInMinutes < 1) return 'Hace menos de 1 minuto';
+    if (diffInMinutes < 60) return `Hace ${diffInMinutes} min`;
     if (diffInHours < 24) return `Hace ${diffInHours} horas`;
     if (diffInHours < 48) return 'Hace 1 día';
 
@@ -394,6 +391,37 @@ export class UsuarioProfileComponent implements OnInit {
     if (diffInDays < 30) return `Hace ${Math.floor(diffInDays / 7)} semanas`;
 
     return this.formatearFecha(fecha);
+  }
+
+  formatearDuracionSesion(sesion: SesionActiva): string {
+    const start = new Date(sesion.fecha_inicio).getTime();
+    const end = sesion.fecha_logout
+      ? new Date(sesion.fecha_logout).getTime()
+      : Date.now();
+
+    const durationSecondsRaw = typeof sesion.duracion_segundos === 'number'
+      ? sesion.duracion_segundos
+      : Math.max(0, Math.floor((end - start) / 1000));
+
+    const totalMinutes = Math.floor(durationSecondsRaw / 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m`;
+  }
+
+  getIconoDispositivoAcceso(dispositivo?: string): string {
+    const normalized = (dispositivo || '').toLowerCase();
+    if (normalized.includes('móvil') || normalized.includes('movil') || normalized.includes('mobile')) {
+      return 'smartphone';
+    }
+    if (normalized.includes('tablet')) {
+      return 'tablet_mac';
+    }
+    return 'computer';
   }
 }
 

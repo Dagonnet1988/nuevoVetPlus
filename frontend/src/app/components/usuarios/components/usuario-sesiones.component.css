@@ -229,6 +229,24 @@
   background: white;
 }
 
+.filters-row {
+  display: grid;
+  grid-template-columns: 180px minmax(220px, 1fr) minmax(240px, 1.2fr) auto;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.filter-field {
+  width: 100%;
+}
+
+.filters-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .sesiones-table {
   width: 100%;
   background: white;
@@ -298,6 +316,12 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.device-user {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #1a365d;
 }
 
 .device-name {
@@ -660,6 +684,10 @@
   .info-cards {
     grid-template-columns: 1fr;
   }
+
+  .filters-row {
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+  }
 }
 
 @media (max-width: 768px) {
@@ -681,6 +709,14 @@
   .stats-row {
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 12px;
+  }
+
+  .filters-row {
+    grid-template-columns: 1fr;
+  }
+
+  .filters-actions {
+    justify-content: flex-end;
   }
 
   .table-container {

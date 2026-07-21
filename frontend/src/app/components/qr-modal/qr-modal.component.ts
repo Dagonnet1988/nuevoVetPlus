@@ -46,19 +46,20 @@ export interface QRModalData {
           </p>
           <div class="qr-wrap">
             <img [src]="data.qrBase64" alt="Código QR" class="qr-image" />
-            @if (polling()) {
-              <div class="polling-overlay">
-                <mat-spinner diameter="32"></mat-spinner>
-              </div>
-            }
           </div>
+          @if (polling()) {
+            <div class="polling-status" aria-live="polite">
+              <mat-spinner diameter="16"></mat-spinner>
+              <span>Esperando firma en tiempo real...</span>
+            </div>
+          }
           <p class="qr-name">{{ data.clienteNombre }}</p>
           <p class="qr-url">
             <a [href]="data.firmaUrl" target="_blank" rel="noopener">
               {{ data.firmaUrl }}
             </a>
           </p>
-          <p class="qr-expires">Válido hasta: {{ data.expiresAt | date:'dd/MM/yyyy HH:mm' }}</p>
+          <p class="qr-expires">Válido hasta: {{ data.expiresAt | date:'dd-MM-yy h:mm a' }}</p>
         </mat-dialog-content>
 
         <mat-dialog-actions align="end">
@@ -88,7 +89,15 @@ export interface QRModalData {
     .qr-instruction { color: #555; font-size: 0.9rem; margin-bottom: 16px; }
     .qr-wrap { position: relative; display: inline-block; }
     .qr-image { width: 220px; height: 220px; display: block; margin: 0 auto; border-radius: 8px; border: 1px solid #e0e0e0; }
-    .polling-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.6); border-radius: 8px; }
+    .polling-status {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: #5f6b7a;
+      font-size: 0.8rem;
+    }
     .qr-name { font-weight: 600; text-align: center; margin: 12px 0 4px; }
     .qr-url { text-align: center; font-size: 0.78rem; word-break: break-all; color: #1976d2; margin: 0 0 8px; }
     .qr-expires { text-align: center; font-size: 0.8rem; color: #888; margin: 0; }

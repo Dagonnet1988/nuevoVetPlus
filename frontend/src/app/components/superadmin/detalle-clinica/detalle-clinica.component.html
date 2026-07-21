@@ -6,7 +6,7 @@
     @if (tenant()) {
       <div>
         <h2>{{ tenant()!.nombre }}</h2>
-        <p><code>{{ tenant()!.slug }}</code> · creada {{ tenant()!.created_at | date:'dd/MM/yyyy' }}</p>
+        <p><code>{{ tenant()!.slug }}</code> · creada {{ tenant()!.created_at | date:'dd-MM-yy' }}</p>
       </div>
     }
   </header>
@@ -138,6 +138,20 @@
         <h3><mat-icon>group</mat-icon> Usuarios de la clínica</h3>
         <mat-divider />
 
+        <div class="sa-users-actions">
+          <button mat-stroked-button class="sa-provision-btn" (click)="provisionSuperadminAsAdmin()" [disabled]="provisioningAdmin()">
+            @if (provisioningAdmin()) {
+              <mat-spinner diameter="18" />
+            } @else {
+              <mat-icon>admin_panel_settings</mat-icon>
+            }
+            Replicar superadmin como admin
+          </button>
+        </div>
+
+        @if (provisionError()) { <p class="sa-error">{{ provisionError() }}</p> }
+        @if (provisionOk())    { <p class="sa-ok">{{ provisionOk() }}</p> }
+
         @if (tenant()!.usuarios.length === 0) {
           <p class="sa-empty-text">Sin usuarios registrados.</p>
         } @else {
@@ -162,7 +176,7 @@
                       {{ u.activo ? 'Activo' : 'Inactivo' }}
                     </span>
                   </td>
-                  <td class="sa-date">{{ u.ultimo_login ? (u.ultimo_login | date:'dd/MM/yy HH:mm') : '—' }}</td>
+                  <td class="sa-date">{{ u.ultimo_login ? (u.ultimo_login | date:'dd-MM-yy h:mm a') : '—' }}</td>
                 </tr>
               }
             </tbody>

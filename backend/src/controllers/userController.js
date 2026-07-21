@@ -2,6 +2,8 @@ import bcrypt from 'bcryptjs';
 import { query } from '../config/database.js';
 import { validationResult } from 'express-validator/lib/index.js';
 import { v4 as uuidv4 } from 'uuid';
+import { sendEmail } from '../services/emailService.js';
+import { renderEmailTemplate } from '../services/emailTemplateService.js';
 
 /**
  * Controlador para gestión de usuarios
@@ -32,6 +34,14 @@ export const createUser = async (req, res) => {
             forzar_cambio_password = true
         } = req.body;
 
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+        if (!tenantId) {
+            return res.status(403).json({
+                success: false,
+                message: 'No se pudo resolver la clínica del usuario autenticado'
+            });
+        }
+
         console.log('📝 Creando usuario con datos:', {
             nombre,
             apellido,
@@ -42,10 +52,10 @@ export const createUser = async (req, res) => {
             activo
         });
 
-        // Verificar si el email ya existe
+        // Verificar si el email ya existe en el tenant actual
         const existingEmail = await query(
-            'SELECT id_usuario FROM vetplus_auth.usuarios WHERE email = $1',
-            [email.toLowerCase()]
+            'SELECT id_usuario FROM vetplus_auth.usuarios WHERE LOWER(email) = LOWER($1) AND id_tenant = $2',
+            [email.toLowerCase(), tenantId]
         );
 
         if (existingEmail.rows.length > 0) {
@@ -55,10 +65,10 @@ export const createUser = async (req, res) => {
             });
         }
 
-        // Verificar si el documento ya existe
+        // Verificar si el documento ya existe en el tenant actual
         const existingDocument = await query(
-            'SELECT id_usuario FROM vetplus_auth.usuarios WHERE documento = $1',
-            [documento]
+            'SELECT id_usuario FROM vetplus_auth.usuarios WHERE documento = $1 AND id_tenant = $2',
+            [documento, tenantId]
         );
 
         if (existingDocument.rows.length > 0) {
@@ -79,9 +89,9 @@ export const createUser = async (req, res) => {
             INSERT INTO vetplus_auth.usuarios (
                 id_usuario, nombre, apellido, email, documento, tipo_documento,
                 telefono, direccion, password_hash, rol, especialidad, numero_licencia,
-                activo, password_temporal, debe_cambiar_password, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            RETURNING id_usuario, nombre, apellido, email, documento, rol, activo, avatar_url, created_at
+                activo, password_temporal, debe_cambiar_password, id_tenant, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            RETURNING id_usuario, nombre, apellido, email, documento, rol, activo, avatar_url, id_tenant, created_at
         `, [
             id_usuario, 
             nombre, 
@@ -97,10 +107,46 @@ export const createUser = async (req, res) => {
             numero_licencia || null,
             activo,
             true, // password_temporal es booleano
-            forzar_cambio_password
+            forzar_cambio_password,
+            tenantId
         ]);
 
         const newUser = result.rows[0];
+
+        if (enviar_credenciales && newUser.email) {
+            try {
+                const rendered = await renderEmailTemplate({
+                    tenantId,
+                    key: 'usuario_credenciales',
+                    variables: {
+                        usuario_nombre: `${newUser.nombre} ${newUser.apellido || ''}`.trim(),
+                        usuario_email: newUser.email,
+                        password_temporal: finalPassword
+                    },
+                    userId: req.user?.id_usuario || req.user?.id || null
+                });
+
+                if (rendered) {
+                    await sendEmail({
+                        tenantId,
+                        to: newUser.email,
+                        subject: rendered.asunto_render,
+                        html: rendered.cuerpo_html_render,
+                        text: rendered.cuerpo_text_render || undefined,
+                        logContext: {
+                            tipo_envio: 'usuario_credenciales',
+                            userId: req.user?.id_usuario || req.user?.id || null,
+                            metadata: {
+                                id_usuario: newUser.id_usuario,
+                                rol: newUser.rol
+                            }
+                        }
+                    });
+                }
+            } catch (emailError) {
+                console.error('No se pudo enviar correo de credenciales al usuario nuevo:', emailError.message);
+            }
+        }
 
         console.log(`✅ Usuario creado: ${newUser.email} (${newUser.documento}) con rol ${newUser.rol} por ${req.user.email || req.user.documento}`);
 

@@ -6,6 +6,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
+import { applyColombiaHolidaysSeed } from './seeds/colombiaHolidaysSeed.js';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -54,102 +55,6 @@ class DBInit {
     
     // Bandera para mostrar la advertencia de psql solo una vez
     this.psqlWarningShown = false;
-  }
-
-  /**
-   * Ejecuta migraciones idempotentes que deben aplicarse incluso en sistemas ya inicializados.
-   */
-  async runPostInitMigrations() {
-    const migrationFiles = [
-      { file: '10_consentimientos.sql', desc: 'Migración módulo de consentimiento de datos' }
-      // 09 eliminado: archivos_consulta fue reemplazada por archivos_historia en 03_clinical_tables.sql
-      // 11 y 12 eliminados: system.tenants e id_tenant están integrados en 01/02/03/06/10.
-    ];
-    for (const { file, desc } of migrationFiles) {
-      const filePath = path.join(this.schemasPath, file);
-      try {
-        await fs.access(filePath);
-        await this.executeSQL(filePath, desc);
-      } catch (error) {
-        console.log(`⚠️  Migración opcional ${file} no encontrada, saltando...`);
-      }
-    }
-
-    // Migración inline: columnas de facturación en system.tenants
-    await this.migrateTenantsAddBillingColumns();
-    await this.migrateHistoriasAddModificacion();
-    await this.migrateUsuariosAddAvatarColumn();
-    await this.migrateClientesAddUpdatedByColumn();
-  }
-
-  /**
-   * Agrega columnas de periodicidad y fechas de pago a system.tenants (idempotente).
-   */
-  async migrateTenantsAddBillingColumns() {
-    const client = new Client(this.config);
-    try {
-      await client.connect();
-      await client.query(`
-        ALTER TABLE system.tenants
-          ADD COLUMN IF NOT EXISTS periodicidad_pago      VARCHAR(20) DEFAULT 'monthly'
-            CHECK (periodicidad_pago IN ('monthly','quarterly','semiannual','annual')),
-          ADD COLUMN IF NOT EXISTS fecha_inicio_suscripcion DATE,
-          ADD COLUMN IF NOT EXISTS fecha_proximo_pago       DATE
-      `);
-      console.log('✅ Migración billing: columnas de pago en system.tenants verificadas');
-    } catch (error) {
-      console.warn('⚠️  Migración billing parcial:', error.message);
-    } finally {
-      await client.end();
-    }
-  }
-
-  async migrateHistoriasAddModificacion() {
-    const client = new Client(this.config);
-    try {
-      await client.connect();
-      await client.query(`
-        ALTER TABLE clinical.historias_clinicas
-          ADD COLUMN IF NOT EXISTS motivo_modificacion TEXT
-      `);
-      console.log('✅ Migración historias: columna motivo_modificacion verificada');
-    } catch (error) {
-      console.warn('⚠️  Migración historias parcial:', error.message);
-    } finally {
-      await client.end();
-    }
-  }
-
-  async migrateUsuariosAddAvatarColumn() {
-    const client = new Client(this.config);
-    try {
-      await client.connect();
-      await client.query(`
-        ALTER TABLE vetplus_auth.usuarios
-          ADD COLUMN IF NOT EXISTS avatar_url TEXT
-      `);
-      console.log('✅ Migración usuarios: columna avatar_url verificada');
-    } catch (error) {
-      console.warn('⚠️  Migración usuarios/avatar parcial:', error.message);
-    } finally {
-      await client.end();
-    }
-  }
-
-  async migrateClientesAddUpdatedByColumn() {
-    const client = new Client(this.config);
-    try {
-      await client.connect();
-      await client.query(`
-        ALTER TABLE clinical.clientes
-          ADD COLUMN IF NOT EXISTS updated_by UUID REFERENCES vetplus_auth.usuarios(id_usuario)
-      `);
-      console.log('✅ Migración clientes: columna updated_by verificada');
-    } catch (error) {
-      console.warn('⚠️  Migración clientes/updated_by parcial:', error.message);
-    } finally {
-      await client.end();
-    }
   }
 
   /**
@@ -469,7 +374,8 @@ class DBInit {
       { name: 'historias_clinicas', schema: 'clinical' },
       { name: 'calendario_citas', schema: 'clinical' },
       { name: 'configuracion_empresa', schema: 'system' },
-      { name: 'log_auditoria', schema: 'system' }
+      { name: 'log_auditoria', schema: 'system' },
+      { name: 'dias_especiales', schema: 'system' }
     ];
     
     for (const table of tables) {
@@ -478,6 +384,16 @@ class DBInit {
     }
     
     console.log('='.repeat(50));
+  }
+
+  async applyPerformanceIndexes() {
+    const filePath = path.join(this.schemasPath, '12_performance_indexes.sql');
+    try {
+      await fs.access(filePath);
+      await this.executeSQL(filePath, 'Índices de performance');
+    } catch (error) {
+      console.log('⚠️  Archivo de índices de performance no encontrado, saltando...');
+    }
   }
 
   /**
@@ -509,10 +425,10 @@ class DBInit {
       const isFullyInitialized = await this.isSystemFullyInitialized();
       if (isFullyInitialized) {
         console.log('✅ Sistema ya está completamente inicializado');
-        console.log('🔁 Aplicando migraciones post-inicialización...');
-        await this.runPostInitMigrations();
         // Crear superadmin si aún no existe (upgrade desde versión anterior)
         await this.createInitialSuperadmin();
+        await this.seedColombiaHolidays();
+        await this.applyPerformanceIndexes();
         console.log('⏭️  Saltando inicialización completa de schemas base...');
         
         // Mostrar estado del sistema
@@ -537,8 +453,9 @@ class DBInit {
         { file: '06_empresa_config.sql', desc: 'Configuración de empresa' },
         { file: '07_workflow_integration.sql', desc: 'Integraciones de workflow y notificaciones' },
         { file: '08_audit_expansion.sql', desc: 'Expansión sistema auditoría' },
-        { file: '09_clinical_archivos_consulta.sql', desc: 'Placeholder (obsoleto, no-op)' },
-        { file: '10_consentimientos.sql', desc: 'Módulo de consentimiento de datos' }
+        { file: '09_holidays.sql', desc: 'Tabla de festivos nacionales (Colombia)' },
+        { file: '10_consentimientos.sql', desc: 'Módulo de consentimiento de datos' },
+        { file: '12_performance_indexes.sql', desc: 'Índices de performance' }
       ];
       
       for (const { file, desc } of schemaFiles) {
@@ -562,6 +479,7 @@ class DBInit {
 
       // 6. Crear superadmin automáticamente desde variables de entorno
       await this.createInitialSuperadmin();
+      await this.seedColombiaHolidays();
       
       // 6. Mostrar estado final
       await this.checkSystemStatus();
@@ -581,7 +499,7 @@ class DBInit {
   /**
    * Crea el superadmin inicial con credenciales por defecto.
    * Solo actúa si la tabla system.superadmins está vacía.
-   * Puede sobreescribirse con SUPERADMIN_EMAIL/PASSWORD/NOMBRE en .env.
+   * Puede sobreescribirse con SUPERADMIN_EMAIL/PASSWORD/NOMBRE/DOCUMENTO en .env.
    */
   async createInitialSuperadmin() {
     try {
@@ -591,36 +509,165 @@ class DBInit {
         return;
       }
 
+      const email = process.env.SUPERADMIN_EMAIL || 'admin@vetplus.com';
+      const documento = process.env.SUPERADMIN_DOCUMENTO || process.env.SUPERADMIN_DOC || '1000000000';
+
+      const normalizeDocumento = (value) => String(value || '').trim();
+      const documentoNormalizado = normalizeDocumento(documento);
+      if (!documentoNormalizado) {
+        throw new Error('SUPERADMIN_DOCUMENTO vacío. Configura SUPERADMIN_DOCUMENTO en .env.');
+      }
+
       const client = new Client(this.config);
       await client.connect();
+
+      // Compatibilidad con instalaciones existentes: agregar columna si falta.
+      await client.query(`ALTER TABLE system.superadmins ADD COLUMN IF NOT EXISTS documento VARCHAR(20)`);
+
       const countResult = await client.query('SELECT COUNT(*) FROM system.superadmins');
       const count = parseInt(countResult.rows[0].count);
-      await client.end();
 
       if (count > 0) {
+        await client.query(
+          `UPDATE system.superadmins
+           SET documento = $1
+           WHERE LOWER(email) = LOWER($2)
+             AND (documento IS NULL OR BTRIM(documento) = '')`,
+          [documentoNormalizado, email]
+        );
+
+        await client.query(
+          `DO $$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1
+              FROM pg_indexes
+              WHERE schemaname = 'system'
+                AND indexname = 'superadmins_documento_unique'
+            ) THEN
+              EXECUTE 'CREATE UNIQUE INDEX superadmins_documento_unique ON system.superadmins(documento) WHERE documento IS NOT NULL';
+            END IF;
+          END;
+          $$;`
+        );
+
+        await client.end();
         console.log('✅ Superadmin ya existe, saltando...');
         return;
       }
 
-      const email    = process.env.SUPERADMIN_EMAIL    || 'admin@vetplus.com';
       const password = process.env.SUPERADMIN_PASSWORD || 'superadmin123';
       const nombre   = process.env.SUPERADMIN_NOMBRE   || 'Super Admin';
 
       const passwordHash = await bcrypt.hash(password, 12);
 
-      const insertClient = new Client(this.config);
-      await insertClient.connect();
-      await insertClient.query(
-        `INSERT INTO system.superadmins (nombre, email, password_hash)
-         VALUES ($1, $2, $3)`,
-        [nombre, email, passwordHash]
+      await client.query(
+        `INSERT INTO system.superadmins (nombre, email, documento, password_hash)
+         VALUES ($1, $2, $3, $4)`,
+        [nombre, email, documentoNormalizado, passwordHash]
       );
-      await insertClient.end();
+      await client.query(
+        `DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1
+            FROM pg_indexes
+            WHERE schemaname = 'system'
+              AND indexname = 'superadmins_documento_unique'
+          ) THEN
+            EXECUTE 'CREATE UNIQUE INDEX superadmins_documento_unique ON system.superadmins(documento) WHERE documento IS NOT NULL';
+          END IF;
+        END;
+        $$;`
+      );
+      await client.end();
 
       console.log(`✅ Superadmin creado automáticamente: ${email}`);
       console.log('   Puedes iniciar sesión en /superadmin/login');
     } catch (error) {
       console.error('❌ Error creando superadmin inicial:', error.message);
+    }
+  }
+
+  /**
+   * Crea/actualiza la tabla unificada de dias especiales y carga seed global de festivos.
+   * Se ejecuta en cada arranque de forma idempotente.
+   */
+  async seedColombiaHolidays() {
+    const client = new Client(this.config);
+    try {
+      await client.connect();
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS system.dias_especiales (
+          id_dia_especial UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          id_tenant UUID NULL,
+          fecha DATE NOT NULL,
+          descripcion VARCHAR(180) NOT NULL,
+          tipo VARCHAR(30) NOT NULL,
+          hora_inicio TIME NULL,
+          hora_fin TIME NULL,
+          metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+          activo BOOLEAN NOT NULL DEFAULT true,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          created_by UUID NULL,
+          updated_by UUID NULL
+        )
+      `);
+
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_dias_especiales_scope_fecha_tipo_desc
+          ON system.dias_especiales (
+            COALESCE(id_tenant, '00000000-0000-0000-0000-000000000000'::uuid),
+            fecha,
+            tipo,
+            descripcion
+          )
+      `);
+
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_dias_especiales_fecha
+          ON system.dias_especiales(fecha)
+      `);
+
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_dias_especiales_tenant
+          ON system.dias_especiales(id_tenant)
+      `);
+
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_dias_especiales_tipo
+          ON system.dias_especiales(tipo)
+      `);
+
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_dias_especiales_activo
+          ON system.dias_especiales(activo)
+      `);
+
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_trigger
+            WHERE tgname = 'update_dias_especiales_updated_at'
+          ) THEN
+            CREATE TRIGGER update_dias_especiales_updated_at
+            BEFORE UPDATE ON system.dias_especiales
+            FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+          END IF;
+        END;
+        $$;
+      `);
+
+      const { inserted, updated } = await applyColombiaHolidaysSeed(client);
+
+      console.log(`✅ Festivos Colombia seed aplicado: insertados=${inserted}, actualizados=${updated}`);
+    } catch (error) {
+      console.error('❌ Error cargando seed de festivos Colombia:', error.message);
+    } finally {
+      try { await client.end(); } catch {}
     }
   }
 

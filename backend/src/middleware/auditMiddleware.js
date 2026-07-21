@@ -1,4 +1,5 @@
 import { query } from '../config/database.js';
+import jwt from 'jsonwebtoken';
 
 /**
  * Middleware global de auditoría para interceptar todas las requests
@@ -564,6 +565,8 @@ async function logAuthActivity(type, req, statusCode, responseData) {
   try {
     const success = statusCode < 400;
     let userId = null;
+    let sessionKey = req.authToken?.jti || null;
+    let tokenExp = req.authToken?.exp || null;
     
     // Para login exitoso, extraer user ID de la respuesta
     if (type === 'LOGIN' && success && responseData) {
@@ -571,6 +574,13 @@ async function logAuthActivity(type, req, statusCode, responseData) {
         const parsed = typeof responseData === 'string' ? JSON.parse(responseData) : responseData;
         // Estructura esperada del login: { data: { user: { id } } }
         userId = parsed?.data?.user?.id || parsed?.user?.id || parsed?.data?.id || null;
+
+        const accessToken = parsed?.data?.token || parsed?.token;
+        if (accessToken) {
+          const decoded = jwt.decode(accessToken);
+          sessionKey = decoded?.jti || sessionKey;
+          tokenExp = decoded?.exp || tokenExp;
+        }
       } catch (e) {
         // Ignorar errores de parsing
       }
@@ -603,7 +613,9 @@ async function logAuthActivity(type, req, statusCode, responseData) {
       JSON.stringify({
         statusCode,
         timestamp: new Date(),
-        url: req.originalUrl
+        url: req.originalUrl,
+        session_key: sessionKey,
+        token_exp: tokenExp
       })
     ]);
     

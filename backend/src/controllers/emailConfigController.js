@@ -3,63 +3,238 @@ import { getClient, query } from '../config/database.js';
 import { getSafeEmailConfig, testEmailConnection, sendEmail } from '../services/emailService.js';
 import { google } from 'googleapis';
 import jwt from 'jsonwebtoken';
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import QRCode from 'qrcode';
+import { generarPDFHistoria } from '../services/historiaClinicaPDFService.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const OAUTH_SCOPE = [
+  // SMTP OAuth2 con Gmail (Nodemailer XOAUTH2) requiere este scope amplio.
+  'https://mail.google.com/',
   'https://www.googleapis.com/auth/gmail.send',
-  'https://www.googleapis.com/auth/userinfo.email',
-  'https://www.googleapis.com/auth/calendar',
-  'https://www.googleapis.com/auth/calendar.events'
+  'https://www.googleapis.com/auth/userinfo.email'
 ];
 
 const STATE_SECRET = process.env.JWT_SECRET || 'vetplus_dev_only_secret_do_not_use_in_prod';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:4200';
 
 async function resolveGoogleOAuthCredentials(tenantId, configRow = null) {
-  let calendarClientId = null;
-  let calendarClientSecret = null;
-
-  if (!configRow?.oauth_client_id || !configRow?.oauth_client_secret) {
-    const calendarCfg = await query(
-      `SELECT gc.client_id, gc.client_secret
-       FROM vetplus_auth.google_calendar_config gc
-       WHERE gc.is_active = true
-         AND gc.configured_by IN (
-           SELECT u.id_usuario
-           FROM vetplus_auth.usuarios u
-           WHERE u.id_tenant = $1
-         )
-       ORDER BY gc.created_at DESC
-       LIMIT 1`,
-      [tenantId]
-    );
-
-    if (calendarCfg.rows.length) {
-      calendarClientId = calendarCfg.rows[0].client_id || null;
-      calendarClientSecret = calendarCfg.rows[0].client_secret || null;
-    }
-  }
-
   return {
-    clientId: configRow?.oauth_client_id || calendarClientId,
-    clientSecret: configRow?.oauth_client_secret || calendarClientSecret
+    clientId: configRow?.oauth_client_id || process.env.EMAIL_GOOGLE_CLIENT_ID || null,
+    clientSecret: configRow?.oauth_client_secret || process.env.EMAIL_GOOGLE_CLIENT_SECRET || null
   };
 }
 
 async function ensureEmailConfigStructure() {
-  await query(`
-    ALTER TABLE system.configuracion_correo
-      ADD COLUMN IF NOT EXISTS auth_mode VARCHAR(20) NOT NULL DEFAULT 'smtp',
-      ADD COLUMN IF NOT EXISTS oauth_client_id TEXT,
-      ADD COLUMN IF NOT EXISTS oauth_client_secret TEXT,
-      ADD COLUMN IF NOT EXISTS oauth_refresh_token TEXT,
-      ADD COLUMN IF NOT EXISTS oauth_access_token TEXT,
-      ADD COLUMN IF NOT EXISTS oauth_token_expiry TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS oauth_email VARCHAR(150),
-      ADD COLUMN IF NOT EXISTS oauth_redirect_uri TEXT
-  `);
+  // No-op: en despliegues nuevos, la estructura vive en schemas/06_empresa_config.sql.
+  return true;
+}
 
-  await query(`ALTER TABLE system.configuracion_correo ALTER COLUMN smtp_host DROP NOT NULL`);
-  await query(`ALTER TABLE system.configuracion_correo ALTER COLUMN smtp_usuario DROP NOT NULL`);
-  await query(`ALTER TABLE system.configuracion_correo ALTER COLUMN smtp_password DROP NOT NULL`);
+async function getDeliveryBySourceAndId(tenantId, source, id) {
+  if (source === 'system') {
+    const result = await query(
+      `SELECT
+         s.id_log::text AS id,
+         'system'::text AS fuente,
+         s.tipo_envio,
+         s.destinatario_email,
+         COALESCE(s.metadata->>'cliente_nombre', s.metadata->>'propietario_nombre', cl.nombre) AS propietario_nombre,
+         s.asunto,
+         s.estado,
+         s.provider_message_id,
+         s.detalle_error,
+         s.metadata,
+         s.id_tenant,
+         s.created_by,
+         s.created_at,
+         s.sent_at,
+         NULL::uuid AS id_cliente,
+         NULL::uuid AS id_historia,
+         NULL::uuid AS id_consentimiento
+       FROM system.email_delivery_log s
+       LEFT JOIN LATERAL (
+         SELECT CASE
+           WHEN (s.metadata->>'id_cita') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+             THEN (s.metadata->>'id_cita')::uuid
+           ELSE NULL
+         END AS id_cita
+       ) meta ON TRUE
+       LEFT JOIN clinical.calendario_citas cc
+         ON cc.id_cita = meta.id_cita
+        AND cc.id_tenant = s.id_tenant
+       LEFT JOIN clinical.mascotas m
+         ON m.id_mascota = cc.id_mascota
+        AND m.id_tenant = s.id_tenant
+       LEFT JOIN clinical.clientes cl
+         ON cl.id_cliente = m.id_cliente
+        AND cl.id_tenant = s.id_tenant
+       WHERE s.id_tenant = $1
+         AND s.id_log::text = $2
+       LIMIT 1`,
+      [tenantId, id]
+    );
+
+    return result.rows[0] || null;
+  }
+
+  if (source === 'clinical') {
+    const result = await query(
+      `SELECT
+         c.id_envio::text AS id,
+         'clinical'::text AS fuente,
+         c.tipo_documento AS tipo_envio,
+         c.destinatario_email,
+         COALESCE(c.metadata->>'cliente_nombre', cl.nombre) AS propietario_nombre,
+         c.asunto,
+         c.estado,
+         c.provider_message_id,
+         c.detalle_error,
+         c.metadata,
+         c.id_tenant,
+         c.created_by,
+         c.created_at,
+         c.sent_at,
+         c.id_cliente,
+         c.id_historia,
+         c.id_consentimiento
+       FROM clinical.envios_documentos c
+       LEFT JOIN clinical.clientes cl
+         ON cl.id_cliente = c.id_cliente
+        AND cl.id_tenant = c.id_tenant
+       WHERE c.id_tenant = $1
+         AND c.id_envio::text = $2
+       LIMIT 1`,
+      [tenantId, id]
+    );
+
+    return result.rows[0] || null;
+  }
+
+  return null;
+}
+
+function extractRetryPayload(delivery) {
+  const metadata = delivery?.metadata && typeof delivery.metadata === 'object'
+    ? delivery.metadata
+    : {};
+
+  const fromMetadata = metadata.retry_payload || metadata.email_snapshot || null;
+  if (!fromMetadata || typeof fromMetadata !== 'object') {
+    return null;
+  }
+
+  const to = fromMetadata.to || delivery.destinatario_email || null;
+  const subject = fromMetadata.subject || delivery.asunto || null;
+  const text = fromMetadata.text || null;
+  const html = fromMetadata.html || null;
+
+  if (!to || !subject || (!text && !html)) {
+    return null;
+  }
+
+  return { to, subject, text, html };
+}
+
+function snapshotAttachments(attachments = []) {
+  return (attachments || []).map((attachment) => ({
+    filename: attachment?.filename || null,
+    contentType: attachment?.contentType || null,
+    size: typeof attachment?.content === 'string'
+      ? attachment.content.length
+      : (Buffer.isBuffer(attachment?.content) ? attachment.content.length : null)
+  }));
+}
+
+async function buildClinicalRetryAttachments(tenantId, original, metadata = {}) {
+  const tipo = String(original?.tipo_envio || '').trim();
+
+  if (tipo === 'historia_pdf') {
+    const idHistoria = original?.id_historia || metadata?.id_historia || null;
+    if (!idHistoria) return [];
+
+    const pdfBuffer = await generarPDFHistoria(idHistoria, tenantId);
+    const historiaResult = await query(
+      `SELECT codigo_historia
+       FROM clinical.historias_clinicas
+       WHERE id_historia = $1 AND id_tenant = $2
+       LIMIT 1`,
+      [idHistoria, tenantId]
+    );
+
+    const codigo = historiaResult.rows[0]?.codigo_historia || idHistoria;
+    return [
+      {
+        filename: `historia-${String(codigo)}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf'
+      }
+    ];
+  }
+
+  if (tipo === 'consentimiento_pdf') {
+    const idConsentimiento = original?.id_consentimiento || metadata?.id_consentimiento || null;
+    if (!idConsentimiento) return [];
+
+    const consentResult = await query(
+      `SELECT pdf_path, pdf_numero
+       FROM clinical.consentimientos
+       WHERE id_consentimiento = $1 AND id_tenant = $2
+       LIMIT 1`,
+      [idConsentimiento, tenantId]
+    );
+
+    if (!consentResult.rows.length || !consentResult.rows[0]?.pdf_path) {
+      return [];
+    }
+
+    const absolutePath = path.join(__dirname, '../../', consentResult.rows[0].pdf_path);
+    const pdfBuffer = await fs.readFile(absolutePath);
+    return [
+      {
+        filename: `consentimiento-${consentResult.rows[0].pdf_numero || idConsentimiento}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf'
+      }
+    ];
+  }
+
+  if (tipo === 'consentimiento_link') {
+    let firmaUrl = metadata?.firmaUrl || null;
+
+    if (!firmaUrl) {
+      const idConsentimiento = original?.id_consentimiento || metadata?.id_consentimiento || null;
+      if (idConsentimiento) {
+        const consentResult = await query(
+          `SELECT token
+           FROM clinical.consentimientos
+           WHERE id_consentimiento = $1 AND id_tenant = $2
+           LIMIT 1`,
+          [idConsentimiento, tenantId]
+        );
+
+        const token = consentResult.rows[0]?.token || null;
+        if (token) {
+          firmaUrl = `${FRONTEND_URL}/consentimiento/${token}`;
+        }
+      }
+    }
+
+    if (!firmaUrl) return [];
+    const qrBuffer = await QRCode.toBuffer(firmaUrl, { width: 256, margin: 1 });
+    return [
+      {
+        filename: 'consentimiento-qr.png',
+        content: qrBuffer,
+        contentType: 'image/png'
+      }
+    ];
+  }
+
+  return [];
 }
 
 function getOAuthRedirectUri() {
@@ -225,7 +400,6 @@ export async function testEmailConfig(req, res) {
     await ensureEmailConfigStructure();
     const tenantId = req.tenantId ?? req.user?.tenant_id;
     const destination = req.body?.email_prueba || req.user?.email;
-    const currentConfig = await getSafeEmailConfig(tenantId);
 
     if (!destination) {
       return res.status(400).json({ success: false, message: 'No se encontró correo de destino para la prueba' });
@@ -256,10 +430,24 @@ export async function testEmailConfig(req, res) {
     const currentConfig = await getSafeEmailConfig(tenantId);
 
     if (isAuthError && isGmailAuthError && isXOAuth2 && currentConfig?.auth_mode === 'gmail_oauth') {
+      try {
+        await query(
+          `UPDATE system.configuracion_correo
+           SET oauth_refresh_token = NULL,
+               oauth_access_token = NULL,
+               oauth_token_expiry = NULL,
+               updated_at = NOW()
+           WHERE id_tenant = $1 AND activa = true`,
+          [tenantId]
+        );
+      } catch (cleanupError) {
+        console.error('No se pudo limpiar token OAuth inválido tras fallo de autenticación:', cleanupError);
+      }
+
       return res.status(400).json({
         success: false,
         message:
-          'Google OAuth rechazó el envío (credenciales/token no coinciden). Desconecta Google y vuelve a conectar para regenerar tokens con el Client ID/Secret actual.'
+          'Google OAuth rechazó el envío (token inválido/revocado o alcance insuficiente para SMTP). Se limpió la sesión actual de Google para esta clínica. Vuelve a conectar Google para regenerar tokens.'
       });
     }
 
@@ -294,11 +482,18 @@ export async function getEmailModuleStatus(req, res) {
 
     const stats = await query(
       `SELECT
-         COUNT(*) AS total,
-         COUNT(*) FILTER (WHERE estado = 'enviado') AS enviados,
-         COUNT(*) FILTER (WHERE estado = 'fallido') AS fallidos
-       FROM clinical.envios_documentos
-       WHERE id_tenant = $1`,
+         COUNT(*)::text AS total,
+         COUNT(*) FILTER (WHERE estado = 'enviado')::text AS enviados,
+         COUNT(*) FILTER (WHERE estado = 'fallido')::text AS fallidos
+       FROM (
+         SELECT estado
+         FROM clinical.envios_documentos
+         WHERE id_tenant = $1
+         UNION ALL
+         SELECT estado
+         FROM system.email_delivery_log
+         WHERE id_tenant = $1
+       ) e`,
       [tenantId]
     );
 
@@ -312,6 +507,340 @@ export async function getEmailModuleStatus(req, res) {
     });
   } catch (error) {
     console.error('Error obteniendo estado del módulo de correo:', error);
+    return res.status(500).json({ success: false, message: 'Error interno del servidor' });
+  }
+}
+
+export async function getEmailDeliveries(req, res) {
+  try {
+    await ensureEmailConfigStructure();
+    const tenantId = req.tenantId ?? req.user?.tenant_id;
+
+    const limitRaw = Number(req.query?.limit ?? 20);
+    const offsetRaw = Number(req.query?.offset ?? 0);
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 100) : 20;
+    const offset = Number.isFinite(offsetRaw) ? Math.max(offsetRaw, 0) : 0;
+
+    const estado = String(req.query?.estado || '').trim().toLowerCase();
+    const search = String(req.query?.search || '').trim();
+    const receptor = String(req.query?.receptor || '').trim();
+    const fechaDesde = String(req.query?.fecha_desde || '').trim();
+    const fechaHasta = String(req.query?.fecha_hasta || '').trim();
+
+    const params = [tenantId];
+    let where = 'WHERE x.id_tenant = $1';
+
+    if (estado === 'enviado' || estado === 'fallido') {
+      params.push(estado);
+      where += ` AND x.estado = $${params.length}`;
+    }
+
+    if (search) {
+      params.push(`%${search}%`);
+      where += ` AND (
+        x.destinatario_email ILIKE $${params.length}
+        OR x.asunto ILIKE $${params.length}
+        OR x.tipo_envio ILIKE $${params.length}
+      )`;
+    }
+
+    if (receptor) {
+      params.push(`%${receptor}%`);
+      where += ` AND x.destinatario_email ILIKE $${params.length}`;
+    }
+
+    if (fechaDesde) {
+      params.push(fechaDesde);
+      where += ` AND x.created_at >= $${params.length}::date`;
+    }
+
+    if (fechaHasta) {
+      params.push(fechaHasta);
+      where += ` AND x.created_at < ($${params.length}::date + INTERVAL '1 day')`;
+    }
+
+    const baseUnion = `
+      SELECT
+        s.id_log::text AS id,
+        'system'::text AS fuente,
+        s.tipo_envio,
+        s.destinatario_email,
+        COALESCE(s.metadata->>'cliente_nombre', s.metadata->>'propietario_nombre', cl.nombre) AS propietario_nombre,
+        s.asunto,
+        s.estado,
+        s.provider_message_id,
+        s.detalle_error,
+        s.metadata,
+        s.id_tenant,
+        s.created_at,
+        s.sent_at
+      FROM system.email_delivery_log s
+      LEFT JOIN LATERAL (
+        SELECT CASE
+          WHEN (s.metadata->>'id_cita') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            THEN (s.metadata->>'id_cita')::uuid
+          ELSE NULL
+        END AS id_cita
+      ) meta ON TRUE
+      LEFT JOIN clinical.calendario_citas cc
+        ON cc.id_cita = meta.id_cita
+       AND cc.id_tenant = s.id_tenant
+      LEFT JOIN clinical.mascotas m
+        ON m.id_mascota = cc.id_mascota
+       AND m.id_tenant = s.id_tenant
+      LEFT JOIN clinical.clientes cl
+        ON cl.id_cliente = m.id_cliente
+       AND cl.id_tenant = s.id_tenant
+
+      UNION ALL
+
+      SELECT
+        c.id_envio::text AS id,
+        'clinical'::text AS fuente,
+        c.tipo_documento AS tipo_envio,
+        c.destinatario_email,
+        COALESCE(c.metadata->>'cliente_nombre', cl.nombre) AS propietario_nombre,
+        c.asunto,
+        c.estado,
+        c.provider_message_id,
+        c.detalle_error,
+        c.metadata,
+        c.id_tenant,
+        c.created_at,
+        c.sent_at
+      FROM clinical.envios_documentos c
+      LEFT JOIN clinical.clientes cl
+        ON cl.id_cliente = c.id_cliente
+       AND cl.id_tenant = c.id_tenant
+    `;
+
+    const countSql = `
+      SELECT COUNT(*)::int AS total
+      FROM (${baseUnion}) x
+      ${where}
+    `;
+
+    const totalResult = await query(countSql, params);
+    const total = Number(totalResult.rows[0]?.total || 0);
+
+    params.push(limit, offset);
+    const dataSql = `
+      SELECT
+        x.id,
+        x.fuente,
+        x.tipo_envio,
+        x.destinatario_email,
+        x.propietario_nombre,
+        x.asunto,
+        x.estado,
+        x.provider_message_id,
+        x.detalle_error,
+        x.metadata,
+        x.created_at,
+        x.sent_at,
+        COALESCE(jsonb_array_length(x.metadata->'attachments'), 0) AS adjuntos_count
+      FROM (${baseUnion}) x
+      ${where}
+      ORDER BY x.created_at DESC
+      LIMIT $${params.length - 1} OFFSET $${params.length}
+    `;
+
+    const deliveries = await query(dataSql, params);
+
+    return res.json({
+      success: true,
+      data: deliveries.rows,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + limit < total
+      }
+    });
+  } catch (error) {
+    console.error('Error obteniendo historial de envíos de correo:', error);
+    return res.status(500).json({ success: false, message: 'Error interno del servidor' });
+  }
+}
+
+export async function getEmailDeliveryDetail(req, res) {
+  try {
+    await ensureEmailConfigStructure();
+    const tenantId = req.tenantId ?? req.user?.tenant_id;
+    const source = String(req.params?.source || '').trim().toLowerCase();
+    const id = String(req.params?.id || '').trim();
+
+    if (!id || !['system', 'clinical'].includes(source)) {
+      return res.status(400).json({ success: false, message: 'Parámetros inválidos' });
+    }
+
+    const delivery = await getDeliveryBySourceAndId(tenantId, source, id);
+    if (!delivery) {
+      return res.status(404).json({ success: false, message: 'Envío no encontrado' });
+    }
+
+    const metadata = delivery.metadata && typeof delivery.metadata === 'object' ? delivery.metadata : {};
+    const emailSnapshot = metadata.email_snapshot && typeof metadata.email_snapshot === 'object'
+      ? metadata.email_snapshot
+      : null;
+    const retryPayload = extractRetryPayload(delivery);
+
+    return res.json({
+      success: true,
+      data: {
+        ...delivery,
+        copy: emailSnapshot,
+        can_retry: delivery.estado === 'fallido' && Boolean(retryPayload)
+      }
+    });
+  } catch (error) {
+    console.error('Error obteniendo detalle de envío de correo:', error);
+    return res.status(500).json({ success: false, message: 'Error interno del servidor' });
+  }
+}
+
+export async function retryEmailDelivery(req, res) {
+  try {
+    await ensureEmailConfigStructure();
+    const tenantId = req.tenantId ?? req.user?.tenant_id;
+    const userId = req.user?.id_usuario || req.user?.id || null;
+    const source = String(req.params?.source || '').trim().toLowerCase();
+    const id = String(req.params?.id || '').trim();
+
+    if (!id || !['system', 'clinical'].includes(source)) {
+      return res.status(400).json({ success: false, message: 'Parámetros inválidos' });
+    }
+
+    const original = await getDeliveryBySourceAndId(tenantId, source, id);
+    if (!original) {
+      return res.status(404).json({ success: false, message: 'Envío no encontrado' });
+    }
+
+    if (original.estado !== 'fallido') {
+      return res.status(400).json({ success: false, message: 'Solo se pueden reenviar correos fallidos' });
+    }
+
+    const retryPayload = extractRetryPayload(original);
+    if (!retryPayload) {
+      return res.status(422).json({
+        success: false,
+        message: 'Este envío no tiene una copia recuperable para reenvío automático'
+      });
+    }
+
+    const metadata = original.metadata && typeof original.metadata === 'object' ? original.metadata : {};
+    const attachments = source === 'clinical'
+      ? await buildClinicalRetryAttachments(tenantId, original, metadata)
+      : [];
+
+    const retryMeta = {
+      ...metadata,
+      retry_of: { fuente: source, id },
+      retried_by: userId,
+      retried_at: new Date().toISOString(),
+      retry_payload: retryPayload,
+      attachments_retried: snapshotAttachments(attachments)
+    };
+
+    try {
+      const sendResult = await sendEmail({
+        tenantId,
+        to: retryPayload.to,
+        subject: retryPayload.subject,
+        text: retryPayload.text,
+        html: retryPayload.html,
+        attachments,
+        logContext: source === 'system'
+          ? {
+              tipo_envio: original.tipo_envio,
+              userId,
+              metadata: retryMeta
+            }
+          : null
+      });
+
+      if (source === 'clinical') {
+        await query(
+          `INSERT INTO clinical.envios_documentos (
+             tipo_documento, canal, id_cliente, id_historia, id_consentimiento,
+             destinatario_email, asunto, estado, provider_message_id, detalle_error,
+             metadata, id_tenant, created_by, sent_at
+           ) VALUES (
+             $1, 'email', $2, $3, $4,
+             $5, $6, 'enviado', $7, NULL,
+             $8::jsonb, $9, $10, NOW()
+           )`,
+          [
+            original.tipo_envio,
+            original.id_cliente || null,
+            original.id_historia || null,
+            original.id_consentimiento || null,
+            retryPayload.to,
+            retryPayload.subject,
+            sendResult?.messageId || null,
+            JSON.stringify(retryMeta),
+            tenantId,
+            userId
+          ]
+        );
+      }
+
+      return res.json({ success: true, message: 'Correo reenviado correctamente' });
+    } catch (sendError) {
+      if (source === 'system') {
+        await query(
+          `INSERT INTO system.email_delivery_log (
+             tipo_envio, destinatario_email, asunto, estado,
+             provider_message_id, detalle_error, metadata,
+             id_tenant, created_by, sent_at
+           ) VALUES (
+             $1, $2, $3, 'fallido',
+             NULL, $4, $5::jsonb,
+             $6, $7, NULL
+           )`,
+          [
+            original.tipo_envio,
+            retryPayload.to,
+            retryPayload.subject,
+            sendError?.message || 'Error reenviando correo',
+            JSON.stringify(retryMeta),
+            tenantId,
+            userId
+          ]
+        );
+      } else {
+        await query(
+          `INSERT INTO clinical.envios_documentos (
+             tipo_documento, canal, id_cliente, id_historia, id_consentimiento,
+             destinatario_email, asunto, estado, provider_message_id, detalle_error,
+             metadata, id_tenant, created_by, sent_at
+           ) VALUES (
+             $1, 'email', $2, $3, $4,
+             $5, $6, 'fallido', NULL, $7,
+             $8::jsonb, $9, $10, NULL
+           )`,
+          [
+            original.tipo_envio,
+            original.id_cliente || null,
+            original.id_historia || null,
+            original.id_consentimiento || null,
+            retryPayload.to,
+            retryPayload.subject,
+            sendError?.message || 'Error reenviando correo',
+            JSON.stringify(retryMeta),
+            tenantId,
+            userId
+          ]
+        );
+      }
+
+      return res.status(400).json({
+        success: false,
+        message: sendError?.message || 'No fue posible reenviar el correo'
+      });
+    }
+  } catch (error) {
+    console.error('Error reenviando correo desde historial:', error);
     return res.status(500).json({ success: false, message: 'Error interno del servidor' });
   }
 }
@@ -416,7 +945,7 @@ export async function handleGoogleEmailCallback(req, res) {
     );
 
     if (!current.rows.length) {
-      return res.status(400).send('<html><body><h3>No hay configuración OAuth de correo para este tenant.</h3></body></html>');
+      return res.status(400).send('<html><body><h3>No hay configuración OAuth de correo para esta clínica.</h3></body></html>');
     }
 
     const cfg = current.rows[0];
@@ -459,52 +988,61 @@ export async function handleGoogleEmailCallback(req, res) {
       ]
     );
 
-    // Unificacion Calendar + Correo: reutiliza el mismo consentimiento OAuth para Google Calendar.
-    await query(
-      `UPDATE vetplus_auth.google_calendar_config gc
-       SET refresh_token = COALESCE($1, gc.refresh_token),
-           access_token = $2,
-           token_expiry = $3,
-           updated_at = NOW()
-       WHERE gc.is_active = true
-         AND gc.configured_by IN (
-           SELECT u.id_usuario
-           FROM vetplus_auth.usuarios u
-           WHERE u.id_tenant = $4
-         )`,
-      [
-        tokenResult.tokens.refresh_token || null,
-        tokenResult.tokens.access_token || null,
-        tokenResult.tokens.expiry_date ? new Date(tokenResult.tokens.expiry_date) : null,
-        payload.tenantId
-      ]
-    );
-
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:4200';
-    return res.send(`<!doctype html><html><body><script>
-      (function () {
-        try {
-          if (window.opener && !window.opener.closed) {
-            window.opener.postMessage({ type: 'email-google-oauth', status: 'ok' }, '*');
-          }
-        } catch (e) {}
-
-        function tryClose() {
-          try { window.close(); } catch (e) {}
-          setTimeout(function () {
-            if (!window.closed) {
-              window.location.replace('${frontendUrl}/configuracion/correo?google_oauth=ok');
-            }
-          }, 350);
-        }
-
-        tryClose();
-      })();
-    </script><p>Autorizacion completada. Cerrando ventana...</p></body></html>`);
+    const target = `${frontendUrl}/configuracion/correo?google_oauth=ok`;
+    return res.send(`<!doctype html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Autorización de Correo - VetPlus</title>
+        <meta http-equiv="refresh" content="5;url=${target}">
+      </head>
+      <body data-target="${target}" data-status="ok" data-type="email-google-oauth">
+        <p>Autorización completada. Cerrando ventana...</p>
+        <p>Si no se cierra automáticamente, serás redirigido en unos segundos.</p>
+        <script src="/api/admin/email/google/callback-script.js"></script>
+      </body>
+      </html>`);
   } catch (error) {
     console.error('Error en callback OAuth de correo:', error);
     return res.status(400).send('<html><body><h3>No se pudo completar la autorización de Google.</h3></body></html>');
   }
+}
+
+export async function serveGoogleEmailCallbackScript(req, res) {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+
+  res.send(`
+    (function () {
+      const body = document.body || {};
+      const target = body.dataset?.target || '/';
+      const type = body.dataset?.type || 'email-google-oauth';
+      const status = body.dataset?.status || 'ok';
+
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage({ type, status }, '*');
+        }
+      } catch (_) {}
+
+      try {
+        localStorage.setItem('vetplus-email-oauth-result', JSON.stringify({ type, status, timestamp: new Date().toISOString() }));
+      } catch (_) {}
+
+      function closeOrRedirect() {
+        try { window.close(); } catch (_) {}
+        setTimeout(function () {
+          if (!window.closed) {
+            window.location.replace(target);
+          }
+        }, 400);
+      }
+
+      closeOrRedirect();
+      setTimeout(closeOrRedirect, 2200);
+    })();
+  `);
 }
 
 export async function disconnectGoogleEmail(req, res) {
@@ -513,7 +1051,9 @@ export async function disconnectGoogleEmail(req, res) {
     await ensureEmailConfigStructure();
     await query(
       `UPDATE system.configuracion_correo
-       SET auth_mode = 'smtp',
+       SET auth_mode = 'gmail_oauth',
+           oauth_client_id = NULL,
+           oauth_client_secret = NULL,
            oauth_refresh_token = NULL,
            oauth_access_token = NULL,
            oauth_token_expiry = NULL,

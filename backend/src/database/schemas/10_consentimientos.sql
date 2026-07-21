@@ -37,9 +37,9 @@ CREATE INDEX IF NOT EXISTS idx_versiones_consentimiento_tenant
 COMMENT ON TABLE clinical.versiones_consentimiento IS
     'Versiones históricas del texto legal de consentimiento. Permite auditar qué texto exacto firmó cada propietario.';
 
--- Insertar versión 1 solo si no existe (para el tenant por defecto)
+-- Insertar versión 1 solo si existe un tenant "default".
 INSERT INTO clinical.versiones_consentimiento (id_version, titulo, texto_legal, activa, id_tenant)
-VALUES (
+SELECT
     1,
     'Autorización de Tratamiento de Datos Personales',
     E'AUTORIZACIÓN DE TRATAMIENTO DE DATOS PERSONALES\n\n'
@@ -63,8 +63,9 @@ VALUES (
     'Al firmar este documento, declaro que he leído, entiendo y acepto '
     'los términos descritos anteriormente.',
     true,
-    system.get_default_tenant()
-)
+    t.id_tenant
+FROM system.tenants t
+WHERE t.slug = 'default'
 ON CONFLICT DO NOTHING;
 
 

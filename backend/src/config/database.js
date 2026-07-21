@@ -2,13 +2,18 @@ import pkg from 'pg';
 const { Pool } = pkg;
 const LOG_DB_QUERIES = process.env.LOG_DB_QUERIES === 'true';
 const LOG_DB_SLOW_MS = Number(process.env.LOG_DB_SLOW_MS || 800);
+const LOG_DB_CONNECTIONS = process.env.LOG_DB_CONNECTIONS === 'true';
+const DB_POOL_MAX = Number(process.env.DB_POOL_MAX || 8);
+const DB_POOL_MIN = Number(process.env.DB_POOL_MIN || 0);
+const DB_SSL_ENABLED = String(process.env.DB_SSL || '').toLowerCase() === 'true';
+const shouldUseSsl = (host = '') => DB_SSL_ENABLED || String(host).includes('neon.tech');
 
 // Configuración de PostgreSQL
 const pool = new Pool({
   // Si existe DATABASE_URL (como en Neon), úsala directamente
   ...(process.env.DATABASE_URL ? {
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: shouldUseSsl(process.env.DATABASE_URL) ? { rejectUnauthorized: false } : false
   } : {
     // Configuración tradicional
     user: process.env.DB_USER || 'postgres',
@@ -16,16 +21,19 @@ const pool = new Pool({
     database: process.env.DB_NAME || 'vetplus',
     password: process.env.DB_PASSWORD || '',
     port: process.env.DB_PORT || 5432,
-    ssl: (process.env.DB_HOST && process.env.DB_HOST.includes('neon.tech')) ? { rejectUnauthorized: false } : (process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false),
+    ssl: shouldUseSsl(process.env.DB_HOST) ? { rejectUnauthorized: false } : false,
   }),
-  max: 20, // máximo número de conexiones en el pool
+  max: DB_POOL_MAX, // máximo número de conexiones en el pool
+  min: DB_POOL_MIN,
   idleTimeoutMillis: 60000, // tiempo de espera antes de cerrar conexiones inactivas (60s)
   connectionTimeoutMillis: 5000, // tiempo límite para obtener una conexión
 });
 
 // Evento de conexión exitosa
 pool.on('connect', () => {
-  console.log('✅ Conectado a PostgreSQL');
+  if (LOG_DB_CONNECTIONS) {
+    console.log('✅ Conectado a PostgreSQL');
+  }
 });
 
 // Evento de error
@@ -38,7 +46,9 @@ const testConnection = async () => {
   try {
     const client = await pool.connect();
     const result = await client.query('SELECT NOW()');
-    console.log('🗄️  Base de datos conectada:', result.rows[0].now);
+    if (LOG_DB_CONNECTIONS) {
+      console.log('🗄️  Base de datos conectada:', result.rows[0].now);
+    }
     client.release();
     return true;
   } catch (error) {

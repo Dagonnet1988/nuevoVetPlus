@@ -80,26 +80,9 @@ router.use(authenticateToken);
  * @access  Private (solo admin)
  */
 router.post('/',
-    (req, res, next) => {
-        console.log('🔍 POST /api/auth/users - Iniciando creación de usuario');
-        console.log('📝 Datos recibidos:', JSON.stringify(req.body, null, 2));
-        next();
-    },
     authorize(['admin']),
-    (req, res, next) => {
-        console.log('✅ Autorización pasada');
-        next();
-    },
     validateCreateUser,
-    (req, res, next) => {
-        console.log('✅ Validaciones de esquema pasadas');
-        next();
-    },
     validateRequest,
-    (req, res, next) => {
-        console.log('✅ ValidateRequest middleware pasado');
-        next();
-    },
     createUser
 );
 

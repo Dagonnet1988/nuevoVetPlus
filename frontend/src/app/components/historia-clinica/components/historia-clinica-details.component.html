@@ -55,9 +55,11 @@
             <mat-icon>edit</mat-icon> Modificar documento
           </button>
           <mat-divider></mat-divider>
-          <button mat-menu-item disabled matTooltip="Próximamente: envío por WhatsApp y correo">
+          <button mat-menu-item (click)="enviarAlPropietario()" [disabled]="historia()!.estado === 'Cancelado' || sendingEmail()">
             <mat-icon>send</mat-icon> Enviar al propietario
-            <span class="menu-badge-soon">Próximamente</span>
+          </button>
+          <button mat-menu-item (click)="enviarResumenPorWhatsApp()" [disabled]="historia()!.estado === 'Cancelado'">
+            <mat-icon>chat</mat-icon> Enviar por WhatsApp
           </button>
           <mat-divider></mat-divider>
           @if (historia()!.estado === 'Cancelado') {
@@ -271,6 +273,13 @@
                 </section>
               }
 
+              @if (observacionesPalpacion) {
+                <section class="measure-card">
+                  <div class="measure-card-title">Observaciones a la palpación</div>
+                  <p class="dato-texto dato-texto-multiline">{{ observacionesPalpacion }}</p>
+                </section>
+              }
+
             </div>
           </mat-card-content>
         </mat-card>
@@ -308,7 +317,7 @@
       <mat-card class="datos-card">
         <div class="section-header">
           <mat-icon class="section-icon">repeat</mat-icon>
-          <h3>Seguimiento — Sesión {{ datosSeg.numero_sesion }}</h3>
+          <h3>Terapia / Hidroterapia — Sesión {{ datosSeg.numero_sesion }}</h3>
         </div>
         <mat-card-content>
           <div class="datos-grid">
@@ -436,7 +445,7 @@
     }
 
     <!-- ─── ARCHIVOS ADJUNTOS ─── -->
-    @if (historia()!.archivos && historia()!.archivos!.length > 0) {
+    @if (historia()!.tipo_documento !== 'formula' && historia()!.archivos && historia()!.archivos!.length > 0) {
       <mat-card class="datos-card">
         <div class="section-header">
           <mat-icon class="section-icon">attach_file</mat-icon>

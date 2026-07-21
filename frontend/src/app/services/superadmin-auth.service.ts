@@ -46,13 +46,14 @@ export interface CreateTenantPayload {
   nombre: string;
   plan: string;
   max_usuarios: number;
-  admin: {
+  admin?: {
     nombre: string;
     apellido: string;
     email: string;
     documento: string;
     password: string;
   };
+  replicar_superadmin_como_admin?: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -123,6 +124,10 @@ export class SuperadminAuthService {
 
   createTenant(payload: CreateTenantPayload): Observable<any> {
     return this.http.post<any>(`${this.API}/tenants`, payload);
+  }
+
+  provisionSuperadminAsTenantAdmin(id: string): Observable<any> {
+    return this.http.post<any>(`${this.API}/tenants/${id}/provision-superadmin-admin`, {});
   }
 
   updateTenant(id: string, changes: Partial<Pick<TenantStats, 'nombre' | 'plan' | 'estado' | 'max_usuarios' | 'periodicidad_pago' | 'fecha_inicio_suscripcion' | 'fecha_proximo_pago'>>): Observable<any> {

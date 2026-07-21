@@ -2,6 +2,8 @@ import { query, getClient } from '../config/database.js';
 import { v4 as uuidv4 } from 'uuid';
 import googleCalendarService from '../services/googleCalendar.js';
 import appointmentConflictService from '../services/appointmentConflictService.js';
+import { sendEmail } from '../services/emailService.js';
+import { renderEmailTemplate } from '../services/emailTemplateService.js';
 
 /**
  * Convertir fecha a formato Colombia (sin zona horaria)
@@ -57,6 +59,120 @@ const ESTADO_REVERSE_MAPPING = {
 };
 
 const ESTADOS_CITA_PERMITIDOS = ['confirmada', 'en_curso', 'completada', 'no_asistio'];
+const DIAS_BLOQUEADOS_TIPOS = new Set(['no_laborable']);
+
+const extractDateOnly = (value) => {
+    if (!value) return null;
+    const raw = String(value).trim();
+    const match = raw.match(/(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : null;
+};
+
+const getBogotaDateOnlyFromDate = (value) => {
+    if (!(value instanceof Date) || Number.isNaN(value.getTime())) return null;
+    return value.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+};
+
+const getTenantDiasEspeciales = async (tenantId) => {
+    const result = await query(
+        `SELECT fecha, descripcion, tipo, hora_inicio, hora_fin
+         FROM system.dias_especiales
+         WHERE activo = true
+           AND (id_tenant IS NULL OR id_tenant = $1)`,
+        [tenantId]
+    );
+
+    return result.rows.map((row) => ({
+        fecha: row.fecha,
+        descripcion: row.descripcion,
+        tipo: row.tipo,
+        horario_especial: row.hora_inicio && row.hora_fin
+            ? { hora_inicio: row.hora_inicio, hora_fin: row.hora_fin }
+            : undefined,
+        activo: true
+    }));
+};
+
+const getBlockingDiaEspecial = (diasEspeciales, fechaYmd) => {
+    if (!fechaYmd) return null;
+
+    return diasEspeciales.find((dia) => {
+        const tipo = String(dia?.tipo || '').trim();
+        return dia?.fecha === fechaYmd && DIAS_BLOQUEADOS_TIPOS.has(tipo);
+    }) || null;
+};
+
+const parseHourMinutesToTotal = (value) => {
+    const raw = String(value || '').trim();
+    const match = raw.match(/^(\d{2}):(\d{2})/);
+    if (!match) return null;
+    return Number(match[1]) * 60 + Number(match[2]);
+};
+
+const parseDateToMinutes = (value) => {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.getHours() * 60 + d.getMinutes();
+};
+
+const getHorarioEspecialByDate = (diasEspeciales, fechaYmd) => {
+    if (!fechaYmd) return null;
+    return diasEspeciales.find((dia) => dia?.fecha === fechaYmd && String(dia?.tipo || '').trim() === 'horario_especial') || null;
+};
+
+const validateDateTimeAgainstSpecialDays = ({ diasEspeciales, fechaInicio, fechaFin }) => {
+    const fechaYmd = extractDateOnly(fechaInicio);
+    if (!fechaYmd) {
+        return { blocked: false };
+    }
+
+    const diaNoLaborable = getBlockingDiaEspecial(diasEspeciales, fechaYmd);
+    if (diaNoLaborable) {
+        return {
+            blocked: true,
+            code: 'SPECIAL_DAY_BLOCKED',
+            message: `No se pueden agendar citas el ${fechaYmd} (${diaNoLaborable.tipo}).`,
+            data: {
+                fecha: fechaYmd,
+                tipo: diaNoLaborable.tipo,
+                descripcion: diaNoLaborable.descripcion || null
+            }
+        };
+    }
+
+    const horarioEspecial = getHorarioEspecialByDate(diasEspeciales, fechaYmd);
+    if (!horarioEspecial) {
+        return { blocked: false };
+    }
+
+    const allowedStart = parseHourMinutesToTotal(horarioEspecial?.horario_especial?.hora_inicio);
+    const allowedEnd = parseHourMinutesToTotal(horarioEspecial?.horario_especial?.hora_fin);
+    const slotStart = parseDateToMinutes(fechaInicio);
+    const slotEnd = parseDateToMinutes(fechaFin);
+
+    if (
+        allowedStart === null ||
+        allowedEnd === null ||
+        slotStart === null ||
+        slotEnd === null ||
+        slotStart < allowedStart ||
+        slotEnd > allowedEnd
+    ) {
+        return {
+            blocked: true,
+            code: 'SPECIAL_DAY_BLOCKED',
+            message: `No se pueden agendar citas fuera del horario permitido (${horarioEspecial?.horario_especial?.hora_inicio || '--:--'}-${horarioEspecial?.horario_especial?.hora_fin || '--:--'}) el ${fechaYmd}.`,
+            data: {
+                fecha: fechaYmd,
+                tipo: 'horario_especial',
+                descripcion: horarioEspecial.descripcion || null,
+                horario_especial: horarioEspecial.horario_especial || null
+            }
+        };
+    }
+
+    return { blocked: false };
+};
 
 /**
  * Convertir estado del frontend al formato de la base de datos
@@ -97,6 +213,145 @@ const generateAppointmentCode = () => {
     return `CIT-${timestamp}`;
 };
 
+const MAX_RECURRING_OCCURRENCES = 200;
+
+const toLocalDate = (value) => {
+    const d = new Date(value);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds(), 0);
+};
+
+const diffMinutes = (start, end) => {
+    return Math.round((end.getTime() - start.getTime()) / (1000 * 60));
+};
+
+const capitalizeFirst = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return raw;
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+};
+
+const formatDateTimeForEmail = (value) => {
+    if (!value) return '';
+    const d = new Date(value);
+    const locale = 'es-CO';
+    const timeZone = 'America/Bogota';
+
+    const weekday = capitalizeFirst(new Intl.DateTimeFormat(locale, { weekday: 'long', timeZone }).format(d));
+    const day = new Intl.DateTimeFormat(locale, { day: '2-digit', timeZone }).format(d);
+    const month = capitalizeFirst(new Intl.DateTimeFormat(locale, { month: 'long', timeZone }).format(d));
+    const year = new Intl.DateTimeFormat(locale, { year: 'numeric', timeZone }).format(d);
+    const time = new Intl.DateTimeFormat(locale, {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+        timeZone
+    }).format(d);
+
+    return `${weekday} ${day} de ${month} de ${year} a las ${time}`;
+};
+
+const sendAppointmentEmailByTemplate = async ({
+    tenantId,
+    userId,
+    appointment,
+    templateKey
+}) => {
+    const to = String(appointment?.cliente_email || '').trim();
+    if (!to) return;
+
+    const rendered = await renderEmailTemplate({
+        tenantId,
+        key: templateKey,
+        userId,
+        variables: {
+            cliente_nombre: appointment?.cliente_nombre || 'cliente',
+            mascota_nombre: appointment?.mascota_nombre || 'mascota',
+            fecha_hora: formatDateTimeForEmail(appointment?.fecha_inicio),
+            clinica_nombre: (await getClinicBranding(tenantId)).clinicName
+        }
+    });
+
+    if (!rendered) return;
+
+    await sendEmail({
+        tenantId,
+        to,
+        subject: rendered.asunto_render,
+        html: rendered.cuerpo_html_render,
+        text: rendered.cuerpo_text_render || undefined,
+        logContext: {
+            tipo_envio: templateKey,
+            userId,
+            metadata: {
+                id_cita: appointment?.id_cita,
+                codigo_cita: appointment?.codigo_cita || null
+            }
+        }
+    });
+};
+
+const buildRecurringOccurrences = ({
+    fechaInicio,
+    fechaFin,
+    frecuencia,
+    intervalo,
+    diasSemana,
+    totalOcurrencias,
+    fechaHasta
+}) => {
+    const inicioBase = toLocalDate(fechaInicio);
+    const finBase = toLocalDate(fechaFin);
+    const durationMinutes = diffMinutes(inicioBase, finBase);
+
+    if (durationMinutes <= 0) {
+        throw new Error('La fecha_fin debe ser posterior a la fecha_inicio');
+    }
+
+    const until = fechaHasta ? new Date(`${fechaHasta}T23:59:59`) : null;
+    const interval = Math.max(1, Number(intervalo || 1));
+    const limit = Math.min(Number(totalOcurrencias || 0) || MAX_RECURRING_OCCURRENCES, MAX_RECURRING_OCCURRENCES);
+    const occurrences = [];
+
+    if (frecuencia === 'daily') {
+        let cursor = new Date(inicioBase);
+        while (occurrences.length < limit) {
+            if (until && cursor > until) break;
+
+            const start = new Date(cursor);
+            const end = new Date(start.getTime() + durationMinutes * 60000);
+            occurrences.push({ start, end });
+
+            cursor.setDate(cursor.getDate() + interval);
+        }
+
+        return occurrences;
+    }
+
+    const validDays = Array.isArray(diasSemana) && diasSemana.length > 0
+        ? Array.from(new Set(diasSemana.map((d) => Number(d)).filter((d) => d >= 0 && d <= 6))).sort((a, b) => a - b)
+        : [inicioBase.getDay()];
+
+    let dayCursor = new Date(inicioBase);
+    while (occurrences.length < limit) {
+        if (until && dayCursor > until) break;
+
+        const diffDays = Math.floor((new Date(dayCursor.getFullYear(), dayCursor.getMonth(), dayCursor.getDate()).getTime()
+            - new Date(inicioBase.getFullYear(), inicioBase.getMonth(), inicioBase.getDate()).getTime()) / (1000 * 60 * 60 * 24));
+        const weekIndex = Math.floor(diffDays / 7);
+
+        if (weekIndex % interval === 0 && validDays.includes(dayCursor.getDay())) {
+            const start = new Date(dayCursor);
+            start.setHours(inicioBase.getHours(), inicioBase.getMinutes(), inicioBase.getSeconds(), 0);
+            const end = new Date(start.getTime() + durationMinutes * 60000);
+            occurrences.push({ start, end });
+        }
+
+        dayCursor.setDate(dayCursor.getDate() + 1);
+    }
+
+    return occurrences;
+};
+
 const isOutboundGoogleSyncEnabled = () => {
     return String(process.env.GOOGLE_SYNC_OUTBOUND_ENABLED ?? 'false').toLowerCase() === 'true';
 };
@@ -126,6 +381,43 @@ const getClinicBranding = async (tenantId = null) => {
             clinicName: process.env.CLINIC_NAME || 'VetPlus Clínica',
             clinicAddress: process.env.CLINIC_ADDRESS || 'VetPlus Clínica'
         };
+    }
+};
+
+const shouldInviteOwnerToGoogleCalendar = async (tenantId = null) => {
+    if (!tenantId) {
+        return false;
+    }
+
+    try {
+        const result = await query(
+            `SELECT sync_preferences
+             FROM vetplus_auth.google_calendar_config
+             WHERE is_active = true
+               AND configured_by IN (
+                   SELECT id_usuario
+                   FROM vetplus_auth.usuarios
+                   WHERE id_tenant = $1
+               )
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [tenantId]
+        );
+
+        const prefs = result.rows[0]?.sync_preferences || {};
+        const raw = prefs?.configuracion_eventos?.invitar_propietario_calendario;
+
+        if (typeof raw === 'boolean') {
+            return raw;
+        }
+
+        if (typeof raw === 'string') {
+            return raw.trim().toLowerCase() === 'true';
+        }
+
+        return false;
+    } catch {
+        return false;
     }
 };
 
@@ -241,6 +533,7 @@ const syncAppointmentWithGoogle = async (appointmentData, action = 'create') => 
         const formattedStartDateTime = formatDateForGoogle(fecha_inicio);
         const formattedEndDateTime = formatDateForGoogle(fecha_fin);
         const { clinicName, clinicAddress } = await getClinicBranding(id_tenant);
+        const inviteOwnerToCalendar = await shouldInviteOwnerToGoogleCalendar(id_tenant);
 
         console.log('📅 Fechas formateadas para Google:', {
             original_start: fecha_inicio,
@@ -268,7 +561,7 @@ Código de cita: ${appointmentData.codigo_cita}
             description,
             startDateTime: formattedStartDateTime,
             endDateTime: formattedEndDateTime,
-            attendeeEmail: cliente_email,
+            attendeeEmail: inviteOwnerToCalendar ? cliente_email : null,
             location: clinicAddress
         };
 
@@ -451,6 +744,24 @@ export const createAppointment = async (req, res) => {
         const created_by = req.user.id;
         
         const tenantId = req.tenantId ?? req.user?.tenant_id;
+
+        // Regla de negocio: no laborable bloquea todo el día; horario especial solo permite franja configurada.
+        const diasEspeciales = await getTenantDiasEspeciales(tenantId);
+        const specialValidation = validateDateTimeAgainstSpecialDays({
+            diasEspeciales,
+            fechaInicio: fechaInicioFormato,
+            fechaFin: fechaFinFormato
+        });
+
+        if (specialValidation.blocked) {
+            return res.status(409).json({
+                success: false,
+                message: specialValidation.message,
+                code: specialValidation.code,
+                data: specialValidation.data
+            });
+        }
+
         // Verificar que la mascota existe
         const mascotaResult = await query(
             'SELECT id_mascota, nombre FROM clinical.mascotas WHERE id_mascota = $1 AND id_tenant = $2 AND activo = true',
@@ -495,6 +806,17 @@ export const createAppointment = async (req, res) => {
         
         // Obtener información completa de la cita creada
         const citaCompleta = await getAppointmentWithDetails(id_cita);
+
+        try {
+            await sendAppointmentEmailByTemplate({
+                tenantId,
+                userId: req.user?.id_usuario || req.user?.id || null,
+                appointment: citaCompleta,
+                templateKey: 'cita_agendada'
+            });
+        } catch (mailError) {
+            console.error('No se pudo enviar correo de cita agendada:', mailError.message);
+        }
         
         // Sincronizar con Google Calendar (de forma asíncrona)
         const syncResult = await syncAppointmentWithGoogle(citaCompleta, 'create');
@@ -523,6 +845,261 @@ export const createAppointment = async (req, res) => {
 };
 
 /**
+ * Previsualizar citas periódicas sin crear registros
+ */
+export const previewRecurringAppointments = async (req, res) => {
+    try {
+        const {
+            fecha_inicio,
+            fecha_fin,
+            recurrencia
+        } = req.body;
+
+        const frecuencia = recurrencia?.frecuencia || 'weekly';
+        const intervalo = Number(recurrencia?.intervalo || 1);
+        const diasSemana = recurrencia?.dias_semana || [];
+        const totalOcurrencias = Number(recurrencia?.total_ocurrencias || 12);
+        const fechaHasta = recurrencia?.fecha_hasta || null;
+
+        const ocurrencias = buildRecurringOccurrences({
+            fechaInicio: fecha_inicio,
+            fechaFin: fecha_fin,
+            frecuencia,
+            intervalo,
+            diasSemana,
+            totalOcurrencias,
+            fechaHasta
+        });
+
+        return res.json({
+            success: true,
+            data: {
+                total: ocurrencias.length,
+                ocurrencias: ocurrencias.map((o, index) => ({
+                    indice: index + 1,
+                    fecha_inicio: o.start.toISOString(),
+                    fecha_fin: o.end.toISOString()
+                }))
+            }
+        });
+    } catch (error) {
+        return res.status(400).json({
+            success: false,
+            message: error.message || 'No se pudo previsualizar la recurrencia'
+        });
+    }
+};
+
+/**
+ * Crear serie de citas periódicas materializando ocurrencias en calendario_citas
+ */
+export const createRecurringAppointments = async (req, res) => {
+    let txClient = null;
+    try {
+        const {
+            id_mascota,
+            id_veterinario,
+            fecha_inicio,
+            fecha_fin,
+            tipo,
+            motivo,
+            notas,
+            observaciones,
+            recurrencia,
+            ocurrencias_editadas
+        } = req.body;
+
+        const notasFinales = notas || observaciones || null;
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+        const createdBy = req.user?.id || req.user?.id_usuario || null;
+
+        const frecuencia = recurrencia?.frecuencia || 'weekly';
+        const intervalo = Number(recurrencia?.intervalo || 1);
+        const diasSemana = recurrencia?.dias_semana || [];
+        const totalOcurrencias = Number(recurrencia?.total_ocurrencias || 12);
+        const fechaHasta = recurrencia?.fecha_hasta || null;
+
+        const ocurrenciasRegla = buildRecurringOccurrences({
+            fechaInicio: fecha_inicio,
+            fechaFin: fecha_fin,
+            frecuencia,
+            intervalo,
+            diasSemana,
+            totalOcurrencias,
+            fechaHasta
+        });
+
+        const ocurrencias = Array.isArray(ocurrencias_editadas) && ocurrencias_editadas.length > 0
+            ? ocurrencias_editadas
+                .map((item, idx) => {
+                    const start = item?.fecha_inicio ? toLocalDate(item.fecha_inicio) : null;
+                    const end = item?.fecha_fin ? toLocalDate(item.fecha_fin) : null;
+                    if (!start || !end || end <= start) return null;
+                    return {
+                        start,
+                        end,
+                        tipo: item?.tipo || tipo,
+                        indice: Number(item?.indice || idx + 1)
+                    };
+                })
+                .filter(Boolean)
+            : ocurrenciasRegla.map((o, idx) => ({ ...o, tipo, indice: idx + 1 }));
+
+        if (!ocurrencias.length) {
+            return res.status(400).json({
+                success: false,
+                message: 'La regla no genera ocurrencias válidas'
+            });
+        }
+
+        // Regla de negocio: no laborable bloquea el día completo; horario especial bloquea fuera de franja.
+        const diasEspeciales = await getTenantDiasEspeciales(tenantId);
+        const ocurrenciasBloqueadas = [];
+
+        for (const occ of ocurrencias) {
+            const startDateTime = occ.start instanceof Date ? occ.start : occ?.fecha_inicio;
+            const endDateTime = occ.end instanceof Date ? occ.end : occ?.fecha_fin;
+            const validation = validateDateTimeAgainstSpecialDays({
+                diasEspeciales,
+                fechaInicio: startDateTime,
+                fechaFin: endDateTime
+            });
+
+            if (validation.blocked) {
+                ocurrenciasBloqueadas.push({
+                    fecha: validation.data?.fecha || extractDateOnly(startDateTime),
+                    tipo: validation.data?.tipo || null,
+                    descripcion: validation.data?.descripcion || null,
+                    horario_especial: validation.data?.horario_especial || null
+                });
+            }
+        }
+
+        if (ocurrenciasBloqueadas.length > 0) {
+            const fechas = Array.from(new Set(ocurrenciasBloqueadas.map((d) => d.fecha))).slice(0, 5).join(', ');
+            return res.status(409).json({
+                success: false,
+                message: `La serie incluye fechas no agendables (${fechas}).`,
+                code: 'SPECIAL_DAY_BLOCKED',
+                data: {
+                    total_bloqueadas: ocurrenciasBloqueadas.length,
+                    muestras: ocurrenciasBloqueadas.slice(0, 5)
+                }
+            });
+        }
+
+        txClient = await getClient();
+        await txClient.query('BEGIN');
+
+        const duracionMinutos = diffMinutes(toLocalDate(fecha_inicio), toLocalDate(fecha_fin));
+
+        const serieResult = await txClient.query(
+            `INSERT INTO clinical.calendario_series (
+                id_mascota, id_veterinario, tipo, estado_inicial, motivo, notas,
+                duracion_minutos, fecha_inicio_base, frecuencia, intervalo,
+                dias_semana, total_ocurrencias, fecha_hasta, id_tenant, created_by, updated_by
+            ) VALUES (
+                $1,$2,$3,'confirmada',$4,$5,
+                $6,$7,$8,$9,
+                $10,$11,$12,$13,$14,$14
+            )
+            RETURNING id_serie, codigo_serie`,
+            [
+                id_mascota,
+                id_veterinario,
+                tipo,
+                motivo || null,
+                notasFinales,
+                duracionMinutos,
+                convertirFechaAColombia(fecha_inicio),
+                frecuencia,
+                intervalo,
+                diasSemana,
+                Math.min(ocurrencias.length, MAX_RECURRING_OCCURRENCES),
+                fechaHasta,
+                tenantId,
+                createdBy
+            ]
+        );
+
+        const serie = serieResult.rows[0];
+        const createdIds = [];
+
+        for (let i = 0; i < ocurrencias.length; i++) {
+            const occ = ocurrencias[i];
+            const id_cita = uuidv4();
+            const codigo_cita = generateAppointmentCode();
+            const tipoOcurrencia = occ.tipo || tipo;
+            const indiceSerie = occ.indice || (i + 1);
+
+            const insert = await txClient.query(
+                `INSERT INTO clinical.calendario_citas (
+                    id_cita, codigo_cita, id_mascota, id_veterinario,
+                    fecha_inicio, fecha_fin, tipo, estado, motivo, notas,
+                    id_tenant, created_by, id_serie, indice_serie
+                ) VALUES (
+                    $1,$2,$3,$4,
+                    $5,$6,$7,'confirmada',$8,$9,
+                    $10,$11,$12,$13
+                ) RETURNING id_cita`,
+                [
+                    id_cita,
+                    codigo_cita,
+                    id_mascota,
+                    id_veterinario,
+                    convertirFechaAColombia(occ.start.toISOString()),
+                    convertirFechaAColombia(occ.end.toISOString()),
+                    tipoOcurrencia,
+                    motivo || null,
+                    notasFinales,
+                    tenantId,
+                    createdBy,
+                    serie.id_serie,
+                    indiceSerie
+                ]
+            );
+
+            createdIds.push(insert.rows[0].id_cita);
+        }
+
+        await txClient.query('COMMIT');
+        txClient.release();
+        txClient = null;
+
+        // Sync fuera de transacción para no bloquear creación masiva
+        for (const idCita of createdIds) {
+            const citaCompleta = await getAppointmentWithDetails(idCita, tenantId);
+            if (citaCompleta) {
+                await syncAppointmentWithGoogle(citaCompleta, 'create');
+            }
+        }
+
+        return res.status(201).json({
+            success: true,
+            message: 'Serie de citas creada exitosamente',
+            data: {
+                id_serie: serie.id_serie,
+                codigo_serie: serie.codigo_serie,
+                total_citas: createdIds.length,
+                citas: createdIds
+            }
+        });
+    } catch (error) {
+        if (txClient) {
+            try { await txClient.query('ROLLBACK'); } catch {}
+            txClient.release();
+        }
+
+        console.error('Error creando citas periódicas:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'No se pudo crear la serie de citas',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+/**
  * Obtener lista de citas con filtros
  */
 export const getAppointments = async (req, res) => {
@@ -538,11 +1115,6 @@ export const getAppointments = async (req, res) => {
             id_mascota
         } = req.query;
         
-        // 🔍 DEBUG: Log de parámetros recibidos
-        console.log('🔍 [FILTROS] Parámetros recibidos:', {
-            limit, offset, fecha_inicio, fecha_fin, estado, tipo, id_veterinario, id_mascota
-        });
-        
         const tenantId = req.tenantId ?? req.user?.tenant_id;
         let whereConditions = [`c.id_tenant = $1`]; // Filtrar por tenant
         let queryParams = [tenantId];
@@ -551,13 +1123,13 @@ export const getAppointments = async (req, res) => {
         // Construir filtros dinámicos
         if (fecha_inicio) {
             paramCount++;
-            whereConditions.push(`DATE(c.fecha_inicio) >= $${paramCount}`);
+            whereConditions.push(`c.fecha_inicio >= $${paramCount}::date`);
             queryParams.push(fecha_inicio);
         }
         
         if (fecha_fin) {
             paramCount++;
-            whereConditions.push(`DATE(c.fecha_inicio) <= $${paramCount}`);
+            whereConditions.push(`c.fecha_inicio < ($${paramCount}::date + INTERVAL '1 day')`);
             queryParams.push(fecha_fin);
         }
         
@@ -577,7 +1149,6 @@ export const getAppointments = async (req, res) => {
         
         if (id_veterinario) {
             paramCount++;
-            console.log(`🔍 [FILTRO VETERINARIO] Aplicando filtro: id_veterinario = "${id_veterinario}" (tipo: ${typeof id_veterinario})`);
             whereConditions.push(`c.id_veterinario = $${paramCount}`);
             queryParams.push(id_veterinario);
         }
@@ -589,11 +1160,6 @@ export const getAppointments = async (req, res) => {
         }
         
         const whereClause = whereConditions.join(' AND ');
-        
-        // 🔍 DEBUG: Log de query final
-        console.log('🔍 [QUERY] WHERE clause:', whereClause);
-        console.log('🔍 [QUERY] Parámetros:', queryParams);
-        console.log('🔍 [QUERY] Ejecutando query...');
         
         const hasConsultasTable = await hasConsultasClinicasTable();
 
@@ -636,15 +1202,6 @@ export const getAppointments = async (req, res) => {
             query(mainQuery, queryParams),
             query(countQuery, countParams)
         ]);
-        
-        console.log(`🔍 [RESULTADO] Se encontraron ${result.rows.length} citas`);
-        if (id_veterinario) {
-            console.log(`🔍 [FILTRO VET] Citas para veterinario ${id_veterinario}:`, result.rows.map(r => ({
-                id: r.id_cita,
-                vet: r.veterinario_nombre, 
-                fecha: r.fecha_inicio
-            })));
-        }
         
         const total = parseInt(countResult.rows[0].total);
         const totalPages = Math.ceil(total / limit);
@@ -727,6 +1284,25 @@ export const updateAppointment = async (req, res) => {
         }
         
         const cita = citaExistente.rows[0];
+
+        // Regla de negocio: no laborable bloquea día completo; horario especial bloquea fuera de franja.
+        const effectiveFechaInicio = updateData.fecha_inicio !== undefined ? updateData.fecha_inicio : cita.fecha_inicio;
+        const effectiveFechaFin = updateData.fecha_fin !== undefined ? updateData.fecha_fin : cita.fecha_fin;
+        const diasEspeciales = await getTenantDiasEspeciales(tenantId);
+        const specialValidation = validateDateTimeAgainstSpecialDays({
+            diasEspeciales,
+            fechaInicio: effectiveFechaInicio,
+            fechaFin: effectiveFechaFin
+        });
+
+        if (specialValidation.blocked) {
+            return res.status(409).json({
+                success: false,
+                message: specialValidation.message,
+                code: specialValidation.code,
+                data: specialValidation.data
+            });
+        }
         
         // Regla de negocio actual: se permiten citas simultáneas/solapadas por veterinario.
         
@@ -806,6 +1382,19 @@ export const updateAppointment = async (req, res) => {
         
         // Obtener información completa de la cita actualizada
         const citaActualizada = await getAppointmentWithDetails(id);
+
+        if (hasRescheduleChange) {
+            try {
+                await sendAppointmentEmailByTemplate({
+                    tenantId,
+                    userId: req.user?.id_usuario || req.user?.id || null,
+                    appointment: citaActualizada,
+                    templateKey: 'cita_reagendada'
+                });
+            } catch (mailError) {
+                console.error('No se pudo enviar correo de cita reagendada:', mailError.message);
+            }
+        }
         
         // Sincronizar con Google Calendar si hay cambios significativos
         let syncResult = { success: true, message: 'No requiere sincronización' };
@@ -864,7 +1453,7 @@ export const updateAppointmentStatus = async (req, res) => {
         const tenantId = req.tenantId ?? req.user?.tenant_id;
         // Verificar que la cita existe antes de iniciar la transacción
         const citaExistente = await query(
-            'SELECT id_cita, estado FROM clinical.calendario_citas WHERE id_cita = $1 AND id_tenant = $2',
+            'SELECT id_cita, estado, fecha_inicio, fecha_fin FROM clinical.calendario_citas WHERE id_cita = $1 AND id_tenant = $2',
             [id, tenantId]
         );
 
@@ -878,7 +1467,9 @@ export const updateAppointmentStatus = async (req, res) => {
 
         console.log('✅ Cita encontrada:', {
             id_cita: citaExistente.rows[0].id_cita,
-            estado_actual: citaExistente.rows[0].estado
+                estado_actual: citaExistente.rows[0].estado,
+                fecha_inicio_actual: citaExistente.rows[0].fecha_inicio,
+                fecha_fin_actual: citaExistente.rows[0].fecha_fin
         });
 
         const hasConsultasTable = await hasConsultasClinicasTable();
@@ -953,12 +1544,29 @@ export const updateAppointmentStatus = async (req, res) => {
         console.log('🔄 Transacción iniciada');
 
         try {
+            const updateFields = ['estado = $1', 'notas = COALESCE($2, notas)', 'updated_at = CURRENT_TIMESTAMP'];
+            const updateParams = [estadoDb, notas, id, tenantId];
+
+            // Al iniciar consulta, fijar hora real de inicio y un fin tentativo (+1h)
+            // para no bloquear toda la jornada hasta que se marque como completada.
+            if (estadoDb === 'en_curso' && citaExistente.rows[0].estado !== 'en_curso') {
+                updateFields.push("fecha_inicio = date_trunc('second', CURRENT_TIMESTAMP)");
+                updateFields.push("fecha_fin = (date_trunc('second', CURRENT_TIMESTAMP) + INTERVAL '1 hour')");
+            }
+
+            // Al completar, fijar hora real de fin. Si la cita tenía inicio futuro,
+            // normalizamos también el inicio para conservar coherencia temporal.
+            if (estadoDb === 'completada') {
+                updateFields.push("fecha_fin = date_trunc('second', CURRENT_TIMESTAMP)");
+                updateFields.push("fecha_inicio = CASE WHEN fecha_inicio > date_trunc('second', CURRENT_TIMESTAMP) THEN date_trunc('second', CURRENT_TIMESTAMP) ELSE fecha_inicio END");
+            }
+
             const result = await txClient.query(`
                 UPDATE clinical.calendario_citas
-                SET estado = $1, notas = COALESCE($2, notas), updated_at = CURRENT_TIMESTAMP
+                SET ${updateFields.join(', ')}
                 WHERE id_cita = $3 AND id_tenant = $4
                 RETURNING *
-            `, [estadoDb, notas, id, tenantId]);
+            `, updateParams);
 
             if (result.rows.length === 0) {
                 console.log('❌ Error: UPDATE no afectó ninguna fila');
@@ -1127,7 +1735,7 @@ export const updateAppointmentStatus = async (req, res) => {
                 try {
                     // Obtener estado anterior de la cita antes de la actualización
                     const estadoAnterior = result.rows[0].estado; // Estado antes del cambio
-                    console.log(`🔄 Sincronizando cambio de estado con Google Calendar: ${estadoAnterior} → ${estadoDb}`);
+                    console.log(`🔄 Sincronizando cambio de estado/tiempos reales con Google Calendar: ${estadoAnterior} → ${estadoDb}`);
                     syncResult = await syncAppointmentWithGoogle(citaActualizada, 'update');
 
                     if (syncResult.success) {
@@ -1407,8 +2015,8 @@ export const getCalendarView = async (req, res) => {
         
         let whereConditions = [
             'c.id_tenant = $1',
-            'DATE(c.fecha_inicio) >= $2',
-            'DATE(c.fecha_inicio) <= $3'
+            'c.fecha_inicio >= $2::date',
+            'c.fecha_inicio < ($3::date + INTERVAL \'1 day\')'
         ];
         let queryParams = [tenantId, startDate, endDate];
         let paramIndex = 4;
@@ -1771,19 +2379,28 @@ export const getAppointmentStats = async (req, res) => {
             )
             SELECT
                 COUNT(*) FILTER (
-                    WHERE DATE(c.fecha_inicio) BETWEEN b.week_start AND b.week_end
+                                        WHERE c.fecha_inicio >= b.week_start
+                                            AND c.fecha_inicio < (b.week_end + INTERVAL '1 day')
                 )::int AS total_citas,
                 COUNT(*) FILTER (
-                    WHERE DATE(c.fecha_inicio) = b.today
+                                        WHERE c.fecha_inicio >= b.today
+                                            AND c.fecha_inicio < (b.today + INTERVAL '1 day')
                 )::int AS citas_hoy,
                 COUNT(*) FILTER (
-                    WHERE DATE(c.fecha_inicio) = b.today
+                                        WHERE c.fecha_inicio >= b.today
+                                                AND c.fecha_inicio < (b.today + INTERVAL '1 day')
                         AND c.estado = 'confirmada'
                 )::int AS citas_pendientes,
                 COUNT(*) FILTER (
-                    WHERE DATE(c.fecha_inicio) = b.today
+                                        WHERE c.fecha_inicio >= b.today
+                                            AND c.fecha_inicio < (b.today + INTERVAL '1 day')
                       AND c.estado = 'completada'
                 )::int AS citas_completadas
+                                ,COUNT(*) FILTER (
+                                                                                WHERE c.fecha_inicio >= b.week_start
+                                                                                        AND c.fecha_inicio < (b.week_end + INTERVAL '1 day')
+                                            AND c.estado = 'no_asistio'
+                                )::int AS citas_canceladas_semana
             FROM clinical.calendario_citas c
             CROSS JOIN bounds b
             WHERE c.id_tenant = $1`,
@@ -1794,13 +2411,22 @@ export const getAppointmentStats = async (req, res) => {
         const citasHoy = parseInt(summaryResult.rows[0].citas_hoy || 0, 10);
         const citasPendientes = parseInt(summaryResult.rows[0].citas_pendientes || 0, 10);
         const citasCompletadas = parseInt(summaryResult.rows[0].citas_completadas || 0, 10);
+        const citasCanceladasSemana = parseInt(summaryResult.rows[0].citas_canceladas_semana || 0, 10);
         const tasaOcupacion = totalCitas > 0 ? Math.round((citasCompletadas / totalCitas) * 100) : 0;
         
         // Obtener estadísticas por estado
         const estadosQuery = `
+            WITH bounds AS (
+                SELECT
+                    date_trunc('week', CURRENT_DATE)::date AS week_start,
+                    (date_trunc('week', CURRENT_DATE)::date + INTERVAL '6 day')::date AS week_end
+            )
             SELECT estado, COUNT(*) as cantidad 
             FROM clinical.calendario_citas 
+            CROSS JOIN bounds b
             WHERE id_tenant = $1
+                            AND fecha_inicio >= b.week_start
+                            AND fecha_inicio < (b.week_end + INTERVAL '1 day')
             GROUP BY estado 
             ORDER BY cantidad DESC
         `;
@@ -1811,11 +2437,13 @@ export const getAppointmentStats = async (req, res) => {
             citas_hoy: citasHoy,
             citas_pendientes: citasPendientes,
             citas_completadas: citasCompletadas,
+            citas_canceladas_semana: citasCanceladasSemana,
             tasa_ocupacion: tasaOcupacion,
             estados: estadosResult.rows.map(row => ({
                 estado: row.estado,
                 cantidad: parseInt(row.cantidad)
-            }))
+            })),
+            periodo_estados: 'semana_actual'
         };
         
         res.json({

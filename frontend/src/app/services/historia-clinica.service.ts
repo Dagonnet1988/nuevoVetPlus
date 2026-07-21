@@ -9,8 +9,8 @@ export type TipoDocumento = 'valoracion_inicial' | 'seguimiento' | 'formula' | '
 export type EstadoHistoria = 'Borrador' | 'Completado' | 'Cancelado';
 
 export const TIPO_LABELS: Record<TipoDocumento, string> = {
-  valoracion_inicial: 'Valoración Inicial',
-  seguimiento:        'Seguimiento',
+  valoracion_inicial: 'Valoración',
+  seguimiento:        'Terapia / Hidroterapia',
   formula:            'Fórmula',
   remision:           'Remisión',
 };
@@ -189,6 +189,14 @@ export class HistoriaClinicaService {
     return this.http.get<any>(`${this.API}/by-appointment/${idCita}/all`);
   }
 
+  getMedicamentosSugeridos(search = ''): Observable<{ success: boolean; data: string[] }> {
+    let params = new HttpParams();
+    if (search.trim()) {
+      params = params.set('search', search.trim());
+    }
+    return this.http.get<{ success: boolean; data: string[] }>(`${this.API}/medicamentos/sugerencias`, { params });
+  }
+
   createHistoria(data: HistoriaFormData): Observable<{ success: boolean; data: HistoriaClinica }> {
     return this.http.post<any>(this.API, data);
   }
@@ -215,6 +223,12 @@ export class HistoriaClinicaService {
 
   sendHistoriaByEmail(idHistoria: string, emailDestino?: string): Observable<{ success: boolean; message: string; data?: any }> {
     return this.http.post<any>(`${this.NOTIFICACIONES_API}/historia/${idHistoria}/email`, {
+      email_destino: emailDestino || undefined
+    });
+  }
+
+  sendCitaDocumentosByEmail(idCita: string, emailDestino?: string): Observable<{ success: boolean; message: string; data?: any }> {
+    return this.http.post<any>(`${this.NOTIFICACIONES_API}/cita/${idCita}/email`, {
       email_destino: emailDestino || undefined
     });
   }

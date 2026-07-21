@@ -22,8 +22,8 @@ import { DashboardService, Notification } from '../../../services/dashboard.serv
     MatDividerModule
   ],
   template: `
-    <button 
-      mat-icon-button 
+    <button
+      mat-icon-button
       [matMenuTriggerFor]="notificationsMenu"
       class="notifications-trigger"
       [matBadge]="unreadCount"
@@ -48,28 +48,28 @@ import { DashboardService, Notification } from '../../../services/dashboard.serv
       <div class="notifications-content">
         @if (notifications.length > 0) {
           @for (notification of notifications.slice(0, 10); track notification.id) {
-            <div 
+            <div
               class="notification-item"
               [class.unread]="!notification.leida"
               [class]="'notification-' + notification.tipo"
               (click)="markAsRead(notification.id)">
-              
+
               <div class="notification-icon">
                 <mat-icon>{{ getNotificationIcon(notification.tipo) }}</mat-icon>
               </div>
-              
+
               <div class="notification-content">
                 <h4 class="notification-title">{{ notification.titulo }}</h4>
                 <p class="notification-message">{{ notification.mensaje }}</p>
                 <span class="notification-time">{{ getRelativeTime(notification.fecha) }}</span>
               </div>
-              
+
               @if (!notification.leida) {
                 <div class="unread-indicator"></div>
               }
             </div>
           }
-          
+
           @if (notifications.length > 10) {
             <div class="more-notifications">
               <span>{{ notifications.length - 10 }} notificaciones más...</span>
@@ -297,52 +297,6 @@ import { DashboardService, Notification } from '../../../services/dashboard.serv
       font-weight: 500;
     }
 
-    // Dark theme
-    .dark-theme .notifications-header {
-      background: #2d2d2d;
-    }
-
-    .dark-theme .notifications-header h3 {
-      color: #fff;
-    }
-
-    .dark-theme .notification-item:hover {
-      background-color: rgba(255, 255, 255, 0.02);
-    }
-
-    .dark-theme .notification-item.unread {
-      background-color: rgba(129, 199, 132, 0.02);
-    }
-
-    .dark-theme .notification-title {
-      color: #fff;
-    }
-
-    .dark-theme .notification-message {
-      color: #b3b3b3;
-    }
-
-    .dark-theme .notification-time {
-      color: #666;
-    }
-
-    .dark-theme .more-notifications {
-      background: #2d2d2d;
-      color: #666;
-    }
-
-    .dark-theme .notifications-footer {
-      background: #2d2d2d;
-    }
-
-    .dark-theme .no-notifications {
-      color: #666;
-    }
-
-    .dark-theme .no-notifications mat-icon {
-      color: #444;
-    }
-
     // Responsive
     @media (max-width: 768px) {
       ::ng-deep .notifications-menu {
@@ -436,9 +390,9 @@ export class NotificationsComponent implements OnInit, OnDestroy {
     } else if (diffInDays < 7) {
       return `${diffInDays}d`;
     } else {
-      return date.toLocaleDateString('es-ES', { 
-        day: '2-digit', 
-        month: '2-digit' 
+      return date.toLocaleDateString('es-ES', {
+        day: '2-digit',
+        month: '2-digit'
       });
     }
   }

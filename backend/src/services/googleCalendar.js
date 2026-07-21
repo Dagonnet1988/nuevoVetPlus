@@ -19,6 +19,41 @@ class GoogleCalendarService {
         return error?.status || error?.code || error?.response?.status || error?.cause?.code || null;
     }
 
+    isGoogleReauthRequiredError(error) {
+        const oauthError = String(error?.response?.data?.error || '').toLowerCase();
+        const composedMessage = [
+            error?.message,
+            error?.cause?.message,
+            error?.response?.data?.error_description
+        ]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase();
+
+        return oauthError === 'invalid_grant' || composedMessage.includes('invalid_grant');
+    }
+
+    buildGoogleErrorPayload(error, fallbackMessage = 'Error de Google Calendar') {
+        if (this.isGoogleReauthRequiredError(error)) {
+            return {
+                error: 'La autorización de Google Calendar expiró o fue revocada. Reconecta la cuenta de Google.',
+                code: 'GOOGLE_REAUTH_REQUIRED',
+                status: 400,
+                requires_reauth: true
+            };
+        }
+
+        const status = this.getErrorStatusCode(error);
+        const normalizedStatus = Number.isFinite(Number(status)) ? Number(status) : 500;
+
+        return {
+            error: error?.message || fallbackMessage,
+            code: 'GOOGLE_API_ERROR',
+            status: normalizedStatus,
+            requires_reauth: false
+        };
+    }
+
     async getActiveCalendarId() {
         const configuredCalendarId = this.getConfiguredCalendarId();
 
@@ -854,7 +889,7 @@ class GoogleCalendarService {
      */
     async listEvents(startDateTime, endDateTime) {
         try {
-            if (!this.isConfigured()) {
+            if (!await this.isConfigured()) {
                 throw new Error('Google Calendar no está configurado');
             }
 
@@ -899,8 +934,6 @@ class GoogleCalendarService {
                 singleEvents: true,
                 orderBy: 'startTime'
             });
-
-            console.log('✅ Eventos obtenidos:', response.data.items?.length || 0);
 
             return {
                 success: true,
@@ -953,16 +986,20 @@ class GoogleCalendarService {
                     };
                 } catch (refreshError) {
                     console.error('❌ Error al refrescar token:', refreshError);
+                    const refreshErrorPayload = this.buildGoogleErrorPayload(refreshError, 'No se pudo refrescar el token de Google Calendar');
                     return {
                         success: false,
-                        error: 'Token expirado y no se pudo refrescar: ' + refreshError.message
+                        ...refreshErrorPayload,
+                        details: refreshError.cause || refreshError.response?.data
                     };
                 }
             }
+
+            const errorPayload = this.buildGoogleErrorPayload(error);
             
             return {
                 success: false,
-                error: error.message,
+                ...errorPayload,
                 details: error.cause || error.response?.data
             };
         }
@@ -1062,19 +1099,6 @@ class GoogleCalendarService {
 
             // Filtrar solo eventos clasificados como citas
             const vetEvents = classifiedEvents.filter(item => item.classification.isAppointment);
-
-            console.log('🧭 Clasificación import Google:', {
-                total_events: eventsResult.events.length,
-                vet_events_found: vetEvents.length,
-                reasons: classificationStats,
-                expected_color_ids: expectedColorIds,
-                no_color_match_sample: noColorMatchDetails
-            });
-
-            if (classificationAudit.length > 0) {
-                console.log('🎨 Auditoría de clasificación por evento (colorId -> tipo):');
-                console.table(classificationAudit);
-            }
 
             const importedEvents = [];
             const errors = [];
@@ -1254,12 +1278,12 @@ class GoogleCalendarService {
                 google_event_id: id,
                 titulo: summary || 'Evento importado',
                 descripcion: description || 'Evento importado desde Google Calendar',
-                fecha_inicio: start.dateTime || start.date,
-                fecha_fin: end.dateTime || end.date,
+                fecha_inicio: start?.dateTime || start?.date || null,
+                fecha_fin: end?.dateTime || end?.date || null,
                 tipo: tipo,
                 motivo: motivo,
                 estado_google: status || 'confirmed',
-                estado_vetplus: this.mapGoogleStatusToVetPlus(status, start.dateTime || start.date),
+                estado_vetplus: this.mapGoogleStatusToVetPlus(status, start?.dateTime || start?.date),
                 ultima_modificacion: updated,
                 mascota_nombre: mascotaNombre,
                 cliente_nombre: clienteNombre,
@@ -1363,30 +1387,48 @@ class GoogleCalendarService {
             const changes = [];
             
             for (const event of response.data.items) {
+                const changeType = this.determineChangeType(event);
                 const classification = this.classifyEventForImport(event);
-                // Solo procesar eventos clasificados como cita
-                if (classification.isAppointment) {
-                    const changeType = this.determineChangeType(event);
-                    const parsedEvent = this.parseGoogleEventToVetPlus(event, classification);
-                    
-                    if (parsedEvent) {
-                        // Detectar cambios específicos en respuestas de asistentes
-                        const attendeeChanges = this.detectAttendeeChanges(event);
-                        
-                        changes.push({
-                            change_type: changeType,
-                            google_event: event,
-                            parsed_data: parsedEvent,
-                            attendee_changes: attendeeChanges,
-                            event_status: event.status,
-                            updated_at: event.updated
-                        });
 
-                        console.log(`📝 Cambio detectado: ${changeType} - ${event.summary}`);
-                        if (attendeeChanges.length > 0) {
-                            console.log(`👥 Respuestas de asistentes:`, attendeeChanges);
-                        }
-                    }
+                // Los eventos eliminados deben procesarse siempre aunque Google devuelva payload parcial.
+                const shouldProcess = changeType === 'deleted' ? Boolean(event?.id) : classification.isAppointment;
+                if (!shouldProcess) {
+                    continue;
+                }
+
+                const parsedEvent = this.parseGoogleEventToVetPlus(event, classification) || {
+                    google_event_id: event?.id || null,
+                    titulo: event?.summary || 'Evento eliminado',
+                    descripcion: event?.description || '',
+                    fecha_inicio: event?.start?.dateTime || event?.start?.date || null,
+                    fecha_fin: event?.end?.dateTime || event?.end?.date || null,
+                    tipo: 'control',
+                    motivo: 'Sincronizado desde Google Calendar',
+                    estado_google: event?.status || 'cancelled',
+                    estado_vetplus: this.mapGoogleStatusToVetPlus(event?.status || 'cancelled', event?.start?.dateTime || event?.start?.date),
+                    ultima_modificacion: event?.updated || new Date().toISOString(),
+                    mascota_nombre: null,
+                    cliente_nombre: null,
+                    veterinario_nombre: null,
+                    cliente_email: null,
+                    requiere_matching: false
+                };
+
+                // Detectar cambios específicos en respuestas de asistentes
+                const attendeeChanges = this.detectAttendeeChanges(event);
+
+                changes.push({
+                    change_type: changeType,
+                    google_event: event,
+                    parsed_data: parsedEvent,
+                    attendee_changes: attendeeChanges,
+                    event_status: event.status,
+                    updated_at: event.updated
+                });
+
+                console.log(`📝 Cambio detectado: ${changeType} - ${event.summary}`);
+                if (attendeeChanges.length > 0) {
+                    console.log(`👥 Respuestas de asistentes:`, attendeeChanges);
                 }
             }
 
@@ -1413,9 +1455,11 @@ class GoogleCalendarService {
                 };
             }
 
+            const errorPayload = this.buildGoogleErrorPayload(error);
+
             return {
                 success: false,
-                error: error.message
+                ...errorPayload
             };
         }
     }

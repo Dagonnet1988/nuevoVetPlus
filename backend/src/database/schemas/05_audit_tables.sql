@@ -48,18 +48,6 @@ CREATE TABLE IF NOT EXISTS system.sensitive_access_log (
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Tabla para configuration changes (cambios de configuración)
-CREATE TABLE IF NOT EXISTS system.config_changes_log (
-    id_change UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    id_usuario UUID REFERENCES vetplus_auth.usuarios(id_usuario) ON DELETE SET NULL,
-    tipo_configuracion VARCHAR(100) NOT NULL, -- USER_ROLE, SYSTEM_SETTING, PERMISSIONS, etc.
-    configuracion_anterior JSONB,
-    configuracion_nueva JSONB,
-    descripcion TEXT,
-    ip_address INET,
-    timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
 -- Índices para optimizar consultas de auditoría
 CREATE INDEX IF NOT EXISTS idx_activity_log_usuario_timestamp ON system.activity_log(id_usuario, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_activity_log_tipo_timestamp ON system.activity_log(tipo_actividad, timestamp DESC);

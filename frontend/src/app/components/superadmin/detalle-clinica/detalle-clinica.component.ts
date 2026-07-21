@@ -34,6 +34,9 @@ export class DetalleClinicaComponent implements OnInit {
   saving = signal(false);
   saveError = signal('');
   saveOk = signal('');
+  provisioningAdmin = signal(false);
+  provisionError = signal('');
+  provisionOk = signal('');
 
   editNombre = '';
   editPlan: string = 'standard';
@@ -108,6 +111,48 @@ export class DetalleClinicaComponent implements OnInit {
   planLabel(plan: string): string {
     const m: Record<string, string> = { standard: 'Standard', pro: 'Pro', enterprise: 'Enterprise' };
     return m[plan] ?? plan;
+  }
+
+  provisionSuperadminAsAdmin(): void {
+    const t = this.tenant();
+    if (!t || this.provisioningAdmin()) return;
+
+    this.provisioningAdmin.set(true);
+    this.provisionError.set('');
+    this.provisionOk.set('');
+
+    this.svc.provisionSuperadminAsTenantAdmin(t.id_tenant).subscribe({
+      next: res => {
+        const existing = t.usuarios.some(u => u.id_usuario === res.admin?.id_usuario);
+        const updatedUsuarios = existing
+          ? t.usuarios
+          : [
+              {
+                id_usuario: res.admin.id_usuario,
+                nombre: res.admin.nombre,
+                apellido: res.admin.apellido,
+                email: res.admin.email,
+                rol: res.admin.rol,
+                activo: res.admin.activo,
+                ultimo_login: null
+              },
+              ...t.usuarios
+            ];
+
+        this.tenant.set({
+          ...t,
+          total_usuarios: existing ? t.total_usuarios : t.total_usuarios + 1,
+          usuarios: updatedUsuarios
+        });
+
+        this.provisionOk.set(res?.message || 'Superadmin replicado como admin correctamente.');
+        this.provisioningAdmin.set(false);
+      },
+      error: err => {
+        this.provisionError.set(err?.error?.message || 'No se pudo provisionar el admin.');
+        this.provisioningAdmin.set(false);
+      }
+    });
   }
 
   /** Returns 'vencido' | 'alerta' | 'proximo' | 'ok' | 'sin-fecha' */

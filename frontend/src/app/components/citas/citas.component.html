@@ -183,11 +183,35 @@
                 <mat-card-title>Seleccionar día</mat-card-title>
               </mat-card-header>
               <mat-card-content>
-                <mat-calendar [selected]="selectedDate()" (selectedChange)="onDateSelected($event)"></mat-calendar>
+                <mat-calendar [selected]="selectedDate()" [dateClass]="calendarDateClass" (selectedChange)="onDateSelected($event)"></mat-calendar>
                 <button mat-stroked-button class="btn-hoy" (click)="goToToday()">
                   <mat-icon>today</mat-icon>
                   Ir a hoy
                 </button>
+
+                <div class="dia-legend sidebar-legend" aria-label="Leyenda de colores por tipo de cita">
+                  <span class="dia-legend-title">Tipos de cita</span>
+                  <div class="dia-legend-items">
+                    @for (tipo of tiposCita; track tipo.value) {
+                      <span class="legend-chip" [matTooltip]="tipo.label">
+                        <span class="legend-dot" [style.background-color]="tipo.color"></span>
+                        <span class="legend-text">{{ tipo.label }}</span>
+                      </span>
+                    }
+                  </div>
+                </div>
+
+                <div class="dia-legend sidebar-legend" aria-label="Leyenda de colores por estado de cita">
+                  <span class="dia-legend-title">Estados de cita</span>
+                  <div class="dia-legend-items">
+                    @for (estado of estadosCita; track estado.value) {
+                      <span class="legend-chip" [matTooltip]="estado.label">
+                        <span class="legend-dot" [style.background-color]="estado.color"></span>
+                        <span class="legend-text">{{ estado.label }}</span>
+                      </span>
+                    }
+                  </div>
+                </div>
               </mat-card-content>
             </mat-card>
           </aside>
@@ -196,6 +220,9 @@
             <div class="dia-header">
               <div class="dia-info">
                 <h3 class="dia-titulo">{{ tituloDiaSeleccionado() }}</h3>
+                @if (getSelectedDaySpecial()) {
+                  <div class="selected-day-badge">{{ getSelectedDaySpecialLabel() }}</div>
+                }
                 <div class="dia-estadisticas">
                   <span class="estadistica-item">
                     <strong>{{ citasVisiblesDelDiaSeleccionado().length }}</strong> cita{{ citasVisiblesDelDiaSeleccionado().length !== 1 ? 's' : '' }}
@@ -207,6 +234,7 @@
                   }
                 </div>
               </div>
+
               <div class="day-nav-actions">
                 @if (isSelectedDayToday() && citasDelDiaSeleccionado().length > 0) {
                   <button mat-stroked-button

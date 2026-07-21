@@ -337,6 +337,25 @@ export async function updateMascota(req, res) {
 
     const tenantId = req.tenantId;
 
+    if (updates.activo === false) {
+      const citasActivasResult = await query(
+        `SELECT COUNT(*) AS citas_activas
+         FROM clinical.calendario_citas
+         WHERE id_mascota = $1
+           AND id_tenant = $2
+           AND estado IN ('confirmada', 'en_curso')`,
+        [id, tenantId]
+      );
+
+      const citasActivas = parseInt(citasActivasResult.rows[0]?.citas_activas || '0', 10);
+      if (citasActivas > 0) {
+        return res.status(409).json({
+          success: false,
+          message: `No se puede inactivar la mascota porque tiene ${citasActivas} cita(s) activa(s).`
+        });
+      }
+    }
+
     // Verificar que la mascota existe
     const mascotaExiste = await query(
       'SELECT id_mascota FROM clinical.mascotas WHERE id_mascota = $1 AND id_tenant = $2',
@@ -676,12 +695,19 @@ export async function getMascotasConCliente(req, res) {
     }
 
     // Ordenamiento
-    const allowedSortFields = ['nombre', 'especie', 'created_at', 'cliente_nombre'];
-    const sortField = allowedSortFields.includes(sortBy) ? 
-      (sortBy === 'cliente_nombre' ? 'c.nombre' : `m.${sortBy}`) : 'm.created_at';
+    const sortFieldMap = {
+      nombre: "LOWER(COALESCE(m.nombre, ''))",
+      especie: "LOWER(COALESCE(m.especie, ''))",
+      cliente_nombre: "LOWER(COALESCE(c.nombre, ''))",
+      created_at: 'm.created_at'
+    };
+    const sortField = Object.prototype.hasOwnProperty.call(sortFieldMap, sortBy)
+      ? sortFieldMap[sortBy]
+      : 'm.created_at';
     const order = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-    
-    queryText += ` ORDER BY ${sortField} ${order}`;
+
+    // Orden case-insensitive para textos y consistente para empates.
+    queryText += ` ORDER BY ${sortField} ${order}, m.created_at DESC`;
 
     // Paginación
     paramCount++;
@@ -791,14 +817,16 @@ export async function getMascotasConCliente(req, res) {
  */
 export async function getEspecies(req, res) {
   try {
+    const tenantId = req.tenantId;
     const queryText = `
       SELECT DISTINCT especie 
       FROM clinical.mascotas 
-      WHERE activo = true 
+      WHERE activo = true
+        AND id_tenant = $1
       ORDER BY especie
     `;
 
-    const result = await query(queryText);
+    const result = await query(queryText, [tenantId]);
     const especies = result.rows.map(row => row.especie);
 
     // Agregar especies comunes si no están en la base de datos
@@ -826,15 +854,19 @@ export async function getEspecies(req, res) {
 export async function getRazasByEspecie(req, res) {
   try {
     const { especie } = req.params;
+    const tenantId = req.tenantId;
 
     const queryText = `
       SELECT DISTINCT raza 
       FROM clinical.mascotas 
-      WHERE especie = $1 AND raza IS NOT NULL AND activo = true 
+      WHERE especie = $1
+        AND raza IS NOT NULL
+        AND activo = true
+        AND id_tenant = $2
       ORDER BY raza
     `;
 
-    const result = await query(queryText, [especie]);
+    const result = await query(queryText, [especie, tenantId]);
     const razas = result.rows.map(row => row.raza);
 
     // Razas predefinidas por especie
@@ -1226,7 +1258,7 @@ export async function inactivarMascota(req, res) {
       `SELECT
         (SELECT COUNT(*) FROM clinical.consultas_clinicas WHERE id_mascota = $1 AND id_tenant = $2) AS consultas,
         (SELECT COUNT(*) FROM clinical.calendario_citas
-         WHERE id_mascota = $1 AND id_tenant = $2 AND estado NOT IN ('cancelada', 'completada')) AS citas_activas`,
+         WHERE id_mascota = $1 AND id_tenant = $2 AND estado IN ('confirmada', 'en_curso')) AS citas_activas`,
       [id, tenantId]
     );
 

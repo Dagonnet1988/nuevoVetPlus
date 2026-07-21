@@ -2,7 +2,7 @@ import { Component, OnInit, signal } from '@angular/core';
 import { extractError } from '../../utils/error.utils';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -122,7 +122,21 @@ export class EditarPropietarioDialogComponent {
     if (this.form.invalid || this.saving()) return;
     this.saving.set(true);
 
-    this.clientesService.updateCliente(this.data.id_cliente, this.form.value).subscribe({
+    const raw = this.form.value;
+    const normalize = (value: any) => {
+      const val = String(value ?? '').trim();
+      return val.length ? val : null;
+    };
+
+    const payload: any = {
+      nombre: String(raw.nombre || '').trim(),
+      telefono: normalize(raw.telefono),
+      email: normalize(raw.email),
+      direccion: normalize(raw.direccion),
+      cedula: normalize(raw.cedula)
+    };
+
+    this.clientesService.updateCliente(this.data.id_cliente, payload).subscribe({
       next: (updated) => {
         this.saving.set(false);
         this.snackBar.open('Propietario actualizado', 'OK', { duration: 3000 });
@@ -270,7 +284,8 @@ export class MascotasPropietarioDialogComponent implements OnInit {
     <mat-dialog-content style="min-width:360px;max-width:500px;padding:16px 24px">
       <app-consentimiento-status
         [idCliente]="data.id_cliente"
-        [clienteNombre]="data.nombre">
+        [clienteNombre]="data.nombre"
+        [clienteTelefono]="data.telefono || null">
       </app-consentimiento-status>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
@@ -319,7 +334,8 @@ export class PropietariosComponent implements OnInit {
     private clientesService: ClientesService,
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
-    private router: Router
+    private router: Router,
+    private route: ActivatedRoute
   ) {
     this.searchForm = this.fb.group({
       search: [''],
@@ -328,6 +344,11 @@ export class PropietariosComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    const initialSearch = String(this.route.snapshot.queryParamMap.get('search') || '').trim();
+    if (initialSearch) {
+      this.searchForm.patchValue({ search: initialSearch }, { emitEvent: false });
+    }
+
     this.cargarPropietarios();
 
     // Búsqueda con debounce manual

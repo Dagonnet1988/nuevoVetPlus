@@ -318,6 +318,10 @@
   gap: 8px;
 }
 
+.group-columns.single-column {
+  grid-template-columns: 1fr;
+}
+
 .group-compact-item {
   min-height: 38px;
   border: 1px solid #e8edf3;
@@ -380,6 +384,39 @@
 
 .historia-item {
   border-left: 3px solid #2563eb;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.historia-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-start;
+}
+
+.historia-link {
+  border: 1px solid #dbe5f5;
+  background: #f8fbff;
+  color: #1f3b6e;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.historia-link mat-icon {
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
+}
+
+.historia-link:hover {
+  background: #edf4ff;
+  border-color: #c9d9f4;
 }
 
 .is-clickable {

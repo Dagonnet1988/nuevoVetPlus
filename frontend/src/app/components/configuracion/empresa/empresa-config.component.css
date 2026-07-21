@@ -129,6 +129,208 @@
   flex: 1;
 }
 
+.dias-especiales-header h3 {
+  margin: 0;
+}
+
+.dias-especiales-header p {
+  margin: 6px 0 18px;
+  color: #666;
+}
+
+.dias-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.summary-item {
+  border: 1px solid #dfe4ea;
+  border-radius: 10px;
+  padding: 10px 14px;
+  min-width: 110px;
+  background: #fafcff;
+  display: flex;
+  flex-direction: column;
+}
+
+.summary-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1f4e78;
+  line-height: 1;
+}
+
+.summary-label {
+  margin-top: 4px;
+  color: #5f6b7a;
+  font-size: 12px;
+}
+
+.dias-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  z-index: 1200;
+}
+
+.dias-modal {
+  position: fixed;
+  z-index: 1201;
+  inset: 4vh 5vw;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 24px 72px rgba(15, 23, 42, 0.35);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.dias-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px 20px 10px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.dias-modal-header h3 {
+  margin: 0;
+}
+
+.dias-modal-header p {
+  margin: 4px 0 0;
+  color: #64748b;
+}
+
+.dias-modal-filters {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 20px 0;
+}
+
+.filter-field {
+  min-width: 160px;
+  flex: 1;
+}
+
+.filter-search {
+  min-width: 240px;
+  flex: 2;
+}
+
+.dias-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 20px 0;
+}
+
+.dias-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.dias-list {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 20px 20px;
+  max-height: 45vh;
+  overflow-y: auto;
+}
+
+.dia-item {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.dia-main {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.dia-type {
+  background: #f3f6fb;
+  border: 1px solid #d6e0ef;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.tipo-festivo {
+  background: #fff8e1;
+  border-color: #ffe082;
+  color: #8d6e00;
+}
+
+.tipo-no_laborable {
+  background: #ffebee;
+  border-color: #ef9a9a;
+  color: #b71c1c;
+}
+
+.tipo-horario_especial {
+  background: #fff3e0;
+  border-color: #ffb74d;
+  color: #e65100;
+}
+
+.tipo-cumpleanos {
+  background: #fce4ec;
+  border-color: #f8bbd0;
+  color: #ad1457;
+}
+
+.tipo-ausencia {
+  background: #e3f2fd;
+  border-color: #90caf9;
+  color: #1565c0;
+}
+
+.native-date-picker {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.dia-hours {
+  color: #3f51b5;
+  font-weight: 500;
+}
+
+.dia-item-actions {
+  display: flex;
+  align-items: center;
+}
+
+.locked-note {
+  color: #64748b;
+  font-size: 12px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+
+.empty-text {
+  color: #666;
+  margin: 0;
+}
+
 .time-field {
   min-width: 120px;
 }
@@ -145,5 +347,18 @@
 
   .time-field {
     min-width: unset;
+  }
+
+  .dia-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .dias-modal {
+    inset: 2vh 2vw;
+  }
+
+  .dias-modal-filters {
+    flex-direction: column;
   }
 }

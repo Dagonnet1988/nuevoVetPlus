@@ -44,6 +44,56 @@
   font-size: 16px;
 }
 
+/* Estadisticas rapidas */
+.quick-stats {
+  margin-bottom: 24px;
+}
+
+.stats-card {
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.stat-item mat-icon {
+  flex-shrink: 0;
+}
+
+.stat-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #607080;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.stat-value {
+  font-size: 14px;
+  color: #2c3e50;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
 /* Grid de configuraciones */
 .config-sections {
   display: grid;
@@ -99,6 +149,30 @@
   font-size: 28px;
   width: 28px;
   height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.section-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.section-status mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.status-text {
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .config-card mat-card-title {
@@ -137,6 +211,10 @@
   .config-sections {
     grid-template-columns: 1fr;
     gap: 16px;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
   }
 
   .page-title {

@@ -7,7 +7,7 @@
           <mat-icon [style.color]="getIconColor()">{{ stat.icon }}</mat-icon>
         </div>
       </div>
-      
+
       <div class="stats-value">
         <span class="value">{{ formatValue(stat.value) }}</span>
         @if (stat.trend) {
@@ -17,15 +17,15 @@
           </div>
         }
       </div>
-      
+
       @if (stat.subtitle) {
         <p class="stats-subtitle">{{ stat.subtitle }}</p>
       }
     </div>
-    
+
     @if (stat.route) {
       <div class="stats-action">
-        <button mat-button [routerLink]="stat.route" class="view-more-btn">
+        <button mat-button [routerLink]="stat.route" [queryParams]="stat.queryParams" class="view-more-btn">
           <mat-icon>arrow_forward</mat-icon>
         </button>
       </div>

@@ -287,6 +287,7 @@ export const getPetsByClient = async (req, res) => {
 export const updatePet = async (req, res) => {
     try {
         const { id } = req.params;
+        const tenantId = req.tenantId;
         const {
             nombre,
             especie,
@@ -302,9 +303,28 @@ export const updatePet = async (req, res) => {
 
         // Verificar que la mascota existe
         const mascotaExiste = await query(
-            'SELECT id_mascota FROM clinical.mascotas WHERE id_mascota = $1',
-            [id]
+            'SELECT id_mascota FROM clinical.mascotas WHERE id_mascota = $1 AND id_tenant = $2',
+            [id, tenantId]
         );
+        if (activo === false) {
+            const citasActivasResult = await query(
+                `SELECT COUNT(*) AS citas_activas
+                 FROM clinical.calendario_citas
+                 WHERE id_mascota = $1
+                   AND id_tenant = $2
+                   AND estado IN ('confirmada', 'en_curso')`,
+                [id, tenantId]
+            );
+
+            const citasActivas = parseInt(citasActivasResult.rows[0]?.citas_activas || '0', 10);
+            if (citasActivas > 0) {
+                return res.status(409).json({
+                    success: false,
+                    message: `No se puede desactivar la mascota porque tiene ${citasActivas} cita(s) activa(s).`
+                });
+            }
+        }
+
 
         if (mascotaExiste.rows.length === 0) {
             return res.status(404).json({
@@ -335,13 +355,13 @@ export const updatePet = async (req, res) => {
                 microchip = COALESCE($10, microchip),
                 activo = COALESCE($11, activo),
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id_mascota = $12
+            WHERE id_mascota = $12 AND id_tenant = $13
             RETURNING *
         `;
 
         const values = [
             nombre, especie, raza, edad, sexo, peso, color,
-            fecha_nacimiento, esterilizado, microchip, activo, id
+            fecha_nacimiento, esterilizado, microchip, activo, id, tenantId
         ];
 
         const result = await query(updateSQL, values);
@@ -389,11 +409,12 @@ export const updatePet = async (req, res) => {
 export const deletePet = async (req, res) => {
     try {
         const { id } = req.params;
+        const tenantId = req.tenantId;
 
         // Verificar que la mascota existe
         const mascotaExiste = await query(
-            'SELECT id_mascota FROM clinical.mascotas WHERE id_mascota = $1',
-            [id]
+            'SELECT id_mascota FROM clinical.mascotas WHERE id_mascota = $1 AND id_tenant = $2',
+            [id, tenantId]
         );
 
         if (mascotaExiste.rows.length === 0) {
@@ -403,17 +424,34 @@ export const deletePet = async (req, res) => {
             });
         }
 
+        const citasActivasResult = await query(
+            `SELECT COUNT(*) AS citas_activas
+             FROM clinical.calendario_citas
+             WHERE id_mascota = $1
+               AND id_tenant = $2
+               AND estado IN ('confirmada', 'en_curso')`,
+            [id, tenantId]
+        );
+
+        const citasActivas = parseInt(citasActivasResult.rows[0]?.citas_activas || '0', 10);
+        if (citasActivas > 0) {
+            return res.status(409).json({
+                success: false,
+                message: `No se puede desactivar la mascota porque tiene ${citasActivas} cita(s) activa(s).`
+            });
+        }
+
         // Soft delete
         const deleteSQL = `
             UPDATE clinical.mascotas 
             SET 
                 activo = false,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id_mascota = $1
+            WHERE id_mascota = $1 AND id_tenant = $2
             RETURNING nombre
         `;
 
-        const result = await query(deleteSQL, [id]);
+        const result = await query(deleteSQL, [id, tenantId]);
 
         res.json({
             success: true,

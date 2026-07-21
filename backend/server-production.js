@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import { randomUUID } from 'crypto';
 import DBInit from './src/database/DBInit.js';
 
 // Importar configuración de producción
@@ -89,18 +90,55 @@ console.log('═'.repeat(60));
 // Configurar trust proxy para obtener IP real
 app.set('trust proxy', 1);
 
+// Request ID para trazabilidad mínima en logs y respuestas
+app.use((req, res, next) => {
+    const headerRequestId = req.headers['x-request-id'];
+    req.id = typeof headerRequestId === 'string' && headerRequestId.trim()
+        ? headerRequestId.trim()
+        : randomUUID();
+    res.setHeader('X-Request-Id', req.id);
+    next();
+});
+
 // ============ MIDDLEWARE DE SEGURIDAD AVANZADA ============
 
 // Helmet con configuración personalizada
 app.use(helmet(config.security.helmet));
 
-// CORS optimizado
+const corsOriginRules = (config.security.corsOrigins || [])
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+function escapeRegex(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+const compiledCorsRules = corsOriginRules.map((rule) => {
+    if (rule === '*') {
+        return /^.*$/i;
+    }
+    const regexPattern = `^${escapeRegex(rule).replace(/\\\*/g, '[^.\\/:]+')}$`;
+    return new RegExp(regexPattern, 'i');
+});
+
+function isOriginAllowed(origin) {
+    if (!origin) return true;
+    if (compiledCorsRules.length === 0) return false;
+    return compiledCorsRules.some((rule) => rule.test(origin));
+}
+
+// CORS optimizado (soporta patrones wildcard como https://*.vetplus.com)
 app.use(cors({
-    origin: config.security.corsOrigins,
+    origin: (origin, callback) => {
+        if (isOriginAllowed(origin)) {
+            return callback(null, true);
+        }
+        return callback(new Error(`Origen no permitido por CORS: ${origin}`));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    exposedHeaders: ['X-Total-Count', 'X-Cache', 'X-RateLimit-Remaining']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Tenant-Slug', 'X-Request-Id'],
+    exposedHeaders: ['X-Total-Count', 'X-Cache', 'X-RateLimit-Remaining', 'X-Request-Id']
 }));
 
 // Rate limiting global
@@ -128,6 +166,7 @@ app.use(preventSQLInjection);
 
 // Logging avanzado
 if (config.logging.requests) {
+    morgan.token('reqId', (req) => req.id || 'unknown');
     app.use(morgan(config.app.env === 'production' ? 'combined' : 'dev'));
 }
 

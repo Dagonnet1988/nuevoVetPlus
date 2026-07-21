@@ -1,5 +1,5 @@
 import { Component, OnInit, signal, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -32,6 +32,7 @@ import { ConsultasService, ConsultaClinica } from '../../../services/consultas.s
 export class ConsultaDetailsComponent implements OnInit {
   private router = inject(Router);
   private route = inject(ActivatedRoute);
+  private location = inject(Location);
   private consultasService = inject(ConsultasService);
   private snackBar = inject(MatSnackBar);
 
@@ -84,6 +85,11 @@ export class ConsultaDetailsComponent implements OnInit {
   }
 
   onBack(): void {
+    if (window.history.length > 1) {
+      this.location.back();
+      return;
+    }
+
     this.router.navigate(['/historia-clinica']);
   }
 
