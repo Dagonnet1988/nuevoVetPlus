@@ -1,7 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { Observable, tap, catchError, throwError } from 'rxjs';
+import { Observable, tap, catchError, throwError, finalize } from 'rxjs';
 import { LoginRequest, LoginResponse, User, PasswordChangeRequest, ApiResponse } from '../models/auth.interface';
 import { environment } from '../../environments/environment';
 
@@ -14,6 +14,30 @@ export class AuthService {
   private readonly REFRESH_TOKEN_KEY = 'vetplus_refresh_token';
   private readonly USER_KEY = 'vetplus_user';
   private readonly THEME_KEY = 'vetplus_theme';
+
+  private storageGet(key: string): string | null {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
+
+  private storageSet(key: string, value: string): void {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // Ignorar errores de storage (Safari/Firefox en modos restrictivos)
+    }
+  }
+
+  private storageRemove(key: string): void {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // Ignorar errores de storage
+    }
+  }
 
   // Signals para Angular 20 - Estado reactivo
   public currentUser = signal<User | null>(null);
@@ -39,37 +63,49 @@ export class AuthService {
     return this.http.post<any>(`${this.API_URL}/auth/login`, credentials)
       .pipe(
         tap(response => {
-          if (response.success && response.data) {
-            // Extraer token, refreshToken y user de response.data
-            const { token, refreshToken, user, must_change_password } = response.data;
-
-            // Convertir formato del backend al formato esperado por el frontend
-            const frontendUser = {
-              id_usuario: user.id,
-              email: user.email,
-              documento: user.documento,
-              nombre: user.nombre,
-              apellido: user.apellido,
-              rol: user.rol,
-              activo: true,
-              primer_acceso: must_change_password || false,
-              created_at: new Date().toISOString()
-            };
-
-            this.setUserSession(token, refreshToken, frontendUser);
-
-            // Redirigir según el estado del usuario
-            if (must_change_password) {
-              this.router.navigate(['/change-password']);
-            } else {
-              this.router.navigate(['/dashboard']);
-            }
+          if (!response?.success) {
+            return;
           }
-          this.loading.set(false);
+
+          const payload = response?.data ?? response;
+          const token = payload?.token;
+          const refreshToken = payload?.refreshToken;
+          const user = payload?.user;
+          const mustChangePassword = !!payload?.must_change_password;
+
+          // Evita bloquear el flujo si el backend cambia el shape del payload.
+          if (!token || !refreshToken || !user) {
+            throw new Error('Respuesta de login incompleta');
+          }
+
+          // Convertir formato del backend al formato esperado por el frontend
+          const frontendUser = {
+            id_usuario: user.id,
+            email: user.email,
+            documento: user.documento,
+            nombre: user.nombre,
+            apellido: user.apellido,
+            avatar_url: user.avatar_url,
+            rol: user.rol,
+            activo: true,
+            primer_acceso: mustChangePassword,
+            created_at: new Date().toISOString()
+          };
+
+          this.setUserSession(token, refreshToken, frontendUser);
+
+          // Redirigir según el estado del usuario
+          if (mustChangePassword) {
+            this.router.navigate(['/change-password']);
+          } else {
+            this.router.navigate(['/dashboard']);
+          }
         }),
         catchError(error => {
-          this.loading.set(false);
           return throwError(() => error);
+        }),
+        finalize(() => {
+          this.loading.set(false);
         })
       );
   }
@@ -94,9 +130,9 @@ export class AuthService {
   }
 
   private clearSession(): void {
-    localStorage.removeItem(this.TOKEN_KEY);
-    localStorage.removeItem(this.REFRESH_TOKEN_KEY);
-    localStorage.removeItem(this.USER_KEY);
+    this.storageRemove(this.TOKEN_KEY);
+    this.storageRemove(this.REFRESH_TOKEN_KEY);
+    this.storageRemove(this.USER_KEY);
     this.currentUser.set(null);
     this.authStatus.set(false);
     this.router.navigate(['/login']);
@@ -118,7 +154,7 @@ export class AuthService {
             if (currentUser) {
               const updatedUser = { ...currentUser, primer_acceso: false };
               this.currentUser.set(updatedUser);
-              localStorage.setItem(this.USER_KEY, JSON.stringify(updatedUser));
+              this.storageSet(this.USER_KEY, JSON.stringify(updatedUser));
             }
           }
           this.loading.set(false);
@@ -128,6 +164,14 @@ export class AuthService {
           return throwError(() => error);
         })
       );
+  }
+
+  forgotPassword(payload: { email?: string; documento?: string }): Observable<ApiResponse> {
+    return this.http.post<ApiResponse>(`${this.API_URL}/auth/forgot-password`, payload);
+  }
+
+  resetPasswordWithToken(payload: { token: string; newPassword: string; confirmPassword: string }): Observable<ApiResponse> {
+    return this.http.post<ApiResponse>(`${this.API_URL}/auth/reset-password`, payload);
   }
 
   mustChangePassword(): boolean {
@@ -140,17 +184,17 @@ export class AuthService {
   // ===============================
 
   private setUserSession(token: string, refreshToken: string, user: User): void {
-    localStorage.setItem(this.TOKEN_KEY, token);
-    localStorage.setItem(this.REFRESH_TOKEN_KEY, refreshToken);
-    localStorage.setItem(this.USER_KEY, JSON.stringify(user));
+    this.storageSet(this.TOKEN_KEY, token);
+    this.storageSet(this.REFRESH_TOKEN_KEY, refreshToken);
+    this.storageSet(this.USER_KEY, JSON.stringify(user));
     this.currentUser.set(user);
     this.authStatus.set(true);
   }
 
   private loadUserFromStorage(): void {
     try {
-      const token = localStorage.getItem(this.TOKEN_KEY);
-      const userJson = localStorage.getItem(this.USER_KEY);
+      const token = this.storageGet(this.TOKEN_KEY);
+      const userJson = this.storageGet(this.USER_KEY);
 
       if (token && userJson) {
         // Verificar si el token está expirado antes de autenticar
@@ -186,7 +230,7 @@ export class AuthService {
   // Método auxiliar para verificar expiración
   private isTokenExpired(token: string): boolean {
     try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
+      const payload = this.decodeJwtPayload(token);
       const expirationTime = payload.exp * 1000;
       return Date.now() >= expirationTime;
     } catch (error) {
@@ -195,11 +239,11 @@ export class AuthService {
   }
 
   getToken(): string | null {
-    return localStorage.getItem(this.TOKEN_KEY);
+    return this.storageGet(this.TOKEN_KEY);
   }
 
   getRefreshToken(): string | null {
-    return localStorage.getItem(this.REFRESH_TOKEN_KEY);
+    return this.storageGet(this.REFRESH_TOKEN_KEY);
   }
 
   // Verificar si el token está próximo a expirar
@@ -208,7 +252,7 @@ export class AuthService {
     if (!token) return true;
 
     try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
+      const payload = this.decodeJwtPayload(token);
       const expirationTime = payload.exp * 1000; // Convertir a milisegundos
       const currentTime = Date.now();
       const timeUntilExpiry = expirationTime - currentTime;
@@ -218,6 +262,19 @@ export class AuthService {
     } catch (error) {
       return true;
     }
+  }
+
+  private decodeJwtPayload(token: string): any {
+    const parts = token.split('.');
+    if (parts.length < 2) {
+      throw new Error('Invalid JWT format');
+    }
+
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+
+    return JSON.parse(atob(padded));
   }
 
   // Refrescar token automáticamente
@@ -233,8 +290,8 @@ export class AuthService {
         tap(response => {
           if (response.success && response.data) {
             const { token, refreshToken: newRefreshToken } = response.data;
-            localStorage.setItem(this.TOKEN_KEY, token);
-            localStorage.setItem(this.REFRESH_TOKEN_KEY, newRefreshToken);
+            this.storageSet(this.TOKEN_KEY, token);
+            this.storageSet(this.REFRESH_TOKEN_KEY, newRefreshToken);
             console.log('Token refrescado automáticamente');
           }
         }),
@@ -259,7 +316,7 @@ export class AuthService {
   // VERIFICACIÓN DE ROLES
   // ===============================
 
-  hasRole(role: 'admin' | 'vet' | 'aux_admin' | 'aux_vet'): boolean {
+  hasRole(role: 'admin' | 'vet' | 'aux'): boolean {
     const user = this.currentUser();
     return user?.rol === role;
   }
@@ -273,19 +330,19 @@ export class AuthService {
   }
 
   isAuxAdmin(): boolean {
-    return this.hasRole('aux_admin');
+    return this.hasRole('aux');
   }
 
   isAuxVet(): boolean {
-    return this.hasRole('aux_vet');
+    return this.hasRole('aux');
   }
 
   isAux(): boolean {
-    return this.hasRole('aux_admin') || this.hasRole('aux_vet');
+    return this.hasRole('aux');
   }
 
   // Verificar múltiples roles
-  hasAnyRole(roles: ('admin' | 'vet' | 'aux_admin' | 'aux_vet')[]): boolean {
+  hasAnyRole(roles: ('admin' | 'vet' | 'aux')[]): boolean {
     const user = this.currentUser();
     return roles.includes(user?.rol as any);
   }
@@ -300,37 +357,26 @@ export class AuthService {
     return this.hasAnyRole(['admin', 'vet']);
   }
 
-  // Verificar si puede acceder a funciones financieras
-  canAccessFinancial(): boolean {
-    return this.hasAnyRole(['admin', 'aux_admin']);
-  }
-
   // ===============================
   // GESTIÓN DE TEMAS
   // ===============================
 
   setTheme(theme: 'light' | 'dark' | 'blue'): void {
-    this.currentTheme.set(theme);
-    localStorage.setItem(this.THEME_KEY, theme);
+    // Tema único oficial: siempre light.
+    this.currentTheme.set('light');
+    this.storageSet(this.THEME_KEY, 'light');
 
     // Aplicar clase CSS al body
     document.body.className = document.body.className.replace(/\w*-theme/g, '');
-    if (theme !== 'light') {
-      document.body.classList.add(`${theme}-theme`);
-    }
   }
 
   loadThemeFromStorage(): void {
-    const savedTheme = localStorage.getItem(this.THEME_KEY) as 'light' | 'dark' | 'blue';
-    this.setTheme(savedTheme || 'light');
+    this.storageRemove(this.THEME_KEY);
+    this.setTheme('light');
   }
 
   toggleTheme(): void {
-    const currentTheme = this.currentTheme();
-    const themes: ('light' | 'dark' | 'blue')[] = ['light', 'dark', 'blue'];
-    const currentIndex = themes.indexOf(currentTheme as any);
-    const nextIndex = (currentIndex + 1) % themes.length;
-    this.setTheme(themes[nextIndex]);
+    this.setTheme('light');
   }
 
   // ===============================
@@ -350,11 +396,18 @@ export class AuthService {
     switch (role) {
       case 'admin': return 'Administrador';
       case 'vet': return 'Veterinario';
-      case 'aux_admin': return 'Auxiliar Administrativo';
-      case 'aux_vet': return 'Auxiliar Veterinario';
-      case 'aux': return 'Auxiliar'; // For backward compatibility
+      case 'aux': return 'Auxiliar';
       default: return 'Usuario';
     }
+  }
+
+  getCurrentUserAvatar(): string {
+    const avatar = this.currentUser()?.avatar_url;
+    if (!avatar) return '';
+    if (/^https?:\/\//i.test(avatar)) return avatar;
+
+    const apiBase = this.API_URL.replace(/\/api\/?$/, '');
+    return `${apiBase}${avatar.startsWith('/') ? '' : '/'}${avatar}`;
   }
 
   // Verificar si el usuario está activo
@@ -369,7 +422,7 @@ export class AuthService {
         tap(response => {
           if (response.success && response.data) {
             this.currentUser.set(response.data);
-            localStorage.setItem(this.USER_KEY, JSON.stringify(response.data));
+            this.storageSet(this.USER_KEY, JSON.stringify(response.data));
           }
         })
       );

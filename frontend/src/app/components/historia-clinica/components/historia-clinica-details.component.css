@@ -1,0 +1,649 @@
+.historia-details-container {
+  padding: 24px;
+  max-width: 960px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── LOADING / ERROR ── */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  gap: 16px;
+  color: #666;
+}
+
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 80px 24px;
+  color: #999;
+}
+
+/* ── HEADER ── */
+.details-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px 24px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+}
+
+.btn-back {
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.header-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.header-top-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.tipo-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 4px 8px;
+  border-radius: 20px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.tipo-chip mat-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}
+
+.estado-chip {
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  background: #e0e0e0;
+  color: #555;
+}
+
+.estado-chip.estado-completado {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.estado-chip.estado-anulado {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.doc-title {
+  margin: 0 0 4px 0;
+  font-size: 26px;
+  font-weight: 600;
+  color: #1a1a1a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.doc-fecha {
+  margin: 0;
+  font-size: 14px;
+  color: #777;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* ── INFO CARD ── */
+.info-card {
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08) !important;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.info-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #f9f9f9;
+  border-radius: 8px;
+}
+
+.info-icon {
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+  color: #2e7d32;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.info-item > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.info-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: #888;
+}
+
+.info-value {
+  font-size: 15px;
+  font-weight: 500;
+  color: #1a1a1a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.info-sub {
+  font-size: 12px;
+  color: #888;
+}
+
+/* ── SECTION CARDS ── */
+.datos-card {
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08) !important;
+  overflow: hidden;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  background: linear-gradient(90deg, #f1f8e9, #fff);
+  border-left: 4px solid #4caf50;
+}
+
+.section-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #2e7d32;
+}
+
+.section-icon {
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+  color: #4caf50;
+}
+
+/* ── DATOS GRID ── */
+.datos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.dato-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dato-texto-multiline {
+  white-space: pre-line;
+}
+
+.dato-item.full {
+  grid-column: 1 / -1;
+}
+
+.dato-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: #888;
+}
+
+.dato-texto {
+  margin: 0;
+  font-size: 14px;
+  color: #333;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  background: #fafafa;
+  border-left: 3px solid #c8e6c9;
+  padding: 8px 12px;
+  border-radius: 0 6px 6px 0;
+}
+
+.dato-costo {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2e7d32;
+}
+
+.seguimiento-checklist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.seguimiento-checklist-card {
+  border: 1px solid #e5e7eb;
+  background: #f8fafc;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.seguimiento-checklist-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #475569;
+  letter-spacing: 0.35px;
+}
+
+.seguimiento-checklist-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.seguimiento-check-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid #e7edf4;
+}
+
+.seguimiento-check-item mat-icon {
+  color: #2e7d32;
+  font-size: 17px;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+}
+
+.seguimiento-check-item span {
+  font-size: 13px;
+  color: #1f2937;
+  line-height: 1.35;
+}
+
+.mt-16 {
+  margin-top: 16px;
+}
+
+/* ── TABLA MEDICAMENTOS ── */
+.table-wrapper {
+  overflow-x: auto;
+  margin: 0 -8px;
+}
+
+.med-table {
+  width: 100%;
+  min-width: 480px;
+}
+
+.med-table th {
+  background: #f5f5f5;
+  font-weight: 600;
+  color: #555;
+}
+
+.formula-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.formula-item {
+  border: 1px solid #dde6ef;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbfd 100%);
+  padding: 12px;
+}
+
+.formula-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.formula-item-head h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.formula-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid #cfe0f3;
+  background: #eef5fd;
+  color: #1f4f86;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.formula-item-meta {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.formula-item-meta span {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #f2f6fa;
+  color: #465a6d;
+  font-size: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.formula-item-notes {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.45;
+  background: #f8fafc;
+  border-left: 3px solid #cbd5e1;
+  border-radius: 0 6px 6px 0;
+  padding: 8px 10px;
+}
+
+/* ── MEDIDAS CLINICAS ── */
+.assessment-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.measure-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.measure-card-title {
+  padding: 10px 14px;
+  background: linear-gradient(90deg, #f7fbff 0%, #eef7f2 100%);
+  border-bottom: 1px solid #e8edf2;
+  font-size: 13px;
+  font-weight: 700;
+  color: #2f5f5a;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.measure-subgroup {
+  padding: 10px 12px 12px;
+}
+
+.measure-subgroup + .measure-subgroup {
+  border-top: 1px dashed #e5e7eb;
+}
+
+.measure-subtitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: #51606f;
+  margin: 0 0 8px;
+}
+
+.measure-table-wrap {
+  overflow-x: auto;
+}
+
+.measure-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 460px;
+  font-size: 13px;
+}
+
+.measure-table th,
+.measure-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #edf1f5;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.measure-table th {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.45px;
+  text-transform: uppercase;
+  color: #64748b;
+  background: #f8fafc;
+}
+
+.measure-table tbody tr:nth-child(even) {
+  background: #fbfcfd;
+}
+
+.measure-table-compact {
+  min-width: 420px;
+}
+
+.measure-table td:nth-child(2),
+.measure-table td:nth-child(3),
+.measure-table th:nth-child(2),
+.measure-table th:nth-child(3) {
+  width: 130px;
+}
+
+/* ── ARCHIVOS ── */
+.archivos-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.archivo-item {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  background: #fafafa;
+}
+
+.archivo-thumb {
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #d9dee5;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.archivo-thumb-pdf {
+  background: #fff;
+  overflow: hidden;
+}
+
+.pdf-tile {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #c62828;
+  background: #fff5f5;
+}
+
+.pdf-tile mat-icon {
+  font-size: 36px;
+  width: 36px;
+  height: 36px;
+}
+
+.pdf-tile span {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.archivo-thumb-file.file-pdf { color: #c62828; background: #fff5f5; }
+.archivo-thumb-file.file-doc,
+.archivo-thumb-file.file-docx,
+.archivo-thumb-file.file-txt { color: #1565c0; background: #f3f8ff; }
+.archivo-thumb-file.file-xls,
+.archivo-thumb-file.file-xlsx,
+.archivo-thumb-file.file-csv { color: #2e7d32; background: #f1fbf3; }
+.archivo-thumb-file.file-jpg,
+.archivo-thumb-file.file-jpeg,
+.archivo-thumb-file.file-png,
+.archivo-thumb-file.file-webp { color: #6a1b9a; background: #faf4ff; }
+.archivo-thumb-file.file-generic { color: #455a64; background: #f3f5f7; }
+
+.archivo-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.archivo-nombre {
+  font-size: 14px;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.archivo-meta {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.archivo-desc {
+  font-size: 12px;
+  color: #888;
+}
+
+.archivo-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.archivo-actions button[mat-stroked-button] {
+  flex: 1;
+}
+
+@media (max-width: 640px) {
+  .archivos-list {
+    grid-template-columns: 1fr;
+  }
+
+  .archivo-thumb {
+    height: 160px;
+  }
+}
+
+/* ── MENÚ OPCIONES ── */
+.menu-anular {
+  color: #c62828;
+}
+
+.menu-anular mat-icon {
+  color: #c62828;
+}
+
+.menu-badge-soon {
+  font-size: 10px;
+  background: #fff3e0;
+  color: #e65100;
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 8px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+/* ── PRINT ── */
+@media print {
+  .details-header .btn-back,
+  .details-header .header-actions {
+    display: none !important;
+  }
+
+  .historia-details-container {
+    padding: 0;
+    max-width: 100%;
+  }
+
+  .datos-card,
+  .info-card,
+  .details-header {
+    box-shadow: none !important;
+    border: 1px solid #ddd;
+    break-inside: avoid;
+  }
+}
+
+@media (max-width: 680px) {
+  .measure-table {
+    min-width: 380px;
+    font-size: 12px;
+  }
+
+  .measure-card-title {
+    font-size: 12px;
+  }
+}

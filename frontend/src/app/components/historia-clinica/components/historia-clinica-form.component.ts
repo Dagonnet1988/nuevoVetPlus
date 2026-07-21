@@ -1,1250 +1,1552 @@
-import { Component, OnInit, signal, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { FormBuilder, FormGroup, FormArray, Validators, ReactiveFormsModule } from '@angular/forms';
+import { Component, OnInit, OnDestroy, HostListener, signal } from '@angular/core';
+import { CommonModule, Location } from '@angular/common';
+import { FormBuilder, FormGroup, FormArray, Validators, ReactiveFormsModule, FormControl } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
-import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
+import { CdkTextareaAutosize } from '@angular/cdk/text-field';
+import { CanComponentDeactivate } from '../../../guards/unsaved-changes.guard';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
-import { MatDatepickerModule } from '@angular/material/datepicker';
-import { MatNativeDateModule } from '@angular/material/core';
-import { MatChipsModule } from '@angular/material/chips';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatTabsModule } from '@angular/material/tabs';
 import { MatExpansionModule } from '@angular/material/expansion';
+import { MatDividerModule } from '@angular/material/divider';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatTabsModule } from '@angular/material/tabs';
+import { MatDialogModule } from '@angular/material/dialog';
+import { MatStepperModule } from '@angular/material/stepper';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 
-import { ConsultasService, ConsultaClinica } from '../../../services/consultas.service';
+import { HistoriaClinicaService, TipoDocumento, TIPO_LABELS, TIPO_ICONS } from '../../../services/historia-clinica.service';
 import { PacientesService } from '../../../services/pacientes.service';
 import { CitasService } from '../../../services/citas.service';
-import { ProductosService, Producto } from '../../../services/productos.service';
+
+type EjercicioCategoriaKey = 'calentamiento' | 'fortalecimiento' | 'hidroterapia' | 'pasivos' | 'agentes';
 
 @Component({
   selector: 'app-historia-clinica-form',
   standalone: true,
   imports: [
-    CommonModule,
-    ReactiveFormsModule,
-    MatCardModule,
-    MatButtonModule,
-    MatIconModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
-    MatDatepickerModule,
-    MatNativeDateModule,
-    MatChipsModule,
-    MatAutocompleteModule,
-    MatSnackBarModule,
-    MatProgressSpinnerModule,
-    MatTabsModule,
-    MatExpansionModule,
-    MatCheckboxModule
+    CommonModule, ReactiveFormsModule,
+    MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule,
+    MatSelectModule, MatAutocompleteModule, MatSnackBarModule,
+    MatProgressSpinnerModule, MatExpansionModule, MatDividerModule, MatTooltipModule,
+    MatTabsModule, MatDialogModule, MatStepperModule, MatCheckboxModule, CdkTextareaAutosize
   ],
-  template: `
-    <div class="historia-clinica-form-container">
-      <!-- Header -->
-      <div class="form-header">
-        <div class="header-content">
-          <button mat-icon-button (click)="goBack()" class="back-button">
-            <mat-icon>arrow_back</mat-icon>
-          </button>
-          <div class="title-section">
-            <h1 class="form-title">
-              <mat-icon class="title-icon">assignment_add</mat-icon>
-              {{ isEdit() ? 'Editar Consulta' : 'Nueva Consulta Clínica' }}
-            </h1>
-            <p class="form-subtitle">{{ isEdit() ? 'Modificar información de la historia clínica' : 'Registrar nueva historia clínica médica' }}</p>
-          </div>
-          <div class="actions-section">
-            <button mat-stroked-button
-                    type="button"
-                    (click)="resetForm()"
-                    [disabled]="loading()">
-              <mat-icon>refresh</mat-icon>
-              Limpiar
-            </button>
-            <button mat-raised-button
-                    color="primary"
-                    (click)="saveHistoriaClinica()"
-                    [disabled]="consultaForm.invalid || loading()">
-              <mat-icon>save</mat-icon>
-              {{ isEdit() ? 'Actualizar' : 'Guardar' }}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Formulario -->
-      <form [formGroup]="consultaForm" class="consulta-form">
-
-        <!-- Información básica -->
-        <mat-card class="form-section">
-          <mat-card-header>
-            <mat-card-title>
-              <mat-icon>info</mat-icon>
-              Información Básica
-            </mat-card-title>
-          </mat-card-header>
-          <mat-card-content>
-            <div class="form-row">
-              <mat-form-field appearance="outline" class="mascota-field">
-                <mat-label>Paciente *</mat-label>
-                <mat-select formControlName="id_mascota"
-                           required>
-                  <mat-option value="">Seleccionar paciente...</mat-option>
-                  @for (paciente of pacientes(); track paciente.id_mascota || paciente.id_cliente || $index) {
-                    <mat-option [value]="paciente.id_mascota">
-                      {{ paciente.nombre }} - {{ paciente.cliente?.nombre }}
-                    </mat-option>
-                  }
-                </mat-select>
-                <mat-error *ngIf="consultaForm.get('id_mascota')?.hasError('required')">
-                  El paciente es obligatorio
-                </mat-error>
-              </mat-form-field>
-
-              <mat-form-field appearance="outline" class="veterinario-field">
-                <mat-label>Veterinario *</mat-label>
-                <mat-select formControlName="id_veterinario"
-                           required>
-                  <mat-option value="">Seleccionar veterinario...</mat-option>
-                  @for (vet of veterinarios(); track vet.id_usuario || vet.id || $index) {
-                    <mat-option [value]="vet.id_usuario || vet.id">{{ vet.nombre }}</mat-option>
-                  }
-                </mat-select>
-                <mat-error *ngIf="consultaForm.get('id_veterinario')?.hasError('required')">
-                  El veterinario es obligatorio
-                </mat-error>
-              </mat-form-field>
-
-              <mat-form-field appearance="outline" class="fecha-field">
-                <mat-label>Fecha y Hora *</mat-label>
-                <input matInput
-                       [matDatepicker]="picker"
-                       formControlName="fecha_consulta"
-                       required>
-                <mat-datepicker-toggle matIconSuffix [for]="picker"></mat-datepicker-toggle>
-                <mat-datepicker #picker></mat-datepicker>
-                <mat-error *ngIf="consultaForm.get('fecha_consulta')?.hasError('required')">
-                  La fecha es obligatoria
-                </mat-error>
-              </mat-form-field>
-            </div>
-
-            <div class="form-row">
-              <mat-form-field appearance="outline" class="full-width">
-                <mat-label>Motivo de Consulta *</mat-label>
-                <textarea matInput
-                          formControlName="motivo"
-                          rows="3"
-                          placeholder="Describe el motivo principal de la consulta..."
-                          required></textarea>
-                <mat-error *ngIf="consultaForm.get('motivo')?.hasError('required')">
-                  El motivo es obligatorio
-                </mat-error>
-              </mat-form-field>
-            </div>
-          </mat-card-content>
-        </mat-card>
-
-        <!-- Examen físico -->
-        <mat-card class="form-section">
-          <mat-card-header>
-            <mat-card-title>
-              <mat-icon>medical_services</mat-icon>
-              Examen Físico
-            </mat-card-title>
-          </mat-card-header>
-          <mat-card-content>
-            <mat-tab-group>
-              <mat-tab label="Signos Vitales">
-                <div class="tab-content">
-                  <div class="form-row">
-                    <mat-form-field appearance="outline">
-                      <mat-label>Temperatura (°C)</mat-label>
-                      <input matInput type="number" formControlName="temperatura" step="0.1" min="30" max="45">
-                      <mat-error *ngIf="consultaForm.get('temperatura')?.hasError('temperaturaInvalida')">
-                        {{ consultaForm.get('temperatura')?.errors?.['temperaturaInvalida'] }}
-                      </mat-error>
-                      <mat-error *ngIf="consultaForm.get('temperatura')?.hasError('temperaturaFueraRango')">
-                        {{ consultaForm.get('temperatura')?.errors?.['temperaturaFueraRango'] }}
-                      </mat-error>
-                      <mat-hint>Rango normal: 30°C - 45°C</mat-hint>
-                    </mat-form-field>
-                    <mat-form-field appearance="outline">
-                      <mat-label>Peso (kg)</mat-label>
-                      <input matInput type="number" formControlName="peso" step="0.1">
-                    </mat-form-field>
-                    <mat-form-field appearance="outline">
-                      <mat-label>Frecuencia Cardíaca</mat-label>
-                      <input matInput type="number" formControlName="frecuencia_cardiaca">
-                    </mat-form-field>
-                    <mat-form-field appearance="outline">
-                      <mat-label>Frecuencia Respiratoria</mat-label>
-                      <input matInput type="number" formControlName="frecuencia_respiratoria">
-                    </mat-form-field>
-                  </div>
-                </div>
-              </mat-tab>
-
-              <mat-tab label="Observaciones">
-                <div class="tab-content">
-                  <mat-form-field appearance="outline" class="full-width">
-                    <mat-label>Observaciones del Examen</mat-label>
-                    <textarea matInput
-                              formControlName="observaciones_examen"
-                              rows="4"
-                              placeholder="Describe los hallazgos del examen físico..."></textarea>
-                  </mat-form-field>
-                </div>
-              </mat-tab>
-            </mat-tab-group>
-          </mat-card-content>
-        </mat-card>
-
-        <!-- Diagnóstico y tratamiento -->
-        <mat-card class="form-section">
-          <mat-card-header>
-            <mat-card-title>
-              <mat-icon>healing</mat-icon>
-              Diagnóstico y Tratamiento
-            </mat-card-title>
-          </mat-card-header>
-          <mat-card-content>
-            <div class="form-row">
-              <mat-form-field appearance="outline" class="full-width">
-                <mat-label>Diagnóstico</mat-label>
-                <textarea matInput
-                          formControlName="diagnostico"
-                          rows="3"
-                          placeholder="Diagnóstico clínico..."></textarea>
-              </mat-form-field>
-            </div>
-
-            <div class="form-row">
-              <mat-form-field appearance="outline" class="full-width">
-                <mat-label>Plan de Tratamiento</mat-label>
-                <textarea matInput
-                          formControlName="tratamiento"
-                          rows="4"
-                          placeholder="Describe el plan de tratamiento, medicamentos, dosis, etc..."></textarea>
-              </mat-form-field>
-            </div>
-
-            <div class="form-row">
-              <mat-form-field appearance="outline" class="estado-field">
-                <mat-label>Estado de la Consulta</mat-label>
-                <mat-select formControlName="estado">
-                  @for (estado of estadosConsulta; track estado.value) {
-                    <mat-option [value]="estado.value">{{ estado.label }}</mat-option>
-                  }
-                </mat-select>
-              </mat-form-field>
-
-              <mat-form-field appearance="outline" class="proxima-cita-field">
-                <mat-label>Próxima Cita</mat-label>
-                <input matInput [matDatepicker]="nextPicker" formControlName="proxima_cita">
-                <mat-datepicker-toggle matIconSuffix [for]="nextPicker"></mat-datepicker-toggle>
-                <mat-datepicker #nextPicker></mat-datepicker>
-              </mat-form-field>
-            </div>
-          </mat-card-content>
-        </mat-card>
-
-        <!-- Medicamentos -->
-        <mat-card class="form-section">
-          <mat-card-header>
-            <mat-card-title>
-              <mat-icon>medication</mat-icon>
-              Medicamentos Prescritos
-            </mat-card-title>
-          </mat-card-header>
-          <mat-card-content>
-            <div formArrayName="medicamentos">
-              @for (medicamento of medicamentosArray.controls; track $index) {
-                <div [formGroupName]="$index" class="medicamento-item">
-                  <div class="medicamento-header">
-                    <h4>Medicamento {{ $index + 1 }}</h4>
-                    <button mat-icon-button
-                            type="button"
-                            color="warn"
-                            (click)="removeMedicamento($index)">
-                      <mat-icon>delete</mat-icon>
-                    </button>
-                  </div>
-
-                  <div class="form-row">
-                    <mat-form-field appearance="outline" class="nombre-medicamento-field">
-                      <mat-label>Nombre del Medicamento</mat-label>
-                      <input matInput
-                             formControlName="nombre"
-                             placeholder="Ej: Amoxicilina"
-                             (input)="onMedicamentoInput($event, $index)"
-                             [matAutocomplete]="autoMedicamentos">
-                      <mat-autocomplete #autoMedicamentos="matAutocomplete"
-                                       (optionSelected)="selectMedicamento($event.option.value, $index)">
-                        @for (medicamento of medicamentosInventario(); track medicamento.id_producto) {
-                          <mat-option [value]="medicamento">
-                            <div class="medicamento-option">
-                              <div class="medicamento-nombre">{{ medicamento.nombre }}</div>
-                              <div class="medicamento-info">
-                                <span class="stock">Stock: {{ medicamento.stock_actual }}</span>
-                                <span class="precio">Precio: {{ medicamento.precio_venta }}</span>
-                              </div>
-                            </div>
-                          </mat-option>
-                        }
-                      </mat-autocomplete>
-                    </mat-form-field>
-
-                    <mat-form-field appearance="outline" class="dosis-field">
-                      <mat-label>Dosis</mat-label>
-                      <input matInput
-                             formControlName="dosis"
-                             placeholder="Ej: 250mg">
-                    </mat-form-field>
-                  </div>
-
-                  <div class="form-row">
-                    <mat-form-field appearance="outline" class="frecuencia-field">
-                      <mat-label>Frecuencia</mat-label>
-                      <input matInput
-                             formControlName="frecuencia"
-                             placeholder="Ej: Cada 12 horas">
-                    </mat-form-field>
-
-                    <mat-form-field appearance="outline" class="duracion-field">
-                      <mat-label>Duración</mat-label>
-                      <input matInput
-                             formControlName="duracion"
-                             placeholder="Ej: 7 días">
-                    </mat-form-field>
-                  </div>
-                </div>
-              } @empty {
-                <div class="no-medicamentos">
-                  <p>No hay medicamentos agregados</p>
-                </div>
-              }
-            </div>
-
-            <div class="add-medicamento-section">
-              <button mat-stroked-button
-                      type="button"
-                      (click)="addMedicamento()"
-                      color="primary">
-                <mat-icon>add</mat-icon>
-                Agregar Medicamento
-              </button>
-            </div>
-          </mat-card-content>
-        </mat-card>
-
-        <!-- Notas adicionales -->
-        <mat-card class="form-section">
-          <mat-card-header>
-            <mat-card-title>
-              <mat-icon>notes</mat-icon>
-              Notas Adicionales
-            </mat-card-title>
-          </mat-card-header>
-          <mat-card-content>
-            <mat-form-field appearance="outline" class="full-width">
-              <mat-label>Notas</mat-label>
-              <textarea matInput
-                        formControlName="notas"
-                        rows="3"
-                        placeholder="Notas adicionales, observaciones especiales..."></textarea>
-            </mat-form-field>
-
-            <div class="checkbox-row">
-              <mat-checkbox formControlName="enviar_recordatorio">
-                Enviar recordatorio al propietario
-              </mat-checkbox>
-              <mat-checkbox formControlName="seguimiento_requerido">
-                Requiere seguimiento
-              </mat-checkbox>
-            </div>
-          </mat-card-content>
-        </mat-card>
-
-        <!-- Archivos adjuntos -->
-        <mat-card class="form-section">
-          <mat-card-header>
-            <mat-card-title>
-              <mat-icon>attach_file</mat-icon>
-              Archivos Adjuntos
-            </mat-card-title>
-          </mat-card-header>
-          <mat-card-content>
-            <div class="files-section">
-              <div class="file-upload-area">
-                <input type="file"
-                       #fileInput
-                       (change)="onFileSelected($event)"
-                       multiple
-                       accept="image/*,.pdf,.doc,.docx"
-                       style="display: none;">
-                <button mat-stroked-button
-                        type="button"
-                        (click)="fileInput.click()"
-                        color="primary">
-                  <mat-icon>cloud_upload</mat-icon>
-                  Seleccionar Archivos
-                </button>
-                <p class="upload-hint">Formatos permitidos: PDF, DOC, DOCX, imágenes (JPG, PNG, GIF)</p>
-              </div>
-
-              @if (archivosSeleccionados().length > 0) {
-                <div class="selected-files">
-                  <h5>Archivos seleccionados:</h5>
-                  <div class="files-list">
-                    @for (archivo of archivosSeleccionados(); track archivo.name) {
-                      <div class="file-item">
-                        <mat-icon class="file-icon">{{ getFileIcon(archivo.type) }}</mat-icon>
-                        <div class="file-info">
-                          <span class="file-name">{{ archivo.name }}</span>
-                          <span class="file-size">({{ formatFileSize(archivo.size) }})</span>
-                        </div>
-                        <button mat-icon-button
-                                (click)="removeFile(archivo)"
-                                color="warn">
-                          <mat-icon>delete</mat-icon>
-                        </button>
-                      </div>
-                    }
-                  </div>
-                </div>
-              }
-            </div>
-          </mat-card-content>
-        </mat-card>
-      </form>
-
-      <!-- Loading overlay -->
-      @if (loading()) {
-        <div class="loading-overlay">
-          <mat-spinner diameter="50"></mat-spinner>
-          <p>{{ isEdit() ? 'Actualizando' : 'Guardando' }} consulta...</p>
-        </div>
-      }
-    </div>
-  `,
+  templateUrl: './historia-clinica-form.component.html',
   styles: [`
-    .consulta-form-container {
-      padding: 24px;
-      max-width: 1200px;
-      margin: 0 auto;
-      position: relative;
-    }
-
-    /* Header mejorado */
-    .form-header {
-      margin-bottom: 32px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border-radius: 16px;
-      padding: 24px;
-      color: white;
-      box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
-    }
-
-    .header-content {
-      display: flex;
-      align-items: center;
-      gap: 20px;
-    }
-
-    .back-button {
-      background: rgba(255, 255, 255, 0.2);
-      color: white;
-      border: 1px solid rgba(255, 255, 255, 0.3);
-      backdrop-filter: blur(10px);
-      transition: all 0.3s ease;
-    }
-
-    .back-button:hover {
-      background: rgba(255, 255, 255, 0.3);
-      transform: translateY(-2px);
-    }
-
-    .title-section {
-      flex: 1;
-    }
-
-    .form-title {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      margin: 0 0 8px 0;
-      font-size: 32px;
-      font-weight: 600;
-      color: white;
-      text-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-
-    .title-icon {
-      font-size: 36px;
-      width: 36px;
-      height: 36px;
-      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
-    }
-
-    .form-subtitle {
-      margin: 0;
-      color: rgba(255, 255, 255, 0.9);
-      font-size: 18px;
-      font-weight: 300;
-    }
-
-    .actions-section {
-      display: flex;
-      gap: 16px;
-    }
-
-    .actions-section .mat-stroked-button {
-      color: white;
-      border-color: rgba(255, 255, 255, 0.5);
-      backdrop-filter: blur(10px);
-    }
-
-    .actions-section .mat-stroked-button:hover {
-      background: rgba(255, 255, 255, 0.1);
-      border-color: white;
-    }
-
-    .actions-section .mat-raised-button {
-      background: rgba(255, 255, 255, 0.2);
-      backdrop-filter: blur(10px);
-      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
-    }
-
-    .actions-section .mat-raised-button:hover {
-      background: rgba(255, 255, 255, 0.3);
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(0,0,0,0.3);
-    }
-
-    /* Form sections mejoradas */
-    .form-section {
-      margin-bottom: 32px;
-      border-radius: 16px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-      border: 1px solid rgba(255,255,255,0.8);
-      transition: all 0.3s ease;
-      overflow: hidden;
-    }
-
-    .form-section:hover {
-      box-shadow: 0 8px 32px rgba(0,0,0,0.12);
-      transform: translateY(-2px);
-    }
-
-    .form-section .mat-mdc-card-header {
-      padding: 24px 24px 16px 24px;
-      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-      border-bottom: 1px solid rgba(0,0,0,0.06);
-    }
-
-    .form-section .mat-mdc-card-title {
-      display: flex;
-      align-items: center;
+    :host { display: block; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
       gap: 12px;
-      color: #495057;
-      font-size: 20px;
-      font-weight: 600;
-      margin: 0;
     }
-
-    .form-section .mat-mdc-card-content {
-      padding: 24px;
+    .form-grid mat-form-field {
+      min-width: 0;
+      width: 100%;
+      grid-column: span 3;
     }
+    .form-grid .field-compact { grid-column: span 3; }
+    .form-grid .field-medium  { grid-column: span 4; }
+    .form-grid .field-third   { grid-column: span 4; }
+    .form-grid .field-half    { grid-column: span 6; }
+    .form-grid .field-full,
+    .form-grid .full-width { grid-column: 1 / -1; }
+    .form-grid .med-inline { grid-column: span 2; }
+    .form-grid .med-main { grid-column: span 4; }
 
-    /* Form layout */
-    .form-row {
+    .ejercicios-categorias {
       display: flex;
-      gap: 16px;
-      margin-bottom: 16px;
+      gap: 14px;
+      align-items: center;
       flex-wrap: wrap;
+      margin-bottom: 8px;
     }
 
-    .full-width {
+    .ejercicios-categoria-bloque {
+      margin-bottom: 10px;
+    }
+
+    .ejercicios-checklist {
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 10px;
+      background: #fafafa;
+      margin-bottom: 10px;
+    }
+
+    .ejercicios-checklist-title {
+      margin: 0 0 8px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #374151;
+      text-transform: uppercase;
+      letter-spacing: 0.2px;
+    }
+
+    .ejercicios-checklist-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px 12px;
+    }
+
+    .ejercicios-agente-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 180px;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .ejercicios-agente-zona {
       width: 100%;
     }
 
-    .mascota-field {
-      flex: 2;
-      min-width: 250px;
-    }
-
-    .veterinario-field {
-      flex: 1.5;
-      min-width: 200px;
-    }
-
-    .fecha-field {
-      flex: 1;
-      min-width: 180px;
-    }
-
-    .estado-field {
-      flex: 1;
-      min-width: 150px;
-    }
-
-    .proxima-cita-field {
-      flex: 1;
-      min-width: 180px;
-    }
-
-    /* Tabs */
-    .tab-content {
-      padding: 16px 0;
-    }
-
-    /* Checkboxes */
-    .checkbox-row {
-      display: flex;
-      gap: 24px;
-      margin-top: 16px;
-      flex-wrap: wrap;
-    }
-
-    /* Loading overlay */
-    .loading-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(255, 255, 255, 0.8);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 16px;
-      z-index: 1000;
-    }
-
-    .loading-overlay p {
-      margin: 0;
-      color: #666;
-      font-size: 16px;
-    }
-
-    /* Responsive */
-    @media (max-width: 768px) {
-      .consulta-form-container {
-        padding: 16px;
-      }
-
-      .header-content {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 16px;
-      }
-
-      .form-title {
-        font-size: 24px;
-      }
-
-      .form-row {
-        flex-direction: column;
-      }
-
-      .form-row > * {
-        flex: none !important;
-        min-width: auto !important;
-        width: 100%;
-      }
-
-      .checkbox-row {
-        flex-direction: column;
-        gap: 12px;
-      }
-    }
-
-    /* Estilos para medicamentos */
-    .medicamento-item {
-      border: 1px solid #e0e0e0;
+    .upload-box {
+      border: 1px dashed #cbd5e1;
       border-radius: 8px;
-      padding: 16px;
-      margin-bottom: 16px;
-      background-color: #fafafa;
-    }
-
-    .medicamento-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-    }
-
-    .medicamento-header h4 {
-      margin: 0;
-      color: #1976d2;
-      font-weight: 500;
-    }
-
-    .nombre-medicamento-field {
-      flex: 2;
-      margin-right: 16px;
-    }
-
-    .dosis-field {
-      flex: 1;
-    }
-
-    .frecuencia-field {
-      flex: 1;
-      margin-right: 16px;
-    }
-
-    .duracion-field {
-      flex: 1;
-    }
-
-    .no-medicamentos {
-      text-align: center;
-      padding: 32px;
-      color: #666;
-      font-style: italic;
-    }
-
-    .medicamento-option {
-      padding: 8px 0;
-    }
-
-    .medicamento-nombre {
-      font-weight: 500;
-      color: #333;
-    }
-
-    .medicamento-info {
-      display: flex;
-      gap: 12px;
-      font-size: 12px;
-      color: #666;
-      margin-top: 4px;
-    }
-
-    .stock {
-      background-color: #e8f5e8;
-      color: #2e7d32;
-      padding: 2px 6px;
-      border-radius: 4px;
-    }
-
-    .precio {
-      background-color: #e3f2fd;
-      color: #1976d2;
-      padding: 2px 6px;
-      border-radius: 4px;
-    }
-
-    .add-medicamento-section {
-      display: flex;
-      justify-content: center;
-      margin-top: 16px;
-    }
-
-    /* Archivos */
-    .files-section {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-
-    .file-upload-area {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 12px;
-      padding: 24px;
-      border: 2px dashed #e0e0e0;
-      border-radius: 8px;
+      padding: 12px;
       background: #fafafa;
+    }
+
+    .upload-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .upload-title {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+      color: #334155;
     }
 
     .upload-hint {
       margin: 0;
       font-size: 12px;
-      color: #666;
-      text-align: center;
+      color: #64748b;
     }
 
-    .selected-files h5 {
-      margin: 0 0 12px 0;
-      color: #333;
-      font-size: 16px;
-    }
-
-    .files-list {
+    .upload-list {
+      margin-top: 8px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 6px;
     }
 
-    .file-item {
+    .upload-item {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 12px;
-      background: #f8f9fa;
-      border-radius: 8px;
-      border: 1px solid #e0e0e0;
+      justify-content: space-between;
+      gap: 8px;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 6px 8px;
+      background: #fff;
     }
 
-    .file-icon {
-      color: #666;
-      flex-shrink: 0;
-    }
-
-    .file-info {
-      flex: 1;
+    .upload-item-main {
       display: flex;
-      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
     }
 
-    .file-name {
-      font-weight: 500;
-      color: #333;
-    }
-
-    .file-size {
+    .upload-item-name {
       font-size: 12px;
-      color: #666;
+      color: #111827;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
-    @media (max-width: 768px) {
-      .nombre-medicamento-field,
-      .frecuencia-field {
-        margin-right: 0;
-        margin-bottom: 16px;
-      }
+    .upload-item-size {
+      font-size: 11px;
+      color: #6b7280;
+    }
 
-      .file-upload-area {
-        padding: 16px;
-      }
+    .form-grid textarea[matInput],
+    .field-full textarea[matInput] {
+      width: 100%;
+      min-width: 0;
+    }
 
-      .file-item {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 8px;
-      }
+    .patient-summary-panel {
+      margin-top: 12px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #fafafa;
+    }
+
+    .patient-summary-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0 0 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .patient-summary-groups {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    .summary-group {
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 10px;
+    }
+
+    .summary-group-title {
+      margin: 0 0 8px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #374151;
+      text-transform: uppercase;
+      letter-spacing: 0.25px;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px 12px;
+    }
+
+    .summary-grid-owner {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .summary-item-full {
+      grid-column: 1 / -1;
+    }
+
+    .summary-item {
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .summary-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.2px;
+    }
+
+    .summary-value {
+      font-size: 12px;
+      color: #111827;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .summary-value-wrap {
+      white-space: normal;
+      overflow: visible;
+      text-overflow: unset;
+      line-height: 1.35;
+    }
+
+    @media (max-width: 1024px) {
+      .form-grid mat-form-field { grid-column: span 6; }
+      .form-grid .field-compact { grid-column: span 6; }
+      .form-grid .field-medium  { grid-column: span 6; }
+      .form-grid .field-third   { grid-column: span 6; }
+      .form-grid .field-half    { grid-column: span 6; }
+      .form-grid .med-inline,
+      .form-grid .med-main { grid-column: span 6; }
+      .patient-summary-groups { grid-template-columns: 1fr; }
+      .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .summary-grid-owner { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 640px) {
+      .form-grid mat-form-field { grid-column: 1 / -1; }
+      .form-grid .field-compact,
+      .form-grid .field-medium,
+      .form-grid .field-third,
+      .form-grid .field-half,
+      .form-grid .med-inline,
+      .form-grid .med-main { grid-column: 1 / -1; }
+      .summary-grid,
+      .summary-grid-owner { grid-template-columns: 1fr; }
+      .summary-item { grid-template-columns: 84px 1fr; }
+      .ejercicios-checklist-grid { grid-template-columns: 1fr; }
+      .ejercicios-agente-row { grid-template-columns: 1fr; }
     }
   `]
 })
-export class HistoriaClinicaFormComponent implements OnInit {
-  private fb = inject(FormBuilder);
-  private router = inject(Router);
-  private route = inject(ActivatedRoute);
-  private consultasService = inject(ConsultasService);
-  private pacientesService = inject(PacientesService);
-  private citasService = inject(CitasService);
-  private productosService = inject(ProductosService);
-  private snackBar = inject(MatSnackBar);
-  private http = inject(HttpClient);
+export class HistoriaClinicaFormComponent implements OnInit, OnDestroy, CanComponentDeactivate {
+  /** Controla si ya se guardó (evita disparar el guard tras guardar exitosamente) */
+  private savedSuccessfully = false;
+  loading    = signal(false);
+  saving     = signal(false);
+  isEdit     = signal(false);
+  historiaId = signal<string | null>(null);
+  originalTipoDocumento = signal<TipoDocumento | null>(null);
 
-  // Signals
-  loading = signal(false);
-  isEdit = signal(false);
-  consulta = signal<ConsultaClinica | null>(null);
-  pacientes = signal<any[]>([]);
-  veterinarios = signal<any[]>([]);
-  medicamentosInventario = signal<Producto[]>([]);
-  citaId = signal<string | null>(null);
-  archivosSeleccionados = signal<File[]>([]);
+  mascotas          = signal<any[]>([]);
+  mascotasFiltradas = signal<any[]>([]);
+  clientes          = signal<any[]>([]);
+  veterinarios      = signal<any[]>([]);
+  mascotaSeleccionada = signal<any>(null);
+  expandDiagnostico   = signal(false);
+  imagenesDiagnosticasFiles = signal<File[]>([]);
+  medicamentosSugeridos = signal<string[]>([]);
+  medicamentosFiltrados = signal<string[]>([]);
+  pacienteSearchCtrl = new FormControl<any>('', { nonNullable: true });
 
-  // Form
-  consultaForm: FormGroup;
-
-  // Estados disponibles
-  estadosConsulta = [
-    { value: 'En Curso', label: 'En Curso' },
-    { value: 'Completada', label: 'Completada' },
-    { value: 'Cancelada', label: 'Cancelada' }
+  readonly ejerciciosChecklistConfig: Array<{ key: EjercicioCategoriaKey; label: string; ejercicios: string[] }> = [
+    {
+      key: 'calentamiento',
+      label: 'Ejercicios de calentamiento y coordinacion',
+      ejercicios: [
+        'Caminata en banda caminadora',
+        'Cavaletti recto',
+        'Cavaletti circular',
+        'Slalom',
+        'Cavaletti Slalom',
+        'Cavaletti con arrastres intercalados',
+        'Arrastres circulares',
+        'Arrastres en linea recta',
+        'Entrenamiento motor',
+      ],
+    },
+    {
+      key: 'fortalecimiento',
+      label: 'Ejercicios de fortalecimiento muscular',
+      ejercicios: [
+        'Pista de equilibrio',
+        'Carga posterior en balon',
+        'Carga posterior en 2 balones',
+        'Carga delanteral en balon',
+        'Carga delantera en 2 balones',
+        'Tabla de equilibrio',
+        'Carga posterior en rampa',
+        'Carga delantera en rampa',
+        'Isometrias y equilibrio sobre balon',
+      ],
+    },
+    {
+      key: 'hidroterapia',
+      label: 'Ejercicios de hidroterapia',
+      ejercicios: [
+        'Caminata circular en la piscina',
+        'Hemimarcha en piscina',
+        'Caminata de frente y en reversa',
+        'Caminata en zic zac',
+        'Estimulacion de nado',
+      ],
+    },
+    {
+      key: 'pasivos',
+      label: 'Ejercicios pasivos',
+      ejercicios: [
+        'Movilidad pasiva',
+        'Movilidad pasiva con bandas',
+        'Estiramientos',
+        'Masaje Effleurage',
+      ],
+    },
+    {
+      key: 'agentes',
+      label: 'Equipos y agentes fisicos',
+      ejercicios: [
+        'Electroestimulacion muscular TENS',
+        'Electroestimulacion muscular EMS',
+        'Magnetoterapia',
+        'Fototerapia LED',
+        'Fototerapia LASER',
+        'Infrasonido terapeutico',
+        'Ultrasonido terapeutico',
+      ],
+    },
   ];
 
-  constructor() {
-    this.consultaForm = this.fb.group({
-      id_mascota: ['', Validators.required],
-      id_veterinario: ['', Validators.required],
-      fecha_consulta: [new Date(), Validators.required],
-      motivo: ['', Validators.required],
-      temperatura: ['', [this.temperaturaValidator]],
-      peso: [''],
-      frecuencia_cardiaca: [''],
-      frecuencia_respiratoria: [''],
-      observaciones_examen: [''],
-      diagnostico: [''],
-      tratamiento: [''],
-      medicamentos: this.fb.array([]),
-      estado: ['En Curso'],
-      proxima_cita: [''],
-      notas: [''],
-      enviar_recordatorio: [false],
-      seguimiento_requerido: [false]
+  ejerciciosCategoriasActivas = signal<Record<EjercicioCategoriaKey, boolean>>({
+    calentamiento: false,
+    fortalecimiento: false,
+    hidroterapia: false,
+    pasivos: false,
+    agentes: false,
+  });
+
+  ejerciciosSeleccionados = signal<Record<EjercicioCategoriaKey, string[]>>({
+    calentamiento: [],
+    fortalecimiento: [],
+    hidroterapia: [],
+    pasivos: [],
+    agentes: [],
+  });
+
+  zonasAgentes = signal<Record<string, string>>({});
+  tiposBloqueadosEnCita = signal<Partial<Record<TipoDocumento, string>>>({});
+
+  form!: FormGroup;
+
+  tiposDocumento: { value: TipoDocumento; label: string; icon: string }[] = [
+    { value: 'valoracion_inicial', label: TIPO_LABELS.valoracion_inicial, icon: TIPO_ICONS.valoracion_inicial },
+    { value: 'seguimiento',        label: TIPO_LABELS.seguimiento,        icon: TIPO_ICONS.seguimiento },
+    { value: 'formula',            label: TIPO_LABELS.formula,            icon: TIPO_ICONS.formula },
+    { value: 'remision',           label: TIPO_LABELS.remision,           icon: TIPO_ICONS.remision },
+  ];
+
+  // estados sólo visibles en modo edición
+  estados: { value: string; label: string; icon: string }[] = [
+    { value: 'Completado', label: 'Historia completada', icon: 'check_circle'  },
+    { value: 'Cancelado',  label: 'Cancelado',           icon: 'cancel'        },
+  ];
+
+  constructor(
+    private fb: FormBuilder,
+    private historiaService: HistoriaClinicaService,
+    private pacientesService: PacientesService,
+    private citasService: CitasService,
+    private snackBar: MatSnackBar,
+    private router: Router,
+    private route: ActivatedRoute,
+    private location: Location
+  ) {}
+
+  /** Advertencia nativa del navegador al cerrar pestaña / F5 con formulario sucio */
+  @HostListener('window:beforeunload', ['$event'])
+  onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (this.form?.dirty && !this.savedSuccessfully) {
+      event.preventDefault();
+    }
+  }
+
+  ngOnInit(): void {
+    this.buildForm();
+    // Sincronizar validators al tipo inicial antes de cargar datos
+    this.syncGroupsToTipo(this.tipoActual);
+    this.loadVeterinarios();
+    this.loadMascotas();
+    this.loadMedicamentosSugeridos();
+
+    this.pacienteSearchCtrl.valueChanges.subscribe((value) => {
+      if (typeof value === 'string') {
+        this.filtrarMascotas(value);
+      } else {
+        this.mascotasFiltradas.set(this.mascotas());
+      }
+    });
+
+    const id = this.route.snapshot.paramMap.get('id');
+    if (id) {
+      this.isEdit.set(true);
+      this.historiaId.set(id);
+      // Motivo obligatorio en toda edición
+      const ctrl = this.form.get('motivo_modificacion')!;
+      ctrl.setValidators([Validators.required, Validators.minLength(10)]);
+      ctrl.updateValueAndValidity();
+      this.loadHistoria(id);
+    } else {
+      this.prefillFromQueryParams();
+      this.lockPacienteVeterinarioIfFromCita();
+      // Si el tipo llega por query params (p.ej. seguimiento desde una cita),
+      // activar el grupo correcto para que no quede deshabilitado.
+      this.syncGroupsToTipo(this.tipoActual);
+    }
+
+    // Watch tipo: sincronizar validators y limpiar campos
+    this.gGeneral.get('tipo_documento')!.valueChanges.subscribe(async (tipo) => {
+      this.syncGroupsToTipo(tipo);
+      this.resetChildFields();
+
+      // En creación desde cita: validar duplicado al cambiar tipo (no esperar al guardar).
+      if (!this.isEdit()) {
+        await this.handleTipoDocumentoDuplicadoEnCita(tipo as TipoDocumento);
+      }
+    });
+
+    // Validar también el tipo inicial al entrar en creación desde cita.
+    if (!this.isEdit()) {
+      this.handleTipoDocumentoDuplicadoEnCita(this.tipoActual);
+    }
+
+    // Watch mascota to show patient info
+    this.gGeneral.get('id_mascota')!.valueChanges.subscribe((id) => {
+      const found = this.mascotas().find(m => m.id_mascota === id) ?? null;
+      this.mascotaSeleccionada.set(found);
+      if (found && this.pacienteSearchCtrl.value !== found) {
+        this.pacienteSearchCtrl.setValue(found, { emitEvent: false });
+      }
     });
   }
 
-  // Validador personalizado para temperatura (30-45°C)
-  private temperaturaValidator(control: any): any {
-    if (!control.value) {
-      return null; // Permitir valores vacíos
+  private prefillFromQueryParams(): void {
+    const qp = this.route.snapshot.queryParamMap;
+    const idMascota = qp.get('id_mascota');
+    const idVeterinario = qp.get('id_veterinario');
+    const idCita = qp.get('id_cita');
+    const tipoDocumento = qp.get('tipo_documento');
+
+    const patchGeneral: any = {};
+
+    if (idMascota) patchGeneral.id_mascota = idMascota;
+    if (idVeterinario) patchGeneral.id_veterinario = idVeterinario;
+    if (idCita) patchGeneral.id_cita = idCita;
+    if (this.isTipoDocumento(tipoDocumento)) patchGeneral.tipo_documento = tipoDocumento;
+
+    if (Object.keys(patchGeneral).length > 0) {
+      this.gGeneral.patchValue(patchGeneral);
     }
 
-    const temperatura = parseFloat(control.value);
-    if (isNaN(temperatura)) {
-      return { temperaturaInvalida: 'La temperatura debe ser un número válido' };
+    if (idMascota) {
+      const found = this.mascotas().find(m => m.id_mascota === idMascota) ?? null;
+      this.mascotaSeleccionada.set(found);
+      if (found) {
+        this.pacienteSearchCtrl.setValue(found, { emitEvent: false });
+      }
     }
+  }
 
-    if (temperatura < 30 || temperatura > 45) {
-      return { temperaturaFueraRango: 'La temperatura debe estar entre 30°C y 45°C' };
+  private isTipoDocumento(value: string | null): value is TipoDocumento {
+    return value === 'valoracion_inicial' || value === 'seguimiento' || value === 'formula' || value === 'remision';
+  }
+
+  private lockPacienteVeterinarioIfFromCita(): void {
+    const idCita = this.gGeneral.get('id_cita')?.value;
+    if (!idCita) return;
+
+    this.gGeneral.get('id_mascota')?.disable({ emitEvent: false });
+    this.gGeneral.get('id_veterinario')?.disable({ emitEvent: false });
+    this.pacienteSearchCtrl.disable({ emitEvent: false });
+  }
+
+  private async handleTipoDocumentoDuplicadoEnCita(tipo: TipoDocumento): Promise<void> {
+    const idCita = this.gGeneral.get('id_cita')?.value;
+    if (!idCita || !tipo) return;
+
+    try {
+      const res = await this.historiaService.getHistoriasByCitaId(idCita).toPromise();
+      const docs = Array.isArray(res?.data) ? res.data : [];
+      const existente = docs.find((d: any) => d.tipo_documento === tipo && d.estado !== 'Cancelado');
+
+      const nextBloqueados = { ...this.tiposBloqueadosEnCita() };
+      if (!existente?.id_historia) {
+        if (nextBloqueados[tipo]) {
+          delete nextBloqueados[tipo];
+          this.tiposBloqueadosEnCita.set(nextBloqueados);
+          this.syncGroupsToTipo(this.tipoActual);
+        }
+        return;
+      }
+
+      const shouldEdit = window.confirm(
+        `Ya existe ${this.historiaService.getTipoLabel(tipo)} para esta cita (${existente.codigo_historia}).\n\n¿Deseas abrirlo en modo edición?`
+      );
+
+      if (shouldEdit) {
+        this.form.markAsPristine();
+        this.router.navigate(['/historia-clinica', existente.id_historia, 'editar'], {
+          queryParams: { from: 'cita', id_cita: idCita }
+        });
+        return;
+      }
+
+      nextBloqueados[tipo] = existente.id_historia;
+      this.tiposBloqueadosEnCita.set(nextBloqueados);
+      await this.cargarDatosExistentesTipoBloqueado(existente.id_historia, tipo);
+      this.syncGroupsToTipo(this.tipoActual);
+      this.snackBar.open(
+        `${this.historiaService.getTipoLabel(tipo)} bloqueado para esta cita. Cambia de tipo para crear un documento nuevo.`,
+        'Ver existente',
+        { duration: 7000 }
+      ).onAction().subscribe(() => {
+        this.router.navigate(['/historia-clinica', existente.id_historia], {
+          queryParams: { from: 'cita', id_cita: idCita }
+        });
+      });
+    } catch {
+      // Si falla esta validación temprana, el backend vuelve a validar al guardar.
     }
+  }
 
-    return null;
+  isTipoBloqueado(tipo: TipoDocumento): boolean {
+    return Boolean(this.tiposBloqueadosEnCita()[tipo]);
+  }
+
+  private async cargarDatosExistentesTipoBloqueado(idHistoria: string, tipo: TipoDocumento): Promise<void> {
+    try {
+      const res = await this.historiaService.getHistoriaById(idHistoria).toPromise();
+      const d: any = res?.data?.datos ?? {};
+
+      if (tipo === 'seguimiento') {
+        this.gSeguimiento.patchValue({
+          ...d,
+          ejercicios_realizados: this.extraerOtrosEjerciciosSeguimiento(d?.ejercicios_realizados),
+        });
+        this.hidratarChecklistSeguimiento(d?.ejercicios_realizados);
+        return;
+      }
+
+      if (tipo === 'formula') {
+        this.gFormula.patchValue({
+          plan_terapeutico: d?.plan_terapeutico ?? '',
+        });
+        this.medicamentosArray.clear();
+        if (Array.isArray(d?.medicamentos)) {
+          d.medicamentos.forEach((m: any) => {
+            const med = this.newMedicamento();
+            med.patchValue({
+              medicamento: m?.medicamento ?? m?.nombre ?? '',
+              dosis: m?.dosis ?? '',
+              frecuencia: m?.frecuencia ?? '',
+              duracion: m?.duracion ?? '',
+              cantidad: m?.cantidad ?? '',
+              instrucciones: m?.instrucciones ?? '',
+            });
+            this.medicamentosArray.push(med);
+          });
+        }
+        return;
+      }
+
+      if (tipo === 'remision') {
+        this.gRemision.patchValue(d);
+        return;
+      }
+
+      if (tipo === 'valoracion_inicial') {
+        this.gAnamnesis.patchValue(d);
+        this.gValoracion.patchValue(d);
+        this.gPerimetria.patchValue(d);
+        this.gExploracion.patchValue(d);
+        this.gDiagnostico.patchValue(d);
+      }
+    } catch {
+      // Si falla la carga de solo lectura, se mantiene el bloqueo del tipo.
+    }
+  }
+
+  ngOnDestroy(): void {
+    // No subscriptions to manually clean up currently.
+  }
+
+  /** Llamado por el guard antes de navegar fuera */
+  canDeactivate(): boolean | Observable<boolean> {
+    if (this.savedSuccessfully || !this.form?.dirty) return true;
+    return false; // el guard abrirá el diálogo
+  }
+
+  // ─── Build form ─────────────────────────────────────────────────────────────
+  // El formulario usa un FormGroup padre con sub-grupos por paso del stepper.
+  // Cada sub-grupo tiene al menos un campo requerido para que el paso se considere válido.
+
+  buildForm(): void {
+    this.form = this.fb.group({
+      // ── Paso 0: Datos generales ────────────────────────────────────────────
+      general: this.fb.group({
+        tipo_documento:  ['valoracion_inicial', Validators.required],
+        id_mascota:      ['', Validators.required],
+        id_veterinario:  ['', Validators.required],
+        estado:          ['Completado'],
+        id_cita:         [''],
+      }),
+
+
+      // ── Pasos de Valoración inicial ───────────────────────────────────────
+      anamnesis: this.fb.group({
+        remitido_por:            [''],
+        antiguedad_signos:       [''],
+        medicacion_previa:       [''],
+        enfermedades_anteriores: [''],
+        actividad_fisica:        [''],
+        anamnesis:               ['', Validators.required],  // campo pivot del paso
+      }),
+
+      valoracion: this.fb.group({
+        valoracion_estatica:        ['', Validators.required],  // campo pivot
+        valoracion_dinamica:        [''],
+        hallazgos_musculares:       [''],
+        hallazgos_osteoarticulares: [''],
+      }),
+
+      perimetria: this.fb.group({
+        perimetria_mtd_1: [null],
+        perimetria_mtd_2: [null],
+        perimetria_mti_1: [null],
+        perimetria_mti_2: [null],
+        perimetria_mpd_1: [null],
+        perimetria_mpd_2: [null],
+        perimetria_mpi_1: [null],
+        perimetria_mpi_2: [null],
+      }),
+
+      exploracion: this.fb.group({
+        prueba_cajon:             [''],
+        prueba_compresion_tibial: [''],
+        prueba_ortolani:          [''],
+        luxacion_patelar:         [''],
+        sensibilidad:             [''],
+        propiocepcion:            [''],
+        equilibrio:               [''],
+        paniculo:                 [''],
+        // Reflejos torácicos (MTD / MTI)
+        reflejo_tricipital_d:      [''],
+        reflejo_tricipital_i:      [''],
+        reflejo_flexor_tor_d:      [''],
+        reflejo_flexor_tor_i:      [''],
+        // Reflejos pélvicos (MPD / MPI)
+        reflejo_patelar_d:         [''],
+        reflejo_patelar_i:         [''],
+        reflejo_tibial_craneal_d:  [''],
+        reflejo_tibial_craneal_i:  [''],
+        reflejo_ciatico_d:         [''],
+        reflejo_ciatico_i:         [''],
+        reflejo_flexor_pelv_d:     [''],
+        reflejo_flexor_pelv_i:     [''],
+        observaciones_palpacion:   [''],
+      }),
+
+      goniometria: this.fb.group({
+        // Miembro torácico derecho
+        gonio_hombro_flexion_d:    [null],
+        gonio_hombro_extension_d:  [null],
+        gonio_codo_flexion_d:      [null],
+        gonio_codo_extension_d:    [null],
+        gonio_carpo_flexion_d:     [null],
+        gonio_carpo_extension_d:   [null],
+        // Miembro torácico izquierdo
+        gonio_hombro_flexion_i:    [null],
+        gonio_hombro_extension_i:  [null],
+        gonio_codo_flexion_i:      [null],
+        gonio_codo_extension_i:    [null],
+        gonio_carpo_flexion_i:     [null],
+        gonio_carpo_extension_i:   [null],
+        // Miembro pélvico derecho
+        gonio_cadera_flexion_d:    [null],
+        gonio_cadera_extension_d:  [null],
+        gonio_rodilla_flexion_d:   [null],
+        gonio_rodilla_extension_d: [null],
+        gonio_tarso_flexion_d:     [null],
+        gonio_tarso_extension_d:   [null],
+        // Miembro pélvico izquierdo
+        gonio_cadera_flexion_i:    [null],
+        gonio_cadera_extension_i:  [null],
+        gonio_rodilla_flexion_i:   [null],
+        gonio_rodilla_extension_i: [null],
+        gonio_tarso_flexion_i:     [null],
+        gonio_tarso_extension_i:   [null],
+      }),
+
+      diagnostico: this.fb.group({
+        imagenes_diagnosticas: [''],
+        diagnostico:           ['', Validators.required],  // campo pivot
+        tratamiento:           [''],
+        recomendaciones:       [''],
+        proxima_cita:          [''],
+      }),
+
+      // ── Seguimiento ───────────────────────────────────────────────────────
+      seguimiento: this.fb.group({
+        numero_sesion:         [null, Validators.required],
+        observaciones_en_casa: [''],
+        ejercicios_realizados: [''],
+        recomendaciones_casa:  [''],
+        notas_clinicas:        [''],
+      }),
+
+      // ── Remisión ──────────────────────────────────────────────────────────
+      remision: this.fb.group({
+        motivo:               ['', Validators.required],
+        texto_remision:       [''],
+        especialidad_destino: [''],
+        profesional_destino:  [''],
+        institucion_destino:  [''],
+      }),
+
+      // ── Fórmula ───────────────────────────────────────────────────────────
+      formula: this.fb.group({
+        plan_terapeutico: [''],
+      }),
+    });
+
+    // FormArray de medicamentos (en el nivel raíz para acceso fácil)
+    this.form.addControl('medicamentos', this.fb.array([]));
+    // Motivo de modificación (solo requerido en edición; los validators se activan en ngOnInit)
+    this.form.addControl('motivo_modificacion', this.fb.control(''));
+  }
+
+  // ── Getters de sub-grupos ──────────────────────────────────────────────────
+  get gGeneral()    { return this.form.get('general')    as FormGroup; }
+  get gAnamnesis()  { return this.form.get('anamnesis')  as FormGroup; }
+  get gValoracion() { return this.form.get('valoracion') as FormGroup; }
+  get gPerimetria() { return this.form.get('perimetria') as FormGroup; }
+  get gExploracion(){ return this.form.get('exploracion')as FormGroup; }
+  get gGoniometria(){ return this.form.get('goniometria') as FormGroup; }
+  get gDiagnostico(){ return this.form.get('diagnostico')as FormGroup; }
+  get gSeguimiento(){ return this.form.get('seguimiento')as FormGroup; }
+  get gRemision()   { return this.form.get('remision')   as FormGroup; }
+  get gFormula()    { return this.form.get('formula')    as FormGroup; }
+
+  get tipoActual(): TipoDocumento {
+    return this.gGeneral.get('tipo_documento')!.value;
+  }
+
+  // ── Unlock progresivo para valoración inicial ─────────────────────────────
+  /** Paso 1: paciente seleccionado */
+  get canAnamnesis(): boolean {
+    return !!this.gGeneral.get('id_mascota')?.value;
+  }
+  /** Paso 2: anamnesis (descripción) completada */
+  get canValoracion(): boolean {
+    return this.canAnamnesis && !!this.gAnamnesis.get('anamnesis')?.value?.trim();
+  }
+  /** Paso 3: valoración estática completada */
+  get canPerimetria(): boolean {
+    return this.canValoracion && !!this.gValoracion.get('valoracion_estatica')?.value?.trim();
+  }
+  /** Paso 4: perimetría registrada (sin campo requerido, se habilita junto con paso 3) */
+  get canExploracion(): boolean {
+    return this.canPerimetria;
+  }
+  /** Paso 5: diagnóstico requiere haber pasado por exploración */
+  get canDiagnostico(): boolean {
+    return this.canExploracion;
   }
 
   get medicamentosArray(): FormArray {
-    return this.consultaForm.get('medicamentos') as FormArray;
+    return this.form.get('medicamentos') as FormArray;
   }
 
-  createMedicamentoGroup(): FormGroup {
-    return this.fb.group({
-      nombre: ['', Validators.required],
-      dosis: ['', Validators.required],
-      frecuencia: ['', Validators.required],
-      duracion: ['', Validators.required]
+  newMedicamento(): FormGroup {
+    const group = this.fb.group({
+      medicamento:   ['', Validators.required],
+      dosis:         [''],
+      frecuencia:    [''],
+      duracion:      [''],
+      cantidad:      [''],
+      instrucciones: [''],
     });
+
+    group.get('medicamento')?.valueChanges.subscribe((value) => {
+      this.updateMedicamentosFiltrados(String(value || ''));
+    });
+
+    return group;
+  }
+
+  private loadMedicamentosSugeridos(): void {
+    this.historiaService.getMedicamentosSugeridos().subscribe({
+      next: (response) => {
+        const medicamentos = Array.isArray(response?.data) ? response.data : [];
+        this.medicamentosSugeridos.set(medicamentos);
+        this.updateMedicamentosFiltrados('');
+      },
+      error: () => {
+        this.medicamentosSugeridos.set([]);
+        this.medicamentosFiltrados.set([]);
+      }
+    });
+  }
+
+  updateMedicamentosFiltrados(rawSearch: string): void {
+    const search = String(rawSearch || '').trim().toLowerCase();
+    const source = this.medicamentosSugeridos();
+
+    if (!search) {
+      this.medicamentosFiltrados.set(source);
+      return;
+    }
+
+    this.medicamentosFiltrados.set(
+      source.filter((medicamento) => String(medicamento || '').toLowerCase().includes(search))
+    );
   }
 
   addMedicamento(): void {
-    this.medicamentosArray.push(this.createMedicamentoGroup());
+    if (this.isTipoBloqueado(this.tipoActual)) return;
+    this.medicamentosArray.push(this.newMedicamento());
   }
 
-  removeMedicamento(index: number): void {
-    this.medicamentosArray.removeAt(index);
+  removeMedicamento(i: number): void {
+    if (this.isTipoBloqueado(this.tipoActual)) return;
+    this.medicamentosArray.removeAt(i);
   }
 
-  searchMedicamentos(query: string): void {
-    if (query.length < 2) {
-      this.medicamentosInventario.set([]);
-      return;
+  private parseFrecuenciaPorDia(text: string): number | null {
+    const raw = String(text || '').toLowerCase().trim();
+    if (!raw) return null;
+
+    const cadaHoras = raw.match(/cada\s+(\d+(?:[.,]\d+)?)\s*(h|hs|hora|horas)/i);
+    if (cadaHoras) {
+      const v = Number(cadaHoras[1].replace(',', '.'));
+      if (v > 0) return 24 / v;
     }
 
-    this.productosService.getProductos(1, 10, {
-      search: query,
-      activo: true,
-      categoria: 'Medicamentos' // Filtrar solo medicamentos
-    }).subscribe({
-      next: (response) => {
-        const medicamentos = response?.data?.products || response?.data || [];
-        this.medicamentosInventario.set(Array.isArray(medicamentos) ? medicamentos : []);
+    const cadaDias = raw.match(/cada\s+(\d+(?:[.,]\d+)?)\s*(dia|dias|d[ií]a|d[ií]as)/i);
+    if (cadaDias) {
+      const v = Number(cadaDias[1].replace(',', '.'));
+      if (v > 0) return 1 / v;
+    }
+
+    const vecesDia = raw.match(/(\d+(?:[.,]\d+)?)\s*veces?\s*(al\s*)?(dia|d[ií]a)/i);
+    if (vecesDia) {
+      const v = Number(vecesDia[1].replace(',', '.'));
+      if (v > 0) return v;
+    }
+
+    if (/una\s+vez\s+(al\s*)?(dia|d[ií]a)/i.test(raw)) return 1;
+    return null;
+  }
+
+  private parseDuracionDias(text: string): number | null {
+    const raw = String(text || '').toLowerCase().trim();
+    if (!raw) return null;
+
+    const m = raw.match(/(\d+(?:[.,]\d+)?)\s*(hora|horas|h|hs|dia|dias|d[ií]a|d[ií]as|semana|semanas|mes|meses)/i);
+    if (!m) return null;
+
+    const value = Number(m[1].replace(',', '.'));
+    if (!(value > 0)) return null;
+
+    const unit = m[2];
+    if (/hora|horas|h|hs/.test(unit)) return value / 24;
+    if (/semana|semanas/.test(unit)) return value * 7;
+    if (/mes|meses/.test(unit)) return value * 30;
+    return value;
+  }
+
+  getCantidadSugerida(med: FormGroup): string {
+    const frecuencia = String(med.get('frecuencia')?.value ?? '').trim();
+    const duracion = String(med.get('duracion')?.value ?? '').trim();
+    if (!frecuencia || !duracion) return '';
+
+    const porDia = this.parseFrecuenciaPorDia(frecuencia);
+    const dias = this.parseDuracionDias(duracion);
+    if (!porDia || !dias) return '';
+
+    const tomas = Math.ceil(porDia * dias);
+    if (!(tomas > 0)) return '';
+    return `Sugerido: ${tomas} tomas (puedes ajustar la cantidad total manualmente)`;
+  }
+
+  resetChildFields(): void {
+    // No hace nada especial; la UI muestra/oculta secciones
+  }
+
+  /**
+   * Habilita solo los FormGroups del tipo activo y deshabilita los demás.
+   * Los grupos deshabilitados son ignorados por form.invalid (validators inactivos).
+   */
+  private syncGroupsToTipo(tipo: TipoDocumento): void {
+    const byTipo: Record<string, string[]> = {
+      valoracion_inicial: ['anamnesis','valoracion','perimetria','goniometria','exploracion','diagnostico'],
+      seguimiento:        ['seguimiento'],
+      formula:            ['formula'],
+      remision:           ['remision'],
+    };
+    const active = new Set(byTipo[tipo] ?? []);
+    const tipoBloqueado = this.isTipoBloqueado(tipo);
+    ['anamnesis','valoracion','perimetria','goniometria','exploracion','diagnostico',
+     'seguimiento','formula','remision'].forEach(g => {
+      const ctrl = this.form.get(g);
+      if (!ctrl) return;
+      (active.has(g) && !tipoBloqueado)
+        ? ctrl.enable({ emitEvent: false })
+        : ctrl.disable({ emitEvent: false });
+    });
+
+    const puedeEditarMedicamentos = !tipoBloqueado && active.has('formula');
+    puedeEditarMedicamentos
+      ? this.medicamentosArray.enable({ emitEvent: false })
+      : this.medicamentosArray.disable({ emitEvent: false });
+  }
+
+  // ─── Load data ──────────────────────────────────────────────────────────────
+
+  loadMascotas(): void {
+    this.pacientesService.getMascotas(1, 500).subscribe({
+      next: (res) => {
+        const lista = (res?.data?.pacientes ?? []).map((m: any) => ({
+          id_mascota:        m.id_mascota,
+          nombre:            m.nombre,
+          especie:           m.especie,
+          raza:              m.raza,
+          sexo:              m.sexo,
+          peso:              m.peso,
+          fecha_nacimiento:  m.fecha_nacimiento,
+          esterilizado:      m.esterilizado,
+          color:             m.color,
+          cliente_nombre:    m.cliente?.nombre ?? '',
+          cliente_cedula:    m.cliente?.cedula ?? '',
+          cliente_telefono:  m.cliente?.telefono ?? '',
+          cliente_email:     m.cliente?.email ?? '',
+          cliente_direccion: m.cliente?.direccion ?? '',
+        }));
+        this.mascotas.set(lista);
+        this.mascotasFiltradas.set(lista);
+        const selectedId = this.gGeneral.get('id_mascota')?.value;
+        if (selectedId) {
+          const found = lista.find((m: any) => m.id_mascota === selectedId);
+          if (found) this.pacienteSearchCtrl.setValue(found, { emitEvent: false });
+        }
       },
-      error: (error) => {
-        console.error('Error buscando medicamentos:', error);
-        this.medicamentosInventario.set([]);
+      error: () => {
+        this.mascotas.set([]);
+        this.mascotasFiltradas.set([]);
       }
     });
   }
 
-  onMedicamentoInput(event: Event, index: number): void {
-    const input = event.target as HTMLInputElement;
-    this.searchMedicamentos(input.value);
-  }
-
-  selectMedicamento(medicamento: Producto, index: number): void {
-    const medicamentoGroup = this.medicamentosArray.at(index) as FormGroup;
-    if (medicamentoGroup) {
-      medicamentoGroup.patchValue({
-        nombre: medicamento.nombre
-      });
-      this.medicamentosInventario.set([]);
-    }
-  }
-
-  async ngOnInit(): Promise<void> {
-    const consultaId = this.route.snapshot.paramMap.get('id');
-    const citaId = this.route.snapshot.queryParamMap.get('citaId'); // Capturar ID de cita
-
-    if (citaId) {
-      this.citaId.set(citaId);
+  private filtrarMascotas(term: string): void {
+    const query = String(term || '').trim().toLowerCase();
+    const source = this.mascotas();
+    if (!query) {
+      this.mascotasFiltradas.set(source);
+      return;
     }
 
-    if (consultaId) {
-      this.isEdit.set(true);
-      this.loadHistoriaClinica(consultaId);
-    } else {
-      // Para historias clínicas nuevas, no agregar medicamento por defecto
-      // Solo cargar datos para nuevas historias clínicas
-      await this.loadInitialData();
-    }
+    const filtered = source.filter((m) => {
+      const mascota = String(m.nombre || '').toLowerCase();
+      const especie = String(m.especie || '').toLowerCase();
+      const propietario = String(m.cliente_nombre || '').toLowerCase();
+      return mascota.includes(query) || especie.includes(query) || propietario.includes(query);
+    });
+
+    this.mascotasFiltradas.set(filtered);
   }
 
-  private async loadInitialData(): Promise<void> {
-    await Promise.all([
-      this.loadPacientes(),
-      this.loadVeterinarios()
-    ]);
+  displayMascota = (m: any): string => {
+    if (!m || typeof m === 'string') return '';
+    return `${m.nombre} (${m.especie}) — ${m.cliente_nombre}`;
+  };
+
+  onPacienteSelected(m: any): void {
+    if (!m?.id_mascota) return;
+    this.gGeneral.get('id_mascota')?.setValue(m.id_mascota);
   }
 
-  private async loadHistoriaClinica(id: string): Promise<void> {
+  calcularEdad(fechaNacimiento: string | null): string {
+    if (!fechaNacimiento) return 'No disponible';
+    const hoy = new Date();
+    const nac = new Date(fechaNacimiento);
+    const años = hoy.getFullYear() - nac.getFullYear();
+    const meses = hoy.getMonth() - nac.getMonth() + años * 12;
+    if (meses < 24) return `${meses} meses`;
+    return `${Math.floor(meses / 12)} años`;
+  }
+
+  formatSexo(sexo: string | null | undefined): string {
+    if (!sexo) return 'No disponible';
+    const s = String(sexo).trim().toLowerCase();
+    if (s === 'm' || s === 'macho') return 'Macho';
+    if (s === 'h' || s === 'hembra') return 'Hembra';
+    return sexo;
+  }
+
+  loadVeterinarios(): void {
+    this.citasService.getVeterinarios().subscribe({
+      next: (res) => this.veterinarios.set(res?.data ?? []),
+      error: () => this.veterinarios.set([])
+    });
+  }
+
+  loadHistoria(id: string): void {
     this.loading.set(true);
-
-    try {
-      // Primero cargar datos iniciales
-      await this.loadInitialData();
-
-      // Luego cargar la historia clínica
-      const response = await this.consultasService.getConsultaById(id).toPromise();
-
-      if (response?.success && response.data) {
-        this.consulta.set(response.data);
-        this.populateForm(response.data);
-      } else {
-        throw new Error('Respuesta inválida del servidor');
-      }
-    } catch (error) {
-      console.error('Error cargando historia clínica:', error);
-      this.snackBar.open('Error cargando historia clínica', 'Cerrar', { duration: 3000 });
-    } finally {
-      this.loading.set(false);
-    }
-  }
-
-  private populateForm(consulta: any): void {
-    // Primero limpiar el array de medicamentos
-    while (this.medicamentosArray.length !== 0) {
-      this.medicamentosArray.removeAt(0);
-    }
-
-    // Agregar medicamentos si existen
-    if (consulta.medicamentos && Array.isArray(consulta.medicamentos)) {
-      consulta.medicamentos.forEach((med: any) => {
-        const medicamentoGroup = this.createMedicamentoGroup();
-        medicamentoGroup.patchValue({
-          nombre: med.nombre || '',
-          dosis: med.dosis || '',
-          frecuencia: med.frecuencia || '',
-          duracion: med.duracion || ''
+    this.historiaService.getHistoriaById(id).subscribe({
+      next: (res) => {
+        const h = res.data;
+        const d = h.datos ?? {} as any;
+        this.originalTipoDocumento.set(h.tipo_documento as TipoDocumento);
+        // Parchar cada sub-grupo por separado
+        this.gGeneral.patchValue({
+          tipo_documento: h.tipo_documento,
+          id_mascota:     h.id_mascota,
+          id_veterinario: h.id_veterinario,
+          estado:         h.estado,
+          id_cita:        h.id_cita ?? '',
         });
-        this.medicamentosArray.push(medicamentoGroup);
-      });
-    }
-    // Si no hay medicamentos, no agregar ninguno (ahora son opcionales)
-
-    this.consultaForm.patchValue({
-      id_mascota: consulta.id_mascota,
-      id_veterinario: consulta.id_veterinario,
-      fecha_consulta: consulta.fecha_consulta ? new Date(consulta.fecha_consulta) : new Date(),
-      motivo: consulta.motivo || '',
-      anamnesis: consulta.anamnesis || '',
-      examen_fisico: consulta.examen_fisico || '',
-      temperatura: consulta.temperatura || null,
-      peso: consulta.peso || null,
-      diagnostico: consulta.diagnostico || '',
-      tratamiento: consulta.tratamiento || '',
-      recomendaciones: consulta.recomendaciones || '',
-            estado: consulta.estado || 'En Curso',
-      costo: consulta.costo || null,
-      proxima_cita: consulta.proxima_cita ? new Date(consulta.proxima_cita) : null,
-      // Campos que no existen en la BD pero están en el formulario - usar valores por defecto
-      frecuencia_cardiaca: null,
-      frecuencia_respiratoria: null,
-      observaciones_examen: '',
-      notas: '',
-      enviar_recordatorio: false,
-      seguimiento_requerido: false
-    });
-
-    // Deshabilitar campos que no deben ser editables en modo edición
-    if (this.isEdit()) {
-      this.consultaForm.get('id_mascota')?.disable();
-      this.consultaForm.get('id_veterinario')?.disable();
-      this.consultaForm.get('fecha_consulta')?.disable();
-    }
-  }
-
-  private async loadPacientes(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.pacientesService.getMascotas(1, 1000).subscribe({
-        next: (response) => {
-          const data = response?.data;
-          const pacientesArray = data?.pacientes || data || [];
-          this.pacientes.set(Array.isArray(pacientesArray) ? pacientesArray : []);
-          resolve();
-        },
-        error: (error) => {
-          console.error('Error cargando mascotas:', error);
-          this.pacientes.set([]);
-          reject(error);
+        // Set mascota info panel (mascotas may not be loaded yet; retry after)
+        const setMascota = () => {
+          const found = this.mascotas().find(m => m.id_mascota === h.id_mascota) ?? null;
+          this.mascotaSeleccionada.set(found);
+        };
+        if (this.mascotas().length > 0) {
+          setMascota();
+        } else {
+          // Wait for mascotas to load
+          const interval = setInterval(() => {
+            if (this.mascotas().length > 0) { setMascota(); clearInterval(interval); }
+          }, 200);
         }
-      });
-    });
-  }
-
-  private async loadVeterinarios(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.citasService.getVeterinarios().subscribe({
-        next: (response) => {
-          const veterinariosArray = response?.data || response;
-          this.veterinarios.set(Array.isArray(veterinariosArray) ? veterinariosArray : []);
-          resolve();
-        },
-        error: (error) => {
-          console.error('Error cargando veterinarios:', error);
-          this.veterinarios.set([]);
-          reject(error);
+        // Parchar los grupos de detalle según tipo
+        if (h.tipo_documento === 'valoracion_inicial') {
+          this.gAnamnesis.patchValue(d);
+          this.gValoracion.patchValue(d);
+          this.gPerimetria.patchValue(d);
+          // Goniometría: el backend almacena como JSONB, remapear claves
+          if (d.goniometria && typeof d.goniometria === 'object') {
+            const g = d.goniometria as Record<string, any>;
+            this.gGoniometria.patchValue({
+              gonio_hombro_flexion_d:    g['hombro_flexion_d'],
+              gonio_hombro_extension_d:  g['hombro_extension_d'],
+              gonio_codo_flexion_d:      g['codo_flexion_d'],
+              gonio_codo_extension_d:    g['codo_extension_d'],
+              gonio_carpo_flexion_d:     g['carpo_flexion_d'],
+              gonio_carpo_extension_d:   g['carpo_extension_d'],
+              gonio_hombro_flexion_i:    g['hombro_flexion_i'],
+              gonio_hombro_extension_i:  g['hombro_extension_i'],
+              gonio_codo_flexion_i:      g['codo_flexion_i'],
+              gonio_codo_extension_i:    g['codo_extension_i'],
+              gonio_carpo_flexion_i:     g['carpo_flexion_i'],
+              gonio_carpo_extension_i:   g['carpo_extension_i'],
+              gonio_cadera_flexion_d:    g['cadera_flexion_d'],
+              gonio_cadera_extension_d:  g['cadera_extension_d'],
+              gonio_rodilla_flexion_d:   g['rodilla_flexion_d'],
+              gonio_rodilla_extension_d: g['rodilla_extension_d'],
+              gonio_tarso_flexion_d:     g['tarso_flexion_d'],
+              gonio_tarso_extension_d:   g['tarso_extension_d'],
+              gonio_cadera_flexion_i:    g['cadera_flexion_i'],
+              gonio_cadera_extension_i:  g['cadera_extension_i'],
+              gonio_rodilla_flexion_i:   g['rodilla_flexion_i'],
+              gonio_rodilla_extension_i: g['rodilla_extension_i'],
+              gonio_tarso_flexion_i:     g['tarso_flexion_i'],
+              gonio_tarso_extension_i:   g['tarso_extension_i'],
+            });
+          }
+          this.gExploracion.patchValue(d);
+          // Reflejos (stored as JSONB, remap keys to form controls)
+          if (d.reflejos && typeof d.reflejos === 'object') {
+            const r = d.reflejos as Record<string, any>;
+            this.gExploracion.patchValue({
+              reflejo_tricipital_d:     r['tricipital_d'],
+              reflejo_tricipital_i:     r['tricipital_i'],
+              reflejo_flexor_tor_d:     r['flexor_tor_d'],
+              reflejo_flexor_tor_i:     r['flexor_tor_i'],
+              reflejo_patelar_d:        r['patelar_d'],
+              reflejo_patelar_i:        r['patelar_i'],
+              reflejo_tibial_craneal_d: r['tibial_craneal_d'],
+              reflejo_tibial_craneal_i: r['tibial_craneal_i'],
+              reflejo_ciatico_d:        r['ciatico_d'],
+              reflejo_ciatico_i:        r['ciatico_i'],
+              reflejo_flexor_pelv_d:    r['flexor_pelv_d'],
+              reflejo_flexor_pelv_i:    r['flexor_pelv_i'],
+              observaciones_palpacion:  r['observaciones_palpacion'],
+            });
+          }
+          this.gDiagnostico.patchValue(d);
+        } else if (h.tipo_documento === 'seguimiento') {
+          this.gSeguimiento.patchValue({
+            ...d,
+            ejercicios_realizados: this.extraerOtrosEjerciciosSeguimiento(d?.ejercicios_realizados),
+          });
+          this.hidratarChecklistSeguimiento(d?.ejercicios_realizados);
+        } else if (h.tipo_documento === 'formula') {
+          this.gFormula.patchValue({});
+          if (Array.isArray(d.medicamentos)) {
+            d.medicamentos.forEach((m: any) => {
+              const med = this.newMedicamento();
+              med.patchValue({
+                medicamento: m?.medicamento ?? m?.nombre ?? '',
+                dosis: m?.dosis ?? '',
+                frecuencia: m?.frecuencia ?? '',
+                duracion: m?.duracion ?? '',
+                cantidad: m?.cantidad ?? '',
+                instrucciones: m?.instrucciones ?? '',
+              });
+              this.medicamentosArray.push(med);
+            });
+          }
+        } else if (h.tipo_documento === 'remision') {
+          this.gRemision.patchValue(d);
         }
-      });
-    });
-  }
 
-  async saveHistoriaClinica(): Promise<void> {
-    if (this.consultaForm.invalid) {
-      this.snackBar.open('Por favor completa todos los campos obligatorios', 'Cerrar', { duration: 3000 });
-      return;
-    }
+        if (this.isEdit()) {
+          // Evita transformar un documento de un tipo a otro al editar.
+          this.gGeneral.get('tipo_documento')?.disable({ emitEvent: false });
+        }
 
-    this.loading.set(true);
-    const formData = this.consultaForm.value;
-
-    // Formatear fechas
-    if (formData.fecha_consulta) {
-      formData.fecha_consulta = formData.fecha_consulta.toISOString();
-    }
-    if (formData.proxima_cita) {
-      formData.proxima_cita = formData.proxima_cita.toISOString();
-    }
-
-    try {
-      let consultaId: string;
-
-      // Primero guardar la historia clínica
-      if (this.isEdit()) {
-        const result = await this.consultasService.updateConsulta(this.consulta()!.id_consulta, formData).toPromise();
-        consultaId = this.consulta()!.id_consulta;
-        console.log('Historia clínica actualizada:', result);
-      } else {
-        const result = await this.consultasService.createConsulta(formData).toPromise();
-        consultaId = result.data?.id_consulta || result.id_consulta;
-        console.log('Historia clínica creada:', result);
+        this.loading.set(false);
+      },
+      error: () => {
+        this.snackBar.open('Error cargando historia', 'Cerrar', { duration: 3000 });
+        this.loading.set(false);
       }
+    });
+  }
 
-      // Si hay archivos seleccionados, subirlos
-      if (this.archivosSeleccionados().length > 0 && consultaId) {
-        console.log(`Subiendo ${this.archivosSeleccionados().length} archivo(s) para consulta ${consultaId}`);
+  // ─── Submit ─────────────────────────────────────────────────────────────────
 
-        try {
-          await this.uploadArchivos(consultaId);
-          this.snackBar.open('Archivos subidos exitosamente', 'Cerrar', { duration: 2000 });
-        } catch (uploadError) {
-          console.error('Error subiendo archivos:', uploadError);
-          this.snackBar.open('Historia clínica guardada pero error subiendo archivos', 'Cerrar', { duration: 3000 });
-        }
-      }
-
+  guardar(): void {
+    if (!this.isEdit() && this.isTipoBloqueado(this.tipoActual)) {
       this.snackBar.open(
-        this.isEdit() ? 'Historia clínica actualizada exitosamente' : 'Historia clínica creada exitosamente',
+        `Este tipo de documento ya existe para la cita y está bloqueado. Usa otro tipo o abre el existente.`,
         'Cerrar',
-        { duration: 3000 }
+        { duration: 5000 }
       );
-
-      // Redirigir a la cita si tenemos el ID, sino a historia clínica
-      if (this.citaId()) {
-        this.router.navigate(['/citas', this.citaId()]);
-      } else {
-        this.router.navigate(['/historia-clinica']);
-      }
-
-    } catch (error) {
-      console.error('Error guardando historia clínica:', error);
-      this.snackBar.open('Error guardando historia clínica', 'Cerrar', { duration: 3000 });
-    } finally {
-      this.loading.set(false);
-    }
-  }
-
-  private async uploadArchivos(consultaId: string): Promise<void> {
-    const archivos = this.archivosSeleccionados();
-
-    if (archivos.length === 0) {
       return;
     }
 
-    // Crear FormData para enviar archivos
-    const formData = new FormData();
-    archivos.forEach((archivo, index) => {
-      formData.append('archivos', archivo, archivo.name);
-    });
-
-    // Usar HttpClient inyectado para subir archivos
-    const uploadUrl = `${this.consultasService['API_URL']}/consultations/${consultaId}/upload-files`;
-
-    const uploadResult = await this.http.post(uploadUrl, formData).toPromise();
-
-    console.log('Archivos subidos exitosamente:', uploadResult);
-
-    // Limpiar archivos seleccionados después del upload exitoso
-    this.archivosSeleccionados.set([]);
-  }
-
-  resetForm(): void {
-    if (this.isEdit()) {
-      this.populateForm(this.consulta()!);
-    } else {
-      this.consultaForm.reset({
-        fecha_consulta: new Date(),
-        estado: 'En Curso',
-        enviar_recordatorio: false,
-        seguimiento_requerido: false
-      });
+    if (this.form.invalid) {
+      this.form.markAllAsTouched();
+      // Auto-expandir el panel Diagnóstico si tiene errores
+      if (this.tipoActual === 'valoracion_inicial' && this.gDiagnostico.invalid) {
+        this.expandDiagnostico.set(true);
+      }
+      this.snackBar.open('Completa todos los campos requeridos antes de guardar', 'Cerrar', { duration: 4000 });
+      return;
     }
+    // En creación el estado siempre es Completado
+    if (!this.isEdit()) {
+      this.gGeneral.patchValue({ estado: 'Completado' });
+    }
+    this.saving.set(true);
+    const payload = this.buildPayload();
+    const obs = this.isEdit()
+      ? this.historiaService.updateHistoria(this.historiaId()!, payload)
+      : this.historiaService.createHistoria(payload as any);
+
+    obs.subscribe({
+      next: (res) => {
+        this.saving.set(false);
+        this.savedSuccessfully = true;  // marca para que canDeactivate deje pasar
+        this.form.markAsPristine();     // resetea dirty por si acaso
+        const historiaId = res.data.id_historia;
+        const files = this.imagenesDiagnosticasFiles();
+
+        if (files.length > 0) {
+          this.historiaService.uploadHistoriaArchivos(historiaId, files).subscribe({
+            next: () => {
+              this.snackBar.open(
+                this.isEdit() ? 'Historia actualizada y archivos cargados' : 'Historia creada y archivos cargados',
+                'Cerrar', { duration: 3000 }
+              );
+              this.imagenesDiagnosticasFiles.set([]);
+              this.router.navigate(['/historia-clinica', historiaId]);
+            },
+            error: () => {
+              this.snackBar.open(
+                'Historia guardada, pero falló la carga de algunos archivos diagnósticos',
+                'Cerrar', { duration: 4500 }
+              );
+              this.router.navigate(['/historia-clinica', historiaId]);
+            }
+          });
+          return;
+        }
+
+        this.snackBar.open(
+          this.isEdit() ? 'Historia actualizada' : 'Historia creada correctamente',
+          'Cerrar', { duration: 3000 }
+        );
+        this.router.navigate(['/historia-clinica', historiaId]);
+      },
+      error: (err) => {
+        this.saving.set(false);
+        const duplicateCode = err?.error?.code;
+        const existingId = err?.error?.data?.existing?.id_historia;
+
+        if (err?.status === 409 && duplicateCode === 'DUPLICATE_HISTORIA_BY_APPOINTMENT_TYPE' && existingId) {
+          const goEdit = window.confirm(
+            `${err?.error?.message ?? 'Ya existe un documento de este tipo para la cita.'}\n\n¿Deseas abrir el documento existente en modo edición?`
+          );
+
+          if (goEdit) {
+            this.form.markAsPristine();
+            this.router.navigate(['/historia-clinica', existingId, 'editar'], {
+              queryParams: { from: 'cita', id_cita: this.gGeneral.get('id_cita')?.value || undefined }
+            });
+            return;
+          }
+
+          this.snackBar.open('No se creó un duplicado. Puedes cambiar el tipo de documento o editar el existente.', 'Cerrar', {
+            duration: 5000
+          });
+          return;
+        }
+
+        this.snackBar.open(err?.error?.message ?? 'Error al guardar', 'Cerrar', { duration: 4000 });
+      }
+    });
   }
 
-  goBack(): void {
-    // Redirigir a la cita si tenemos el ID, sino a historia clínica
-    if (this.citaId()) {
-      this.router.navigate(['/citas', this.citaId()]);
+  buildPayload(): any {
+    const g  = this.gGeneral.getRawValue();
+    const tipo: TipoDocumento = (this.isEdit()
+      ? (this.originalTipoDocumento() ?? g.tipo_documento)
+      : g.tipo_documento) as TipoDocumento;
+    const base: any = {
+      tipo_documento: tipo,
+      id_mascota:     g.id_mascota,
+      id_veterinario: g.id_veterinario,
+      estado:         g.estado,
+      id_cita:        g.id_cita || undefined,
+    };
+
+    // Motivo de modificación (edición)
+    if (this.isEdit()) {
+      base.motivo_modificacion = this.form.get('motivo_modificacion')?.value ?? null;
+    }
+
+    if (tipo === 'valoracion_inicial') {
+      const a   = this.gAnamnesis.value;
+      const val = this.gValoracion.value;
+      const per = this.gPerimetria.value;
+      const gon = this.gGoniometria.value;
+      const exp = this.gExploracion.value;
+      const dx  = this.gDiagnostico.value;
+      Object.assign(base, { ...a, ...val, ...per, ...gon, ...exp, ...dx });
+    } else if (tipo === 'seguimiento') {
+      const seg = { ...this.gSeguimiento.value };
+      seg.ejercicios_realizados = this.construirTextoEjerciciosSeguimiento(seg.ejercicios_realizados);
+      Object.assign(base, seg);
+    } else if (tipo === 'formula') {
+      Object.assign(base, {
+        medicamentos:     this.form.value.medicamentos,
+      });
+    } else if (tipo === 'remision') {
+      Object.assign(base, this.gRemision.value);
+    }
+    return base;
+  }
+
+  onImagenesDiagnosticasSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
+    if (!files.length) return;
+
+    const allowedExt = /\.(jpg|jpeg|png|gif|webp|pdf|txt|xls|xlsx)$/i;
+    const valid = files.filter(f => allowedExt.test(f.name));
+
+    if (valid.length !== files.length) {
+      this.snackBar.open('Algunos archivos se omitieron por formato no permitido', 'Cerrar', { duration: 3000 });
+    }
+
+    const merged = [...this.imagenesDiagnosticasFiles(), ...valid];
+    this.imagenesDiagnosticasFiles.set(merged.slice(0, 10));
+    input.value = '';
+  }
+
+  removeImagenDiagnostica(index: number): void {
+    const files = [...this.imagenesDiagnosticasFiles()];
+    files.splice(index, 1);
+    this.imagenesDiagnosticasFiles.set(files);
+  }
+
+  formatFileSize(bytes: number): string {
+    if (!bytes) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let size = bytes;
+    let idx = 0;
+    while (size >= 1024 && idx < units.length - 1) {
+      size /= 1024;
+      idx++;
+    }
+    return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[idx]}`;
+  }
+
+  cancelar(): void {
+    // Marcamos el formulario como pristine para que el guard no intercepte
+    // esta navegación intencional del usuario
+    this.form.markAsPristine();
+
+    if (window.history.length > 1) {
+      this.location.back();
+      return;
+    }
+
+    const idCitaFromQuery = this.route.snapshot.queryParamMap.get('id_cita');
+    const idCitaFromForm = this.gGeneral.get('id_cita')?.value;
+    const idCita = idCitaFromQuery || idCitaFromForm;
+
+    // Si la historia se abrió desde una cita, volver al detalle de esa cita.
+    if (idCita) {
+      this.router.navigate(['/citas', idCita]);
+      return;
+    }
+
+    if (this.isEdit() && this.historiaId()) {
+      this.router.navigate(['/historia-clinica', this.historiaId()]);
     } else {
       this.router.navigate(['/historia-clinica']);
     }
   }
 
-  // Métodos para manejo de archivos
-  onFileSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    if (input.files) {
-      const files = Array.from(input.files);
-      const currentFiles = this.archivosSeleccionados();
-      this.archivosSeleccionados.set([...currentFiles, ...files]);
+  onToggleCategoriaEjercicios(tipo: EjercicioCategoriaKey, checked: boolean): void {
+    if (this.isTipoBloqueado(this.tipoActual)) return;
+
+    const nextActivas = { ...this.ejerciciosCategoriasActivas(), [tipo]: checked };
+    this.ejerciciosCategoriasActivas.set(nextActivas);
+
+    if (!checked) {
+      const nextSel = { ...this.ejerciciosSeleccionados(), [tipo]: [] };
+      this.ejerciciosSeleccionados.set(nextSel);
+      if (tipo === 'agentes') {
+        this.zonasAgentes.set({});
+      }
     }
   }
 
-  removeFile(file: File): void {
-    const currentFiles = this.archivosSeleccionados();
-    const filteredFiles = currentFiles.filter(f => f !== file);
-    this.archivosSeleccionados.set(filteredFiles);
+  onToggleEjercicio(tipo: EjercicioCategoriaKey, ejercicio: string, checked: boolean): void {
+    if (this.isTipoBloqueado(this.tipoActual)) return;
+
+    const source = this.ejerciciosSeleccionados()[tipo] ?? [];
+    const nextByTipo = checked ? [...source, ejercicio] : source.filter((e) => e !== ejercicio);
+    const next = { ...this.ejerciciosSeleccionados(), [tipo]: nextByTipo };
+    this.ejerciciosSeleccionados.set(next);
+
+    if (tipo === 'agentes' && !checked) {
+      const zonas = { ...this.zonasAgentes() };
+      delete zonas[ejercicio];
+      this.zonasAgentes.set(zonas);
+    }
   }
 
-  getFileIcon(mimeType: string): string {
-    if (mimeType.startsWith('image/')) return 'image';
-    if (mimeType === 'application/pdf') return 'picture_as_pdf';
-    if (mimeType.includes('document') || mimeType.includes('word')) return 'description';
-    return 'attach_file';
+  isEjercicioSeleccionado(tipo: EjercicioCategoriaKey, ejercicio: string): boolean {
+    return (this.ejerciciosSeleccionados()[tipo] ?? []).includes(ejercicio);
   }
 
-  formatFileSize(bytes: number): string {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  onZonaAgenteChange(ejercicio: string, value: string): void {
+    if (this.isTipoBloqueado(this.tipoActual)) return;
+
+    const zonas = { ...this.zonasAgentes(), [ejercicio]: String(value || '').trim() };
+    this.zonasAgentes.set(zonas);
+  }
+
+  getZonaAgente(ejercicio: string): string {
+    return this.zonasAgentes()[ejercicio] ?? '';
+  }
+
+  private construirTextoEjerciciosSeguimiento(otrosEjercicios: string): string {
+    const bloques: string[] = [];
+
+    this.ejerciciosChecklistConfig.forEach((cfg) => {
+      const selected = this.ejerciciosSeleccionados()[cfg.key] ?? [];
+      if (this.ejerciciosCategoriasActivas()[cfg.key] && selected.length) {
+        if (cfg.key === 'agentes') {
+          const conZona = selected.map((e) => {
+            const zona = this.getZonaAgente(e);
+            return zona ? `${e} (zona: ${zona})` : e;
+          });
+          bloques.push(`${cfg.label}: ${conZona.join(', ')}`);
+        } else {
+          bloques.push(`${cfg.label}: ${selected.join(', ')}`);
+        }
+      }
+    });
+
+    const otros = this.extraerOtrosEjerciciosSeguimiento(otrosEjercicios);
+    if (otros) bloques.push(`Otros: ${otros}`);
+
+    return bloques.join('\n');
+  }
+
+  private hidratarChecklistSeguimiento(rawEjercicios: string): void {
+    const raw = String(rawEjercicios || '').toLowerCase();
+    if (!raw) {
+      this.ejerciciosCategoriasActivas.set({
+        calentamiento: false,
+        fortalecimiento: false,
+        hidroterapia: false,
+        pasivos: false,
+        agentes: false,
+      });
+      this.ejerciciosSeleccionados.set({
+        calentamiento: [],
+        fortalecimiento: [],
+        hidroterapia: [],
+        pasivos: [],
+        agentes: [],
+      });
+      return;
+    }
+
+    const nextActivas: Record<EjercicioCategoriaKey, boolean> = {
+      calentamiento: false,
+      fortalecimiento: false,
+      hidroterapia: false,
+      pasivos: false,
+      agentes: false,
+    };
+
+    const nextSel: Record<EjercicioCategoriaKey, string[]> = {
+      calentamiento: [],
+      fortalecimiento: [],
+      hidroterapia: [],
+      pasivos: [],
+      agentes: [],
+    };
+
+    const nextZonas: Record<string, string> = {};
+
+    this.ejerciciosChecklistConfig.forEach((cfg) => {
+      if (cfg.key !== 'agentes') {
+        const selected = cfg.ejercicios.filter((e) => raw.includes(e.toLowerCase()));
+        nextSel[cfg.key] = selected;
+        nextActivas[cfg.key] = selected.length > 0;
+        return;
+      }
+
+      const selectedAgentes: string[] = [];
+      cfg.ejercicios.forEach((e) => {
+        const escaped = e.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const re = new RegExp(`${escaped}(?:\\s*\\(zona:\\s*([^\\)]+)\\))?`, 'i');
+        const match = raw.match(re);
+        if (!match) return;
+        selectedAgentes.push(e);
+        if (match[1]) nextZonas[e] = match[1].trim();
+      });
+
+      nextSel[cfg.key] = selectedAgentes;
+      nextActivas[cfg.key] = selectedAgentes.length > 0;
+    });
+
+    this.ejerciciosSeleccionados.set(nextSel);
+    this.ejerciciosCategoriasActivas.set(nextActivas);
+    this.zonasAgentes.set(nextZonas);
+  }
+
+  private extraerOtrosEjerciciosSeguimiento(rawValue: string): string {
+    const raw = String(rawValue || '').trim();
+    if (!raw) return '';
+
+    const lines = raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const otrosParts: string[] = [];
+    let leyendoOtros = false;
+
+    for (const line of lines) {
+      const otrosMatch = line.match(/^otros\s*:\s*(.*)$/i);
+      if (otrosMatch) {
+        leyendoOtros = true;
+        const contenido = otrosMatch[1]?.trim();
+        if (contenido) otrosParts.push(contenido);
+        continue;
+      }
+
+      const esLineaConEtiqueta = /^[^:]{2,}:\s*/.test(line);
+      if (leyendoOtros && !esLineaConEtiqueta) {
+        otrosParts.push(line);
+      }
+    }
+
+    if (otrosParts.length) return otrosParts.join('\n').trim();
+
+    // Compatibilidad con registros antiguos que guardaban solo texto libre.
+    const tieneLineasEtiquetadas = lines.some((line) => /^[^:]{2,}:\s*/.test(line));
+    return tieneLineasEtiquetadas ? '' : raw;
   }
 }

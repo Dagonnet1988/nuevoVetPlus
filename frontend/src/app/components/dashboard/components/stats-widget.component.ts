@@ -16,6 +16,7 @@ export interface StatItem {
     isPositive: boolean;
   };
   route?: string;
+  queryParams?: Record<string, string>;
   category?: string;
 }
 

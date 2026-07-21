@@ -1,5 +1,5 @@
 import { Component, OnInit, signal, computed } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
@@ -17,8 +17,11 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatStepperModule } from '@angular/material/stepper';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 
 import { PacientesService } from '../../services/pacientes.service';
+import { ConsentimientosService } from '../../services/consentimientos.service';
+import { QRModalComponent, QRModalData } from '../qr-modal/qr-modal.component';
 import { Cliente, Mascota, PacienteFormData, CreatePacienteResponse } from '../../models/paciente.interface';
 import { sexoDbToFrontend, sexoFrontendToDb, processBackendResponse } from '../../utils/paciente.utils';
 import { environment } from '../../../environments/environment';
@@ -43,7 +46,8 @@ import { environment } from '../../../environments/environment';
     MatSnackBarModule,
     MatStepperModule,
     MatDividerModule,
-    MatChipsModule
+    MatChipsModule,
+    MatDialogModule
   ],
   template: `
     <div class="form-container">
@@ -80,7 +84,7 @@ import { environment } from '../../../environments/environment';
 
             <mat-card-content>
               <!-- Búsqueda de propietario existente -->
-              <div class="search-section" *ngIf="!isEditing()">
+                <div class="search-section">
                 <mat-form-field appearance="outline" class="search-field">
                   <mat-label>Buscar propietario existente</mat-label>
                   <input matInput
@@ -200,11 +204,18 @@ import { environment } from '../../../environments/environment';
               <div class="form-row">
                 <mat-form-field appearance="outline" class="flex-1">
                   <mat-label>Raza</mat-label>
-                  <mat-select formControlName="raza">
-                    @for (raza of (razasDisponibles() || []); track raza) {
+                  <input matInput
+                         formControlName="raza"
+                         [matAutocomplete]="razaAuto"
+                         placeholder="Escribe para buscar o crear una raza">
+                  <mat-autocomplete #razaAuto="matAutocomplete">
+                    @for (raza of (filteredRazas() || []); track raza) {
                       <mat-option [value]="raza">{{ raza }}</mat-option>
                     }
-                  </mat-select>
+                    @if (filteredRazas().length === 0) {
+                      <mat-option disabled>Sin coincidencias</mat-option>
+                    }
+                  </mat-autocomplete>
                 </mat-form-field>
 
                 <mat-form-field appearance="outline" class="flex-1">
@@ -690,6 +701,7 @@ export class PacienteFormComponent implements OnInit {
   clienteSeleccionado = signal<Cliente | null>(null);
   especies = signal<string[]>(['Perro', 'Gato', 'Ave', 'Hamster', 'Conejo', 'Reptil', 'Pez', 'Otro']); // Inicializar con datos básicos
   razasDisponibles = signal<string[]>(['Mestizo', 'Otro']);
+  filteredRazas = signal<string[]>(['Mestizo', 'Otro']);
   filteredClientes = signal<Cliente[]>([]);
 
   // Signals para manejo de fotos
@@ -708,9 +720,12 @@ export class PacienteFormComponent implements OnInit {
   constructor(
     private fb: FormBuilder,
     private pacientesService: PacientesService,
+    private consentimientosService: ConsentimientosService,
+    private dialog: MatDialog,
     private router: Router,
     private route: ActivatedRoute,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private location: Location
   ) {
     this.pacienteForm = this.createForm();
     this.clienteSearchControl = this.fb.control('');
@@ -758,6 +773,11 @@ export class PacienteFormComponent implements OnInit {
       if (especie) {
         this.updateRazas(especie);
       }
+    });
+
+    // Filtrar sugerencias de raza mientras se escribe
+    this.pacienteForm.get('raza')?.valueChanges.subscribe((value) => {
+      this.updateFilteredRazas(typeof value === 'string' ? value : '');
     });
   }
 
@@ -854,6 +874,18 @@ export class PacienteFormComponent implements OnInit {
           this.pacienteForm.reset();
           this.pacienteForm.patchValue(formData);
 
+          const owner: Cliente = {
+            id_cliente: pacienteData.id_cliente,
+            nombre: pacienteData.nombre_cliente || '',
+            telefono: pacienteData.telefono || '',
+            email: pacienteData.email || '',
+            direccion: pacienteData.direccion || '',
+            cedula: pacienteData.cedula || '',
+            activo: true
+          };
+          this.clienteSeleccionado.set(owner);
+          this.clienteSearchControl.setValue(owner.nombre || '', { emitEvent: false });
+
           // Marcar campos como touched para labels de Material Design
           this.markAllFieldsAsTouched();
 
@@ -874,7 +906,13 @@ export class PacienteFormComponent implements OnInit {
   private loadClientes(): void {
     this.pacientesService.getClientes(1, 50).subscribe({
       next: (response) => {
-        this.filteredClientes.set(response.data.clients);
+        const data: any = response as any;
+        const clientes = Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(data?.data?.clientes)
+            ? data.data.clientes
+            : [];
+        this.filteredClientes.set(clientes);
       },
       error: (error) => {
         console.error('Error cargando clientes:', error);
@@ -892,7 +930,13 @@ export class PacienteFormComponent implements OnInit {
 
     this.pacientesService.getClientes(1, 20, searchTerm).subscribe({
       next: (response) => {
-        this.filteredClientes.set(response.data.clients);
+        const data: any = response as any;
+        const clientes = Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(data?.data?.clientes)
+            ? data.data.clientes
+            : [];
+        this.filteredClientes.set(clientes);
       },
       error: (error) => {
         console.error('Error buscando clientes:', error);
@@ -948,16 +992,32 @@ export class PacienteFormComponent implements OnInit {
           }
 
           this.razasDisponibles.set(razasArray);
+          this.updateFilteredRazas(this.pacienteForm.get('raza')?.value || '');
           resolve();
         },
         error: (error) => {
           console.error('Error cargando razas:', error);
           this.razasDisponibles.set(['Mestizo', 'Otro']);
+          this.updateFilteredRazas(this.pacienteForm.get('raza')?.value || '');
           resolve();
         }
       });
     });
   }
+
+    private updateFilteredRazas(rawSearch: string): void {
+      const search = String(rawSearch || '').trim().toLowerCase();
+      const allRazas = this.razasDisponibles() || [];
+
+      if (!search) {
+        this.filteredRazas.set(allRazas);
+        return;
+      }
+
+      this.filteredRazas.set(
+        allRazas.filter((raza) => String(raza || '').toLowerCase().includes(search))
+      );
+    }
 
   onClienteSelected(event: any): void {
     const cliente: Cliente = event.option.value;
@@ -990,7 +1050,9 @@ export class PacienteFormComponent implements OnInit {
   }
 
   displayCliente(cliente: Cliente): string {
-    return cliente ? cliente.nombre : '';
+    if (!cliente) return '';
+    if (typeof cliente === 'string') return cliente;
+    return cliente.nombre || '';
   }
 
   onSubmit(): void {
@@ -1067,6 +1129,12 @@ export class PacienteFormComponent implements OnInit {
           ...(rawFormData.microchip && rawFormData.microchip.trim() && { microchip: rawFormData.microchip }),
           ...(rawFormData.notas && rawFormData.notas.trim() && { notas: rawFormData.notas })
         };
+
+        // Si se seleccionó un propietario existente desde el buscador,
+        // priorizar vínculo por ID para crear/editar la mascota sin duplicar cliente.
+        if (this.clienteSeleccionado()?.id_cliente) {
+          (formData as any).id_cliente_existente = this.clienteSeleccionado()!.id_cliente;
+        }
       }
 
       if (this.isEditing()) {
@@ -1130,6 +1198,26 @@ export class PacienteFormComponent implements OnInit {
                 'Cerrar',
                 { duration: 3000, panelClass: ['success-snackbar'] }
               );
+
+              // Abrir QR de consentimiento automáticamente
+              const idCliente = response.data?.cliente?.id_cliente;
+              const nombreCliente = response.data?.cliente?.nombre;
+              if (idCliente) {
+                this.consentimientosService.crear(idCliente).subscribe({
+                  next: (resp) => {
+                    const data: QRModalData = {
+                      qrBase64: resp.qrBase64,
+                      firmaUrl: resp.firmaUrl,
+                      expiresAt: resp.expiresAt,
+                      idCliente,
+                      clienteNombre: nombreCliente ?? ''
+                    };
+                    this.dialog.open(QRModalComponent, { data, width: '420px' });
+                  },
+                  error: () => {} // no interrumpir el flujo si falla el consentimiento
+                });
+              }
+
               this.router.navigate(['/pacientes']);
             } catch (photoError) {
               this.loading.set(false);
@@ -1195,6 +1283,11 @@ export class PacienteFormComponent implements OnInit {
   }
 
   goBack(): void {
+    if (window.history.length > 1) {
+      this.location.back();
+      return;
+    }
+
     this.router.navigate(['/pacientes']);
   }
 

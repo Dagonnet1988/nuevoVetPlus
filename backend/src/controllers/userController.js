@@ -2,6 +2,8 @@ import bcrypt from 'bcryptjs';
 import { query } from '../config/database.js';
 import { validationResult } from 'express-validator/lib/index.js';
 import { v4 as uuidv4 } from 'uuid';
+import { sendEmail } from '../services/emailService.js';
+import { renderEmailTemplate } from '../services/emailTemplateService.js';
 
 /**
  * Controlador para gestión de usuarios
@@ -32,6 +34,14 @@ export const createUser = async (req, res) => {
             forzar_cambio_password = true
         } = req.body;
 
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+        if (!tenantId) {
+            return res.status(403).json({
+                success: false,
+                message: 'No se pudo resolver la clínica del usuario autenticado'
+            });
+        }
+
         console.log('📝 Creando usuario con datos:', {
             nombre,
             apellido,
@@ -42,10 +52,10 @@ export const createUser = async (req, res) => {
             activo
         });
 
-        // Verificar si el email ya existe
+        // Verificar si el email ya existe en el tenant actual
         const existingEmail = await query(
-            'SELECT id_usuario FROM vetplus_auth.usuarios WHERE email = $1',
-            [email.toLowerCase()]
+            'SELECT id_usuario FROM vetplus_auth.usuarios WHERE LOWER(email) = LOWER($1) AND id_tenant = $2',
+            [email.toLowerCase(), tenantId]
         );
 
         if (existingEmail.rows.length > 0) {
@@ -55,10 +65,10 @@ export const createUser = async (req, res) => {
             });
         }
 
-        // Verificar si el documento ya existe
+        // Verificar si el documento ya existe en el tenant actual
         const existingDocument = await query(
-            'SELECT id_usuario FROM vetplus_auth.usuarios WHERE documento = $1',
-            [documento]
+            'SELECT id_usuario FROM vetplus_auth.usuarios WHERE documento = $1 AND id_tenant = $2',
+            [documento, tenantId]
         );
 
         if (existingDocument.rows.length > 0) {
@@ -79,9 +89,9 @@ export const createUser = async (req, res) => {
             INSERT INTO vetplus_auth.usuarios (
                 id_usuario, nombre, apellido, email, documento, tipo_documento,
                 telefono, direccion, password_hash, rol, especialidad, numero_licencia,
-                activo, password_temporal, debe_cambiar_password, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            RETURNING id_usuario, nombre, apellido, email, documento, rol, activo, created_at
+                activo, password_temporal, debe_cambiar_password, id_tenant, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            RETURNING id_usuario, nombre, apellido, email, documento, rol, activo, avatar_url, id_tenant, created_at
         `, [
             id_usuario, 
             nombre, 
@@ -97,10 +107,46 @@ export const createUser = async (req, res) => {
             numero_licencia || null,
             activo,
             true, // password_temporal es booleano
-            forzar_cambio_password
+            forzar_cambio_password,
+            tenantId
         ]);
 
         const newUser = result.rows[0];
+
+        if (enviar_credenciales && newUser.email) {
+            try {
+                const rendered = await renderEmailTemplate({
+                    tenantId,
+                    key: 'usuario_credenciales',
+                    variables: {
+                        usuario_nombre: `${newUser.nombre} ${newUser.apellido || ''}`.trim(),
+                        usuario_email: newUser.email,
+                        password_temporal: finalPassword
+                    },
+                    userId: req.user?.id_usuario || req.user?.id || null
+                });
+
+                if (rendered) {
+                    await sendEmail({
+                        tenantId,
+                        to: newUser.email,
+                        subject: rendered.asunto_render,
+                        html: rendered.cuerpo_html_render,
+                        text: rendered.cuerpo_text_render || undefined,
+                        logContext: {
+                            tipo_envio: 'usuario_credenciales',
+                            userId: req.user?.id_usuario || req.user?.id || null,
+                            metadata: {
+                                id_usuario: newUser.id_usuario,
+                                rol: newUser.rol
+                            }
+                        }
+                    });
+                }
+            } catch (emailError) {
+                console.error('No se pudo enviar correo de credenciales al usuario nuevo:', emailError.message);
+            }
+        }
 
         console.log(`✅ Usuario creado: ${newUser.email} (${newUser.documento}) con rol ${newUser.rol} por ${req.user.email || req.user.documento}`);
 
@@ -136,6 +182,8 @@ export const getUsers = async (req, res) => {
             search
         } = req.query;
 
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+
         // Validar límites de paginación
         const maxLimit = 100;
         const validLimit = Math.min(parseInt(limit), maxLimit);
@@ -145,20 +193,29 @@ export const getUsers = async (req, res) => {
             SELECT 
                 id_usuario,
                 nombre,
+                apellido,
                 email,
+                documento,
+                tipo_documento,
+                telefono,
                 rol,
+                especialidad,
+                numero_licencia,
                 activo,
                 ultimo_login,
                 intentos_login,
                 bloqueado_hasta,
+                avatar_url,
+                firma_url,
                 created_at,
                 updated_at
             FROM vetplus_auth.usuarios
             WHERE 1=1
         `;
 
-        const values = [];
-        let paramCount = 0;
+        const values = [tenantId];
+        let paramCount = 1;
+        selectSQL += ` AND id_tenant = $1`;
 
         // Filtros opcionales
         if (rol) {
@@ -175,7 +232,7 @@ export const getUsers = async (req, res) => {
 
         if (search) {
             paramCount++;
-            selectSQL += ` AND (nombre ILIKE $${paramCount} OR email ILIKE $${paramCount})`;
+            selectSQL += ` AND (nombre ILIKE $${paramCount} OR apellido ILIKE $${paramCount} OR email ILIKE $${paramCount})`;
             values.push(`%${search}%`);
         }
 
@@ -193,9 +250,9 @@ export const getUsers = async (req, res) => {
         const result = await query(selectSQL, values);
 
         // Contar total de registros
-        let countSQL = 'SELECT COUNT(*) FROM vetplus_auth.usuarios WHERE 1=1';
-        const countValues = [];
-        let countParamCount = 0;
+        let countSQL = 'SELECT COUNT(*) FROM vetplus_auth.usuarios WHERE id_tenant = $1';
+        const countValues = [tenantId];
+        let countParamCount = 1;
 
         if (rol) {
             countParamCount++;
@@ -211,7 +268,7 @@ export const getUsers = async (req, res) => {
 
         if (search) {
             countParamCount++;
-            countSQL += ` AND (nombre ILIKE $${countParamCount} OR email ILIKE $${countParamCount})`;
+            countSQL += ` AND (nombre ILIKE $${countParamCount} OR apellido ILIKE $${countParamCount} OR email ILIKE $${countParamCount})`;
             countValues.push(`%${search}%`);
         }
 
@@ -264,7 +321,9 @@ export const getUserById = async (req, res) => {
                 created_at,
                 updated_at,
                 password_temporal,
-                debe_cambiar_password
+                debe_cambiar_password,
+                avatar_url,
+                firma_url
             FROM vetplus_auth.usuarios 
             WHERE id_usuario = $1
         `, [id]);
@@ -438,7 +497,7 @@ export const updateUser = async (req, res) => {
             UPDATE vetplus_auth.usuarios 
             SET ${updateFields.join(', ')}
             WHERE id_usuario = $${paramCount + 1}
-            RETURNING id_usuario, nombre, apellido, email, rol, especialidad, numero_licencia, activo, telefono, direccion, tipo_documento, updated_at
+            RETURNING id_usuario, nombre, apellido, email, rol, especialidad, numero_licencia, activo, telefono, direccion, tipo_documento, avatar_url, updated_at
         `;
 
         const result = await query(updateQuery, updateValues);
@@ -651,6 +710,7 @@ export const reactivateUser = async (req, res) => {
  */
 export const getUserStats = async (req, res) => {
     try {
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
         const result = await query(`
             SELECT 
                 COUNT(*) as total_usuarios,
@@ -658,13 +718,12 @@ export const getUserStats = async (req, res) => {
                 COUNT(CASE WHEN activo = false THEN 1 END) as usuarios_inactivos,
                 COUNT(CASE WHEN rol = 'admin' THEN 1 END) as administradores,
                 COUNT(CASE WHEN rol = 'vet' THEN 1 END) as veterinarios,
-                COUNT(CASE WHEN rol IN ('aux_admin', 'aux_vet') THEN 1 END) as auxiliares,
-                COUNT(CASE WHEN rol = 'aux_admin' THEN 1 END) as aux_admin,
-                COUNT(CASE WHEN rol = 'aux_vet' THEN 1 END) as aux_vet,
+                COUNT(CASE WHEN rol = 'aux' THEN 1 END) as auxiliares,
                 COUNT(CASE WHEN ultimo_login >= CURRENT_DATE - INTERVAL '7 days' THEN 1 END) as usuarios_activos_semana,
                 COUNT(CASE WHEN bloqueado_hasta > CURRENT_TIMESTAMP THEN 1 END) as usuarios_bloqueados
             FROM vetplus_auth.usuarios
-        `);
+            WHERE id_tenant = $1
+        `, [tenantId]);
 
         const stats = result.rows[0];
 
@@ -678,15 +737,108 @@ export const getUserStats = async (req, res) => {
                 administradores: parseInt(stats.administradores),
                 veterinarios: parseInt(stats.veterinarios),
                 auxiliares: parseInt(stats.auxiliares),
-                aux_admin: parseInt(stats.aux_admin || 0),
-                aux_vet: parseInt(stats.aux_vet || 0),
                 usuarios_activos_semana: parseInt(stats.usuarios_activos_semana),
                 usuarios_bloqueados: parseInt(stats.usuarios_bloqueados)
             }
         });
 
     } catch (error) {
-        console.error('Error obteniendo estadísticas de usuarios:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+/**
+ * Subir firma del veterinario
+ * @route POST /api/auth/users/:id/firma
+ */
+export const uploadFirma = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+
+        const isSelf = req.user.id_usuario === id;
+        const isAdmin = req.user.rol === 'admin';
+        if (!isSelf && !isAdmin) {
+            return res.status(403).json({ success: false, message: 'Sin permiso para modificar esta firma' });
+        }
+
+        if (!req.file) {
+            return res.status(400).json({ success: false, message: 'No se recibió ningún archivo' });
+        }
+
+        const firmaUrl = `/uploads/firmas/${req.file.filename}`;
+
+        const result = await query(
+            `UPDATE vetplus_auth.usuarios
+             SET firma_url = $1, updated_at = NOW()
+             WHERE id_usuario = $2 AND id_tenant = $3
+             RETURNING id_usuario, firma_url`,
+            [firmaUrl, id, tenantId]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+        }
+
+        res.json({
+            success: true,
+            message: 'Firma subida exitosamente',
+            data: { firma_url: result.rows[0].firma_url }
+        });
+    } catch (error) {
+        console.error('Error subiendo firma:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+/**
+ * Subir avatar de usuario
+ * @route POST /api/auth/users/:id/avatar
+ */
+export const uploadAvatar = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+
+        const isSelf = req.user.id_usuario === id;
+        const isAdmin = req.user.rol === 'admin';
+        if (!isSelf && !isAdmin) {
+            return res.status(403).json({ success: false, message: 'Sin permiso para modificar este avatar' });
+        }
+
+        if (!req.file) {
+            return res.status(400).json({ success: false, message: 'No se recibió ningún archivo' });
+        }
+
+        const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+
+        const result = await query(
+            `UPDATE vetplus_auth.usuarios
+             SET avatar_url = $1, updated_at = NOW()
+             WHERE id_usuario = $2 AND id_tenant = $3
+             RETURNING id_usuario, avatar_url`,
+            [avatarUrl, id, tenantId]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+        }
+
+        res.json({
+            success: true,
+            message: 'Avatar actualizado exitosamente',
+            data: { avatar_url: result.rows[0].avatar_url }
+        });
+    } catch (error) {
+        console.error('Error subiendo avatar:', error);
         res.status(500).json({
             success: false,
             message: 'Error interno del servidor',

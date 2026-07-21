@@ -219,11 +219,11 @@ export class SyncDialogComponent {
     this.syncForm = this.fb.group({
       syncToGoogle: [true],
       importFromGoogle: [true],
-      syncChanges: [true],
+      syncChanges: [false],
       fechaInicio: [startOfMonth, Validators.required],
       fechaFin: [endOfMonth, Validators.required],
       autoMatch: [true],
-      createMissingData: [false],
+      createMissingData: [true],
       dryRun: [false]
     });
   }
@@ -249,12 +249,23 @@ export class SyncDialogComponent {
       // Convertir fechas a string ISO
       const result = {
         ...formValue,
-        fechaInicio: formValue.fechaInicio?.toISOString().split('T')[0],
-        fechaFin: formValue.fechaFin?.toISOString().split('T')[0]
+        fechaInicio: this.formatDateLocal(formValue.fechaInicio),
+        fechaFin: this.formatDateLocal(formValue.fechaFin)
       };
 
       this.dialogRef.close(result);
     }
+  }
+
+  private formatDateLocal(value: Date | string | null | undefined): string | null {
+    if (!value) return null;
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   onCancel(): void {

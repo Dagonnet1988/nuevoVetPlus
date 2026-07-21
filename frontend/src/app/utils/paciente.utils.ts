@@ -15,11 +15,11 @@ export enum SexoBackend {
 /**
  * Convierte el sexo de base de datos (Macho/Hembra) a formato frontend (M/H)
  */
-export function sexoDbToFrontend(sexoDb: string): string {
+export function sexoDbToFrontend(sexoDb: string): 'M' | 'H' | '' {
   if (!sexoDb) return '';
-  
+
   const sexoNormalized = sexoDb.toLowerCase().trim();
-  
+
   switch (sexoNormalized) {
     case 'macho':
       return SexoFrontend.MACHO;
@@ -36,9 +36,9 @@ export function sexoDbToFrontend(sexoDb: string): string {
  */
 export function sexoFrontendToDb(sexoFrontend: string): string {
   if (!sexoFrontend) return '';
-  
+
   const sexoNormalized = sexoFrontend.toUpperCase().trim();
-  
+
   switch (sexoNormalized) {
     case SexoFrontend.MACHO:
       return SexoBackend.MACHO;
@@ -55,7 +55,7 @@ export function sexoFrontendToDb(sexoFrontend: string): string {
  */
 export function getSexoDisplayText(sexo: string): string {
   const normalizedSexo = sexo?.toUpperCase().trim();
-  
+
   switch (normalizedSexo) {
     case SexoFrontend.MACHO:
     case 'MACHO':
@@ -73,9 +73,9 @@ export function getSexoDisplayText(sexo: string): string {
  */
 export function isValidSexo(sexo: string): boolean {
   if (!sexo) return false;
-  
+
   const normalizedSexo = sexo.toUpperCase().trim();
-  return normalizedSexo === SexoFrontend.MACHO || 
+  return normalizedSexo === SexoFrontend.MACHO ||
          normalizedSexo === SexoFrontend.HEMBRA ||
          normalizedSexo === 'MACHO' ||
          normalizedSexo === 'HEMBRA';
@@ -97,7 +97,7 @@ export function processBackendResponse<T>(response: any): {
       message: response.message
     };
   }
-  
+
   // Si la respuesta tiene solo data
   if (response && typeof response === 'object' && 'data' in response) {
     return {
@@ -105,7 +105,7 @@ export function processBackendResponse<T>(response: any): {
       success: true
     };
   }
-  
+
   // Si la respuesta es directamente los datos
   if (response) {
     return {
@@ -113,7 +113,7 @@ export function processBackendResponse<T>(response: any): {
       success: true
     };
   }
-  
+
   return {
     data: null,
     success: false,

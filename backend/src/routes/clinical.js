@@ -4,9 +4,12 @@ import petRoutes from './pets.js';
 import pacientesRoutes from './pacientes.js';
 import consultationRoutes from './consultations.js';
 import appointmentRoutes from './appointments.js';
+import historiaRoutes from './historias.js';
 import { getEspecies, getRazasByEspecie } from '../controllers/pacientesController.js';
 import { authenticateToken, authorize } from '../middleware/auth.js';
+import { tenantContext } from '../middleware/tenantContext.js';
 import { uploadHistoriaClinicaArchivos, handleUploadError } from '../middleware/uploadMiddleware.js';
+import { configCache } from '../middleware/performance.js';
 
 const router = express.Router();
 
@@ -22,23 +25,26 @@ router.get('/test', (req, res) => {
 });
 
 // Montar las rutas de clientes
-router.use('/clients', clientRoutes);
-router.use('/clientes', clientRoutes); // Alias en español
+router.use('/clients', authenticateToken, tenantContext, clientRoutes);
+router.use('/clientes', authenticateToken, tenantContext, clientRoutes); // Alias en español
 
 // Montar las rutas de mascotas
-router.use('/pets', petRoutes);
+router.use('/pets', authenticateToken, tenantContext, petRoutes);
 
 // Montar las rutas de pacientes (combinadas)
-router.use('/pacientes', pacientesRoutes);
+router.use('/pacientes', authenticateToken, tenantContext, pacientesRoutes);
 
 // Las rutas de especies están ahora en /pacientes/especies
 
 // Ruta directa para obtener veterinarios
 router.get('/veterinarians',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  tenantContext,
+  authorize(['admin', 'vet', 'aux']),
+  configCache,
   async (req, res) => {
     try {
+      const tenantId = req.tenantId;
       const { query } = await import('../config/database.js');
       const result = await query(`
         SELECT 
@@ -47,10 +53,11 @@ router.get('/veterinarians',
           email,
           'Medicina Veterinaria' as especialidad
         FROM vetplus_auth.usuarios 
-        WHERE rol = 'vet' 
+        WHERE rol = 'vet'
+        AND id_tenant = $1
         AND activo = true
         ORDER BY nombre ASC
-      `);
+      `, [tenantId]);
       
       res.json({
         success: true,
@@ -69,7 +76,8 @@ router.get('/veterinarians',
 // Ruta para subir archivos de historia clínica
 router.post('/consultations/:id/upload-files',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  tenantContext,
+  authorize(['admin', 'vet', 'aux']),
   (req, res, next) => {
     uploadHistoriaClinicaArchivos(req, res, (err) => {
       if (err) {
@@ -81,6 +89,7 @@ router.post('/consultations/:id/upload-files',
   async (req, res) => {
     try {
       const { id } = req.params;
+      const tenantId = req.tenantId;
       const archivos = req.files || [];
 
       if (!archivos || archivos.length === 0) {
@@ -93,8 +102,8 @@ router.post('/consultations/:id/upload-files',
       // Verificar que la consulta existe
       const { query } = await import('../config/database.js');
       const consultaResult = await query(
-        'SELECT id_consulta FROM clinical.consultas_clinicas WHERE id_consulta = $1',
-        [id]
+        'SELECT id_consulta FROM clinical.consultas_clinicas WHERE id_consulta = $1 AND id_tenant = $2',
+        [id, tenantId]
       );
 
       if (consultaResult.rows.length === 0) {
@@ -115,9 +124,9 @@ router.post('/consultations/:id/upload-files',
           const archivoResult = await dbQuery(`
             INSERT INTO clinical.archivos_consulta (
               id_consulta, nombre_original, nombre_archivo, ruta_archivo,
-              tipo_mime, tamaño_bytes, subido_por
+              tipo_archivo, tamano_bytes, created_by
             ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-            RETURNING id_archivo, fecha_subida
+            RETURNING id_archivo, created_at
           `, [
             id,
             file.originalname,
@@ -135,7 +144,7 @@ router.post('/consultations/:id/upload-files',
             ruta: `/uploads/historia-clinica/${file.filename}`,
             tipo: file.mimetype,
             tamaño: file.size,
-            fecha_subida: archivoResult.rows[0].fecha_subida
+            fecha_subida: archivoResult.rows[0].created_at
           });
         } catch (dbError) {
           console.error('Error guardando archivo en BD:', dbError);
@@ -175,17 +184,18 @@ router.post('/consultations/:id/upload-files',
 // Ruta para obtener archivos de una consulta
 router.get('/consultations/:id/files',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  tenantContext,
+  authorize(['admin', 'vet', 'aux']),
   async (req, res) => {
     try {
       const { id } = req.params;
-      const { categoria } = req.query;
+      const tenantId = req.tenantId;
 
       // Verificar que la consulta existe
       const { query } = await import('../config/database.js');
       const consultaResult = await query(
-        'SELECT id_consulta FROM clinical.consultas_clinicas WHERE id_consulta = $1',
-        [id]
+        'SELECT id_consulta FROM clinical.consultas_clinicas WHERE id_consulta = $1 AND id_tenant = $2',
+        [id, tenantId]
       );
 
       if (consultaResult.rows.length === 0) {
@@ -202,26 +212,36 @@ router.get('/consultations/:id/files',
           nombre_original,
           nombre_archivo,
           ruta_archivo,
-          tipo_mime,
-          tamaño_bytes,
+          COALESCE(to_jsonb(ac)->>'tipo_archivo', to_jsonb(ac)->>'tipo_mime') as tipo_mime,
+          COALESCE(
+            (to_jsonb(ac)->>'tamano_bytes')::integer,
+            (to_jsonb(ac)->>'tamaño_bytes')::integer
+          ) as tamano_bytes,
           descripcion,
-          categoria,
-          fecha_subida,
-          subido_por,
+          COALESCE(
+            (to_jsonb(ac)->>'created_at')::timestamp,
+            (to_jsonb(ac)->>'fecha_subida')::timestamp
+          ) as fecha_subida,
+          COALESCE(
+            (to_jsonb(ac)->>'created_by')::uuid,
+            (to_jsonb(ac)->>'subido_por')::uuid
+          ) as subido_por,
           u.nombre as subido_por_nombre
         FROM clinical.archivos_consulta ac
-        LEFT JOIN vetplus_auth.usuarios u ON ac.subido_por = u.id_usuario
-        WHERE ac.id_consulta = $1 AND ac.activo = true
+        LEFT JOIN vetplus_auth.usuarios u ON u.id_usuario = COALESCE(
+          (to_jsonb(ac)->>'created_by')::uuid,
+          (to_jsonb(ac)->>'subido_por')::uuid
+        )
+        WHERE ac.id_consulta = $1
+          AND COALESCE((to_jsonb(ac)->>'activo')::boolean, true) = true
       `;
 
       const params = [id];
 
-      if (categoria) {
-        sqlQuery += ' AND ac.categoria = $2';
-        params.push(categoria);
-      }
-
-      sqlQuery += ' ORDER BY ac.fecha_subida DESC';
+      sqlQuery += ` ORDER BY COALESCE(
+        (to_jsonb(ac)->>'created_at')::timestamp,
+        (to_jsonb(ac)->>'fecha_subida')::timestamp
+      ) DESC`;
 
       const archivosResult = await query(sqlQuery, params);
 
@@ -245,18 +265,20 @@ router.get('/consultations/:id/files',
 // Ruta para eliminar archivo de consulta
 router.delete('/consultations/:id/files/:fileId',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux_admin']),
+  tenantContext,
+  authorize(['admin', 'vet']),
   async (req, res) => {
     try {
       const { id, fileId } = req.params;
+      const tenantId = req.tenantId;
 
       // Verificar que el archivo existe y pertenece a la consulta
       const { query } = await import('../config/database.js');
       const archivoResult = await query(`
         SELECT nombre_archivo, ruta_archivo
         FROM clinical.archivos_consulta
-        WHERE id_archivo = $1 AND id_consulta = $2 AND activo = true
-      `, [fileId, id]);
+        WHERE id_archivo = $1 AND id_consulta = $2 AND id_tenant = $3 AND activo = true
+      `, [fileId, id, tenantId]);
 
       if (archivoResult.rows.length === 0) {
         return res.status(404).json({
@@ -271,8 +293,8 @@ router.delete('/consultations/:id/files/:fileId',
       await query(`
         UPDATE clinical.archivos_consulta
         SET activo = false, updated_at = CURRENT_TIMESTAMP
-        WHERE id_archivo = $1
-      `, [fileId]);
+        WHERE id_archivo = $1 AND id_consulta = $2 AND id_tenant = $3
+      `, [fileId, id, tenantId]);
 
       // Intentar eliminar el archivo físico
       try {
@@ -300,10 +322,13 @@ router.delete('/consultations/:id/files/:fileId',
   }
 );
 
-// Montar las rutas de consultas clínicas
-router.use('/consultations', consultationRoutes);
+// Montar las rutas de consultas clínicas (legacy, mantener por compatibilidad)
+router.use('/consultations', authenticateToken, tenantContext, consultationRoutes);
+
+// Montar las rutas de historias clínicas (nuevo módulo)
+router.use('/historias', authenticateToken, tenantContext, historiaRoutes);
 
 // Montar las rutas de citas
-router.use('/appointments', appointmentRoutes);
+router.use('/appointments', authenticateToken, tenantContext, appointmentRoutes);
 
 export default router;

@@ -8,6 +8,8 @@ import {
   CitaFormData,
   CitaFilter,
   CitaStats,
+  RecurringAppointmentPayload,
+  RecurringPreviewItem,
   VeterinarioDisponibilidad,
   SugerenciaHorario,
   CalendarView
@@ -26,9 +28,10 @@ export class CitasService {
   // ===============================
 
   getCitas(page: number = 1, limit: number = 10, filters?: CitaFilter): Observable<any> {
+    const offset = (page - 1) * limit;
     let params = new HttpParams()
-      .set('page', page.toString())
-      .set('limit', limit.toString());
+      .set('limit', limit.toString())
+      .set('offset', offset.toString());
 
     if (filters) {
       if (filters.fecha_inicio) params = params.set('fecha_inicio', filters.fecha_inicio);
@@ -50,6 +53,16 @@ export class CitasService {
     // Transformar los datos para que sean compatibles con el backend
     const citaTransformada = this.transformarCitaParaBackend(cita);
     return this.http.post<any>(`${this.API_URL}/appointments`, citaTransformada);
+  }
+
+  previewCitasPeriodicas(payload: RecurringAppointmentPayload): Observable<RecurringPreviewItem[]> {
+    return this.http.post<any>(`${this.API_URL}/appointments/recurring/preview`, payload).pipe(
+      map((response: any) => response?.data?.ocurrencias || [])
+    );
+  }
+
+  createCitasPeriodicas(payload: RecurringAppointmentPayload): Observable<any> {
+    return this.http.post<any>(`${this.API_URL}/appointments/recurring`, payload);
   }
 
   updateCita(id: string, cita: Partial<CitaFormData>): Observable<any> {
@@ -106,7 +119,7 @@ export class CitasService {
     if (fechaInicio) params = params.set('fecha_inicio', fechaInicio);
     if (fechaFin) params = params.set('fecha_fin', fechaFin);
 
-    return this.http.get<any>(`${this.API_URL}/appointments/veterinarian/${vetId}`, { params });
+    return this.http.get<any>(`${this.API_URL}/appointments/vet/${vetId}`, { params });
   }
 
   getCitasByPaciente(petId: string): Observable<any> {
@@ -122,7 +135,7 @@ export class CitasService {
       .set('fecha', fecha);
 
     return this.http.get<VeterinarioDisponibilidad>(
-      `${this.API_URL}/appointments/veterinarian/${vetId}/availability`,
+      `${this.API_URL}/appointments/vet/${vetId}/availability`,
       { params }
     );
   }
@@ -167,13 +180,24 @@ export class CitasService {
       fecha_inicio: fechaInicio,
       fecha_fin: fechaFin,
       auto_match: options.autoMatch ?? true,
-      create_missing_data: options.createMissingData ?? false,
+      create_missing_data: options.createMissingData ?? true,
       dry_run: options.dryRun ?? false
     });
   }
 
-  syncChangesFromGoogle(): Observable<any> {
-    return this.http.post<any>(`${environment.apiUrl}/google-calendar/sync-changes`, {});
+  syncChangesFromGoogle(options: {
+    onlyToday?: boolean;
+    startDate?: string;
+    endDate?: string;
+  } = {}): Observable<any> {
+    const hasExplicitRange = Boolean(options.startDate && options.endDate);
+    const onlyToday = hasExplicitRange ? false : (options.onlyToday ?? true);
+
+    return this.http.post<any>(`${environment.apiUrl}/google-calendar/sync-changes`, {
+      only_today: onlyToday,
+      start_date: options.startDate ?? null,
+      end_date: options.endDate ?? null
+    });
   }
 
   getSyncStatus(): Observable<any> {
@@ -232,10 +256,15 @@ export class CitasService {
 
   calcularDuracionCita(tipo: string): number {
     const duraciones: { [key: string]: number } = {
+      'valoracion': 60,
+      'hidroterapia': 45,
+      'terapia': 45,
+      'domicilio': 45,
+      'control': 30,
+      // Legacy
       'consulta_general': 30,
       'vacunacion': 15,
       'cirugia': 120,
-      'control': 20,
       'emergencia': 45,
       'revision': 25,
       'desparasitacion': 15,
@@ -248,27 +277,56 @@ export class CitasService {
 
   obtenerColorPorTipo(tipo: string): string {
     const colores: { [key: string]: string } = {
-      'consulta_general': '#2196f3',
-      'vacunacion': '#4caf50',
-      'cirugia': '#f44336',
-      'control': '#ff9800',
-      'emergencia': '#e91e63',
-      'revision': '#9c27b0',
-      'desparasitacion': '#00bcd4',
-      'estetica': '#cddc39',
-      'otro': '#607d8b'
+      'domicilio': '#dff1e0',
+      'valoracion': '#f8e9af',
+      'hidroterapia': '#cfe0ff',
+      'terapia': '#d9f3f4',
+      'sin_clasificar': '#eceff1',
+      'control': '#ffe7d1',
+      // Legacy
+      'consulta_general': '#dff1e0',
+      'vacunacion': '#dff1e0',
+      'cirugia': '#cfe0ff',
+      'emergencia': '#fde2df',
+      'revision': '#ece5f8',
+      'desparasitacion': '#d9f3f4',
+      'estetica': '#f3f7d5',
+      'otro': '#eceff1'
     };
 
-    return colores[tipo] || '#607d8b';
+    return colores[tipo] || '#eceff1';
+  }
+
+  obtenerColorBordePorTipo(tipo: string): string {
+    const colores: { [key: string]: string } = {
+      'domicilio': '#a2c9a4',
+      'valoracion': '#d7be58',
+      'hidroterapia': '#6f96dc',
+      'terapia': '#93d7d9',
+      'sin_clasificar': '#c7d0d8',
+      'control': '#e09a5f',
+      // Legacy
+      'consulta_general': '#a2c9a4',
+      'vacunacion': '#a2c9a4',
+      'cirugia': '#6f96dc',
+      'emergencia': '#efb2ab',
+      'revision': '#c3b0de',
+      'desparasitacion': '#93d7d9',
+      'estetica': '#d6dfa1',
+      'otro': '#c7d0d8'
+    };
+
+    return colores[tipo] || '#c7d0d8';
   }
 
   obtenerColorPorEstado(estado: string): string {
     const colores: { [key: string]: string } = {
-      'pendiente': '#ff9800',
       'confirmada': '#2196f3',
       'en_curso': '#9c27b0',
       'completada': '#4caf50',
-      'cancelada': '#607d8b',
+      // Compatibilidad visual para estados legados
+      'pendiente': '#2196f3',
+      'cancelada': '#f44336',
       'no_asistio': '#f44336'
     };
 
@@ -329,10 +387,17 @@ export class CitasService {
 
     // Mapear tipos del frontend a tipos del backend
     const mapeoTipos: { [key: string]: string } = {
-      'consulta_general': 'consulta_general',  // Mantener igual por compatibilidad
+      // Nuevos tipos
+      'valoracion': 'valoracion',
+      'hidroterapia': 'hidroterapia',
+      'terapia': 'terapia',
+      'domicilio': 'domicilio',
+      'control': 'control',
+      'sin_clasificar': 'sin_clasificar',
+      // Compatibilidad legada
+      'consulta_general': 'consulta_general',
       'vacunacion': 'vacunacion',
       'cirugia': 'cirugia',
-      'control': 'control',
       'emergencia': 'emergencia',
       'revision': 'revision',
       'desparasitacion': 'desparasitacion',
@@ -342,11 +407,13 @@ export class CitasService {
 
     // Mapear estados del frontend a estados del backend
     const mapeoEstados: { [key: string]: string } = {
-      'pendiente': 'pendiente',
+      // Compatibilidad legada
+      'pendiente': 'confirmada',
       'confirmada': 'confirmada',
-      'en_progreso': 'en_progreso',
+      'en_curso': 'en_curso',
+      'en_progreso': 'en_curso',   // alias incorrecto anterior → corregido
       'completada': 'completada',
-      'cancelada': 'cancelada',
+      'cancelada': 'no_asistio',
       'no_asistio': 'no_asistio'
     };
 

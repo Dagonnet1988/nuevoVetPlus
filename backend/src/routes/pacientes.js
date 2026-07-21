@@ -4,6 +4,8 @@ import {
   createPacienteCompleto,
   updatePacienteCompleto,
   updateMascota,
+  createMascotaParaCliente,
+  inactivarMascota,
   getPacienteById,
   getMascotasConCliente,
   getEstadisticasPacientes,
@@ -13,10 +15,22 @@ import {
   eliminarFotoPaciente,
   getFotoPaciente
 } from '../controllers/pacientesController.js';
-import { validateCreatePacienteCompleto, validatePacienteSearch } from '../validators/pacientesValidators.js';
+import { validateCreatePacienteCompleto, validatePacienteSearch, validateUpdateMascota } from '../validators/pacientesValidators.js';
 import { uploadPacienteFoto, handleUploadError } from '../middleware/uploadMiddleware.js';
+import {
+  crearConsentimiento,
+  obtenerEstadoConsentimiento,
+  reenviarEnlaceConsentimiento,
+  descargarPDFConsentimiento,
+  revocarConsentimiento
+} from '../controllers/consentimientoController.js';
+import { cacheInvalidation, configCache, intelligentCaching } from '../middleware/performance.js';
 
 const router = express.Router();
+
+router.use(cacheInvalidation(['.*pacientes.*', '.*pets.*', '.*clients.*', '.*clientes.*']));
+
+const pacientesReadCache = intelligentCaching({ ttl: 60 });
 
 /**
  * @route   POST /api/clinical/pacientes
@@ -25,7 +39,7 @@ const router = express.Router();
  */
 router.post('/',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  authorize(['admin', 'vet', 'aux']),
   validateCreatePacienteCompleto,
   createPacienteCompleto
 );
@@ -37,7 +51,7 @@ router.post('/',
  */
 router.put('/:id',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  authorize(['admin', 'vet', 'aux']),
   validateCreatePacienteCompleto,
   updatePacienteCompleto
 );
@@ -49,8 +63,9 @@ router.put('/:id',
  */
 router.get('/',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  authorize(['admin', 'vet', 'aux']),
   validatePacienteSearch,
+  pacientesReadCache,
   getMascotasConCliente
 );
 
@@ -61,7 +76,7 @@ router.get('/',
  */
 router.get('/stats',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  authorize(['admin', 'vet', 'aux']),
   getEstadisticasPacientes
 );
 
@@ -72,7 +87,8 @@ router.get('/stats',
  */
 router.get('/especies',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  authorize(['admin', 'vet', 'aux']),
+  configCache,
   getEspecies
 );
 
@@ -83,7 +99,8 @@ router.get('/especies',
  */
 router.get('/especies/:especie/razas',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  authorize(['admin', 'vet', 'aux']),
+  configCache,
   getRazasByEspecie
 );
 
@@ -94,8 +111,20 @@ router.get('/especies/:especie/razas',
  */
 router.get('/:id',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  authorize(['admin', 'vet', 'aux']),
+  pacientesReadCache,
   getPacienteById
+);
+
+/**
+ * @route   POST /api/clinical/pacientes/mascota
+ * @desc    Crear mascota para un cliente existente
+ * @access  Private (admin, vet, aux)
+ */
+router.post('/mascota',
+  authenticateToken,
+  authorize(['admin', 'vet', 'aux']),
+  createMascotaParaCliente
 );
 
 /**
@@ -105,8 +134,20 @@ router.get('/:id',
  */
 router.put('/mascota/:id',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  authorize(['admin', 'vet', 'aux']),
+  validateUpdateMascota,
   updateMascota
+);
+
+/**
+ * @route   PATCH /api/clinical/pacientes/mascota/:id/inactivar
+ * @desc    Inactivar mascota (requiere motivo: Fallecida | Transferida | Error de registro | Otro)
+ * @access  Private (admin, vet)
+ */
+router.patch('/mascota/:id/inactivar',
+  authenticateToken,
+  authorize(['admin', 'vet']),
+  inactivarMascota
 );
 
 /**
@@ -116,7 +157,7 @@ router.put('/mascota/:id',
  */
 router.post('/:id/foto',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  authorize(['admin', 'vet', 'aux']),
   uploadPacienteFoto,
   uploadFotoPaciente
 );
@@ -128,7 +169,7 @@ router.post('/:id/foto',
  */
 router.get('/:id/foto',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  authorize(['admin', 'vet', 'aux']),
   getFotoPaciente
 );
 
@@ -139,8 +180,70 @@ router.get('/:id/foto',
  */
 router.delete('/:id/foto',
   authenticateToken,
-  authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+  authorize(['admin', 'vet', 'aux']),
   eliminarFotoPaciente
+);
+
+// ── CONSENTIMIENTO DE DATOS PERSONALES ────────────────────────────────────────
+
+/**
+ * @route   GET /api/clinical/pacientes/cliente/:idCliente/consentimiento/estado
+ * @desc    Estado del consentimiento vigente del cliente
+ * @access  Private (admin, vet, aux)
+ */
+router.get('/cliente/:idCliente/consentimiento/estado',
+  authenticateToken,
+  authorize(['admin', 'vet', 'aux']),
+  (req, res, next) => { req.params.id = req.params.idCliente; next(); },
+  obtenerEstadoConsentimiento
+);
+
+/**
+ * @route   POST /api/clinical/pacientes/cliente/:idCliente/consentimiento
+ * @desc    Crear nuevo consentimiento (genera token + QR)
+ * @access  Private (admin, vet, aux)
+ */
+router.post('/cliente/:idCliente/consentimiento',
+  authenticateToken,
+  authorize(['admin', 'vet', 'aux']),
+  (req, res, next) => { req.params.id = req.params.idCliente; next(); },
+  crearConsentimiento
+);
+
+/**
+ * @route   POST /api/clinical/pacientes/cliente/:idCliente/consentimiento/reenviar
+ * @desc    Reenviar enlace (expira el anterior y genera uno nuevo)
+ * @access  Private (admin, vet, aux)
+ */
+router.post('/cliente/:idCliente/consentimiento/reenviar',
+  authenticateToken,
+  authorize(['admin', 'vet', 'aux']),
+  (req, res, next) => { req.params.id = req.params.idCliente; next(); },
+  reenviarEnlaceConsentimiento
+);
+
+/**
+ * @route   GET /api/clinical/pacientes/cliente/:idCliente/consentimiento/pdf
+ * @desc    Descargar PDF del consentimiento firmado
+ * @access  Private (admin, vet)
+ */
+router.get('/cliente/:idCliente/consentimiento/pdf',
+  authenticateToken,
+  authorize(['admin', 'vet']),
+  (req, res, next) => { req.params.id = req.params.idCliente; next(); },
+  descargarPDFConsentimiento
+);
+
+/**
+ * @route   PUT /api/clinical/pacientes/cliente/:idCliente/consentimiento/revocar
+ * @desc    Revocar el consentimiento firmado vigente de un cliente
+ * @access  Private (admin, vet)
+ */
+router.put('/cliente/:idCliente/consentimiento/revocar',
+  authenticateToken,
+  authorize(['admin', 'vet']),
+  (req, res, next) => { req.params.id = req.params.idCliente; next(); },
+  revocarConsentimiento
 );
 
 export default router;

@@ -12,7 +12,7 @@ export interface QuickAction {
   icon: string;
   route: string;
   color: string;
-  roles: ('admin' | 'vet' | 'aux_admin' | 'aux_vet')[];
+  roles: ('admin' | 'vet' | 'aux')[];
   description?: string;
 }
 
@@ -39,7 +39,7 @@ export class QuickActionsComponent {
       icon: 'event_available',
       route: '/citas/nueva',
       color: 'primary',
-      roles: ['admin', 'vet', 'aux_admin', 'aux_vet'],
+      roles: ['admin', 'vet', 'aux'],
       description: 'Agendar cita'
     },
     {
@@ -47,40 +47,16 @@ export class QuickActionsComponent {
       icon: 'pets',
       route: '/pacientes/nuevo',
       color: 'success',
-      roles: ['admin', 'vet', 'aux_admin', 'aux_vet'],
+      roles: ['admin', 'vet', 'aux'],
       description: 'Registrar mascota'
     },
     {
-      title: 'Nueva Factura',
-      icon: 'receipt_long',
-      route: '/facturacion/nueva',
-      color: 'warning',
-      roles: ['admin', 'aux_admin'],
-      description: 'Generar factura'
-    },
-    {
-      title: 'Consulta Médica',
+      title: 'Historia Clínica',
       icon: 'medical_services',
       route: '/historia-clinica/nueva',
       color: 'info',
       roles: ['admin', 'vet'],
-      description: 'Nueva consulta'
-    },
-    {
-      title: 'Inventario',
-      icon: 'inventory_2',
-      route: '/inventario',
-      color: 'primary',
-      roles: ['admin', 'aux_admin'],
-      description: 'Gestionar stock'
-    },
-    {
-      title: 'Reportes',
-      icon: 'analytics',
-      route: '/reportes',
-      color: 'info',
-      roles: ['admin'],
-      description: 'Ver estadísticas'
+      description: 'Registrar valoración o consulta'
     },
     {
       title: 'Usuarios',
@@ -104,8 +80,8 @@ export class QuickActionsComponent {
 
   get filteredActions(): QuickAction[] {
     const actionsToFilter = this.actions.length > 0 ? this.actions : this.defaultActions;
-    
-    return actionsToFilter.filter(action => 
+
+    return actionsToFilter.filter(action =>
       this.authService.hasAnyRole(action.roles)
     );
   }

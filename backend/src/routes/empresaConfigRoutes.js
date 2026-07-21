@@ -15,23 +15,18 @@ import {
     getEmpresaConfig,
     updateEmpresaConfig,
     uploadLogo,
-    configureWhatsApp,
-    getWhatsAppConfig,
-    updateWhatsAppConfig,
-    getWhatsAppLimites,
-    updateWhatsAppLimites,
-    getWhatsAppEstadoLimites,
-    resetWhatsAppContadores,
-    reanudarWhatsAppEnvios,
     getDiasEspeciales,
     addDiaEspecial,
-    getSiguienteNumeroFactura,
-    testWhatsAppConfig
+    updateDiaEspecial,
+    deleteDiaEspecial
 } from '../controllers/empresaConfigController.js';
+import { cacheInvalidation, configCache } from '../middleware/performance.js';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+router.use(cacheInvalidation(['.*empresa.*', '.*config.*', '.*dias-especiales.*', '.*calendar.*', '.*appointments.*']));
 
 // Configuración de multer para subida de archivos
 const storage = multer.diskStorage({
@@ -59,11 +54,12 @@ const upload = multer({
         fileSize: 5 * 1024 * 1024 // 5MB máximo
     },
     fileFilter: (req, file, cb) => {
-        const allowedTypes = ['image/jpeg', 'image/png', 'image/svg+xml'];
+        // Solo PNG y JPEG — son los únicos formatos que PDFKit soporta para incrustar en el PDF
+        const allowedTypes = ['image/jpeg', 'image/png'];
         if (allowedTypes.includes(file.mimetype)) {
             cb(null, true);
         } else {
-            cb(new Error('Tipo de archivo no permitido. Solo JPG, PNG y SVG.'));
+            cb(new Error('Formato no permitido. El logo debe ser PNG o JPG/JPEG.'));
         }
     }
 });
@@ -79,8 +75,8 @@ const validateEmpresaConfig = [
     body('nit')
         .notEmpty()
         .withMessage('El NIT es requerido')
-        .matches(/^[0-9]{9,12}-[0-9]{1}$/)
-        .withMessage('Formato de NIT inválido (ej: 900123456-1)'),
+        .isLength({ min: 3, max: 30 })
+        .withMessage('El NIT no puede exceder 30 caracteres'),
     
     body('direccion')
         .notEmpty()
@@ -89,110 +85,31 @@ const validateEmpresaConfig = [
         .withMessage('La dirección no puede exceder 500 caracteres'),
     
     body('telefono')
-        .optional()
+        .notEmpty()
+        .withMessage('El teléfono es requerido')
         .matches(/^[\+]?[0-9\s\-\(\)]{7,20}$/)
         .withMessage('Formato de teléfono inválido'),
     
     body('email')
-        .optional()
+        .notEmpty()
+        .withMessage('El email es requerido')
         .isEmail()
         .withMessage('Formato de email inválido'),
     
-    body('prefijo_factura')
-        .optional()
-        .isLength({ min: 1, max: 10 })
-        .withMessage('El prefijo de factura debe tener entre 1 y 10 caracteres'),
-    
-    body('horarios')
-        .optional()
-        .isArray({ max: 7 })
-        .withMessage('Los horarios deben ser un array de máximo 7 elementos'),
-    
-    body('horarios.*.dia_semana')
-        .if(body('horarios').exists())
-        .isInt({ min: 0, max: 6 })
-        .withMessage('Día de semana inválido (0-6)'),
-    
-    body('horarios.*.hora_apertura')
-        .if(body('horarios').exists())
-        .optional()
-        .matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)
-        .withMessage('Formato de hora inválido (HH:MM)'),
-    
-    body('horarios.*.hora_cierre')
-        .if(body('horarios').exists())
-        .optional()
-        .matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)
-        .withMessage('Formato de hora inválido (HH:MM)'),
+    body('eslogan')
+        .optional({ nullable: true })
+        .isLength({ max: 200 })
+        .withMessage('El eslogan no puede exceder 200 caracteres'),
 
-    // Validación personalizada: verificar días únicos
-    body('horarios').custom((horarios) => {
-        if (horarios && Array.isArray(horarios)) {
-            const diasVistos = new Set();
-            for (const horario of horarios) {
-                if (diasVistos.has(horario.dia_semana)) {
-                    throw new Error(`Día de semana ${horario.dia_semana} duplicado en horarios`);
-                }
-                diasVistos.add(horario.dia_semana);
-            }
-        }
-        return true;
-    })
-];
-
-const validateWhatsAppConfig = [
-    body('whatsapp_business_number')
-        .optional()
-        .matches(/^[0-9]{10,15}$/)
-        .withMessage('Número de WhatsApp Business inválido'),
-    
-    body('whatsapp_api_token')
-        .optional()
-        .isLength({ min: 10 })
-        .withMessage('Token de API inválido'),
-    
-    body('whatsapp_webhook_verify_token')
-        .optional()
-        .isLength({ min: 8 })
-        .withMessage('Token de verificación debe tener al menos 8 caracteres'),
-    
-    body('whatsapp_activo')
-        .optional()
-        .isBoolean()
-        .withMessage('Estado de WhatsApp debe ser booleano')
-];
-
-const validateDiaEspecial = [
-    body('fecha')
-        .notEmpty()
-        .withMessage('La fecha es requerida')
-        .isISO8601()
-        .withMessage('Formato de fecha inválido'),
-    
-    body('motivo')
-        .notEmpty()
-        .withMessage('El motivo es requerido')
-        .isLength({ min: 3, max: 200 })
-        .withMessage('El motivo debe tener entre 3 y 200 caracteres'),
-    
-    body('cerrado')
-        .optional()
-        .isBoolean()
-        .withMessage('El campo cerrado debe ser booleano'),
-    
-    body('hora_apertura')
-        .optional()
-        .matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)
-        .withMessage('Formato de hora inválido (HH:MM)'),
-    
-    body('hora_cierre')
-        .optional()
-        .matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)
-        .withMessage('Formato de hora inválido (HH:MM)')
+    body('sitio_web')
+        .optional({ nullable: true })
+        .isLength({ max: 200 })
+        .withMessage('El sitio web no puede exceder 200 caracteres')
 ];
 
 // Middleware para verificar permisos de administrador
 const requireAdmin = authorize(['admin']);
+const requireAuthenticatedTenantUser = authorize(['admin', 'vet', 'aux']);
 
 /**
  * @swagger
@@ -210,7 +127,7 @@ const requireAdmin = authorize(['admin']);
  *       404:
  *         description: Configuración no encontrada
  */
-router.get('/config', authenticateToken, requireAdmin, getEmpresaConfig);
+router.get('/config', authenticateToken, requireAuthenticatedTenantUser, configCache, getEmpresaConfig);
 
 /**
  * @swagger
@@ -230,6 +147,8 @@ router.get('/config', authenticateToken, requireAdmin, getEmpresaConfig);
  *               - nombre_empresa
  *               - nit  
  *               - direccion
+ *               - telefono
+ *               - email
  *             properties:
  *               nombre_empresa:
  *                 type: string
@@ -249,6 +168,42 @@ router.get('/config', authenticateToken, requireAdmin, getEmpresaConfig);
  *         description: Acceso denegado
  */
 router.put('/config', authenticateToken, requireAdmin, validateEmpresaConfig, updateEmpresaConfig);
+
+/**
+ * @swagger
+ * /api/admin/empresa/dias-especiales:
+ *   get:
+ *     summary: Obtener días especiales de la empresa
+ *     tags: [Configuración Empresa]
+ */
+router.get('/dias-especiales', authenticateToken, requireAuthenticatedTenantUser, configCache, getDiasEspeciales);
+
+/**
+ * @swagger
+ * /api/admin/empresa/dias-especiales:
+ *   post:
+ *     summary: Crear un día especial (festivo/no laborable/horario especial)
+ *     tags: [Configuración Empresa]
+ */
+router.post('/dias-especiales', authenticateToken, requireAdmin, addDiaEspecial);
+
+/**
+ * @swagger
+ * /api/admin/empresa/dias-especiales/{id}:
+ *   put:
+ *     summary: Actualizar un día especial
+ *     tags: [Configuración Empresa]
+ */
+router.put('/dias-especiales/:id', authenticateToken, requireAdmin, updateDiaEspecial);
+
+/**
+ * @swagger
+ * /api/admin/empresa/dias-especiales/{id}:
+ *   delete:
+ *     summary: Eliminar un día especial
+ *     tags: [Configuración Empresa]
+ */
+router.delete('/dias-especiales/:id', authenticateToken, requireAdmin, deleteDiaEspecial);
 
 /**
  * @swagger
@@ -278,280 +233,6 @@ router.put('/config', authenticateToken, requireAdmin, validateEmpresaConfig, up
  *         description: Acceso denegado
  */
 router.post('/logo', authenticateToken, requireAdmin, upload.single('logo'), uploadLogo);
-
-/**
- * @swagger
- * /api/admin/empresa/whatsapp:
- *   get:
- *     summary: Obtener configuración de WhatsApp
- *     tags: [Configuración Empresa]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Configuración de WhatsApp obtenida exitosamente
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *                   properties:
- *                     activo:
- *                       type: boolean
- *                     numero_telefono:
- *                       type: string
- *                     nombre_empresa:
- *                       type: string
- *                     templates:
- *                       type: object
- *                     configuracion_envios:
- *                       type: object
- *                     horarios_envio:
- *                       type: object
- *                     notificaciones_automaticas:
- *                       type: object
- *       403:
- *         description: Acceso denegado
- */
-router.get('/whatsapp', authenticateToken, requireAdmin, getWhatsAppConfig);
-
-/**
- * @swagger
- * /api/admin/empresa/whatsapp:
- *   put:
- *     summary: Configurar WhatsApp Business
- *     tags: [Configuración Empresa]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               whatsapp_business_number:
- *                 type: string
- *                 example: "573001234567"
- *               whatsapp_api_token:
- *                 type: string
- *                 example: "EAAYourTokenHere"
- *               whatsapp_webhook_verify_token:
- *                 type: string
- *                 example: "your_verify_token"
- *               whatsapp_activo:
- *                 type: boolean
- *                 example: true
- *     responses:
- *       200:
- *         description: WhatsApp configurado exitosamente
- *       400:
- *         description: Datos inválidos
- *       403:
- *         description: Acceso denegado
- */
-router.put('/whatsapp', authenticateToken, requireAdmin, updateWhatsAppConfig);
-
-/**
- * @swagger
- * /api/admin/empresa/whatsapp/test:
- *   post:
- *     summary: Probar configuración de WhatsApp
- *     tags: [Configuración Empresa]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - numero_prueba
- *             properties:
- *               numero_prueba:
- *                 type: string
- *                 example: "573001234567"
- *     responses:
- *       200:
- *         description: Mensaje de prueba enviado
- *       400:
- *         description: Configuración inválida
- *       403:
- *         description: Acceso denegado
- */
-router.post('/whatsapp/test', authenticateToken, requireAdmin, testWhatsAppConfig);
-
-/**
- * @swagger
- * /api/admin/empresa/whatsapp/limites:
- *   get:
- *     summary: Obtener configuración de límites de WhatsApp
- *     tags: [Configuración Empresa]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Límites obtenidos exitosamente
- *       403:
- *         description: Acceso denegado
- */
-router.get('/whatsapp/limites', authenticateToken, requireAdmin, getWhatsAppLimites);
-
-/**
- * @swagger
- * /api/admin/empresa/whatsapp/limites:
- *   put:
- *     summary: Actualizar límites de WhatsApp
- *     tags: [Configuración Empresa]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               limite_diario:
- *                 type: number
- *               limite_por_hora:
- *                 type: number
- *               intervalo_minimo:
- *                 type: number
- *     responses:
- *       200:
- *         description: Límites actualizados exitosamente
- *       400:
- *         description: Datos inválidos
- *       403:
- *         description: Acceso denegado
- */
-router.put('/whatsapp/limites', authenticateToken, requireAdmin, updateWhatsAppLimites);
-
-/**
- * @swagger
- * /api/admin/empresa/whatsapp/estado-limites:
- *   get:
- *     summary: Obtener estado actual de límites de WhatsApp
- *     tags: [Configuración Empresa]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Estado de límites obtenido exitosamente
- *       403:
- *         description: Acceso denegado
- */
-router.get('/whatsapp/estado-limites', authenticateToken, requireAdmin, getWhatsAppEstadoLimites);
-
-/**
- * @swagger
- * /api/admin/empresa/whatsapp/reset-contadores:
- *   post:
- *     summary: Resetear contadores de límites
- *     tags: [Configuración Empresa]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Contadores reseteados exitosamente
- *       403:
- *         description: Acceso denegado
- */
-router.post('/whatsapp/reset-contadores', authenticateToken, requireAdmin, resetWhatsAppContadores);
-
-/**
- * @swagger
- * /api/admin/empresa/whatsapp/reanudar:
- *   post:
- *     summary: Reanudar envíos de WhatsApp
- *     tags: [Configuración Empresa]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Envíos reanudados exitosamente
- *       403:
- *         description: Acceso denegado
- */
-router.post('/whatsapp/reanudar', authenticateToken, requireAdmin, reanudarWhatsAppEnvios);
-
-/**
- * @swagger
- * /api/admin/empresa/dias-especiales:
- *   get:
- *     summary: Obtener días especiales y festivos
- *     tags: [Configuración Empresa]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: year
- *         schema:
- *           type: integer
- *         description: Año a consultar
- *     responses:
- *       200:
- *         description: Lista de días especiales
- */
-router.get('/dias-especiales', authenticateToken, getDiasEspeciales);
-
-/**
- * @swagger
- * /api/admin/empresa/dias-especiales:
- *   post:
- *     summary: Agregar día especial
- *     tags: [Configuración Empresa]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - fecha
- *               - motivo
- *             properties:
- *               fecha:
- *                 type: string
- *                 format: date
- *                 example: "2024-12-25"
- *               motivo:
- *                 type: string
- *                 example: "Navidad"
- *               cerrado:
- *                 type: boolean
- *                 example: true
- *     responses:
- *       201:
- *         description: Día especial agregado
- *       400:
- *         description: Datos inválidos
- *       403:
- *         description: Acceso denegado
- */
-router.post('/dias-especiales', authenticateToken, requireAdmin, validateDiaEspecial, addDiaEspecial);
-
-/**
- * @swagger
- * /api/admin/empresa/siguiente-numero/factura:
- *   get:
- *     summary: Obtener siguiente número de factura
- *     tags: [Configuración Empresa]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Siguiente número obtenido
- */
-router.get('/siguiente-numero/factura', authenticateToken, requireAdmin, getSiguienteNumeroFactura);
 
 // Middleware de manejo de errores para multer
 router.use((error, req, res, next) => {

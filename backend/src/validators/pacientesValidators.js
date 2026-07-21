@@ -142,3 +142,42 @@ export const validateEspecieParam = [
     .isLength({ min: 2, max: 30 })
     .withMessage('La especie debe tener entre 2 y 30 caracteres')
 ];
+
+export const validateUpdateMascota = [
+  body('nombre')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 50 })
+    .withMessage('El nombre debe tener entre 1 y 50 caracteres'),
+  body('especie')
+    .optional()
+    .trim()
+    .isLength({ min: 2, max: 30 })
+    .withMessage('La especie debe tener entre 2 y 30 caracteres'),
+  body('sexo')
+    .optional()
+    .isIn(['M', 'H', 'Macho', 'Hembra'])
+    .withMessage('El sexo debe ser M, H, Macho o Hembra'),
+  body('peso')
+    .optional({ nullable: true })
+    .isFloat({ min: 0, max: 999 })
+    .withMessage('El peso debe ser un número entre 0 y 999'),
+  body('activo')
+    .optional()
+    .isBoolean()
+    .withMessage('El campo activo debe ser booleano'),
+  body('esterilizado')
+    .optional()
+    .isBoolean()
+    .withMessage('El campo esterilizado debe ser booleano'),
+  body('microchip')
+    .optional({ nullable: true })
+    .trim()
+    .isLength({ max: 50 })
+    .withMessage('El microchip no puede superar 50 caracteres'),
+  body('notas')
+    .optional({ nullable: true })
+    .trim()
+    .isLength({ max: 1000 })
+    .withMessage('Las notas no pueden superar 1000 caracteres')
+];

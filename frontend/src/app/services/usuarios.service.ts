@@ -17,7 +17,7 @@ export interface Usuario {
   direccion?: string;
   documento: string;
   tipo_documento: 'CC' | 'CE' | 'TI' | 'PP';
-  rol: 'admin' | 'vet' | 'aux_admin' | 'aux_vet';
+  rol: 'admin' | 'vet' | 'aux';
   especialidad?: string;
   numero_licencia?: string;
   activo: boolean;
@@ -28,6 +28,7 @@ export interface Usuario {
   debe_cambiar_password?: boolean;
   // Campos opcionales que pueden no venir del backend
   avatar_url?: string;
+  firma_url?: string;
   configuraciones?: ConfiguracionUsuario;
   estadisticas?: EstadisticasUsuario;
 }
@@ -38,7 +39,7 @@ export interface ConfiguracionUsuario {
   timezone: string;
   notificaciones_email: boolean;
   notificaciones_push: boolean;
-  formato_fecha: 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'YYYY-MM-DD';
+  formato_fecha: 'DD-MM-YY' | 'MM-DD-YY' | 'YYYY-MM-DD';
   formato_hora: '12h' | '24h';
   items_por_pagina: number;
   dashboard_personalizado: any[];
@@ -62,7 +63,7 @@ export interface CreateUsuarioRequest {
   direccion?: string;
   documento: string;
   tipo_documento: 'CC' | 'CE' | 'TI' | 'PP';
-  rol: 'admin' | 'vet' | 'aux_admin' | 'aux_vet';
+  rol: 'admin' | 'vet' | 'aux';
   especialidad?: string;
   numero_licencia?: string;
   password_temporal?: string;
@@ -77,7 +78,7 @@ export interface UpdateUsuarioRequest {
   direccion?: string;
   documento?: string;
   tipo_documento?: 'CC' | 'CE' | 'TI' | 'PP';
-  rol?: 'admin' | 'vet' | 'aux_admin' | 'aux_vet';
+  rol?: 'admin' | 'vet' | 'aux';
   especialidad?: string;
   numero_licencia?: string;
   activo?: boolean;
@@ -100,7 +101,7 @@ export interface ResetPasswordRequest {
 // ===============================
 
 export interface Rol {
-  codigo: 'admin' | 'vet' | 'aux_admin' | 'aux_vet';
+  codigo: 'admin' | 'vet' | 'aux';
   nombre: string;
   descripcion: string;
   permisos: Permiso[];
@@ -122,7 +123,7 @@ export interface AccionPermiso {
 
 export interface AsignarRolRequest {
   id_usuario: string;
-  rol: 'admin' | 'vet' | 'aux_admin' | 'aux_vet';
+  rol: 'admin' | 'vet' | 'aux';
   motivo?: string;
 }
 
@@ -168,10 +169,19 @@ export interface SesionActiva {
   user_agent: string;
   ubicacion?: string;
   fecha_inicio: string;
+  fecha_logout?: string | null;
   ultima_actividad: string;
+  duracion_segundos?: number;
   dispositivo: string;
   navegador: string;
   activa: boolean;
+}
+
+export interface FiltroSesiones {
+  id_usuario?: string;
+  estado?: 'activas' | 'cerradas' | 'todas';
+  search?: string;
+  exclude_admins?: boolean;
 }
 
 export interface ConfiguracionSeguridad {
@@ -409,10 +419,19 @@ export class UsuariosService {
   // SESIONES ACTIVAS
   // ===============================
 
-  getSesionesActivas(id_usuario?: string): Observable<SesionActiva[]> {
+  getSesionesActivas(filtros?: FiltroSesiones): Observable<SesionActiva[]> {
     let params = new HttpParams();
-    if (id_usuario) {
-      params = params.set('id_usuario', id_usuario);
+    if (filtros?.id_usuario) {
+      params = params.set('id_usuario', filtros.id_usuario);
+    }
+    if (filtros?.estado) {
+      params = params.set('estado', filtros.estado);
+    }
+    if (filtros?.search) {
+      params = params.set('search', filtros.search);
+    }
+    if (filtros?.exclude_admins !== undefined) {
+      params = params.set('exclude_admins', String(filtros.exclude_admins));
     }
 
     return this.http.get<any>(`${this.API_URL}/sesiones-activas`, { params }).pipe(
@@ -431,6 +450,22 @@ export class UsuariosService {
 
   cerrarTodasLasSesiones(id_usuario: string): Observable<any> {
     return this.http.delete<any>(`${this.API_URL}/usuarios/${id_usuario}/sesiones`);
+  }
+
+  uploadFirma(id_usuario: string, file: File): Observable<{ firma_url: string }> {
+    const formData = new FormData();
+    formData.append('firma', file);
+    return this.http.post<any>(`${this.API_URL}/users/${id_usuario}/firma`, formData).pipe(
+      map(r => r.data)
+    );
+  }
+
+  uploadAvatar(id_usuario: string, file: File): Observable<{ avatar_url: string }> {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    return this.http.post<any>(`${this.API_URL}/users/${id_usuario}/avatar`, formData).pipe(
+      map(r => r.data)
+    );
   }
 
   // ===============================
@@ -469,8 +504,7 @@ export class UsuariosService {
             distribución_roles: [
               { rol: 'admin', cantidad: stats.administradores || 0, porcentaje: this.calcularPorcentaje(stats.administradores, stats.total_usuarios) },
               { rol: 'vet', cantidad: stats.veterinarios || 0, porcentaje: this.calcularPorcentaje(stats.veterinarios, stats.total_usuarios) },
-              { rol: 'aux_admin', cantidad: stats.aux_admin || 0, porcentaje: this.calcularPorcentaje(stats.aux_admin, stats.total_usuarios) },
-              { rol: 'aux_vet', cantidad: stats.aux_vet || 0, porcentaje: this.calcularPorcentaje(stats.aux_vet, stats.total_usuarios) }
+              { rol: 'aux', cantidad: stats.auxiliares || 0, porcentaje: this.calcularPorcentaje(stats.auxiliares, stats.total_usuarios) }
             ],
             nuevos_este_mes: 0, // No disponible en backend
             sesiones_activas: stats.usuarios_activos_semana || 0
@@ -552,14 +586,12 @@ export class UsuariosService {
   }
 
   formatearRol(rol: string): string {
-    const roles = {
+    const roles: Record<string, string> = {
       admin: 'Administrador',
       vet: 'Veterinario',
-      aux_admin: 'Auxiliar Administrativo',
-      aux_vet: 'Auxiliar Veterinario',
-      aux: 'Auxiliar' // For backward compatibility
+      aux: 'Auxiliar'
     };
-    return roles[rol as keyof typeof roles] || rol;
+    return roles[rol] || rol;
   }
 
   formatearTipoDocumento(tipo: string): string {
@@ -572,25 +604,21 @@ export class UsuariosService {
   }
 
   getColorRol(rol: string): string {
-    const colores = {
+    const colores: Record<string, string> = {
       admin: '#f44336',
       vet: '#2196f3',
-      aux_admin: '#4caf50',
-      aux_vet: '#ff9800',
-      aux: '#4caf50' // For backward compatibility
+      aux: '#4caf50'
     };
-    return colores[rol as keyof typeof colores] || '#666';
+    return colores[rol] || '#666';
   }
 
   getIconoRol(rol: string): string {
-    const iconos = {
+    const iconos: Record<string, string> = {
       admin: 'admin_panel_settings',
       vet: 'medical_services',
-      aux_admin: 'support_agent',
-      aux_vet: 'health_and_safety',
-      aux: 'support_agent' // For backward compatibility
+      aux: 'support_agent'
     };
-    return iconos[rol as keyof typeof iconos] || 'person';
+    return iconos[rol] || 'person';
   }
 
 
@@ -601,7 +629,7 @@ export class UsuariosService {
       timezone: 'America/Bogota',
       notificaciones_email: true,
       notificaciones_push: true,
-      formato_fecha: 'DD/MM/YYYY',
+      formato_fecha: 'DD-MM-YY',
       formato_hora: '24h',
       items_por_pagina: 25,
       dashboard_personalizado: []

@@ -27,87 +27,52 @@
     <div class="section-content">
       <div class="content-row">
         <!-- Calendario de citas -->
-        @if (authService.hasAnyRole(['admin', 'vet', 'aux_admin', 'aux_vet'])) {
+        @if (authService.hasAnyRole(['admin', 'vet', 'aux'])) {
           <div class="content-item">
             <app-appointments-calendar [appointments]="todayAppointments"></app-appointments-calendar>
           </div>
         }
 
-        <!-- Gráficos de citas y pacientes -->
-        <div class="content-item">
+        <!-- Columna derecha: estado + actividad -->
+        <div class="content-item right-stack">
           @if (shouldShowChart('citas')) {
             <mat-card class="chart-card">
               <mat-card-header>
                 <mat-card-title>
                   <mat-icon>schedule</mat-icon>
-                  Citas por Estado
+                  Citas por Estado (Semana)
                 </mat-card-title>
               </mat-card-header>
               <mat-card-content>
-                <app-doughnut-chart [data]="citasPorEstadoData"></app-doughnut-chart>
+                <div class="chart-area">
+                  <app-doughnut-chart [data]="citasPorEstadoData"></app-doughnut-chart>
+                </div>
+
+                @if (citasPorEstadoResumen.length > 0) {
+                  <div class="estado-resumen">
+                    @for (item of citasPorEstadoResumen; track item.label) {
+                      <div class="estado-item">
+                        <div class="estado-item-left">
+                          <span class="estado-dot" [style.background-color]="item.color"></span>
+                          <span class="estado-label">{{ item.label }}</span>
+                        </div>
+                        <div class="estado-item-right">
+                          <span class="estado-count">{{ item.cantidad }}</span>
+                          <span class="estado-percent">{{ item.porcentaje }}%</span>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                }
               </mat-card-content>
             </mat-card>
           }
 
-          @if (shouldShowChart('pacientes')) {
-            <mat-card class="chart-card">
-              <mat-card-header>
-                <mat-card-title>
-                  <mat-icon>pets</mat-icon>
-                  Pacientes por Especie
-                </mat-card-title>
-              </mat-card-header>
-              <mat-card-content>
-                <app-doughnut-chart [data]="pacientesPorEspecieData"></app-doughnut-chart>
-              </mat-card-content>
-            </mat-card>
-          }
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Sección: Datos Financieros -->
-  <div class="section-container">
-    <div class="section-header">
-      <mat-icon class="section-icon">attach_money</mat-icon>
-      <h2 class="section-title">Finanzas e Inventario</h2>
-    </div>
-
-    <!-- Stats específicos de finanzas -->
-    <div class="section-stats">
-      @for (stat of getStatsByCategory('finanzas'); track $index) {
-        <app-stats-widget [stat]="stat"></app-stats-widget>
-      }
-    </div>
-
-    <!-- Contenido financiero -->
-    <div class="section-content">
-      <div class="content-row">
-        <!-- Gráfico de ventas mensuales -->
-        <div class="content-item large">
-          @if (shouldShowChart('ventas')) {
-            <mat-card class="chart-card">
-              <mat-card-header>
-                <mat-card-title>
-                  <mat-icon>trending_up</mat-icon>
-                  Tendencia de Ventas
-                </mat-card-title>
-              </mat-card-header>
-              <mat-card-content>
-                <app-line-chart
-                  [data]="ventasMensualesData"
-                  [title]="'Ventas Mensuales (COP)'">
-                </app-line-chart>
-              </mat-card-content>
-            </mat-card>
-          }
-        </div>
-
-        <!-- Acciones rápidas y actividad reciente -->
-        <div class="content-item">
-          <app-quick-actions></app-quick-actions>
-          <app-recent-activity [activities]="recentActivities"></app-recent-activity>
+          <app-recent-activity
+            [activities]="recentActivities"
+            historyRoute="/citas"
+            [historyQueryParams]="{ view: 'calendario' }">
+          </app-recent-activity>
         </div>
       </div>
     </div>

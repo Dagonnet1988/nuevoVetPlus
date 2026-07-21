@@ -1,5 +1,6 @@
+import { extractError } from '../../utils/error.utils';
 import { Component, OnInit, OnDestroy, signal, Inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -13,15 +14,19 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatExpansionModule } from '@angular/material/expansion';
+import { sexoDbToFrontend } from '../../utils/paciente.utils';
 import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
+import { HttpClient } from '@angular/common/http';
 
 import { PacientesService } from '../../services/pacientes.service';
 import { CitasService } from '../../services/citas.service';
 import { ConsultasService } from '../../services/consultas.service';
-import { ReportesService } from '../../services/reportes.service';
+import { HistoriaClinicaService } from '../../services/historia-clinica.service';
+import { ConsentimientoStatusComponent } from '../consentimiento-status/consentimiento-status.component';
 import { Mascota, Cliente } from '../../models/paciente.interface';
 import { environment } from '../../../environments/environment';
-import { Subscription } from 'rxjs';
+import { Subscription, firstValueFrom } from 'rxjs';
 
 @Component({
   selector: 'app-paciente-details',
@@ -40,7 +45,8 @@ import { Subscription } from 'rxjs';
     MatSnackBarModule,
     MatTooltipModule,
     MatExpansionModule,
-    MatDialogModule
+    MatDialogModule,
+    ConsentimientoStatusComponent
   ],
   templateUrl: './paciente-details.component.html',
   styleUrls: ['./paciente-details.component.css']
@@ -50,28 +56,14 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
   loading = signal(true);
   paciente = signal<Mascota | null>(null);
   statsResumen = signal<any>({});
-  activeFilter = signal('all');
   documentos = signal<any[]>([]);
 
   // Historia médica específica por paciente
   historiaClinica = signal<any[]>([]);
-
-  mockDocumentos = [
-    {
-      id: '1',
-      nombre: 'Certificado de Vacunación',
-      tipo: 'certificado',
-      descripcion: 'Certificado actualizado de vacunas',
-      fecha: '2024-01-15'
-    },
-    {
-      id: '2',
-      nombre: 'Radiografía Torácica',
-      tipo: 'imagen',
-      descripcion: 'Radiografía para diagnóstico',
-      fecha: '2024-01-10'
-    }
-  ];
+  historialEventos = signal<any[]>([]);
+  historialAgrupado = signal<any[]>([]);
+  private historiasEventos = signal<any[]>([]);
+  private citasEventos = signal<any[]>([]);
 
   pacienteId!: string;
 
@@ -81,12 +73,14 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
   constructor(
     private route: ActivatedRoute,
     private router: Router,
+    private location: Location,
     private pacientesService: PacientesService,
     private citasService: CitasService,
     private consultasService: ConsultasService,
-    private reportesService: ReportesService,
+    private historiaClinicaService: HistoriaClinicaService,
     private snackBar: MatSnackBar,
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private sanitizer: DomSanitizer
   ) {}
 
   ngOnInit(): void {
@@ -123,7 +117,7 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
             nombre: rawData.nombre,
             especie: rawData.especie,
             raza: rawData.raza,
-            sexo: rawData.sexo,
+            sexo: (sexoDbToFrontend(rawData.sexo) || 'M') as 'M' | 'H',
             fecha_nacimiento: rawData.fecha_nacimiento,
             peso: rawData.peso,
             color: rawData.color,
@@ -152,8 +146,9 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
         // Stats mock (por ahora hasta implementar la historia clínica)
         this.statsResumen.set({
           consultas: 0,
+          historias: 0,
           citas: 0,
-          vacunas: 0,
+          adjuntos: 0,
           ultimaVisita: 'No hay registros',
           proximaCita: 'Sin citas programadas'
         });
@@ -184,56 +179,51 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
   }
 
   private loadHistoriaClinica(pacienteId: string): void {
-    // Cargar historia clínica real desde el backend
-    this.consultasService.getHistoriaClinicaMascota(pacienteId).subscribe({
+    // Cargar historias clínicas reales del backend (valoración inicial, seguimiento, fórmula, remisión)
+    this.historiaClinicaService.getHistorias({ id_mascota: pacienteId, page: 1, limit: 50 }).subscribe({
       next: (response) => {
         let historiaData: any[] = [];
+        const historiasRaw: any[] = response?.success && Array.isArray(response?.data) ? response.data : [];
 
-        if (response.success && response.data && response.data.length > 0) {
+        if (historiasRaw.length > 0) {
           // Mapear los datos del backend al formato del frontend
-          historiaData = response.data.map((consulta: any) => ({
-            id: consulta.id_consulta,
-            tipo: 'consulta',
-            titulo: consulta.motivo || 'Consulta general',
-            fecha: consulta.fecha_consulta,
-            profesional: consulta.veterinario?.nombre || 'Veterinario',
-            descripcion: consulta.diagnostico || consulta.anamnesis || 'Sin descripción disponible',
-            medicamentos: consulta.medicamentos ? consulta.medicamentos.split(',').map((m: string) => m.trim()) : []
+          historiaData = historiasRaw.map((historia: any) => ({
+            id: historia.id_historia,
+            source: 'historia',
+            tipo: historia.tipo_documento,
+            id_cita: historia.id_cita || null,
+            codigo_historia: historia.codigo_historia,
+            estado: String(historia.estado || '').toLowerCase().replace(' ', '_'),
+            titulo: this.getHistoriaTitulo(historia.tipo_documento),
+            fecha: historia.fecha,
+            profesional: historia.veterinario_nombre || 'Veterinario',
+            descripcion: `Documento ${this.getHistoriaTitulo(historia.tipo_documento)} · Código ${historia.codigo_historia || 'N/A'}`,
+            medicamentos: []
           }));
 
           // Actualizar estadísticas del resumen
           this.statsResumen.update(stats => ({
             ...stats,
             consultas: historiaData.length,
+            historias: historiaData.length,
             ultimaVisita: historiaData.length > 0 ? this.formatDate(historiaData[0].fecha) : 'No hay registros'
           }));
+          this.loadDocumentosFromHistorias(historiasRaw);
         } else {
-          // Si no hay consultas, mostrar mensaje por defecto
-          historiaData = [{
-            id: `${pacienteId}-placeholder`,
-            tipo: 'consulta',
-            titulo: 'Sin registros médicos',
-            fecha: new Date().toISOString().split('T')[0],
-            profesional: 'Sistema',
-            descripcion: 'Este paciente no tiene historia clínica registrada aún.',
-            medicamentos: []
-          }];
+          this.documentos.set([]);
+          this.statsResumen.update(stats => ({ ...stats, consultas: 0, adjuntos: 0, historias: 0 }));
         }
 
         this.historiaClinica.set(historiaData);
+        this.historiasEventos.set(historiaData);
+        this.rebuildHistorialEventos();
       },
       error: (error) => {
         console.error('Error cargando historia clínica:', error);
-        // En caso de error, mostrar datos por defecto
-        this.historiaClinica.set([{
-          id: `${pacienteId}-error`,
-          tipo: 'consulta',
-          titulo: 'Error al cargar historial',
-          fecha: new Date().toISOString().split('T')[0],
-          profesional: 'Sistema',
-          descripcion: 'No se pudo cargar la historia clínica del paciente.',
-          medicamentos: []
-        }]);
+        this.historiaClinica.set([]);
+        this.historiasEventos.set([]);
+        this.rebuildHistorialEventos();
+        this.documentos.set([]);
       }
     });
   }
@@ -244,23 +234,49 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
       next: (response) => {
         if (response.success && response.data) {
           const citas = response.data;
+          const citaDate = (c: any) => c.fecha_cita || c.fecha_inicio || c.fecha;
 
           // Buscar la próxima cita pendiente o confirmada
           const proximasCitas = citas.filter((c: any) =>
             ['pendiente', 'confirmada'].includes(c.estado) &&
-            new Date(c.fecha_cita) > new Date()
-          ).sort((a: any, b: any) => new Date(a.fecha_cita).getTime() - new Date(b.fecha_cita).getTime());
+            new Date(citaDate(c)) > new Date()
+          ).sort((a: any, b: any) => new Date(citaDate(a)).getTime() - new Date(citaDate(b)).getTime());
+
+          const citasPasadas = citas
+            .filter((c: any) => ['completada', 'en_curso'].includes(String(c.estado || '').toLowerCase()) && new Date(citaDate(c)) <= new Date())
+            .sort((a: any, b: any) => new Date(citaDate(b)).getTime() - new Date(citaDate(a)).getTime());
+
+          const citasEventos = citas.map((c: any) => ({
+            id: c.id_cita,
+            source: 'cita',
+            tipo: 'cita',
+            id_historia: c.id_historia || null,
+            codigo_cita: c.codigo_cita || null,
+            estado: String(c.estado || '').toLowerCase().replace(' ', '_'),
+            titulo: c.tipo || c.motivo || 'Cita',
+            fecha: citaDate(c),
+            profesional: c.veterinario_nombre || 'Veterinario',
+            descripcion: `Cita ${String(c.estado || '').replace('_', ' ')}`,
+            medicamentos: []
+          }));
+          this.citasEventos.set(citasEventos);
+          this.rebuildHistorialEventos();
 
           // Actualizar estadísticas
           this.statsResumen.update(stats => ({
             ...stats,
             citas: citas.length,
-            proximaCita: proximasCitas.length > 0 ? this.formatDate(proximasCitas[0].fecha_cita) : 'Sin citas programadas'
+            ultimaVisita: stats.ultimaVisita !== 'No hay registros'
+              ? stats.ultimaVisita
+              : (citasPasadas.length > 0 ? this.formatDate(citaDate(citasPasadas[0])) : 'No hay registros'),
+            proximaCita: proximasCitas.length > 0 ? this.formatDate(citaDate(proximasCitas[0])) : 'Sin citas programadas'
           }));
         }
       },
       error: (error) => {
         console.error('Error cargando estadísticas de citas:', error);
+        this.citasEventos.set([]);
+        this.rebuildHistorialEventos();
       }
     });
   }
@@ -291,22 +307,14 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
     });
   }
 
-  filteredHistory() {
-    const filter = this.activeFilter();
-    if (filter === 'all') return this.historiaClinica();
-    return this.historiaClinica().filter(evento => evento.tipo === filter);
-  }
-
-  setFilter(filter: string): void {
-    this.activeFilter.set(filter);
-  }
-
   getEventIcon(tipo: string): string {
     const icons: { [key: string]: string } = {
-      consulta: 'medical_services',
-      vacuna: 'vaccines',
-      tratamiento: 'medication',
-      cirugia: 'healing'
+      valoracion_inicial: 'assignment',
+      seguimiento: 'repeat',
+      formula: 'medication',
+      remision: 'send',
+      cita: 'event',
+      consulta: 'medical_services'
     };
     return icons[tipo] || 'event';
   }
@@ -321,8 +329,76 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
     return icons[tipo] || 'insert_drive_file';
   }
 
+  getDocumentUrl(doc: any): string {
+    const ruta = doc?.ruta_archivo;
+    if (!ruta) return '';
+    if (String(ruta).startsWith('http')) return ruta;
+    return `${environment.backendUrl}${ruta}`;
+  }
+
+  isImageDocument(doc: any): boolean {
+    const mime = String(doc?.tipo || '').toLowerCase();
+    if (mime.startsWith('image/')) return true;
+
+    const nombre = String(doc?.nombre || '').toLowerCase();
+    return /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/.test(nombre);
+  }
+
+  isPdfDocument(doc: any): boolean {
+    const mime = String(doc?.tipo || '').toLowerCase();
+    if (mime.includes('pdf')) return true;
+
+    const nombre = String(doc?.nombre || '').toLowerCase();
+    return nombre.endsWith('.pdf');
+  }
+
+  getDocumentExtension(doc: any): string {
+    const nombre = String(doc?.nombre || '').toLowerCase();
+    const fromName = nombre.includes('.') ? nombre.split('.').pop() || '' : '';
+    if (fromName) return fromName;
+
+    const mime = String(doc?.tipo || '').toLowerCase();
+    if (mime.includes('pdf')) return 'pdf';
+    if (mime.includes('spreadsheet') || mime.includes('excel')) return 'xlsx';
+    if (mime.includes('word')) return 'docx';
+    if (mime.includes('csv')) return 'csv';
+    if (mime.includes('text')) return 'txt';
+    return 'file';
+  }
+
+  getDocumentTypeLabel(doc: any): string {
+    return this.getDocumentExtension(doc).slice(0, 4).toUpperCase();
+  }
+
+  getDocumentTypeClass(doc: any): string {
+    const ext = this.getDocumentExtension(doc);
+    if (['pdf', 'xls', 'xlsx', 'csv', 'doc', 'docx', 'txt', 'jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
+      return `file-${ext}`;
+    }
+    return 'file-generic';
+  }
+
+  getDocumentTypeIcon(doc: any): string {
+    const ext = this.getDocumentExtension(doc);
+    if (ext === 'pdf') return 'picture_as_pdf';
+    if (ext === 'xls' || ext === 'xlsx' || ext === 'csv') return 'table_chart';
+    if (ext === 'doc' || ext === 'docx' || ext === 'txt') return 'article';
+    return 'insert_drive_file';
+  }
+
+  getSafePdfDocumentThumbnailUrl(doc: any): SafeResourceUrl {
+    const url = this.getDocumentUrl(doc);
+    const thumbUrl = `${url}#page=1&view=FitH&toolbar=0&navpanes=0&scrollbar=0`;
+    return this.sanitizer.bypassSecurityTrustResourceUrl(thumbUrl);
+  }
+
   // Acciones
   goBack(): void {
+    if (window.history.length > 1) {
+      this.location.back();
+      return;
+    }
+
     this.router.navigate(['/pacientes']);
   }
 
@@ -374,24 +450,6 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
     });
   }
 
-  generateReport(): void {
-    if (!this.paciente()?.id_mascota) {
-      this.snackBar.open('Error: No se pudo identificar el paciente', 'Cerrar', { duration: 3000 });
-      return;
-    }
-
-    this.snackBar.open('Generando reporte del paciente...', 'Cerrar', { duration: 2000 });
-
-    // Navegar a la sección de reportes con filtros del paciente
-    this.router.navigate(['/reportes'], {
-      queryParams: {
-        tipo: 'paciente',
-        pacienteId: this.paciente()?.id_mascota,
-        pacienteNombre: this.paciente()?.nombre
-      }
-    });
-  }
-
   exportData(): void {
     if (!this.paciente()?.id_mascota) {
       this.snackBar.open('Error: No se pudo identificar el paciente', 'Cerrar', { duration: 3000 });
@@ -400,22 +458,33 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
 
     this.snackBar.open('Preparando exportación de datos...', 'Cerrar', { duration: 2000 });
 
+    // Open a blank tab synchronously so browsers don't block it as a popup.
+    const previewTab = window.open('', '_blank', 'noopener,noreferrer');
+
     // Exportar historia clínica del paciente
     this.consultasService.exportarHistoriaClinica(this.paciente()!.id_mascota!, 'pdf').subscribe({
       next: (blob) => {
-        // Crear enlace de descarga
         const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `historia_clinica_${this.paciente()?.nombre}_${new Date().toISOString().split('T')[0]}.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
+
+        if (previewTab) {
+          previewTab.location.href = url;
+        } else {
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `historia_clinica_${this.paciente()?.nombre}_${new Date().toISOString().split('T')[0]}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+
+        setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
 
         this.snackBar.open('Historia clínica exportada exitosamente', 'Cerrar', { duration: 3000 });
       },
       error: (error) => {
+        if (previewTab && !previewTab.closed) {
+          previewTab.close();
+        }
         console.error('Error exportando datos:', error);
         this.snackBar.open('Error al exportar los datos del paciente', 'Cerrar', { duration: 3000 });
       }
@@ -448,9 +517,9 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
             { duration: 3000 }
           );
         },
-        error: () => {
+        error: (err) => {
           this.snackBar.open(
-            'Error al actualizar el estado del paciente',
+            extractError(err, 'Error al actualizar el estado del paciente'),
             'Cerrar',
             { duration: 3000 }
           );
@@ -460,7 +529,20 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
   }
 
   viewOwnerDetails(): void {
-    this.snackBar.open('Funcionalidad en desarrollo - Detalles del propietario', 'Cerrar', { duration: 3000 });
+    const ownerId = this.paciente()?.cliente?.id_cliente;
+    const ownerName = this.paciente()?.cliente?.nombre || '';
+
+    if (!ownerId) {
+      this.snackBar.open('No se encontró información del propietario', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    this.router.navigate(['/propietarios'], {
+      queryParams: {
+        ownerId,
+        search: ownerName
+      }
+    });
   }
 
   callOwner(): void {
@@ -472,9 +554,21 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
 
   emailOwner(): void {
     const email = this.paciente()?.cliente?.email;
-    if (email) {
-      window.open(`mailto:${email}`);
+    if (!email) {
+      this.snackBar.open('El propietario no tiene correo registrado', 'Cerrar', { duration: 3000 });
+      return;
     }
+
+    if (!navigator.clipboard) {
+      this.snackBar.open(`Correo del propietario: ${email}`, 'Cerrar', { duration: 5000 });
+      return;
+    }
+
+    navigator.clipboard.writeText(email).then(() => {
+      this.snackBar.open('Correo del propietario copiado', 'Cerrar', { duration: 2500 });
+    }).catch(() => {
+      this.snackBar.open(`Correo del propietario: ${email}`, 'Cerrar', { duration: 5000 });
+    });
   }
 
   showMap(): void {
@@ -482,15 +576,97 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
   }
 
   viewEventDetails(evento: any): void {
-    this.snackBar.open(`Ver detalles de: ${evento.titulo}`, 'Cerrar', { duration: 3000 });
+    if (evento?.source === 'historia' && evento?.id) {
+      this.router.navigate(['/historia-clinica', evento.id]);
+      return;
+    }
+    if (evento?.source === 'cita' && evento?.id) {
+      this.router.navigate(['/citas', evento.id]);
+      return;
+    }
+    this.snackBar.open('No se encontró el detalle del evento', 'Cerrar', { duration: 3000 });
   }
 
   uploadDocument(): void {
-    this.snackBar.open('Funcionalidad en desarrollo - Subir documento', 'Cerrar', { duration: 3000 });
+    const historia = this.historiaClinica();
+    const historiaId = historia[0]?.id;
+
+    if (!historiaId) {
+      this.snackBar.open('Primero crea una historia clínica para adjuntar documentos', 'Cerrar', { duration: 3500 });
+      return;
+    }
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+
+      this.historiaClinicaService.uploadHistoriaArchivos(historiaId, [file]).subscribe({
+        next: () => {
+          this.snackBar.open('Documento subido correctamente', 'Cerrar', { duration: 2500 });
+          this.loadHistoriaClinica(this.paciente()?.id_mascota || this.pacienteId);
+        },
+        error: () => {
+          this.snackBar.open('No se pudo subir el documento', 'Cerrar', { duration: 3000 });
+        }
+      });
+    };
+    input.click();
   }
 
   downloadDocument(doc: any): void {
-    this.snackBar.open(`Descargando: ${doc.nombre}`, 'Cerrar', { duration: 3000 });
+    if (!doc?.ruta_archivo) {
+      this.snackBar.open('Documento sin ruta de descarga', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    const link = document.createElement('a');
+    link.href = `${environment.backendUrl}${doc.ruta_archivo}`;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.download = doc.nombre || 'documento';
+    link.click();
+  }
+
+  private async loadDocumentosFromHistorias(historias: any[]): Promise<void> {
+    const historiaIds = [...new Set((historias || []).map((h) => h.id_historia).filter(Boolean))];
+    if (historiaIds.length === 0) {
+      this.documentos.set([]);
+      this.statsResumen.update((stats) => ({ ...stats, adjuntos: 0 }));
+      return;
+    }
+
+    try {
+      const responses = await Promise.all(
+        historiaIds.map((historiaId) =>
+          firstValueFrom(this.historiaClinicaService.getHistoriaById(historiaId)).catch(() => ({ data: { archivos: [] } }))
+        )
+      );
+
+      const docs = responses
+        .flatMap((r: any, idx: number) => {
+          const idHistoria = historiaIds[idx];
+          const files = Array.isArray(r?.data?.archivos) ? r.data.archivos : [];
+          return files.map((d: any) => ({
+            id: d.id_archivo,
+            id_archivo: d.id_archivo,
+            id_historia: idHistoria,
+            nombre: d.nombre_original || d.nombre_archivo || 'Archivo',
+            tipo: d.tipo_mime || 'archivo',
+            descripcion: d.descripcion || 'Documento de historia clínica',
+            fecha: d.fecha_subida || d.created_at,
+            ruta_archivo: d.ruta_archivo
+          }));
+        })
+        .sort((a: any, b: any) => new Date(b.fecha || 0).getTime() - new Date(a.fecha || 0).getTime());
+
+      this.documentos.set(docs);
+      this.statsResumen.update((stats) => ({ ...stats, adjuntos: docs.length }));
+    } catch {
+      this.documentos.set([]);
+      this.statsResumen.update((stats) => ({ ...stats, adjuntos: 0 }));
+    }
   }
 
   // Funciones para cambio de foto
@@ -540,13 +716,130 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
   }
 
   viewDocument(doc: any): void {
-    this.snackBar.open(`Visualizando: ${doc.nombre}`, 'Cerrar', { duration: 3000 });
+    const url = this.getDocumentUrl(doc);
+    if (!url) {
+      this.snackBar.open('No se puede previsualizar este documento', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    this.dialog.open(DocumentPreviewDialog, {
+      data: {
+        title: doc.nombre || 'Documento',
+        url,
+        mimeType: doc.tipo || ''
+      },
+      maxWidth: '92vw',
+      maxHeight: '92vh',
+      width: '960px'
+    });
   }
 
   deleteDocument(doc: any): void {
     if (confirm(`¿Eliminar ${doc.nombre}?`)) {
-      this.snackBar.open(`${doc.nombre} eliminado`, 'Cerrar', { duration: 3000 });
+      this.snackBar.open('Eliminar adjuntos de historia clínica aún no está habilitado en backend', 'Cerrar', { duration: 3500 });
     }
+  }
+
+  getHistoriaTitulo(tipo: string): string {
+    const labels: Record<string, string> = {
+      valoracion_inicial: 'Valoración',
+      seguimiento: 'Terapia / Hidroterapia',
+      formula: 'Fórmula',
+      remision: 'Remisión'
+    };
+    return labels[tipo] || 'Historia Clínica';
+  }
+
+  shouldShowCitaColumn(grupo: any): boolean {
+    return Boolean(grupo?.cita);
+  }
+
+  shouldShowHistoriaColumn(grupo: any): boolean {
+    const historias = Array.isArray(grupo?.historias) ? grupo.historias : [];
+    if (historias.length > 0) return true;
+
+    const cita = grupo?.cita;
+    if (!cita) return false;
+
+    const estado = String(cita?.estado || '').toLowerCase();
+    const noAtendida = ['pendiente', 'confirmada', 'programada'].includes(estado);
+    const fecha = new Date(cita?.fecha || 0);
+    const esFutura = !Number.isNaN(fecha.getTime()) && fecha.getTime() > Date.now();
+
+    // Citas futuras no atendidas no muestran columna de historia.
+    if (noAtendida && esFutura) return false;
+
+    return true;
+  }
+
+  private rebuildHistorialEventos(): void {
+    const merged = [...this.historiasEventos(), ...this.citasEventos()]
+      .sort((a: any, b: any) => new Date(b.fecha || 0).getTime() - new Date(a.fecha || 0).getTime());
+    this.historialEventos.set(merged);
+
+    const historias = [...this.historiasEventos()];
+    const citas = [...this.citasEventos()].sort((a: any, b: any) => new Date(b.fecha || 0).getTime() - new Date(a.fecha || 0).getTime());
+
+    const historiaById = new Map<string, any>();
+    const historiaByCitaId = new Map<string, any[]>();
+    const usedHistoriaIds = new Set<string>();
+
+    for (const historia of historias) {
+      if (historia?.id) {
+        historiaById.set(historia.id, historia);
+      }
+      if (historia?.id_cita) {
+        const existentes = historiaByCitaId.get(historia.id_cita) || [];
+        existentes.push(historia);
+        historiaByCitaId.set(historia.id_cita, existentes);
+      }
+    }
+
+    const grupos: any[] = [];
+
+    for (const cita of citas) {
+      const historiasRelacionadas: any[] = [];
+
+      if (cita?.id_historia && historiaById.has(cita.id_historia)) {
+        historiasRelacionadas.push(historiaById.get(cita.id_historia));
+      }
+
+      if (cita?.id && historiaByCitaId.has(cita.id)) {
+        const historiasPorCita = historiaByCitaId.get(cita.id) || [];
+        for (const historia of historiasPorCita) {
+          if (!historiasRelacionadas.some((h: any) => h?.id === historia?.id)) {
+            historiasRelacionadas.push(historia);
+          }
+        }
+      }
+
+      for (const historiaRelacionada of historiasRelacionadas) {
+        if (historiaRelacionada?.id) {
+          usedHistoriaIds.add(historiaRelacionada.id);
+        }
+      }
+
+      grupos.push({
+        key: `cita-${cita.id}`,
+        fecha: cita.fecha,
+        cita,
+        historias: historiasRelacionadas,
+      });
+    }
+
+    for (const historia of historias) {
+      if (historia?.id && !usedHistoriaIds.has(historia.id)) {
+        grupos.push({
+          key: `historia-${historia.id}`,
+          fecha: historia.fecha,
+          cita: null,
+          historias: [historia],
+        });
+      }
+    }
+
+    grupos.sort((a: any, b: any) => new Date(b.fecha || 0).getTime() - new Date(a.fecha || 0).getTime());
+    this.historialAgrupado.set(grupos);
   }
 
   // Utilidades para imágenes
@@ -669,5 +962,160 @@ export class ImageViewerDialog {
 
   onImageError(event: any): void {
     event.target.style.display = 'none';
+  }
+}
+
+@Component({
+  selector: 'app-document-preview-dialog',
+  standalone: true,
+  imports: [CommonModule, MatButtonModule, MatIconModule, MatDialogModule],
+  template: `
+    <div class="doc-preview-dialog">
+      <div class="dialog-header">
+        <h2>{{ data.title }}</h2>
+        <button mat-icon-button (click)="close()">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+
+      <div class="preview-body">
+        @if (isImage()) {
+          <img [src]="data.url" [alt]="data.title" class="preview-image" />
+        } @else if (isPdf()) {
+          @if (pdfLoading) {
+            <div class="preview-fallback">
+              <mat-icon>hourglass_top</mat-icon>
+              <p>Cargando PDF...</p>
+            </div>
+          } @else if (pdfLoadError || !safePdfUrl) {
+            <div class="preview-fallback">
+              <mat-icon>error_outline</mat-icon>
+              <p>No se pudo cargar la vista previa del PDF.</p>
+              <button mat-raised-button color="primary" (click)="openNewTab()">Abrir archivo</button>
+            </div>
+          } @else {
+            <iframe [src]="safePdfUrl" class="preview-pdf" title="Vista previa de documento"></iframe>
+          }
+        } @else {
+          <div class="preview-fallback">
+            <mat-icon>description</mat-icon>
+            <p>Este tipo de archivo no tiene vista previa embebida.</p>
+            <button mat-raised-button color="primary" (click)="openNewTab()">Abrir archivo</button>
+          </div>
+        }
+      </div>
+    </div>
+  `,
+  styles: [`
+    .doc-preview-dialog { display: flex; flex-direction: column; height: 86vh; }
+    .dialog-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1px solid #e0e0e0;
+      background: #fafafa;
+    }
+    .dialog-header h2 {
+      margin: 0;
+      font-size: 1.05rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .preview-body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f3f5f7;
+      padding: 12px;
+    }
+    .preview-image {
+      max-width: 100%;
+      max-height: 100%;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    .preview-pdf {
+      width: 100%;
+      height: 100%;
+      border: none;
+      border-radius: 8px;
+      background: #fff;
+    }
+    .preview-fallback {
+      text-align: center;
+      color: #5f6368;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      align-items: center;
+    }
+    .preview-fallback mat-icon { font-size: 42px; width: 42px; height: 42px; }
+  `]
+})
+export class DocumentPreviewDialog {
+  safePdfUrl: SafeResourceUrl | null = null;
+  private objectUrl: string | null = null;
+  pdfLoading = false;
+  pdfLoadError = false;
+
+  constructor(
+    public dialogRef: MatDialogRef<DocumentPreviewDialog>,
+    @Inject(MAT_DIALOG_DATA) public data: { title: string; url: string; mimeType: string },
+    private sanitizer: DomSanitizer,
+    private http: HttpClient
+  ) {
+    if (this.isPdf()) {
+      this.loadPdfAsBlob();
+    }
+  }
+
+  private loadPdfAsBlob(): void {
+    this.pdfLoading = true;
+    this.pdfLoadError = false;
+
+    this.http.get(this.data.url, { responseType: 'blob' }).subscribe({
+      next: (blob) => {
+        if (!blob || blob.size === 0) {
+          this.pdfLoadError = true;
+          this.pdfLoading = false;
+          return;
+        }
+
+        const pdfBlob = blob.type ? blob : new Blob([blob], { type: 'application/pdf' });
+        this.objectUrl = URL.createObjectURL(pdfBlob);
+        this.safePdfUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.objectUrl);
+        this.pdfLoading = false;
+      },
+      error: () => {
+        this.pdfLoadError = true;
+        this.pdfLoading = false;
+      }
+    });
+  }
+
+  close(): void {
+    if (this.objectUrl) {
+      URL.revokeObjectURL(this.objectUrl);
+      this.objectUrl = null;
+    }
+    this.dialogRef.close();
+  }
+
+  isImage(): boolean {
+    const type = (this.data.mimeType || '').toLowerCase();
+    return type.startsWith('image/');
+  }
+
+  isPdf(): boolean {
+    const type = (this.data.mimeType || '').toLowerCase();
+    return type.includes('pdf') || this.data.url.toLowerCase().endsWith('.pdf');
+  }
+
+  openNewTab(): void {
+    window.open(this.data.url, '_blank', 'noopener');
   }
 }

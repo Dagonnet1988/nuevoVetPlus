@@ -1,0 +1,134 @@
+.sa-page { max-width: 1000px; }
+
+.sa-page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+
+  h2 { margin: 0; font-size: 24px; font-weight: 700; color: #0f1923; }
+  p  { margin: 4px 0 0; color: #6c8ebf; font-size: 14px; }
+
+  code {
+    background: #ecf0f1; padding: 2px 6px;
+    border-radius: 4px; font-size: 12px; color: #546e7a;
+  }
+}
+
+.sa-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+// ── Quick stats ───────────────────────────────────────────────────────────────
+.sa-quick-stats {
+  display: flex;
+  gap: 16px;
+}
+
+.sa-qs-item {
+  flex: 1;
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+
+  mat-icon { color: #1565c0; font-size: 28px; width: 28px; height: 28px; }
+  span { font-size: 28px; font-weight: 700; color: #0f1923; line-height: 1; }
+  small { font-size: 12px; color: #78909c; }
+}
+
+// ── Sections ──────────────────────────────────────────────────────────────────
+.sa-section {
+  border-radius: 12px !important;
+  padding: 24px;
+
+  h3 {
+    display: flex; align-items: center; gap: 8px;
+    margin: 0 0 16px; font-size: 16px; font-weight: 600; color: #1565c0;
+    mat-icon { font-size: 20px; width: 20px; height: 20px; }
+  }
+  mat-divider { margin-bottom: 20px; }
+}
+
+.sa-fields { display: flex; flex-direction: column; gap: 4px; mat-form-field { width: 100%; } }
+.sa-row    { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.sa-row-end { display: flex; justify-content: flex-end; gap: 12px; margin-top: 8px; }
+
+.sa-save-btn {
+  background: #1565c0 !important; color: #fff !important;
+  border-radius: 8px !important;
+  display: flex; align-items: center; gap: 6px;
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+  &[disabled] { opacity: .6; }
+}
+
+.sa-suspend-btn { color: #e65100 !important; border-color: #e65100 !important; }
+.sa-activate-btn { color: #2e7d32 !important; border-color: #2e7d32 !important; }
+
+.sa-error { color: #c62828; font-size: 13px; }
+.sa-ok    { color: #2e7d32; font-size: 13px; }
+
+// ── Tabla usuarios ────────────────────────────────────────────────────────────
+.sa-table {
+  width: 100%; border-collapse: collapse; font-size: 13px;
+
+  thead tr { background: #f5f7fa; }
+  th { padding: 10px 14px; text-align: left; font-weight: 600; color: #546e7a;
+       text-transform: uppercase; font-size: 11px; letter-spacing: .5px; }
+  tbody tr { border-top: 1px solid #ecf0f1; &:hover { background: #f8fbff; } }
+  td { padding: 10px 14px; }
+}
+
+.sa-date { color: #78909c; font-size: 12px; }
+.sa-empty-text { color: #78909c; text-align: center; padding: 24px 0; }
+
+.sa-users-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 12px;
+}
+
+.sa-provision-btn {
+  border-radius: 8px !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #1565c0 !important;
+  border-color: #1565c0 !important;
+}
+
+// ── Badges ────────────────────────────────────────────────────────────────────
+.sa-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 12px;
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px;
+}
+
+.estado-active    { background: #e8f5e9; color: #2e7d32; }
+.estado-suspended { background: #fff3e0; color: #e65100; }
+.estado-inactive  { background: #eceff1; color: #546e7a; }
+
+.rol-admin { background: #e3f2fd; color: #1565c0; }
+.rol-vet   { background: #f3e5f5; color: #6a1b9a; }
+.rol-aux   { background: #f1f8e9; color: #33691e; }
+
+.sa-center { display: flex; justify-content: center; padding: 60px; }
+
+// ── Billing section ───────────────────────────────────────────────────────────
+.sa-section-subtitle {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600; color: #546e7a;
+  margin: 0 0 12px;
+  mat-icon { font-size: 16px; width: 16px; height: 16px; }
+}
+
+.pago-hint { font-weight: 600; font-size: 11px; }
+.pago-ok      { color: #2e7d32; }
+.pago-proximo { color: #f57f17; }
+.pago-alerta  { color: #e65100; }
+.pago-vencido { color: #c62828; }

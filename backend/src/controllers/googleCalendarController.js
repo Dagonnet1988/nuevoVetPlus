@@ -6,38 +6,147 @@ import syncScheduler from '../services/syncScheduler.js';
 
 // Controlador simplificado integrado
 class GoogleCalendarSimpleController {
+  constructor() {
+    this.ensureConfigSchema = this.ensureConfigSchema.bind(this);
+    this.getDefaultSyncPreferences = this.getDefaultSyncPreferences.bind(this);
+    this.normalizeSyncPreferences = this.normalizeSyncPreferences.bind(this);
+    this.getConfig = this.getConfig.bind(this);
+    this.saveConfig = this.saveConfig.bind(this);
+    this.getAuthUrl = this.getAuthUrl.bind(this);
+    this.handleCallback = this.handleCallback.bind(this);
+    this.getStatus = this.getStatus.bind(this);
+    this.testConnection = this.testConnection.bind(this);
+    this.disconnect = this.disconnect.bind(this);
+  }
+
+  async ensureConfigSchema() {
+    // No-op: en despliegues nuevos, el schema canónico ya incluye sync_preferences.
+    return true;
+  }
+
+  getDefaultSyncPreferences(tenantId = null) {
+    const defaultGlobal = {
+      prefijo_eventos: 'VetPlus',
+      mapeo_colores: {
+        consulta: '#2196f3',
+        cirugia: '#f44336',
+        vacunacion: '#4caf50',
+        control: '#ff9800'
+      },
+      configuracion_eventos: {
+        duracion_default: 30,
+        recordatorio_default: 30,
+        incluir_cliente: true,
+        incluir_mascota: true,
+        incluir_veterinario: true,
+        invitar_propietario_calendario: false
+      }
+    };
+
+    // Reglas especificas para tenant QI Animal.
+    if (String(tenantId || '').toLowerCase() === '490957aa-d5f6-4441-be85-1aa5b2f92614') {
+      return {
+        prefijo_eventos: 'QI',
+        mapeo_colores: {
+          // Compatibilidad con UI actual
+          consulta: '#46d6db',   // terapia (azul claro)
+          cirugia: '#5484ed',    // hidroterapia (azul oscuro)
+          vacunacion: '#51b749', // domicilio (verde)
+          control: '#fbd75b',    // valoracion (amarillo)
+          // Mapeo semantico de negocio
+          domicilio: '#51b749',
+          valoracion: '#fbd75b',
+          terapia: '#46d6db',
+          hidroterapia: '#5484ed'
+        },
+        configuracion_eventos: {
+          duracion_default: 60,
+          recordatorio_default: 30,
+          incluir_cliente: true,
+          incluir_mascota: true,
+          incluir_veterinario: true,
+          invitar_propietario_calendario: false
+        }
+      };
+    }
+
+    return defaultGlobal;
+  }
+
+  normalizeSyncPreferences(rawPreferences = {}, tenantId = null) {
+    const defaults = this.getDefaultSyncPreferences(tenantId);
+    const prefs = rawPreferences && typeof rawPreferences === 'object' ? rawPreferences : {};
+
+    return {
+      prefijo_eventos: String(prefs.prefijo_eventos || defaults.prefijo_eventos).slice(0, 30),
+      mapeo_colores: {
+        ...defaults.mapeo_colores,
+        ...(prefs.mapeo_colores || {})
+      },
+      configuracion_eventos: {
+        ...defaults.configuracion_eventos,
+        ...(prefs.configuracion_eventos || {})
+      }
+    };
+  }
 
   // Obtener configuración actual
   async getConfig(req, res) {
     try {
+      await this.ensureConfigSchema();
+      const tenantId = req.tenantId ?? req.user?.tenant_id;
+      const tenantDefaults = this.getDefaultSyncPreferences(tenantId);
       const result = await query(`
         SELECT
+          id_config,
           is_active as activo,
           client_id as cliente_id,
-          client_secret as cliente_secret,
+          (client_secret IS NOT NULL AND LENGTH(TRIM(client_secret)) > 0) as has_client_secret,
           calendar_id,
           timezone,
           notification_email as sync_automatico,
+          default_reminder_minutes as intervalo_sync,
+          sync_preferences,
           redirect_uri,
           created_at,
           updated_at
         FROM vetplus_auth.google_calendar_config
         WHERE is_active = true
+          AND configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)
         ORDER BY created_at DESC
         LIMIT 1
-      `);
+      `, [tenantId]);
 
       if (result.rows.length === 0) {
         return res.json({
           success: true,
-          data: null,
+          data: {
+            ...tenantDefaults,
+            activo: false,
+            cliente_id: '',
+            has_client_secret: false,
+            calendar_id: 'primary',
+            sync_automatico: true,
+            intervalo_sync: 30
+          },
           message: 'No hay configuración'
         });
       }
 
+      const row = result.rows[0];
+      const syncPreferences = this.normalizeSyncPreferences(
+        row.sync_preferences || {},
+        tenantId
+      );
+
       res.json({
         success: true,
-        data: result.rows[0]
+        data: {
+          ...row,
+          prefijo_eventos: syncPreferences.prefijo_eventos,
+          mapeo_colores: syncPreferences.mapeo_colores,
+          configuracion_eventos: syncPreferences.configuracion_eventos
+        }
       });
     } catch (error) {
       console.error('Error obteniendo configuración:', error);
@@ -51,17 +160,48 @@ class GoogleCalendarSimpleController {
   // Guardar configuración
   async saveConfig(req, res) {
     try {
+      await this.ensureConfigSchema();
       const {
         activo,
         cliente_id,
         cliente_secret,
         calendar_id,
         sync_automatico,
-        prefijo_eventos
+        intervalo_sync,
+        prefijo_eventos,
+        mapeo_colores,
+        configuracion_eventos
       } = req.body;
 
+      const tenantId = req.tenantId ?? req.user?.tenant_id;
+
+      const previousConfigResult = await query(
+        `SELECT client_id, client_secret, sync_preferences
+         FROM vetplus_auth.google_calendar_config
+         WHERE is_active = true
+           AND configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [tenantId]
+      );
+
+      const previousConfig = previousConfigResult.rows[0] || null;
+      const resolvedClientId = (typeof cliente_id === 'string' && cliente_id.trim().length > 0)
+        ? cliente_id.trim()
+        : previousConfig?.client_id;
+      const resolvedClientSecret = (typeof cliente_secret === 'string' && cliente_secret.trim().length > 0)
+        ? cliente_secret.trim()
+        : previousConfig?.client_secret;
+
+      const mergedSyncPreferences = this.normalizeSyncPreferences({
+        ...(previousConfig?.sync_preferences || {}),
+        prefijo_eventos,
+        mapeo_colores,
+        configuracion_eventos
+      }, tenantId);
+
       // Validar campos requeridos
-      if (!cliente_id || !cliente_secret) {
+      if (!resolvedClientId || !resolvedClientSecret) {
         return res.status(400).json({
           success: false,
           error: 'Client ID y Client Secret son requeridos'
@@ -70,35 +210,47 @@ class GoogleCalendarSimpleController {
 
       const redirect_uri = `${process.env.BACKEND_URL || 'http://localhost:3000'}/api/google-calendar/callback`;
 
-      // Desactivar configuración anterior
-      await query(`UPDATE vetplus_auth.google_calendar_config SET is_active = false WHERE is_active = true`);
+      // Desactivar configuración anterior de este tenant
+      await query(
+        `UPDATE vetplus_auth.google_calendar_config SET is_active = false WHERE configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)`,
+        [tenantId]
+      );
 
       // Insertar nueva configuración (adaptando a las columnas existentes)
       const result = await query(`
         INSERT INTO vetplus_auth.google_calendar_config (
           client_id, client_secret, calendar_id,
-          timezone, notification_email, redirect_uri, is_active, configured_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          timezone, notification_email, default_reminder_minutes, redirect_uri, is_active, configured_by, sync_preferences
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         RETURNING *
       `, [
-        cliente_id,
-        cliente_secret,
-        calendar_id || 'primary',
-        'UTC', // timezone por defecto
-        sync_automatico || false, // usando notification_email como sync_automatico
+        resolvedClientId,
+        resolvedClientSecret,
+        (typeof calendar_id === 'string' && calendar_id.trim().length > 0) ? calendar_id.trim() : 'primary',
+        'America/Bogota',
+        sync_automatico ?? false,
+        Number.isFinite(Number(intervalo_sync)) ? Math.max(5, Number(intervalo_sync)) : 30,
         redirect_uri,
-        activo || false, // usando is_active
-        req.user?.id_usuario || null // configured_by
+        activo ?? false,
+        req.user?.id_usuario || null,
+        JSON.stringify(mergedSyncPreferences)
       ]);
+
+      await googleCalendarService.reinitializeWithConfig(result.rows[0]);
+      await syncScheduler.restart();
 
       // Formatear respuesta para el frontend
       const responseData = {
+        id_config: result.rows[0].id_config,
         activo: result.rows[0].is_active,
         cliente_id: result.rows[0].client_id,
-        cliente_secret: result.rows[0].client_secret,
+        has_client_secret: Boolean(result.rows[0].client_secret),
         calendar_id: result.rows[0].calendar_id,
         sync_automatico: result.rows[0].notification_email,
-        prefijo_eventos: '[VetPlus]', // valor por defecto
+        intervalo_sync: result.rows[0].default_reminder_minutes,
+        prefijo_eventos: mergedSyncPreferences.prefijo_eventos,
+        mapeo_colores: mergedSyncPreferences.mapeo_colores,
+        configuracion_eventos: mergedSyncPreferences.configuracion_eventos,
         redirect_uri: result.rows[0].redirect_uri
       };
 
@@ -119,13 +271,15 @@ class GoogleCalendarSimpleController {
   // Obtener URL de autorización
   async getAuthUrl(req, res) {
     try {
+      const tenantId = req.tenantId ?? req.user?.tenant_id;
       const configResult = await query(`
         SELECT client_id, redirect_uri
         FROM vetplus_auth.google_calendar_config
         WHERE is_active = true
+          AND configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)
         ORDER BY created_at DESC
         LIMIT 1
-      `);
+      `, [tenantId]);
 
       if (configResult.rows.length === 0) {
         return res.status(400).json({
@@ -338,6 +492,19 @@ class GoogleCalendarSimpleController {
         tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : null
       ]);
 
+      const updatedConfigResult = await query(`
+        SELECT *
+        FROM vetplus_auth.google_calendar_config
+        WHERE is_active = true
+        ORDER BY created_at DESC
+        LIMIT 1
+      `);
+
+      if (updatedConfigResult.rows[0]) {
+        await googleCalendarService.reinitializeWithConfig(updatedConfigResult.rows[0]);
+        await syncScheduler.restart();
+      }
+
       // Página de éxito simplificada sin JavaScript inline (compatible con CSP)
       res.send(`
         <!DOCTYPE html>
@@ -469,6 +636,7 @@ class GoogleCalendarSimpleController {
   // Obtener estado de conexión
   async getStatus(req, res) {
     try {
+      const tenantId = req.tenantId ?? req.user?.tenant_id;
       const result = await query(`
         SELECT
           is_active as activo,
@@ -479,9 +647,10 @@ class GoogleCalendarSimpleController {
           updated_at
         FROM vetplus_auth.google_calendar_config
         WHERE is_active = true
+          AND configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)
         ORDER BY created_at DESC
         LIMIT 1
-      `);
+      `, [tenantId]);
 
       if (result.rows.length === 0) {
         return res.json({
@@ -530,12 +699,14 @@ class GoogleCalendarSimpleController {
   // Probar conexión
   async testConnection(req, res) {
     try {
+      const tenantId = req.tenantId ?? req.user?.tenant_id;
       const configResult = await query(`
         SELECT * FROM vetplus_auth.google_calendar_config
         WHERE is_active = true
+          AND configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)
         ORDER BY created_at DESC
         LIMIT 1
-      `);
+      `, [tenantId]);
 
       if (configResult.rows.length === 0) {
         return res.status(400).json({
@@ -592,6 +763,7 @@ class GoogleCalendarSimpleController {
   // Desconectar
   async disconnect(req, res) {
     try {
+      const tenantId = req.tenantId ?? req.user?.tenant_id;
       await query(`
         UPDATE vetplus_auth.google_calendar_config
         SET
@@ -601,7 +773,8 @@ class GoogleCalendarSimpleController {
           token_expiry = NULL,
           updated_at = CURRENT_TIMESTAMP
         WHERE is_active = true
-      `);
+          AND configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)
+      `, [tenantId]);
 
       res.json({
         success: true,
@@ -632,6 +805,8 @@ export const getGoogleCalendarConfig = async (req, res) => {
             });
         }
 
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+
         const result = await query(`
             SELECT 
                 id_config,
@@ -653,9 +828,10 @@ export const getGoogleCalendarConfig = async (req, res) => {
                 END as has_refresh_token
             FROM vetplus_auth.google_calendar_config 
             WHERE is_active = true
+              AND configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)
             ORDER BY created_at DESC 
             LIMIT 1
-        `);
+        `, [tenantId]);
 
         if (result.rows.length === 0) {
             return res.json({
@@ -726,10 +902,11 @@ export const configureGoogleCalendar = async (req, res) => {
 
         const id_config = uuidv4();
         const configured_by = req.user.id_usuario;
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
 
         console.log('🗃️ Desactivando configuración anterior...');
         // Desactivar configuración anterior si existe
-        await query('UPDATE vetplus_auth.google_calendar_config SET is_active = false');
+        await query(`UPDATE vetplus_auth.google_calendar_config SET is_active = false WHERE configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)`, [tenantId]);
 
         console.log('💾 Guardando nueva configuración...');
         // Crear nueva configuración
@@ -807,6 +984,8 @@ export const completeGoogleAuth = async (req, res) => {
             });
         }
 
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+
         // Actualizar configuración con los tokens
         const updateResult = await query(`
             UPDATE vetplus_auth.google_calendar_config 
@@ -816,11 +995,13 @@ export const completeGoogleAuth = async (req, res) => {
                 token_expiry = $3,
                 updated_at = CURRENT_TIMESTAMP
             WHERE is_active = true
+              AND configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $4)
             RETURNING *
         `, [
             tokenResult.tokens.refresh_token,
             tokenResult.tokens.access_token,
-            tokenResult.tokens.expiry_date ? new Date(tokenResult.tokens.expiry_date) : null
+            tokenResult.tokens.expiry_date ? new Date(tokenResult.tokens.expiry_date) : null,
+            tenantId
         ]);
 
         if (updateResult.rows.length === 0) {
@@ -899,7 +1080,8 @@ export const disableGoogleCalendar = async (req, res) => {
             });
         }
 
-        await query('UPDATE vetplus_auth.google_calendar_config SET is_active = false');
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+        await query(`UPDATE vetplus_auth.google_calendar_config SET is_active = false WHERE configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)`, [tenantId]);
 
         res.json({
             success: true,
@@ -921,11 +1103,11 @@ export const disableGoogleCalendar = async (req, res) => {
  */
 export const getSchedulerStats = async (req, res) => {
     try {
-        // Solo administradores pueden ver estadísticas del scheduler
-        if (req.user.rol !== 'admin') {
+    // Admin, veterinario y auxiliar pueden ver estadísticas del scheduler
+    if (!['admin', 'vet', 'aux'].includes(req.user.rol)) {
             return res.status(403).json({
                 success: false,
-                message: 'Solo los administradores pueden ver estadísticas del scheduler'
+        message: 'No tienes permisos para ver estadísticas del scheduler'
             });
         }
 
@@ -951,11 +1133,11 @@ export const getSchedulerStats = async (req, res) => {
  */
 export const runManualSync = async (req, res) => {
     try {
-        // Solo administradores pueden ejecutar sincronización manual
-        if (req.user.rol !== 'admin') {
+    // Admin, veterinario y auxiliar pueden ejecutar sincronización manual
+    if (!['admin', 'vet', 'aux'].includes(req.user.rol)) {
             return res.status(403).json({
                 success: false,
-                message: 'Solo los administradores pueden ejecutar sincronización manual'
+        message: 'No tienes permisos para ejecutar sincronización manual'
             });
         }
 
@@ -990,11 +1172,11 @@ export const runManualSync = async (req, res) => {
  */
 export const getSchedulerStatus = async (req, res) => {
     try {
-        // Solo administradores pueden ver el estado del scheduler
-        if (req.user.rol !== 'admin') {
+    // Admin, veterinario y auxiliar pueden ver el estado del scheduler
+    if (!['admin', 'vet', 'aux'].includes(req.user.rol)) {
             return res.status(403).json({
                 success: false,
-                message: 'Solo los administradores pueden ver el estado del scheduler'
+        message: 'No tienes permisos para ver el estado del scheduler'
             });
         }
 
@@ -1020,13 +1202,27 @@ export const getSchedulerStatus = async (req, res) => {
  */
 export const getSyncStatus = async (req, res) => {
     try {
-        // Solo admins y veterinarios pueden ver el estado
-        if (!['admin', 'vet'].includes(req.user.rol)) {
+        // Admin, veterinario y auxiliar pueden ver el estado
+        if (!['admin', 'vet', 'aux'].includes(req.user.rol)) {
             return res.status(403).json({
                 success: false,
                 message: 'No tienes permisos para ver el estado de sincronización'
             });
         }
+
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+
+        const currentConfigResult = await query(`
+            SELECT refresh_token
+            FROM vetplus_auth.google_calendar_config
+            WHERE is_active = true
+              AND configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)
+            ORDER BY created_at DESC
+            LIMIT 1
+        `, [tenantId]);
+
+        const currentConfig = currentConfigResult.rows[0] || null;
+        const hasCurrentGoogleToken = Boolean(currentConfig?.refresh_token);
 
         const statsResult = await query(`
             SELECT
@@ -1034,8 +1230,9 @@ export const getSyncStatus = async (req, res) => {
                 COUNT(*) as cantidad
             FROM clinical.calendario_citas
             WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
+              AND id_tenant = $1
             GROUP BY google_sync_status
-        `);
+        `, [tenantId]);
 
         const recentErrorsResult = await query(`
             SELECT
@@ -1048,16 +1245,59 @@ export const getSyncStatus = async (req, res) => {
             LEFT JOIN clinical.mascotas m ON c.id_mascota = m.id_mascota
             LEFT JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
             WHERE c.google_sync_status = 'failed'
+            AND c.id_tenant = $1
             AND c.created_at >= CURRENT_DATE - INTERVAL '7 days'
             ORDER BY c.last_google_sync DESC
             LIMIT 10
+        `, [tenantId]);
+
+        const authIssueResult = await query(`
+          SELECT
+            created_at,
+            response_data
+          FROM system.activity_log
+          WHERE tipo_actividad = 'SYNC_CALENDAR'
+            AND descripcion IN ('google_calendar_sync:auto_sync_error', 'google_calendar_sync:manual_sync_error')
+            AND created_at >= NOW() - INTERVAL '72 hours'
+          ORDER BY created_at DESC
+          LIMIT 1
         `);
+
+        let googleAuth = {
+          requires_reauth: false,
+          code: null,
+          message: null,
+          last_error_at: null
+        };
+
+        if (authIssueResult.rows.length > 0) {
+          const row = authIssueResult.rows[0];
+          const payload = row.response_data && typeof row.response_data === 'object'
+            ? row.response_data
+            : {};
+
+          const rawCode = String(payload?.code || '').toUpperCase();
+          const rawError = String(payload?.error || '').toLowerCase();
+          const requiresReauth = payload?.requires_reauth === true
+            || rawCode === 'GOOGLE_REAUTH_REQUIRED'
+            || rawError.includes('invalid_grant');
+
+          if (requiresReauth && !hasCurrentGoogleToken) {
+            googleAuth = {
+              requires_reauth: true,
+              code: rawCode || 'GOOGLE_REAUTH_REQUIRED',
+              message: payload?.error || 'La autorización de Google Calendar expiró o fue revocada.',
+              last_error_at: row.created_at
+            };
+          }
+        }
 
         res.json({
             success: true,
             data: {
                 stats: statsResult.rows,
-                recent_errors: recentErrorsResult.rows
+            recent_errors: recentErrorsResult.rows,
+            google_auth: googleAuth
             }
         });
 
@@ -1085,6 +1325,8 @@ export const diagnoseGoogleCalendarSync = async (req, res) => {
         }
 
         console.log('🔍 Iniciando diagnóstico de sincronización con Google Calendar...');
+
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
 
         const diagnostic = {
             connection_status: null,
@@ -1119,8 +1361,9 @@ export const diagnoseGoogleCalendarSync = async (req, res) => {
                 updated_at
             FROM vetplus_auth.google_calendar_config
             WHERE is_active = true
+              AND configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)
             LIMIT 1
-        `);
+        `, [tenantId]);
         diagnostic.configuration = configResult.rows[0] || null;
 
         // 3. Obtener información de última sincronización
@@ -1131,8 +1374,9 @@ export const diagnoseGoogleCalendarSync = async (req, res) => {
                 COUNT(*) as total_citas_sync,
                 COUNT(CASE WHEN google_event_id IS NOT NULL THEN 1 END) as citas_con_event_id
             FROM clinical.calendario_citas
-            WHERE google_event_id IS NOT NULL OR created_at >= CURRENT_DATE - INTERVAL '7 days'
-        `);
+            WHERE (google_event_id IS NOT NULL OR created_at >= CURRENT_DATE - INTERVAL '7 days')
+              AND id_tenant = $1
+        `, [tenantId]);
         diagnostic.last_sync_info = lastSyncResult.rows[0];
 
         // 4. Listar eventos recientes de Google Calendar (últimos 7 días)
@@ -1219,11 +1463,11 @@ export const diagnoseGoogleCalendarSync = async (req, res) => {
  */
 export const importFromGoogleCalendar = async (req, res) => {
     try {
-        // Solo administradores pueden importar
-        if (req.user.rol !== 'admin') {
+    // Admin, veterinario y auxiliar pueden importar
+    if (!['admin', 'vet', 'aux'].includes(req.user.rol)) {
             return res.status(403).json({
                 success: false,
-                message: 'Solo los administradores pueden importar desde Google Calendar'
+        message: 'No tienes permisos para importar desde Google Calendar'
             });
         }
 
@@ -1231,7 +1475,7 @@ export const importFromGoogleCalendar = async (req, res) => {
             fecha_inicio,
             fecha_fin,
             auto_match = true,
-            create_missing_data = false,
+          create_missing_data = true,
             dry_run = false
         } = req.body;
 
@@ -1248,15 +1492,22 @@ export const importFromGoogleCalendar = async (req, res) => {
             {
                 autoMatch: auto_match,
                 createMissingData: create_missing_data,
-                dryRun: dry_run
+            dryRun: dry_run,
+            tenantId: req.tenantId ?? req.user?.tenant_id ?? null
             }
         );
 
         if (!importResult.success) {
-            return res.status(500).json({
+          const statusCode = Number.isFinite(Number(importResult?.status))
+            ? Number(importResult.status)
+            : 500;
+
+          return res.status(statusCode).json({
                 success: false,
                 message: 'Error importando desde Google Calendar',
-                error: importResult.error
+            error: importResult.error,
+            code: importResult.code,
+            requires_reauth: importResult.requires_reauth === true
             });
         }
 
@@ -1282,27 +1533,50 @@ export const importFromGoogleCalendar = async (req, res) => {
  */
 export const syncChangesFromGoogle = async (req, res) => {
     try {
-        // Solo administradores pueden sincronizar cambios
-        if (req.user.rol !== 'admin') {
+        // Admin, veterinario y auxiliar pueden sincronizar cambios
+        if (!['admin', 'vet', 'aux'].includes(req.user.rol)) {
             return res.status(403).json({
                 success: false,
-                message: 'Solo los administradores pueden sincronizar cambios'
+            message: 'No tienes permisos para sincronizar cambios'
             });
         }
 
-        const syncResult = await bidirectionalSyncService.syncChangesFromGoogle();
+        const {
+            only_today = true,
+            start_date = null,
+            end_date = null
+        } = req.body || {};
+
+        // Si llega un rango explícito, priorizar sincronización por rango.
+        const hasExplicitRange = Boolean(start_date && end_date);
+        const effectiveOnlyToday = hasExplicitRange ? false : Boolean(only_today);
+
+        const syncResult = await bidirectionalSyncService.syncChangesFromGoogle({
+          onlyToday: effectiveOnlyToday,
+          startDate: start_date,
+          endDate: end_date,
+          tenantId: req.tenantId ?? req.user?.tenant_id ?? null
+        });
 
         if (!syncResult.success) {
-            return res.status(500).json({
+          const statusCode = Number.isFinite(Number(syncResult?.status))
+            ? Number(syncResult.status)
+            : 500;
+
+          return res.status(statusCode).json({
                 success: false,
                 message: 'Error sincronizando cambios desde Google Calendar',
-                error: syncResult.error
+            error: syncResult.error,
+            code: syncResult.code,
+            requires_reauth: syncResult.requires_reauth === true
             });
         }
 
         res.json({
             success: true,
-            message: 'Sincronización de cambios completada',
+          message: effectiveOnlyToday
+            ? 'Sincronización de cambios de hoy completada'
+            : 'Sincronización de cambios por rango completada',
             data: syncResult.results
         });
 
@@ -1644,11 +1918,11 @@ export const renewWebhook = async (req, res) => {
  */
 export const importGoogleEventsToVetPlus = async (req, res) => {
     try {
-        // Solo administradores pueden importar
-        if (req.user.rol !== 'admin') {
+    // Admin, veterinario y auxiliar pueden importar
+    if (!['admin', 'vet', 'aux'].includes(req.user.rol)) {
             return res.status(403).json({
                 success: false,
-                message: 'Solo los administradores pueden importar eventos a VetPlus'
+        message: 'No tienes permisos para importar eventos a VetPlus'
             });
         }
 
@@ -1666,10 +1940,6 @@ export const importGoogleEventsToVetPlus = async (req, res) => {
             });
         }
 
-        console.log('📥 Iniciando importación de eventos de Google Calendar a VetPlus...');
-        console.log('📅 Rango de fechas:', fecha_inicio, 'a', fecha_fin);
-        console.log('🔧 Modo dry-run:', dry_run);
-
         // 1. Obtener eventos de Google Calendar
         const eventsResult = await googleCalendarService.listEvents(fecha_inicio, fecha_fin);
 
@@ -1680,8 +1950,6 @@ export const importGoogleEventsToVetPlus = async (req, res) => {
                 error: eventsResult.error
             });
         }
-
-        console.log(`📅 Encontrados ${eventsResult.events.length} eventos en Google Calendar`);
 
         // 2. Filtrar eventos que parecen ser de VetPlus
         const vetEvents = eventsResult.events.filter(event => {
@@ -1695,8 +1963,6 @@ export const importGoogleEventsToVetPlus = async (req, res) => {
                    description.includes('VetPlus') ||
                    description.includes('Código de cita:');
         });
-
-        console.log(`🏥 Filtrados ${vetEvents.length} eventos que parecen ser de VetPlus`);
 
         const results = {
             total_events: eventsResult.events.length,

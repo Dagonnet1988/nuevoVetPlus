@@ -1,5 +1,5 @@
 import { Component, OnInit, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -107,32 +107,9 @@ import { SyncDialogComponent } from '../../citas/sync-dialog.component';
                     <!-- Configuración OAuth -->
                     <div class="section">
                       <h3>Configuración OAuth 2.0</h3>
-                      <div class="form-row">
-                        <mat-form-field appearance="outline" class="form-field">
-                          <mat-label>Client ID *</mat-label>
-                          <input matInput formControlName="cliente_id" placeholder="12345678-abcdefgh.apps.googleusercontent.com">
-                          <mat-icon matSuffix>key</mat-icon>
-                          <mat-error *ngIf="configForm.get('cliente_id')?.hasError('required')">Client ID es requerido</mat-error>
-                        </mat-form-field>
-
-                        <mat-form-field appearance="outline" class="form-field">
-                          <mat-label>Client Secret *</mat-label>
-                          <input matInput type="password" formControlName="cliente_secret" placeholder="GOCSPX-xxxxxxxxxxxxx">
-                          <mat-icon matSuffix>lock</mat-icon>
-                          <mat-error *ngIf="configForm.get('cliente_secret')?.hasError('required')">Client Secret es requerido</mat-error>
-                        </mat-form-field>
-                      </div>
-
-                      <mat-form-field appearance="outline" class="form-field-full">
-                        <mat-label>ID del Calendario *</mat-label>
-                        <input matInput formControlName="calendar_id" placeholder="primary">
-                        <mat-icon matSuffix>calendar_today</mat-icon>
-                        <mat-hint>Usar 'primary' para el calendario principal</mat-hint>
-                        <mat-error *ngIf="configForm.get('calendar_id')?.hasError('required')">ID del calendario es requerido</mat-error>
-                      </mat-form-field>
-
                       @if (status().conectado) {
                         <div class="oauth-actions">
+                          <p class="help-text">Google Calendar conectado. Para cambiar credenciales, desconecta y vuelve a autorizar.</p>
                           <button mat-raised-button color="warn" (click)="disconnectGoogle()" [disabled]="disconnecting()">
                             @if (disconnecting()) {
                               <mat-spinner diameter="20"></mat-spinner>
@@ -141,9 +118,36 @@ import { SyncDialogComponent } from '../../citas/sync-dialog.component';
                             }
                             Desconectar Google Calendar
                           </button>
-                          <p class="help-text">Desconecta la integración con Google Calendar. Podrás reconectar en cualquier momento.</p>
+                          <p class="help-text">Desconecta la integración para reconfigurar Client ID/Secret de la clínica.</p>
                         </div>
                       } @else {
+                        <div class="form-row">
+                          <mat-form-field appearance="outline" class="form-field">
+                            <mat-label>Client ID *</mat-label>
+                            <input matInput formControlName="cliente_id" placeholder="12345678-abcdefgh.apps.googleusercontent.com">
+                            <mat-icon matSuffix>key</mat-icon>
+                            <mat-error *ngIf="configForm.get('cliente_id')?.hasError('required')">Client ID es requerido</mat-error>
+                          </mat-form-field>
+
+                          <mat-form-field appearance="outline" class="form-field">
+                            <mat-label>Client Secret *</mat-label>
+                            <input matInput type="password" formControlName="cliente_secret" placeholder="Dejar en blanco para mantener el actual">
+                            <mat-icon matSuffix>lock</mat-icon>
+                            <mat-error *ngIf="configForm.get('cliente_secret')?.hasError('required')">Client Secret es requerido</mat-error>
+                            @if (hasStoredSecret()) {
+                              <mat-hint>Ya existe un Client Secret guardado para esta clínica</mat-hint>
+                            }
+                          </mat-form-field>
+                        </div>
+
+                        <mat-form-field appearance="outline" class="form-field-full">
+                          <mat-label>ID del Calendario *</mat-label>
+                          <input matInput formControlName="calendar_id" placeholder="primary">
+                          <mat-icon matSuffix>calendar_today</mat-icon>
+                          <mat-hint>Usar 'primary' para el calendario principal</mat-hint>
+                          <mat-error *ngIf="configForm.get('calendar_id')?.hasError('required')">ID del calendario es requerido</mat-error>
+                        </mat-form-field>
+
                         <div class="oauth-actions">
                           <button mat-raised-button color="primary" (click)="initializeOAuth()" [disabled]="oauthLoading()">
                             @if (oauthLoading()) {
@@ -161,7 +165,7 @@ import { SyncDialogComponent } from '../../citas/sync-dialog.component';
                     <mat-divider></mat-divider>
 
                     <!-- Acciones de Sincronización -->
-                    @if (status().conectado || (configForm.value.cliente_id && configForm.value.cliente_secret)) {
+                    @if (status().conectado || (configForm.value.cliente_id && (configForm.value.cliente_secret || hasStoredSecret()))) {
                       <div class="section">
                         <h3>Acciones de Sincronización</h3>
                         <div class="sync-actions">
@@ -260,6 +264,9 @@ import { SyncDialogComponent } from '../../citas/sync-dialog.component';
                         <mat-slide-toggle formControlName="incluir_veterinario" color="primary">
                           Incluir nombre del veterinario
                         </mat-slide-toggle>
+                        <mat-slide-toggle formControlName="invitar_propietario_calendario" color="primary">
+                          Invitar al propietario al calendario (asistente)
+                        </mat-slide-toggle>
                       </div>
                     </div>
 
@@ -270,19 +277,19 @@ import { SyncDialogComponent } from '../../citas/sync-dialog.component';
                       <h3>Colores por Tipo de Cita</h3>
                       <div class="color-config">
                         <div class="color-item">
-                          <span>Consulta:</span>
+                          <span>Terapia:</span>
                           <input type="color" formControlName="color_consulta" class="color-picker">
                         </div>
                         <div class="color-item">
-                          <span>Cirugía:</span>
+                          <span>Hidroterapia:</span>
                           <input type="color" formControlName="color_cirugia" class="color-picker">
                         </div>
                         <div class="color-item">
-                          <span>Vacunación:</span>
+                          <span>Domicilio:</span>
                           <input type="color" formControlName="color_vacunacion" class="color-picker">
                         </div>
                         <div class="color-item">
-                          <span>Control:</span>
+                          <span>Valoración:</span>
                           <input type="color" formControlName="color_control" class="color-picker">
                         </div>
                       </div>
@@ -324,7 +331,7 @@ import { SyncDialogComponent } from '../../citas/sync-dialog.component';
                       <mat-icon class="status-icon">schedule</mat-icon>
                       <div>
                         <strong>Última sincronización</strong>
-                        <p>{{ status().ultimo_sync ? (status().ultimo_sync | date:'dd/MM/yyyy HH:mm') : 'Nunca' }}</p>
+                        <p>{{ status().ultimo_sync ? (status().ultimo_sync | date:'dd-MM-yy h:mm a') : 'Nunca' }}</p>
                       </div>
                     </div>
 
@@ -667,6 +674,7 @@ export class GoogleCalendarConfigComponent implements OnInit {
   oauthLoading = signal(false);
   syncing = signal(false);
   disconnecting = signal(false);
+  hasStoredSecret = signal(false);
 
   config = signal<GoogleCalendarConfig | null>(null);
   status = signal<GoogleCalendarStatus>({
@@ -694,7 +702,8 @@ export class GoogleCalendarConfigComponent implements OnInit {
     private snackBar: MatSnackBar,
     private router: Router,
     private dialog: MatDialog,
-    private citasService: CitasService
+    private citasService: CitasService,
+    private location: Location
   ) {
     this.configForm = this.createForm();
 
@@ -739,7 +748,7 @@ export class GoogleCalendarConfigComponent implements OnInit {
 
     if (activo) {
       clienteIdControl?.setValidators([Validators.required]);
-      clienteSecretControl?.setValidators([Validators.required]);
+      clienteSecretControl?.setValidators(this.hasStoredSecret() ? [] : [Validators.required]);
       calendarIdControl?.setValidators([Validators.required]);
     } else {
       clienteIdControl?.clearValidators();
@@ -760,16 +769,17 @@ export class GoogleCalendarConfigComponent implements OnInit {
       calendar_id: ['primary'],
       sync_automatico: [true],
       intervalo_sync: [30, [Validators.min(5)]],
-      prefijo_eventos: ['VetPlus'],
-      duracion_default: [30, [Validators.min(15)]],
+      prefijo_eventos: ['QI'],
+      duracion_default: [60, [Validators.min(15)]],
       recordatorio_default: [30, [Validators.min(5)]],
       incluir_cliente: [true],
       incluir_mascota: [true],
       incluir_veterinario: [true],
-      color_consulta: ['#2196f3'],
-      color_cirugia: ['#f44336'],
-      color_vacunacion: ['#4caf50'],
-      color_control: ['#ff9800']
+      invitar_propietario_calendario: [false],
+      color_consulta: ['#46d6db'],
+      color_cirugia: ['#5484ed'],
+      color_vacunacion: ['#51b749'],
+      color_control: ['#fbd75b']
     });
   }
 
@@ -814,24 +824,29 @@ export class GoogleCalendarConfigComponent implements OnInit {
   }
 
   private populateForm(config: GoogleCalendarConfig): void {
+    this.hasStoredSecret.set(!!config.has_client_secret);
+
     this.configForm.patchValue({
       activo: config.activo,
       cliente_id: config.cliente_id,
-      cliente_secret: config.cliente_secret,
+      cliente_secret: '',
       calendar_id: config.calendar_id,
       sync_automatico: config.sync_automatico,
       intervalo_sync: config.intervalo_sync,
       prefijo_eventos: config.prefijo_eventos,
-      duracion_default: config.configuracion_eventos?.duracion_default || 30,
+      duracion_default: config.configuracion_eventos?.duracion_default || 60,
       recordatorio_default: config.configuracion_eventos?.recordatorio_default || 30,
       incluir_cliente: config.configuracion_eventos?.incluir_cliente ?? true,
       incluir_mascota: config.configuracion_eventos?.incluir_mascota ?? true,
       incluir_veterinario: config.configuracion_eventos?.incluir_veterinario ?? true,
-      color_consulta: config.mapeo_colores?.consulta || '#2196f3',
-      color_cirugia: config.mapeo_colores?.cirugia || '#f44336',
-      color_vacunacion: config.mapeo_colores?.vacunacion || '#4caf50',
-      color_control: config.mapeo_colores?.control || '#ff9800'
+      invitar_propietario_calendario: config.configuracion_eventos?.invitar_propietario_calendario ?? false,
+      color_consulta: config.mapeo_colores?.terapia || config.mapeo_colores?.consulta || '#46d6db',
+      color_cirugia: config.mapeo_colores?.hidroterapia || config.mapeo_colores?.cirugia || '#5484ed',
+      color_vacunacion: config.mapeo_colores?.domicilio || config.mapeo_colores?.vacunacion || '#51b749',
+      color_control: config.mapeo_colores?.valoracion || config.mapeo_colores?.control || '#fbd75b'
     });
+
+    this.updateValidators(this.configForm.get('activo')?.value);
   }
 
   saveConfiguration(): Promise<void> {
@@ -846,23 +861,30 @@ export class GoogleCalendarConfigComponent implements OnInit {
     const config: GoogleCalendarConfig = {
       activo: formValue.activo,
       cliente_id: formValue.cliente_id,
-      cliente_secret: formValue.cliente_secret,
+      cliente_secret: formValue.cliente_secret?.trim() ? formValue.cliente_secret.trim() : undefined,
       calendar_id: formValue.calendar_id,
       sync_automatico: formValue.sync_automatico,
       intervalo_sync: formValue.intervalo_sync,
       prefijo_eventos: formValue.prefijo_eventos,
       mapeo_colores: {
+        // Compatibilidad con etiquetas históricas de la UI
         consulta: formValue.color_consulta,
         cirugia: formValue.color_cirugia,
         vacunacion: formValue.color_vacunacion,
-        control: formValue.color_control
+        control: formValue.color_control,
+        // Mapeo semántico del negocio
+        terapia: formValue.color_consulta,
+        hidroterapia: formValue.color_cirugia,
+        domicilio: formValue.color_vacunacion,
+        valoracion: formValue.color_control
       },
       configuracion_eventos: {
         duracion_default: formValue.duracion_default,
         recordatorio_default: formValue.recordatorio_default,
         incluir_cliente: formValue.incluir_cliente,
         incluir_mascota: formValue.incluir_mascota,
-        incluir_veterinario: formValue.incluir_veterinario
+        incluir_veterinario: formValue.incluir_veterinario,
+        invitar_propietario_calendario: formValue.invitar_propietario_calendario
       }
     };
 
@@ -885,8 +907,8 @@ export class GoogleCalendarConfigComponent implements OnInit {
   }
 
   initializeOAuth(): void {
-    if (!this.configForm.value.cliente_id || !this.configForm.value.cliente_secret) {
-      this.snackBar.open('Primero debes configurar Client ID y Client Secret', 'Cerrar', { duration: 3000 });
+    if (!this.configForm.value.cliente_id || (!this.configForm.value.cliente_secret && !this.hasStoredSecret())) {
+      this.snackBar.open('Primero debes configurar Client ID y Client Secret (o usar el secreto ya guardado)', 'Cerrar', { duration: 3000 });
       return;
     }
 
@@ -1139,41 +1161,48 @@ export class GoogleCalendarConfigComponent implements OnInit {
     this.syncing.set(true);
     let completedSteps = 0;
     const totalSteps = this.getTotalSteps(options);
-
-    console.log('🚀 Iniciando sincronización bidireccional completa:', options);
+    const syncConsoleSummary: any[] = [];
 
     // Paso 1: Sincronizar cambios locales hacia Google (si está habilitado)
     if (options.syncToGoogle) {
       this.citasService.forceSyncAllPending().subscribe({
-        next: () => {
+        next: (result) => {
           completedSteps++;
-          console.log(`✅ Paso 1/${totalSteps}: Cambios locales sincronizados hacia Google`);
-          this.executeNextStep(options, completedSteps, totalSteps);
+          syncConsoleSummary.push({
+            step: '1_sync_to_google',
+            processed: result?.data?.total ?? 0,
+            synced: result?.data?.synced ?? 0,
+            failed: result?.data?.failed ?? 0
+          });
+          this.executeNextStep(options, completedSteps, totalSteps, syncConsoleSummary);
         },
         error: (error) => {
           this.handleSyncError('Error sincronizando cambios locales', error);
         }
       });
     } else {
-      this.executeNextStep(options, completedSteps, totalSteps);
+      this.executeNextStep(options, completedSteps, totalSteps, syncConsoleSummary);
     }
   }
 
-  private executeNextStep(options: any, completedSteps: number, totalSteps: number): void {
+  private executeNextStep(options: any, completedSteps: number, totalSteps: number, syncConsoleSummary: any[]): void {
+    const expectedAfterSyncToGoogle = options.syncToGoogle ? 1 : 0;
+    const expectedAfterImport = expectedAfterSyncToGoogle + (options.importFromGoogle ? 1 : 0);
+
     // Paso 2: Importar desde Google (si está habilitado)
-    if (options.importFromGoogle && completedSteps === (options.syncToGoogle ? 1 : 0)) {
-      this.importFromGoogle(options, completedSteps, totalSteps);
+    if (options.importFromGoogle && completedSteps === expectedAfterSyncToGoogle) {
+      this.importFromGoogle(options, completedSteps, totalSteps, syncConsoleSummary);
       return;
     }
 
     // Paso 3: Sincronizar cambios existentes (si está habilitado)
-    if (options.syncChanges && completedSteps === totalSteps - 1) {
-      this.syncChangesFromGoogle(completedSteps, totalSteps);
+    if (options.syncChanges && completedSteps === expectedAfterImport) {
+      this.syncChangesFromGoogle(options, completedSteps, totalSteps, syncConsoleSummary);
       return;
     }
 
     // Si no hay más pasos, completar
-    this.completeSyncProcess(completedSteps, totalSteps);
+    this.completeSyncProcess(completedSteps, totalSteps, undefined, syncConsoleSummary);
   }
 
   private getTotalSteps(options: any): number {
@@ -1184,7 +1213,7 @@ export class GoogleCalendarConfigComponent implements OnInit {
     return steps;
   }
 
-  private importFromGoogle(options: any, completedSteps: number, totalSteps: number): void {
+  private importFromGoogle(options: any, completedSteps: number, totalSteps: number, syncConsoleSummary: any[]): void {
     const fechaInicio = options.fechaInicio || this.getStartOfMonth();
     const fechaFin = options.fechaFin || this.getEndOfMonth();
 
@@ -1195,8 +1224,19 @@ export class GoogleCalendarConfigComponent implements OnInit {
     }).subscribe({
       next: (result) => {
         completedSteps++;
-        console.log(`✅ Paso ${completedSteps}/${totalSteps}: Importación desde Google completada:`, result);
-        this.executeNextStep(options, completedSteps, totalSteps);
+        const importData = result?.data || {};
+        syncConsoleSummary.push({
+          step: '2_import_from_google',
+          fecha_inicio: fechaInicio,
+          fecha_fin: fechaFin,
+          processed: importData?.processed ?? 0,
+          created: importData?.created ?? 0,
+          updated: importData?.updated ?? 0,
+          skipped: importData?.skipped ?? 0,
+          errors: Array.isArray(importData?.errors) ? importData.errors.length : 0
+        });
+
+        this.executeNextStep(options, completedSteps, totalSteps, syncConsoleSummary);
       },
       error: (error) => {
         this.handleSyncError('Error importando desde Google Calendar', error);
@@ -1204,12 +1244,30 @@ export class GoogleCalendarConfigComponent implements OnInit {
     });
   }
 
-  private syncChangesFromGoogle(completedSteps: number, totalSteps: number): void {
-    this.citasService.syncChangesFromGoogle().subscribe({
+  private syncChangesFromGoogle(options: any, completedSteps: number, totalSteps: number, syncConsoleSummary: any[]): void {
+    const useRange = Boolean(options.importFromGoogle && options.fechaInicio && options.fechaFin);
+
+    this.citasService.syncChangesFromGoogle({
+      onlyToday: !useRange,
+      startDate: useRange ? options.fechaInicio : undefined,
+      endDate: useRange ? options.fechaFin : undefined
+    }).subscribe({
       next: (result) => {
         completedSteps++;
-        console.log(`✅ Paso ${completedSteps}/${totalSteps}: Sincronización de cambios completada:`, result);
-        this.completeSyncProcess(completedSteps, totalSteps, result);
+        const syncData = result?.data || {};
+        syncConsoleSummary.push({
+          step: '3_sync_changes',
+          only_today: syncData?.applied_date_range?.only_today,
+          start_date: syncData?.applied_date_range?.start_date,
+          end_date: syncData?.applied_date_range?.end_date,
+          processed: syncData?.processed ?? 0,
+          created: syncData?.created ?? 0,
+          updated: syncData?.updated ?? 0,
+          deleted: syncData?.deleted ?? 0,
+          errors: Array.isArray(syncData?.errors) ? syncData.errors.length : 0
+        });
+
+        this.completeSyncProcess(completedSteps, totalSteps, result, syncConsoleSummary);
       },
       error: (error) => {
         this.handleSyncError('Error sincronizando cambios desde Google', error);
@@ -1217,7 +1275,7 @@ export class GoogleCalendarConfigComponent implements OnInit {
     });
   }
 
-  private completeSyncProcess(completedSteps: number, totalSteps: number, lastResult?: any): void {
+  private completeSyncProcess(completedSteps: number, totalSteps: number, lastResult?: any, syncConsoleSummary: any[] = []): void {
     this.syncing.set(false);
 
     const processedChanges = lastResult?.data?.processed || 0;
@@ -1237,10 +1295,20 @@ export class GoogleCalendarConfigComponent implements OnInit {
     console.error(message + ':', error);
 
     let userMessage = message;
-    if (error.status === 404) {
-      userMessage = 'Servicio de sincronización no disponible';
-    } else if (error.status === 401) {
+    const backendCode = error?.error?.code;
+    const backendError = String(error?.error?.error || '').toLowerCase();
+    const requiresReauth = error?.error?.requires_reauth === true
+      || backendCode === 'GOOGLE_REAUTH_REQUIRED'
+      || backendError.includes('invalid_grant');
+
+    if (requiresReauth) {
+      userMessage = 'La autorización de Google Calendar expiró o fue revocada. Desconecta y vuelve a autorizar la cuenta de Google.';
+    } else if (error.status === 403) {
       userMessage = 'No tienes permisos para sincronizar';
+    } else if (error.status === 401) {
+      userMessage = 'Sesión no autorizada. Inicia sesión nuevamente.';
+    } else if (error.status === 404) {
+      userMessage = 'Servicio de sincronización no disponible';
     } else if (error.status === 500) {
       userMessage = 'Error interno del servidor de sincronización';
     } else if (error.status === 0) {
@@ -1261,6 +1329,11 @@ export class GoogleCalendarConfigComponent implements OnInit {
   }
 
   goBack(): void {
+    if (window.history.length > 1) {
+      this.location.back();
+      return;
+    }
+
     this.router.navigate(['/configuracion']);
   }
 

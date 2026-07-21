@@ -1,7 +1,9 @@
-import { Component, inject } from '@angular/core';
-import { Router, RouterOutlet } from '@angular/router';
+import { Component, effect, inject } from '@angular/core';
+import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { CommonModule } from '@angular/common';
+import { filter } from 'rxjs/operators';
 import { AuthService } from './services/auth.service';
+import { ConfiguracionService } from './services/configuracion.service';
 
 @Component({
   selector: 'app-root',
@@ -10,10 +12,38 @@ import { AuthService } from './services/auth.service';
   styleUrl: './app.scss'
 })
 export class App {
-  protected title = 'vetplus-frontend';
+  protected title = 'VetPlus';
   private authService = inject(AuthService);
+  private configuracionService = inject(ConfiguracionService);
 
-  constructor(private router: Router) {}
+  constructor(private router: Router) {
+    this.router.events
+      .pipe(filter((event) => event instanceof NavigationEnd))
+      .subscribe(() => this.updateBrowserTitle());
+
+    effect(() => {
+      this.configuracionService.empresaConfig();
+      this.updateBrowserTitle();
+    });
+
+    this.updateBrowserTitle();
+  }
+
+  private updateBrowserTitle(): void {
+    if (typeof document === 'undefined') return;
+
+    const url = this.router.url || '';
+    const isSuperadminRoute = url.startsWith('/superadmin');
+
+    if (isSuperadminRoute) {
+      document.title = 'Superadmin';
+      return;
+    }
+
+    const empresa = this.configuracionService.empresaConfig();
+    const nombreEmpresa = empresa?.nombre_empresa?.trim();
+    document.title = nombreEmpresa || 'VetPlus';
+  }
 
   public goToLogin() {
     this.router.navigate(['/login']);

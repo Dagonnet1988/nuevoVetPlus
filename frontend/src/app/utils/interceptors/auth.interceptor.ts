@@ -19,6 +19,9 @@ export class AuthInterceptor implements HttpInterceptor {
   ) {}
 
   intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    // Las rutas del panel de superadmin usan su propio interceptor
+    if (req.url.includes('/superadmin/')) return next.handle(req);
+
     // Agregar token JWT a todas las requests (excepto login)
     let authReq = req;
     const token = this.authService.getToken();
@@ -26,6 +29,16 @@ export class AuthInterceptor implements HttpInterceptor {
     if (token && !req.url.includes('/auth/login')) {
       authReq = req.clone({
         headers: req.headers.set('Authorization', `Bearer ${token}`)
+      });
+    }
+
+    // Agregar X-Tenant-Slug solo en entornos con subdominio real (no localhost/dev)
+    const hostname = window.location.hostname;
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || /^192\.168\.|^10\.|^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
+    if (!isLocal) {
+      const tenantSlug = hostname.split('.')[0];
+      authReq = authReq.clone({
+        headers: authReq.headers.set('X-Tenant-Slug', tenantSlug)
       });
     }
 
@@ -47,6 +60,12 @@ export class AuthInterceptor implements HttpInterceptor {
 
     return next.handle(authReq).pipe(
       catchError((error: HttpErrorResponse) => {
+        // Error funcional de Google Calendar (OAuth invalid_grant):
+        // no implica sesión inválida de VetPlus, por lo tanto NO cerrar sesión.
+        if (this.isGoogleCalendarReauthError(error, req)) {
+          return throwError(() => error);
+        }
+
         // Manejar errores de autenticación
         if (error.status === 401 && !this.isLoggingOut) {
           // Verificar si es un error de token expirado (no de credenciales inválidas)
@@ -114,6 +133,22 @@ export class AuthInterceptor implements HttpInterceptor {
     return errorCode === 'INVALID_TOKEN' ||
            errorMessage.includes('expirado') ||
            errorMessage.includes('expired');
+  }
+
+  // Detecta errores de OAuth de Google Calendar sin afectar la sesión de VetPlus
+  private isGoogleCalendarReauthError(error: HttpErrorResponse, req: HttpRequest<any>): boolean {
+    const isGoogleCalendarEndpoint = req.url.includes('/google-calendar/');
+    if (!isGoogleCalendarEndpoint) return false;
+
+    const backendCode = String(error?.error?.code || '').toUpperCase();
+    const backendRequiresReauth = error?.error?.requires_reauth === true;
+    const backendError = String(error?.error?.error || '').toLowerCase();
+    const backendMessage = String(error?.error?.message || '').toLowerCase();
+
+    return backendCode === 'GOOGLE_REAUTH_REQUIRED'
+      || backendRequiresReauth
+      || backendError.includes('invalid_grant')
+      || backendMessage.includes('invalid_grant');
   }
 
   // Manejar token expirado intentando refresh

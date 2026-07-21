@@ -51,7 +51,7 @@ export class ConfiguracionComponent implements OnInit {
     },
     {
       title: 'Google Calendar',
-      description: 'Integración con Google Calendar para sincronizar citas',
+      description: 'Integración y sincronización de citas con Google Calendar',
       icon: 'event',
       route: '/configuracion/google-calendar',
       color: '#4285f4',
@@ -59,20 +59,20 @@ export class ConfiguracionComponent implements OnInit {
       status: 'loading'
     },
     {
-      title: 'WhatsApp',
-      description: 'Configuración de mensajería automática con Baileys',
-      icon: 'chat',
-      route: '/configuracion/whatsapp',
-      color: '#25d366',
+      title: 'Correo',
+      description: 'Configurar envío de correos clínicos (Google OAuth o SMTP)',
+      icon: 'mail',
+      route: '/configuracion/correo',
+      color: '#0f766e',
       adminOnly: true,
       status: 'loading'
     },
     {
-      title: 'Sistema',
-      description: 'Configuraciones generales del sistema',
-      icon: 'settings',
-      route: '/configuracion/sistema',
-      color: '#ff9800',
+      title: 'Texto de Consentimiento',
+      description: 'Editar el texto legal que firman los propietarios de mascotas',
+      icon: 'gavel',
+      route: '/configuracion/consentimiento-texto',
+      color: '#6a1b9a',
       adminOnly: true,
       status: 'loading'
     },
@@ -83,15 +83,6 @@ export class ConfiguracionComponent implements OnInit {
       route: '/usuarios',
       color: '#34a853',
       adminOnly: true,
-      status: 'active'
-    },
-    {
-      title: 'Reportes',
-      description: 'Configuración de reportes y analytics',
-      icon: 'analytics',
-      route: '/reportes',
-      color: '#9c27b0',
-      adminOnly: false,
       status: 'active'
     }
   ];
@@ -107,7 +98,8 @@ export class ConfiguracionComponent implements OnInit {
   quickStats = signal({
     empresa_configurada: false,
     google_calendar_conectado: false,
-    whatsapp_conectado: false,
+    correo_configurado: false,
+    consentimiento_configurado: false,
     usuarios_activos: 0,
     total_configuraciones: 0
   });
@@ -155,21 +147,23 @@ export class ConfiguracionComponent implements OnInit {
     // Actualizar estado de cada sección basado en configuración real
     this.updateSectionStatus('Empresa', getUIStatus(status.empresa?.estado || 'pending'));
     this.updateSectionStatus('Google Calendar', getUIStatus(status.google_calendar?.estado || 'pending'));
-    this.updateSectionStatus('WhatsApp', getUIStatus(status.whatsapp?.estado || 'pending'));
-    this.updateSectionStatus('Sistema', getUIStatus(status.sistema?.estado || 'pending'));
+    this.updateSectionStatus('Correo', getUIStatus(status.correo?.estado || 'pending'));
+    this.updateSectionStatus('Texto de Consentimiento', getUIStatus(status.consentimiento?.estado || 'pending'));
+    this.updateSectionStatus('Usuarios y Roles', 'active');
   }
 
   private updateQuickStats(status: any): void {
     const stats = {
       empresa_configurada: status.empresa?.configurado || false,
       google_calendar_conectado: status.google_calendar?.conectado || false,
-      whatsapp_conectado: status.whatsapp?.conectado || false,
-      usuarios_activos: status.sistema?.usuarios_activos || 0,
+      correo_configurado: status.correo?.configurado || false,
+      consentimiento_configurado: status.consentimiento?.configurado || false,
+      usuarios_activos: status.usuarios?.total || 0,
       total_configuraciones: [
         status.empresa?.configurado,
         status.google_calendar?.conectado,
-        status.whatsapp?.conectado,
-        status.sistema?.estado === 'operativo'
+        status.correo?.configurado,
+        status.consentimiento?.configurado
       ].filter(Boolean).length
     };
 
@@ -217,5 +211,20 @@ export class ConfiguracionComponent implements OnInit {
       case 'error': return 'Error';
       default: return 'Pendiente';
     }
+  }
+
+  getSectionDescription(section: any): string {
+    if (section.title === 'Usuarios y Roles') {
+      const totalUsuariosClinicos = this.quickStats().usuarios_activos;
+      return totalUsuariosClinicos === 1
+        ? '1 usuario clinico activo (sin admins)'
+        : `${totalUsuariosClinicos} usuarios clinicos activos (sin admins)`;
+    }
+
+    return section.description;
+  }
+
+  shouldShowSectionStatus(section: any): boolean {
+    return section.title !== 'Usuarios y Roles';
   }
 }

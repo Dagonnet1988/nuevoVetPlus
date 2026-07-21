@@ -1,5 +1,15 @@
 import { body, param, query } from 'express-validator/lib/index.js';
 
+const TIPOS_CITA_VALIDOS = [
+    // Nuevos tipos de negocio
+    'valoracion', 'hidroterapia', 'terapia', 'domicilio', 'sin_clasificar', 'control',
+    // Compatibilidad con datos legados
+    'consulta_general', 'vacunacion', 'cirugia', 'emergencia', 'revision', 'desparasitacion', 'estetica', 'otro',
+    'Consulta', 'Terapia', 'Cirugía', 'Control', 'Vacunación', 'Emergencia'
+];
+
+const ESTADOS_CITA_VALIDOS = ['confirmada', 'en_curso', 'completada', 'no_asistio'];
+
 /**
  * Validaciones para la creación de citas
  */
@@ -20,15 +30,7 @@ export const validateCreateAppointment = [
         .notEmpty()
         .withMessage('La fecha de inicio es obligatoria')
         .isISO8601()
-        .withMessage('La fecha de inicio debe ser una fecha válida (ISO 8601)')
-        .custom((value) => {
-            const fechaInicio = new Date(value);
-            const ahora = new Date();
-            if (fechaInicio <= ahora) {
-                throw new Error('La fecha de inicio debe ser posterior a la fecha actual');
-            }
-            return true;
-        }),
+        .withMessage('La fecha de inicio debe ser una fecha válida (ISO 8601)'),
     
     body('fecha_fin')
         .notEmpty()
@@ -55,7 +57,7 @@ export const validateCreateAppointment = [
     body('tipo')
         .notEmpty()
         .withMessage('El tipo de cita es obligatorio')
-        .isIn(['consulta_general', 'vacunacion', 'cirugia', 'control', 'emergencia', 'revision', 'desparasitacion', 'estetica', 'otro', 'Consulta', 'Terapia', 'Cirugía', 'Control', 'Vacunación', 'Emergencia'])
+        .isIn(TIPOS_CITA_VALIDOS)
         .withMessage('El tipo de cita no es válido'),
     
     body('motivo')
@@ -67,6 +69,118 @@ export const validateCreateAppointment = [
         .optional()
         .isLength({ max: 1000 })
         .withMessage('Las notas no pueden exceder 1000 caracteres')
+];
+
+const recurringBaseValidators = [
+    body('id_mascota')
+        .notEmpty()
+        .withMessage('El ID de la mascota es obligatorio')
+        .isUUID()
+        .withMessage('El ID de la mascota debe ser un UUID válido'),
+
+    body('id_veterinario')
+        .notEmpty()
+        .withMessage('El ID del veterinario es obligatorio')
+        .isUUID()
+        .withMessage('El ID del veterinario debe ser un UUID válido'),
+
+    body('fecha_inicio')
+        .notEmpty()
+        .withMessage('La fecha de inicio es obligatoria')
+        .isISO8601()
+        .withMessage('La fecha de inicio debe ser una fecha válida (ISO 8601)'),
+
+    body('fecha_fin')
+        .notEmpty()
+        .withMessage('La fecha de fin es obligatoria')
+        .isISO8601()
+        .withMessage('La fecha de fin debe ser una fecha válida (ISO 8601)')
+        .custom((value, { req }) => {
+            const fechaInicio = new Date(req.body.fecha_inicio);
+            const fechaFin = new Date(value);
+            if (fechaFin <= fechaInicio) {
+                throw new Error('La fecha de fin debe ser posterior a la fecha de inicio');
+            }
+            return true;
+        }),
+
+    body('recurrencia.frecuencia')
+        .optional()
+        .isIn(['daily', 'weekly'])
+        .withMessage('La frecuencia debe ser daily o weekly'),
+
+    body('recurrencia.intervalo')
+        .optional()
+        .isInt({ min: 1, max: 12 })
+        .withMessage('El intervalo debe ser un número entre 1 y 12'),
+
+    body('recurrencia.total_ocurrencias')
+        .optional()
+        .isInt({ min: 1, max: 200 })
+        .withMessage('El total de ocurrencias debe estar entre 1 y 200'),
+
+    body('recurrencia.fecha_hasta')
+        .optional({ nullable: true })
+        .isISO8601()
+        .withMessage('La fecha_hasta debe ser una fecha válida'),
+
+    body('recurrencia.dias_semana')
+        .optional()
+        .isArray({ min: 1 })
+        .withMessage('dias_semana debe ser un arreglo no vacío')
+];
+
+export const validatePreviewRecurringAppointments = [
+    ...recurringBaseValidators
+];
+
+export const validateCreateRecurringAppointments = [
+    ...recurringBaseValidators,
+    body('tipo')
+        .notEmpty()
+        .withMessage('El tipo de cita es obligatorio')
+        .isIn(TIPOS_CITA_VALIDOS)
+        .withMessage('El tipo de cita no es válido'),
+
+    body('motivo')
+        .optional({ nullable: true })
+        .isLength({ max: 500 })
+        .withMessage('El motivo no puede exceder 500 caracteres'),
+
+    body('notas')
+        .optional({ nullable: true })
+        .isLength({ max: 1000 })
+        .withMessage('Las notas no pueden exceder 1000 caracteres'),
+
+    body('observaciones')
+        .optional({ nullable: true })
+        .isLength({ max: 1000 })
+        .withMessage('Las observaciones no pueden exceder 1000 caracteres'),
+
+    body('ocurrencias_editadas')
+        .optional()
+        .isArray({ min: 1, max: 200 })
+        .withMessage('ocurrencias_editadas debe ser un arreglo entre 1 y 200 elementos'),
+
+    body('ocurrencias_editadas.*.indice')
+        .optional()
+        .isInt({ min: 1, max: 999 })
+        .withMessage('El indice de ocurrencia debe ser un número válido'),
+
+    body('ocurrencias_editadas.*.fecha_inicio')
+        .optional()
+        .isISO8601()
+        .withMessage('La fecha_inicio de la ocurrencia debe ser válida'),
+
+    body('ocurrencias_editadas.*.fecha_fin')
+        .optional()
+        .isISO8601()
+        .withMessage('La fecha_fin de la ocurrencia debe ser válida'),
+
+    body('ocurrencias_editadas.*.tipo')
+        .optional()
+        .isIn(TIPOS_CITA_VALIDOS)
+        .withMessage('El tipo de cita en ocurrencias_editadas no es válido')
 ];
 
 /**
@@ -92,38 +206,7 @@ export const validateUpdateAppointment = [
     body('fecha_inicio')
         .optional()
         .isISO8601()
-        .withMessage('La fecha de inicio debe ser una fecha válida (ISO 8601)')
-        .custom((value, { req }) => {
-            if (value) {
-                const fechaInicio = new Date(value);
-                const ahora = new Date();
-                
-                // Agregar margen de tolerancia de 5 minutos para evitar problemas de precisión
-                const margenTolerancia = 5 * 60 * 1000; // 5 minutos en milisegundos
-                const tiempoMinimo = new Date(ahora.getTime() - margenTolerancia);
-                
-                console.log('🕐 Validación de fecha:', {
-                    fechaRecibida: value,
-                    fechaParseada: fechaInicio.toISOString(),
-                    fechaActual: ahora.toISOString(),
-                    tiempoMinimo: tiempoMinimo.toISOString(),
-                    estado: req.body.estado,
-                    diferenciaMilisegundos: fechaInicio.getTime() - ahora.getTime()
-                });
-                
-                // Solo validar fecha futura si el estado no es completada o cancelada
-                if (req.body.estado && ['completada', 'cancelada', 'Completada', 'Cancelada'].includes(req.body.estado)) {
-                    console.log('✅ Cita con estado final, omitiendo validación de fecha futura');
-                    return true;
-                }
-                
-                // Usar el tiempo mínimo con margen de tolerancia
-                if (fechaInicio <= tiempoMinimo) {
-                    throw new Error('La fecha de inicio debe ser posterior a la fecha actual para citas activas');
-                }
-            }
-            return true;
-        }),
+        .withMessage('La fecha de inicio debe ser una fecha válida (ISO 8601)'),
     
     body('fecha_fin')
         .optional()
@@ -148,12 +231,12 @@ export const validateUpdateAppointment = [
     
     body('tipo')
         .optional()
-        .isIn(['consulta_general', 'vacunacion', 'cirugia', 'control', 'emergencia', 'revision', 'desparasitacion', 'estetica', 'otro', 'Consulta', 'Terapia', 'Cirugía', 'Control', 'Vacunación', 'Emergencia'])
+        .isIn(TIPOS_CITA_VALIDOS)
         .withMessage('El tipo de cita no es válido'),
     
     body('estado')
         .optional()
-        .isIn(['Programada', 'Confirmada', 'En Curso', 'Completada', 'Cancelada', 'No Asistió', 'pendiente', 'confirmada', 'en_curso', 'completada', 'cancelada', 'no_asistio'])
+        .isIn(ESTADOS_CITA_VALIDOS)
         .withMessage('El estado de la cita no es válido'),
     
     body('motivo')
@@ -185,7 +268,7 @@ export const validateUpdateAppointmentStatus = [
     body('estado')
         .notEmpty()
         .withMessage('El estado es obligatorio')
-        .isIn(['Programada', 'Confirmada', 'En Curso', 'Completada', 'Cancelada', 'No Asistió', 'pendiente', 'confirmada', 'en_curso', 'completada', 'cancelada', 'no_asistio'])
+        .isIn(ESTADOS_CITA_VALIDOS)
         .withMessage('El estado de la cita no es válido'),
     
     body('notas')
@@ -242,12 +325,12 @@ export const validateGetAppointments = [
     
     query('estado')
         .optional()
-        .isIn(['Programada', 'Confirmada', 'En Curso', 'Completada', 'Cancelada', 'No Asistió', 'pendiente', 'confirmada', 'en_curso', 'completada', 'cancelada', 'no_asistio'])
+        .isIn(ESTADOS_CITA_VALIDOS)
         .withMessage('El estado de la cita no es válido'),
     
     query('tipo')
         .optional()
-        .isIn(['consulta_general', 'vacunacion', 'cirugia', 'control', 'emergencia', 'revision', 'desparasitacion', 'estetica', 'otro', 'Consulta', 'Terapia', 'Cirugía', 'Control', 'Vacunación', 'Emergencia'])
+        .isIn(TIPOS_CITA_VALIDOS)
         .withMessage('El tipo de cita no es válido'),
     
     query('id_veterinario')

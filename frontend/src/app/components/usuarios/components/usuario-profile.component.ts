@@ -1,5 +1,5 @@
 import { Component, OnInit, signal, computed, inject, Inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -18,10 +18,10 @@ import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angu
 import {
   UsuariosService,
   Usuario,
-  LogActividad,
-  SesionActiva,
-  EstadisticasUsuario
+  SesionActiva
 } from '../../../services/usuarios.service';
+import { AuthService } from '../../../services/auth.service';
+import { environment } from '../../../../environments/environment';
 
 @Component({
   selector: 'app-usuario-profile',
@@ -48,48 +48,54 @@ import {
 export class UsuarioProfileComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private location = inject(Location);
   private usuariosService = inject(UsuariosService);
+  private authService = inject(AuthService);
   private snackBar = inject(MatSnackBar);
   private dialog = inject(MatDialog);
 
-  // Signals
   loading = signal(false);
   usuario = signal<Usuario | null>(null);
-  logsActividad = signal<LogActividad[]>([]);
   sesionesActivas = signal<SesionActiva[]>([]);
-  loadingLogs = signal(false);
   loadingSesiones = signal(false);
 
-  // Computed
-  usuarioId = computed(() => this.route.snapshot.paramMap.get('id') || '');
+  usuarioId = computed(() => {
+    const fromParam = this.route.snapshot.paramMap.get('id');
+    const fromQuery = this.route.snapshot.queryParamMap.get('id');
+    const fromSession = this.authService.currentUser()?.id_usuario;
+    return fromParam || fromQuery || fromSession || '';
+  });
+
   isUsuarioActivo = computed(() => this.usuario()?.activo || false);
-  tienePermisos = computed(() => {
-    const usuario = this.usuario();
-    return usuario?.rol === 'admin' || usuario?.rol === 'vet';
-  });
 
-  estadisticasResumen = computed(() => {
-    const stats = this.usuario()?.estadisticas;
-    if (!stats) return [];
-
-    return [
-      { label: 'Citas Realizadas', value: stats.total_citas, icon: 'event', color: '#3182ce' },
-      { label: 'Consultas', value: stats.total_consultas, icon: 'medical_services', color: '#38a169' },
-      { label: 'Pacientes Atendidos', value: stats.total_pacientes_atendidos, icon: 'pets', color: '#805ad5' },
-      { label: 'Horas Trabajadas', value: stats.horas_trabajadas, icon: 'access_time', color: '#ed8936' },
-      { label: 'Calificación', value: stats.calificacion_promedio.toFixed(1), icon: 'star', color: '#f56565' },
-      { label: 'Sesiones Activas', value: stats.sesiones_activas, icon: 'devices', color: '#38b2ac' }
-    ];
-  });
+  uploadingFirma = signal(false);
+  firmaPreview = signal<string | null>(null);
+  uploadingAvatar = signal(false);
+  avatarPreview = signal<string | null>(null);
 
   ngOnInit(): void {
     this.loadUsuario();
   }
 
+  volver(): void {
+    if (window.history.length > 1) {
+      this.location.back();
+      return;
+    }
+
+    const openedFromUsersList = !!this.route.snapshot.paramMap.get('id');
+    if (openedFromUsersList && this.authService.hasRole('admin')) {
+      this.router.navigate(['/usuarios']);
+      return;
+    }
+    this.router.navigate(['/dashboard']);
+  }
+
   private loadUsuario(): void {
     const id = this.usuarioId();
     if (!id) {
-      this.router.navigate(['/usuarios']);
+      this.snackBar.open('No se encontró ID de usuario', 'Cerrar', { duration: 3000 });
+      this.router.navigate(['/dashboard']);
       return;
     }
 
@@ -98,41 +104,13 @@ export class UsuarioProfileComponent implements OnInit {
       next: (usuario) => {
         this.usuario.set(usuario);
         this.loading.set(false);
-
-        // Cargar datos adicionales cuando estén disponibles los endpoints
-        // this.loadLogsActividad();
-        // this.loadSesionesActivas();
-
-        // Temporalmente inicializar arrays vacíos
-        this.logsActividad.set([]);
-        this.sesionesActivas.set([]);
-        this.loadingLogs.set(false);
-        this.loadingSesiones.set(false);
+        this.loadSesionesActivas();
       },
       error: (error) => {
         console.error('Error cargando usuario:', error);
-        this.snackBar.open('Error cargando información del usuario', 'Cerrar', { duration: 3000 });
         this.loading.set(false);
+        this.snackBar.open('Error cargando perfil del usuario', 'Cerrar', { duration: 3000 });
         this.router.navigate(['/usuarios']);
-      }
-    });
-  }
-
-  private loadLogsActividad(): void {
-    const id = this.usuarioId();
-    if (!id) return;
-
-    this.loadingLogs.set(true);
-    this.usuariosService.getLogsUsuario(id, 1, 10).subscribe({
-      next: (response) => {
-        const logs = response?.data || response || [];
-        this.logsActividad.set(Array.isArray(logs) ? logs : []);
-        this.loadingLogs.set(false);
-      },
-      error: (error) => {
-        console.error('Error cargando logs de actividad:', error);
-        this.logsActividad.set([]);
-        this.loadingLogs.set(false);
       }
     });
   }
@@ -142,7 +120,11 @@ export class UsuarioProfileComponent implements OnInit {
     if (!id) return;
 
     this.loadingSesiones.set(true);
-    this.usuariosService.getSesionesActivas(id).subscribe({
+    this.usuariosService.getSesionesActivas({
+      id_usuario: id,
+      estado: 'todas',
+      exclude_admins: false
+    }).subscribe({
       next: (sesiones) => {
         this.sesionesActivas.set(Array.isArray(sesiones) ? sesiones : []);
         this.loadingSesiones.set(false);
@@ -155,7 +137,6 @@ export class UsuarioProfileComponent implements OnInit {
     });
   }
 
-  // Acciones
   editarUsuario(): void {
     const id = this.usuarioId();
     if (id) {
@@ -173,8 +154,8 @@ export class UsuarioProfileComponent implements OnInit {
     if (confirm(mensaje)) {
       this.usuariosService.toggleUsuarioEstado(usuario.id_usuario, !usuario.activo).subscribe({
         next: () => {
+          this.usuario.update((u) => u ? { ...u, activo: !u.activo } : u);
           this.snackBar.open(`Usuario ${accion}do exitosamente`, 'Cerrar', { duration: 3000 });
-          this.loadUsuario(); // Recargar datos
         },
         error: (error) => {
           console.error(`Error ${accion}ndo usuario:`, error);
@@ -188,66 +169,33 @@ export class UsuarioProfileComponent implements OnInit {
     const usuario = this.usuario();
     if (!usuario) return;
 
-    if (confirm(`¿Resetear la contraseña de ${usuario.nombre} ${usuario.apellido}? Se generará una contraseña temporal que deberá cambiar en el primer acceso.`)) {
-      // Usar el método de administrador para generar contraseña temporal
-      this.usuariosService.generarPasswordTemporal(usuario.id_usuario).subscribe({
+    if (confirm(`¿Resetear la contraseña de ${usuario.nombre} ${usuario.apellido}? Se enviará una contraseña temporal por email.`)) {
+      this.usuariosService.enviarPasswordTemporal(usuario.id_usuario).subscribe({
         next: (response) => {
-          console.log('Respuesta completa del servidor:', response);
-
-          // Intentar obtener la contraseña de diferentes posibles estructuras
-          const tempPassword = response.data?.tempPassword ||
-                              response.tempPassword ||
-                              response.password_temporal ||
-                              response.data?.password_temporal ||
-                              response.passwordTemporal ||
-                              response.data?.passwordTemporal ||
-                              response.password ||
-                              response.data?.password;
-
+          const tempPassword = response?.data?.tempPassword;
           if (tempPassword) {
-            // Mostrar la contraseña temporal en un diálogo profesional
             this.dialog.open(TempPasswordDialogComponent, {
-              width: '500px',
+              width: '520px',
               data: {
                 usuario: `${usuario.nombre} ${usuario.apellido}`,
                 password: tempPassword
-              },
-              disableClose: true
+              }
             });
-
-            // También mostrar en consola para fácil copia
-            console.log(`Contraseña temporal para ${usuario.nombre} ${usuario.apellido}: ${tempPassword}`);
-          } else {
-            console.warn('No se encontró la contraseña temporal en la respuesta:', response);
-            alert('Contraseña temporal generada, pero no se pudo obtener del servidor. Revisa la consola para más detalles.');
           }
 
-          this.snackBar.open('Contraseña temporal generada exitosamente', 'Cerrar', { duration: 5000 });
+          const emailSent = response?.data?.email?.sent === true;
+          const statusMessage = emailSent
+            ? 'Se mostro la contrasena temporal y se envio por email.'
+            : 'Se mostro la contrasena temporal. Envio por email pendiente de configuracion.';
 
-          // Recargar datos del usuario para actualizar estado
-          this.loadUsuario();
+          this.snackBar.open(statusMessage, 'Cerrar', { duration: 4500 });
         },
         error: (error) => {
-          console.error('Error generando contraseña temporal:', error);
-          this.snackBar.open('Error generando contraseña temporal', 'Cerrar', { duration: 3000 });
+          console.error('Error reseteando contraseña:', error);
+          this.snackBar.open('Error reseteando contraseña', 'Cerrar', { duration: 3000 });
         }
       });
     }
-  }
-
-  enviarCredenciales(): void {
-    const usuario = this.usuario();
-    if (!usuario) return;
-
-    this.usuariosService.enviarPasswordTemporal(usuario.id_usuario).subscribe({
-      next: () => {
-        this.snackBar.open('Credenciales enviadas por email', 'Cerrar', { duration: 3000 });
-      },
-      error: (error) => {
-        console.error('Error enviando credenciales:', error);
-        this.snackBar.open('Error enviando credenciales', 'Cerrar', { duration: 3000 });
-      }
-    });
   }
 
   forzarCambioPassword(): void {
@@ -258,7 +206,6 @@ export class UsuarioProfileComponent implements OnInit {
       this.usuariosService.forzarCambioPassword(usuario.id_usuario).subscribe({
         next: () => {
           this.snackBar.open('Cambio de contraseña forzado exitosamente', 'Cerrar', { duration: 3000 });
-          // Recargar datos del usuario para actualizar estado
           this.loadUsuario();
         },
         error: (error) => {
@@ -274,7 +221,7 @@ export class UsuarioProfileComponent implements OnInit {
       this.usuariosService.cerrarSesion(sesion.id_sesion).subscribe({
         next: () => {
           this.snackBar.open('Sesión cerrada exitosamente', 'Cerrar', { duration: 3000 });
-          this.loadSesionesActivas(); // Recargar sesiones
+          this.loadSesionesActivas();
         },
         error: (error) => {
           console.error('Error cerrando sesión:', error);
@@ -292,7 +239,7 @@ export class UsuarioProfileComponent implements OnInit {
       this.usuariosService.cerrarTodasLasSesiones(usuario.id_usuario).subscribe({
         next: () => {
           this.snackBar.open('Todas las sesiones han sido cerradas', 'Cerrar', { duration: 3000 });
-          this.loadSesionesActivas(); // Recargar sesiones
+          this.loadSesionesActivas();
         },
         error: (error) => {
           console.error('Error cerrando sesiones:', error);
@@ -302,21 +249,106 @@ export class UsuarioProfileComponent implements OnInit {
     }
   }
 
-  verMasLogs(): void {
-    const id = this.usuarioId();
-    if (id) {
-      this.router.navigate(['/usuarios', id, 'actividad']);
-    }
-  }
-
   verMasSesiones(): void {
     const id = this.usuarioId();
-    if (id) {
-      this.router.navigate(['/usuarios', id, 'sesiones']);
+    if (!id) {
+      return;
     }
+
+    if (this.authService.hasRole('admin')) {
+      this.router.navigate(['/usuarios', id, 'sesiones']);
+      return;
+    }
+
+    this.router.navigate(['/perfil/sesiones'], { queryParams: { id } });
   }
 
-  // Utility methods
+  onAvatarSelected(event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      this.snackBar.open('Solo se permiten archivos PNG, JPG o WEBP', 'Cerrar', { duration: 3000 });
+      return;
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      this.snackBar.open('La imagen no puede superar 4 MB', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = e => this.avatarPreview.set(e.target?.result as string);
+    reader.readAsDataURL(file);
+
+    const id = this.usuarioId();
+    if (!id) return;
+
+    this.uploadingAvatar.set(true);
+    this.usuariosService.uploadAvatar(id, file).subscribe({
+      next: (data) => {
+        const avatarUrl = data?.avatar_url || '';
+        this.usuario.update(u => u ? { ...u, avatar_url: avatarUrl } : u);
+
+        if (this.authService.currentUser()?.id_usuario === id) {
+          this.authService.refreshUserInfo().subscribe({ error: () => {} });
+        }
+
+        this.snackBar.open('Foto de perfil actualizada', 'Cerrar', { duration: 2500 });
+        this.uploadingAvatar.set(false);
+      },
+      error: () => {
+        this.snackBar.open('Error subiendo la foto de perfil', 'Cerrar', { duration: 3000 });
+        this.uploadingAvatar.set(false);
+      }
+    });
+  }
+
+  getAvatarUrl(url?: string): string {
+    if (!url) return '';
+    if (/^https?:\/\//i.test(url)) return url;
+    const apiBase = environment.apiUrl.replace(/\/api\/?$/, '');
+    return `${apiBase}${url.startsWith('/') ? '' : '/'}${url}`;
+  }
+
+  onFirmaSelected(event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+
+    if (!['image/png', 'image/jpeg'].includes(file.type)) {
+      this.snackBar.open('Solo se permiten archivos PNG o JPG', 'Cerrar', { duration: 3000 });
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      this.snackBar.open('El archivo no puede superar 3 MB', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = e => this.firmaPreview.set(e.target?.result as string);
+    reader.readAsDataURL(file);
+
+    const id = this.usuarioId();
+    if (!id) return;
+    this.uploadingFirma.set(true);
+    this.usuariosService.uploadFirma(id, file).subscribe({
+      next: (data) => {
+        this.usuario.update(u => u ? { ...u, firma_url: data.firma_url } : u);
+        this.snackBar.open('Firma subida exitosamente', 'Cerrar', { duration: 3000 });
+        this.uploadingFirma.set(false);
+      },
+      error: () => {
+        this.snackBar.open('Error subiendo la firma', 'Cerrar', { duration: 3000 });
+        this.uploadingFirma.set(false);
+      }
+    });
+  }
+
+  getFirmaUrl(url?: string): string {
+    if (!url) return '';
+    if (/^https?:\/\//i.test(url)) return url;
+    return `${environment.backendUrl}${url.startsWith('/') ? '' : '/'}${url}`;
+  }
+
   formatearRol(rol: string): string {
     return this.usuariosService.formatearRol(rol);
   }
@@ -346,9 +378,11 @@ export class UsuarioProfileComponent implements OnInit {
   formatearFechaRelativa(fecha: string): string {
     const now = new Date();
     const date = new Date(fecha);
-    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
+    const diffInMinutes = Math.max(0, Math.floor((now.getTime() - date.getTime()) / (1000 * 60)));
+    const diffInHours = Math.floor(diffInMinutes / 60);
 
-    if (diffInHours < 1) return 'Hace menos de 1 hora';
+    if (diffInMinutes < 1) return 'Hace menos de 1 minuto';
+    if (diffInMinutes < 60) return `Hace ${diffInMinutes} min`;
     if (diffInHours < 24) return `Hace ${diffInHours} horas`;
     if (diffInHours < 48) return 'Hace 1 día';
 
@@ -359,32 +393,35 @@ export class UsuarioProfileComponent implements OnInit {
     return this.formatearFecha(fecha);
   }
 
-  getColorTipoLog(tipo: string): string {
-    const colores: { [key: string]: string } = {
-      login: '#38a169',
-      logout: '#ed8936',
-      create: '#3182ce',
-      update: '#805ad5',
-      delete: '#e53e3e',
-      view: '#4a5568',
-      export: '#38b2ac',
-      error: '#e53e3e'
-    };
-    return colores[tipo] || '#4a5568';
+  formatearDuracionSesion(sesion: SesionActiva): string {
+    const start = new Date(sesion.fecha_inicio).getTime();
+    const end = sesion.fecha_logout
+      ? new Date(sesion.fecha_logout).getTime()
+      : Date.now();
+
+    const durationSecondsRaw = typeof sesion.duracion_segundos === 'number'
+      ? sesion.duracion_segundos
+      : Math.max(0, Math.floor((end - start) / 1000));
+
+    const totalMinutes = Math.floor(durationSecondsRaw / 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m`;
   }
 
-  getIconoTipoLog(tipo: string): string {
-    const iconos: { [key: string]: string } = {
-      login: 'login',
-      logout: 'logout',
-      create: 'add',
-      update: 'edit',
-      delete: 'delete',
-      view: 'visibility',
-      export: 'download',
-      error: 'error'
-    };
-    return iconos[tipo] || 'info';
+  getIconoDispositivoAcceso(dispositivo?: string): string {
+    const normalized = (dispositivo || '').toLowerCase();
+    if (normalized.includes('móvil') || normalized.includes('movil') || normalized.includes('mobile')) {
+      return 'smartphone';
+    }
+    if (normalized.includes('tablet')) {
+      return 'tablet_mac';
+    }
+    return 'computer';
   }
 }
 

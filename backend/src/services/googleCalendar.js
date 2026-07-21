@@ -10,6 +10,115 @@ class GoogleCalendarService {
         // this.initializeAuth();
     }
 
+    getConfiguredCalendarId() {
+        const raw = String(this.config?.calendar_id || 'primary').trim();
+        return raw || 'primary';
+    }
+
+    getErrorStatusCode(error) {
+        return error?.status || error?.code || error?.response?.status || error?.cause?.code || null;
+    }
+
+    isGoogleReauthRequiredError(error) {
+        const oauthError = String(error?.response?.data?.error || '').toLowerCase();
+        const composedMessage = [
+            error?.message,
+            error?.cause?.message,
+            error?.response?.data?.error_description
+        ]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase();
+
+        return oauthError === 'invalid_grant' || composedMessage.includes('invalid_grant');
+    }
+
+    buildGoogleErrorPayload(error, fallbackMessage = 'Error de Google Calendar') {
+        if (this.isGoogleReauthRequiredError(error)) {
+            return {
+                error: 'La autorización de Google Calendar expiró o fue revocada. Reconecta la cuenta de Google.',
+                code: 'GOOGLE_REAUTH_REQUIRED',
+                status: 400,
+                requires_reauth: true
+            };
+        }
+
+        const status = this.getErrorStatusCode(error);
+        const normalizedStatus = Number.isFinite(Number(status)) ? Number(status) : 500;
+
+        return {
+            error: error?.message || fallbackMessage,
+            code: 'GOOGLE_API_ERROR',
+            status: normalizedStatus,
+            requires_reauth: false
+        };
+    }
+
+    async getActiveCalendarId() {
+        const configuredCalendarId = this.getConfiguredCalendarId();
+
+        if (configuredCalendarId.toLowerCase() === 'primary') {
+            return 'primary';
+        }
+
+        try {
+            await this.calendar.calendars.get({ calendarId: configuredCalendarId });
+            return configuredCalendarId;
+        } catch (error) {
+            const status = this.getErrorStatusCode(error);
+            if (status !== 404) {
+                throw error;
+            }
+        }
+
+        const listResponse = await this.calendar.calendarList.list({ maxResults: 250 });
+        const calendars = listResponse?.data?.items || [];
+        const search = configuredCalendarId.toLowerCase();
+
+        const matched = calendars.find((cal) => {
+            const id = String(cal?.id || '').toLowerCase();
+            const summary = String(cal?.summary || '').toLowerCase();
+            return id === search || summary === search;
+        });
+
+        if (matched?.id) {
+            const resolvedId = String(matched.id).trim();
+
+            if (resolvedId && this.config?.calendar_id !== resolvedId) {
+                try {
+                    if (this.config?.id_config) {
+                        await query(
+                            `UPDATE vetplus_auth.google_calendar_config
+                             SET calendar_id = $1, updated_at = CURRENT_TIMESTAMP
+                             WHERE id_config = $2`,
+                            [resolvedId, this.config.id_config]
+                        );
+                    }
+                    this.config.calendar_id = resolvedId;
+                    console.log(`ℹ️ Calendar ID ajustado automáticamente: '${configuredCalendarId}' -> '${resolvedId}'`);
+                } catch (persistError) {
+                    console.warn('⚠️ No se pudo persistir el calendar_id resuelto automáticamente:', persistError?.message || persistError);
+                }
+            }
+
+            return resolvedId;
+        }
+
+        const known = calendars
+            .slice(0, 12)
+            .map((cal) => cal?.summary || cal?.id)
+            .filter(Boolean)
+            .join(', ');
+
+        const notFoundError = new Error(
+            `El calendario configurado '${configuredCalendarId}' no existe o no está accesible en esta cuenta de Google. ` +
+            `Usa el ID exacto (no solo el nombre visible). Ejemplos disponibles: ${known || 'primary'}`
+        );
+        notFoundError.code = 'CALENDAR_NOT_FOUND';
+        notFoundError.status = 404;
+        throw notFoundError;
+    }
+
     async initialize() {
         await this.initializeAuth();
     }
@@ -54,9 +163,11 @@ class GoogleCalendarService {
     async loadConfig() {
         try {
             const result = await query(`
-                SELECT * FROM vetplus_auth.google_calendar_config 
-                WHERE is_active = true 
-                ORDER BY created_at DESC 
+                SELECT gc.*, u.id_tenant as config_tenant_id
+                FROM vetplus_auth.google_calendar_config gc
+                LEFT JOIN vetplus_auth.usuarios u ON u.id_usuario = gc.configured_by
+                WHERE gc.is_active = true 
+                ORDER BY gc.created_at DESC 
                 LIMIT 1
             `);
             
@@ -71,6 +182,251 @@ class GoogleCalendarService {
                 this.config = null;
             }
         }
+    }
+
+    normalizeEventText(value) {
+        return String(value || '')
+            .replace(/<br\s*\/?>/gi, ' ')
+            .replace(/<\/p>/gi, ' ')
+            .replace(/<[^>]*>/g, ' ')
+            .replace(/&nbsp;|&#160;/gi, ' ')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .replace(/[^a-z0-9\s]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    normalizeHexColor(value) {
+        const raw = String(value || '').trim().toLowerCase();
+        if (!raw) return null;
+        const withHash = raw.startsWith('#') ? raw : `#${raw}`;
+        return /^#[0-9a-f]{6}$/.test(withHash) ? withHash : null;
+    }
+
+    getGoogleEventColorHex(colorId) {
+        const palette = {
+            '1': '#a4bdfc',
+            '2': '#7ae7bf',
+            '3': '#dbadff',
+            '4': '#ff887c',
+            '5': '#fbd75b',
+            '6': '#ffb878',
+            '7': '#46d6db',
+            '8': '#e1e1e1',
+            '9': '#5484ed',
+            '10': '#51b749',
+            '11': '#dc2127'
+        };
+        return palette[String(colorId || '').trim()] || null;
+    }
+
+    getGoogleColorIdByHex(hexColor) {
+        const normalizedHex = this.normalizeHexColor(hexColor);
+        if (!normalizedHex) return null;
+
+        const reversePalette = {
+            '#a4bdfc': '1',
+            '#7ae7bf': '2',
+            '#dbadff': '3',
+            '#ff887c': '4',
+            '#fbd75b': '5',
+            '#ffb878': '6',
+            '#46d6db': '7',
+            '#e1e1e1': '8',
+            '#5484ed': '9',
+            '#51b749': '10',
+            '#dc2127': '11'
+        };
+
+        return reversePalette[normalizedHex] || null;
+    }
+
+    buildColorTypeMapFromPreferences(syncPreferences = {}) {
+        const colors = syncPreferences?.mapeo_colores || {};
+        const mapping = {
+            domicilio: this.normalizeHexColor(colors.domicilio || colors.vacunacion),
+            valoracion: this.normalizeHexColor(colors.valoracion || colors.control),
+            control: this.normalizeHexColor(colors.control),
+            terapia: this.normalizeHexColor(colors.terapia || colors.consulta),
+            hidroterapia: this.normalizeHexColor(colors.hidroterapia || colors.cirugia)
+        };
+
+        const colorTypeMap = {};
+        const domicilioColorId = this.getGoogleColorIdByHex(mapping.domicilio);
+        const valoracionColorId = this.getGoogleColorIdByHex(mapping.valoracion);
+        const controlColorId = this.getGoogleColorIdByHex(mapping.control);
+        const terapiaColorId = this.getGoogleColorIdByHex(mapping.terapia);
+        const hidroterapiaColorId = this.getGoogleColorIdByHex(mapping.hidroterapia);
+
+        if (domicilioColorId) colorTypeMap[domicilioColorId] = { tipo: 'domicilio' };
+        if (valoracionColorId) colorTypeMap[valoracionColorId] = { tipo: 'valoracion' };
+        // Evitar que configuraciones legadas crucen tipos cuando control y valoracion
+        // comparten el mismo color (ej. banana #fbd75b => colorId 5).
+        if (controlColorId && controlColorId !== valoracionColorId) {
+            colorTypeMap[controlColorId] = { tipo: 'control' };
+        }
+        if (terapiaColorId) colorTypeMap[terapiaColorId] = { tipo: 'terapia' };
+        if (hidroterapiaColorId) colorTypeMap[hidroterapiaColorId] = { tipo: 'hidroterapia' };
+
+        // Completar mapa con defaults de Google cuando la configuración del tenant
+        // no define algún color. Esto evita dejar citas válidas sin tipo por color faltante.
+        const defaultColorTypeMap = {
+            '2': { tipo: 'domicilio' },
+            '5': { tipo: 'valoracion' },
+            '6': { tipo: 'control' },
+            '7': { tipo: 'terapia' },
+            '9': { tipo: 'hidroterapia' },
+            '10': { tipo: 'domicilio' }
+        };
+
+        for (const [colorId, mappingValue] of Object.entries(defaultColorTypeMap)) {
+            if (!colorTypeMap[colorId]) {
+                colorTypeMap[colorId] = mappingValue;
+            }
+        }
+
+        // Google usa dos verdes comunes (2 y 10). Ambos pueden representar domicilio
+        // según configuración visual del calendario en diferentes cuentas/temas.
+        if (colorTypeMap['10']?.tipo === 'domicilio' && !colorTypeMap['2']) {
+            colorTypeMap['2'] = { tipo: 'domicilio' };
+        }
+        if (colorTypeMap['2']?.tipo === 'domicilio' && !colorTypeMap['10']) {
+            colorTypeMap['10'] = { tipo: 'domicilio' };
+        }
+
+        return colorTypeMap;
+    }
+
+    getTenantImportRules() {
+        const tenantId = String(this.config?.config_tenant_id || '').toLowerCase();
+        const syncPreferences = this.config?.sync_preferences || {};
+
+        const configuredColorMap = this.buildColorTypeMapFromPreferences(syncPreferences);
+        if (Object.keys(configuredColorMap).length > 0) {
+            return {
+                excludeKeywords: ['pilates', 'zumba', 'gimnasio', 'gym', 'personal', 'vacaciones', 'cumpleanos', 'cumpleaños'],
+                includeKeywords: ['cita', 'consulta', 'control', 'valoracion', 'terapia', 'hidroterapia', 'fisio', 'fisioterapia', 'domicilio', 'mascota', 'veterinaria'],
+                colorTypeMap: configuredColorMap
+            };
+        }
+
+        // Reglas personalizadas para este tenant (colores => tipo de cita).
+        if (tenantId !== '490957aa-d5f6-4441-be85-1aa5b2f92614') {
+            return null;
+        }
+
+        return {
+            excludeKeywords: ['pilates', 'zumba', 'gimnasio', 'gym', 'personal', 'vacaciones', 'cumpleanos', 'cumpleaños'],
+            includeKeywords: ['cita', 'consulta', 'control', 'valoracion', 'terapia', 'hidroterapia', 'fisio', 'fisioterapia', 'domicilio', 'mascota', 'veterinaria'],
+            colorTypeMap: {
+                // Fallback por colorId nativo de Google Calendar.
+                // 2: Sage (verde salvia) -> domicilio
+                // 5: Banana -> valoracion
+                // 6: Tangerine -> control
+                // 7: Turquoise/Peacock -> terapia
+                // 9: Indigo/Blueberry -> hidroterapia
+                '2': { tipo: 'domicilio' },
+                '5': { tipo: 'valoracion' },
+                '6': { tipo: 'control' },
+                '7': { tipo: 'terapia' },
+                '9': { tipo: 'hidroterapia' }
+            }
+        };
+    }
+
+    inferTipoFromText(summary, description) {
+        const text = this.normalizeEventText(`${summary || ''} ${description || ''}`);
+        if (text.includes('hidroterapia')) return 'hidroterapia';
+        if (text.includes('fisioterapia') || text.includes('fisio')) return 'terapia';
+        if (text.includes('terapia')) return 'terapia';
+        if (text.includes('valoracion') || text.includes('valoracion inicial') || text.includes('valorac')) return 'valoracion';
+        if (text.includes('domicilio') || text.includes('domi')) return 'domicilio';
+        if (text.includes('control') || text.includes('consulta') || text.includes('cita')) return 'control';
+        return null;
+    }
+
+    isLikelyPersonalEvent(normalizedSummary, normalizedDescription, normalizedAll) {
+        const summary = String(normalizedSummary || '');
+        const all = String(normalizedAll || '');
+
+        // Evitar clasificar actividades personales como citas clínicas.
+        // No excluir automáticamente "mía/mío" porque puede ser nombre de mascota.
+        const explicitPersonal = ['evento personal', 'uso personal', 'personal', 'vacaciones', 'cumpleanos', 'cumpleaños']
+            .some(token => all.includes(token));
+        const strongFirstPerson = /\b(mi cita|mi sesion|mi sesión|mi entrenamiento|mi clase)\b/.test(summary);
+
+        return explicitPersonal || strongFirstPerson;
+    }
+
+    classifyEventForImport(event) {
+        const summary = event?.summary || '';
+        const description = event?.description || '';
+
+        const normalizedSummary = this.normalizeEventText(summary);
+        const normalizedDescription = this.normalizeEventText(description);
+        const normalizedAll = `${normalizedSummary} ${normalizedDescription}`.trim();
+        const rules = this.getTenantImportRules();
+
+        if (rules) {
+            const eventColorId = String(event?.colorId || '').trim();
+            const colorRule = eventColorId ? rules.colorTypeMap[eventColorId] : null;
+
+            // Para tenant con reglas de color: el tipo se valida por color, no por texto.
+            if (colorRule) {
+                return {
+                    isAppointment: true,
+                    inferredTipo: colorRule.tipo,
+                    inferredModalidad: colorRule.modalidad || null,
+                    reason: 'color_rule'
+                };
+            }
+
+            if (rules.excludeKeywords.some(keyword => normalizedAll.includes(this.normalizeEventText(keyword)))) {
+                return { isAppointment: false, reason: 'excluded_keyword' };
+            }
+
+            if (this.isLikelyPersonalEvent(normalizedSummary, normalizedDescription, normalizedAll)) {
+                return { isAppointment: false, reason: 'excluded_personal_event' };
+            }
+
+            // Si el evento trae color pero no está mapeado, se importa sin clasificar.
+            // El tipo debe decidirse por color, no por texto.
+            if (eventColorId && !colorRule) {
+                return {
+                    isAppointment: true,
+                    inferredTipo: 'terapia',
+                    reason: 'unmapped_color_default_terapia'
+                };
+            }
+
+            // Si el evento no trae color explícito, crearlo como "sin clasificar"
+            // y asignarlo por defecto a terapia según regla operativa del negocio.
+            if (!eventColorId) {
+                return {
+                    isAppointment: true,
+                    inferredTipo: 'terapia',
+                    reason: 'no_color_default_terapia'
+                };
+            }
+
+            return { isAppointment: false, reason: 'tenant_rules_no_color_match' };
+        }
+
+        // Fallback global (comportamiento legacy)
+        const isLegacyMatch =
+            summary.includes('VetPlus') ||
+            summary.includes('Cita') ||
+            summary.includes('Consulta') ||
+            description.includes('VetPlus') ||
+            description.includes('Código de cita:');
+
+        return {
+            isAppointment: isLegacyMatch,
+            inferredTipo: this.inferTipoFromText(summary, description),
+            reason: isLegacyMatch ? 'legacy_match' : 'legacy_no_match'
+        };
     }
 
     /**
@@ -202,7 +558,7 @@ class GoogleCalendarService {
 
             // Configurar recordatorios basados en la configuración
             // Si el evento ya está completado, no configurar recordatorios
-            if (eventData.status !== 'completada' && eventData.status !== 'cancelada') {
+            if (!['completada', 'cancelada', 'no_asistio'].includes(eventData.status)) {
                 if (this.config.notification_email) {
                     event.reminders.overrides.push({
                         method: 'email',
@@ -227,8 +583,9 @@ class GoogleCalendarService {
                 event.attendees.push({ email: attendeeEmail });
             }
 
+            const calendarId = await this.getActiveCalendarId();
             const response = await this.calendar.events.insert({
-                calendarId: 'primary',
+                calendarId,
                 resource: event,
                 sendUpdates: 'all' // Enviar notificaciones a asistentes
             });
@@ -288,7 +645,7 @@ class GoogleCalendarService {
             };
 
             // Configurar recordatorios basados en el estado
-            if (status !== 'completada' && status !== 'cancelada') {
+            if (!['completada', 'cancelada', 'no_asistio'].includes(status)) {
                 if (this.config.notification_email) {
                     event.reminders.overrides.push({
                         method: 'email',
@@ -312,8 +669,9 @@ class GoogleCalendarService {
                 event.attendees.push({ email: attendeeEmail });
             }
 
+            const calendarId = await this.getActiveCalendarId();
             const response = await this.calendar.events.update({
-                calendarId: 'primary',
+                calendarId,
                 eventId: eventId,
                 resource: event,
                 sendUpdates: 'all'
@@ -345,8 +703,9 @@ class GoogleCalendarService {
             }
 
             // Primero obtener el evento actual
+            const calendarId = await this.getActiveCalendarId();
             const getResponse = await this.calendar.events.get({
-                calendarId: 'primary',
+                calendarId,
                 eventId: eventId
             });
 
@@ -362,7 +721,7 @@ class GoogleCalendarService {
 
             // Actualizar el evento
             const response = await this.calendar.events.update({
-                calendarId: 'primary',
+                calendarId,
                 eventId: eventId,
                 resource: event,
                 sendUpdates: 'all'
@@ -393,8 +752,9 @@ class GoogleCalendarService {
             }
 
             // Obtener el evento actual
+            const calendarId = await this.getActiveCalendarId();
             const getResponse = await this.calendar.events.get({
-                calendarId: 'primary',
+                calendarId,
                 eventId: eventId
             });
 
@@ -408,7 +768,7 @@ class GoogleCalendarService {
 
             // Actualizar el evento
             const response = await this.calendar.events.update({
-                calendarId: 'primary',
+                calendarId,
                 eventId: eventId,
                 resource: event,
                 sendUpdates: 'all'
@@ -438,8 +798,9 @@ class GoogleCalendarService {
                 throw new Error('Google Calendar no está configurado');
             }
 
+            const calendarId = await this.getActiveCalendarId();
             await this.calendar.events.delete({
-                calendarId: 'primary',
+                calendarId,
                 eventId: eventId,
                 sendUpdates: 'all'
             });
@@ -467,8 +828,9 @@ class GoogleCalendarService {
                 throw new Error('Google Calendar no está configurado');
             }
 
+            const calendarId = await this.getActiveCalendarId();
             const response = await this.calendar.events.get({
-                calendarId: 'primary',
+                calendarId,
                 eventId: eventId
             });
 
@@ -527,7 +889,7 @@ class GoogleCalendarService {
      */
     async listEvents(startDateTime, endDateTime) {
         try {
-            if (!this.isConfigured()) {
+            if (!await this.isConfigured()) {
                 throw new Error('Google Calendar no está configurado');
             }
 
@@ -540,13 +902,15 @@ class GoogleCalendarService {
             try {
                 // Si las fechas son solo en formato YYYY-MM-DD, agregar tiempo
                 if (startDateTime && !startDateTime.includes('T')) {
-                    formattedStartDate = startDateTime + 'T00:00:00Z';
+                    // Usar zona horaria de Colombia para evitar corrimientos de día por UTC
+                    formattedStartDate = startDateTime + 'T00:00:00-05:00';
                 } else {
                     formattedStartDate = new Date(startDateTime).toISOString();
                 }
                 
                 if (endDateTime && !endDateTime.includes('T')) {
-                    formattedEndDate = endDateTime + 'T23:59:59Z';
+                    // Usar zona horaria de Colombia para cubrir el día local completo
+                    formattedEndDate = endDateTime + 'T23:59:59-05:00';
                 } else {
                     formattedEndDate = new Date(endDateTime).toISOString();
                 }
@@ -554,23 +918,22 @@ class GoogleCalendarService {
                 throw new Error(`Formato de fecha inválido: ${dateError.message}`);
             }
 
+            const calendarId = await this.getActiveCalendarId();
             console.log('📅 Listando eventos de Google Calendar:', {
                 originalStart: startDateTime,
                 originalEnd: endDateTime,
                 formattedStart: formattedStartDate,
                 formattedEnd: formattedEndDate,
-                calendarId: 'primary'
+                calendarId
             });
 
             const response = await this.calendar.events.list({
-                calendarId: 'primary',
+                calendarId,
                 timeMin: formattedStartDate,
                 timeMax: formattedEndDate,
                 singleEvents: true,
                 orderBy: 'startTime'
             });
-
-            console.log('✅ Eventos obtenidos:', response.data.items?.length || 0);
 
             return {
                 success: true,
@@ -610,7 +973,7 @@ class GoogleCalendarService {
                     
                     // Reintentar la operación
                     const response = await this.calendar.events.list({
-                        calendarId: 'primary',
+                        calendarId,
                         timeMin: startDateTime,
                         timeMax: endDateTime,
                         singleEvents: true,
@@ -623,16 +986,20 @@ class GoogleCalendarService {
                     };
                 } catch (refreshError) {
                     console.error('❌ Error al refrescar token:', refreshError);
+                    const refreshErrorPayload = this.buildGoogleErrorPayload(refreshError, 'No se pudo refrescar el token de Google Calendar');
                     return {
                         success: false,
-                        error: 'Token expirado y no se pudo refrescar: ' + refreshError.message
+                        ...refreshErrorPayload,
+                        details: refreshError.cause || refreshError.response?.data
                     };
                 }
             }
+
+            const errorPayload = this.buildGoogleErrorPayload(error);
             
             return {
                 success: false,
-                error: error.message,
+                ...errorPayload,
                 details: error.cause || error.response?.data
             };
         }
@@ -647,15 +1014,16 @@ class GoogleCalendarService {
                 return { success: true, available: true }; // Si no está configurado, asumimos disponible
             }
 
+            const calendarId = await this.getActiveCalendarId();
             const response = await this.calendar.freebusy.query({
                 resource: {
                     timeMin: startDateTime,
                     timeMax: endDateTime,
-                    items: [{ id: 'primary' }]
+                    items: [{ id: calendarId }]
                 }
             });
 
-            const busy = response.data.calendars.primary.busy || [];
+            const busy = response.data.calendars?.[calendarId]?.busy || [];
             const available = busy.length === 0;
 
             return {
@@ -691,29 +1059,60 @@ class GoogleCalendarService {
                 return eventsResult;
             }
 
-            // Filtrar solo eventos que parecen ser citas veterinarias
-            const vetEvents = eventsResult.events.filter(event => {
-                const summary = event.summary || '';
-                // Buscar patrones que indican que es una cita veterinaria
-                return summary.includes('VetPlus') || 
-                       summary.includes('Cita') || 
-                       summary.includes('Consulta') ||
-                       (event.description && event.description.includes('VetPlus'));
+            // Clasificar eventos para diagnóstico de reglas
+            const classifiedEvents = eventsResult.events
+                .map(event => ({ event, classification: this.classifyEventForImport(event) }));
+
+            const classificationStats = classifiedEvents.reduce((acc, item) => {
+                const reason = item?.classification?.reason || 'unknown';
+                acc[reason] = (acc[reason] || 0) + 1;
+                return acc;
+            }, {});
+
+            const classificationAudit = classifiedEvents.map(item => {
+                const event = item?.event || {};
+                const classification = item?.classification || {};
+                const colorId = String(event?.colorId || '').trim() || '(sin colorId)';
+
+                return {
+                    event_id: event.id,
+                    titulo: event.summary || '(sin titulo)',
+                    colorId,
+                    colorHex: this.getGoogleEventColorHex(event?.colorId) || '(sin colorHex)',
+                    is_appointment: Boolean(classification.isAppointment),
+                    reason: classification.reason || 'unknown',
+                    inferred_tipo: classification.inferredTipo || '(sin tipo)',
+                    inferred_modalidad: classification.inferredModalidad || '(sin modalidad)'
+                };
             });
+
+            const expectedColorIds = Object.keys(this.getTenantImportRules()?.colorTypeMap || {});
+            const noColorMatchDetails = classifiedEvents
+                .filter(item => item?.classification?.reason === 'tenant_rules_no_color_match')
+                .slice(0, 20)
+                .map(item => ({
+                    event_id: item.event?.id,
+                    title: item.event?.summary || '(sin titulo)',
+                    colorId: String(item.event?.colorId || ''),
+                    colorHex: this.getGoogleEventColorHex(item.event?.colorId)
+                }));
+
+            // Filtrar solo eventos clasificados como citas
+            const vetEvents = classifiedEvents.filter(item => item.classification.isAppointment);
 
             const importedEvents = [];
             const errors = [];
 
             // Procesar cada evento
-            for (const event of vetEvents) {
+            for (const item of vetEvents) {
                 try {
-                    const eventData = this.parseGoogleEventToVetPlus(event);
+                    const eventData = this.parseGoogleEventToVetPlus(item.event, item.classification);
                     if (eventData) {
                         importedEvents.push(eventData);
                     }
                 } catch (error) {
                     errors.push({
-                        event_id: event.id,
+                        event_id: item.event.id,
                         error: error.message
                     });
                 }
@@ -724,7 +1123,10 @@ class GoogleCalendarService {
                 total_events: eventsResult.events.length,
                 vet_events_found: vetEvents.length,
                 imported_events: importedEvents,
-                errors: errors
+                errors: errors,
+                classification_stats: classificationStats,
+                expected_color_ids: expectedColorIds,
+                no_color_match_sample: noColorMatchDetails
             };
 
         } catch (error) {
@@ -740,38 +1142,27 @@ class GoogleCalendarService {
      * Mapear estado de Google Calendar a estado de VetPlus
      */
     mapGoogleStatusToVetPlus(googleStatus, fechaInicio) {
-        const ahora = new Date();
-        const fechaCita = new Date(fechaInicio);
-        
         // Mapeo de estados
         switch (googleStatus) {
             case 'confirmed':
-                // Si la fecha ya pasó, considerarla completada
-                if (fechaCita < ahora) {
-                    return 'completada';
-                }
-                // Si es muy próxima (menos de 1 hora), está en curso
-                const diferencia = fechaCita.getTime() - ahora.getTime();
-                if (diferencia <= 60 * 60 * 1000 && diferencia > -30 * 60 * 1000) { // 1 hora antes a 30 min después
-                    return 'en_curso';
-                }
+                // Regla operativa: "en_curso" y "completada" se gestionan solo manualmente en VetPlus.
                 return 'confirmada';
                 
             case 'tentative':
-                return 'pendiente';
+                return 'confirmada';
                 
             case 'cancelled':
-                return 'cancelada';
+                return 'no_asistio';
                 
             default:
-                return 'pendiente';
+                return 'confirmada';
         }
     }
 
     /**
      * Parsear evento de Google a formato VetPlus
      */
-    parseGoogleEventToVetPlus(googleEvent) {
+    parseGoogleEventToVetPlus(googleEvent, eventClassification = null) {
         try {
             const {
                 id,
@@ -780,49 +1171,124 @@ class GoogleCalendarService {
                 start,
                 end,
                 status,
-                updated
+                updated,
+                attendees
             } = googleEvent;
 
             // Extraer información del título y descripción
             let mascotaNombre = null;
             let clienteNombre = null;
+            let veterinarioNombre = null;
             let tipo = 'Consulta';
             let motivo = 'Importado desde Google Calendar';
+
+            const classification = eventClassification || this.classifyEventForImport(googleEvent);
+            if (classification?.inferredTipo) {
+                tipo = classification.inferredTipo;
+            }
+
+            const cleanField = (value, maxLength = 120) => {
+                if (!value) return null;
+                const cleaned = String(value)
+                    .replace(/<br\s*\/?>/gi, ' ')
+                    .replace(/<\/p>/gi, ' ')
+                    .replace(/<[^>]*>/g, ' ')
+                    .replace(/&nbsp;|&#160;/gi, ' ')
+                    .replace(/[\r\n]+/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+
+                if (!cleaned) return null;
+
+                // Evitar usar capturas contaminadas con otras etiquetas del evento
+                const forbiddenFragments = ['cliente:', 'mascota:', 'veterinario:', 'tipo:', 'motivo:', 'codigo de cita'];
+                const lowered = cleaned.toLowerCase();
+                if (forbiddenFragments.some(fragment => lowered.includes(fragment))) {
+                    return null;
+                }
+
+                return cleaned.slice(0, maxLength);
+            };
+
+            const normalizedDescription = String(description || '')
+                .replace(/<br\s*\/?>/gi, '\n')
+                .replace(/<\/p>/gi, '\n')
+                .replace(/<[^>]*>/g, ' ')
+                .replace(/&nbsp;|&#160;/gi, ' ')
+                .replace(/\r\n/g, '\n')
+                .replace(/\r/g, '\n');
+
+            const extractField = (regex) => {
+                const match = normalizedDescription.match(regex);
+                return match?.[1] ? cleanField(match[1]) : null;
+            };
 
             // Intentar extraer información del título (formato: "Tipo - Mascota (Cliente)")
             const titleMatch = summary?.match(/^(.+?)\s*-\s*(.+?)\s*\((.+?)\)$/);
             if (titleMatch) {
-                tipo = titleMatch[1].trim();
-                mascotaNombre = titleMatch[2].trim();
-                clienteNombre = titleMatch[3].trim();
+                if (!classification?.inferredTipo) {
+                    tipo = cleanField(titleMatch[1], 30) || tipo;
+                }
+                mascotaNombre = cleanField(titleMatch[2], 50) || mascotaNombre;
+                clienteNombre = cleanField(titleMatch[3], 100) || clienteNombre;
+            } else {
+                // Fallback común: "Fisio Mía", "Hidroterapia Luna", "Valoración Rocky".
+                const compactTitleMatch = String(summary || '').match(
+                    /^\s*(fisio(?:terapia)?|terapia|hidroterapia|valoracion|valoración|control|consulta|cita|domicilio)\s*[-:]?\s+(.+?)\s*$/i
+                );
+
+                if (compactTitleMatch) {
+                    if (!classification?.inferredTipo) {
+                        tipo = cleanField(compactTitleMatch[1], 30) || tipo;
+                    }
+                    mascotaNombre = cleanField(compactTitleMatch[2], 50) || mascotaNombre;
+                }
+
+                // Eventos antiguos: si el título es solo el nombre de la mascota, úsalo como fallback.
+                const maybePetName = cleanField(summary, 50);
+                const hasTypeSeparator = String(summary || '').includes(' - ') || String(summary || '').includes(': ');
+                if (maybePetName && !hasTypeSeparator && !maybePetName.includes('(') && !maybePetName.includes(')')) {
+                    mascotaNombre = mascotaNombre || maybePetName;
+                }
             }
 
             // Intentar extraer información adicional de la descripción
             if (description) {
-                const mascotaMatch = description.match(/🐕\s*Mascota:\s*(.+?)(?:\n|$)/);
-                const clienteMatch = description.match(/👤\s*Cliente:\s*(.+?)(?:\n|$)/);
-                const tipoMatch = description.match(/📋\s*Tipo:\s*(.+?)(?:\n|$)/);
-                const motivoMatch = description.match(/📝\s*Motivo:\s*(.+?)(?:\n|$)/);
+                const extractedMascota = extractField(/(?:🐕\s*)?Mascota:\s*([\s\S]+?)(?=\s*(?:👤\s*Cliente:|👨‍⚕️\s*Veterinario:|📋\s*Tipo:|📝\s*Motivo:|Código de cita:|$))/i);
+                const extractedCliente = extractField(/(?:👤\s*)?Cliente:\s*([\s\S]+?)(?=\s*(?:👨‍⚕️\s*Veterinario:|📋\s*Tipo:|📝\s*Motivo:|Código de cita:|$))/i);
+                const extractedVeterinario = extractField(/(?:👨‍⚕️\s*)?Veterinario:\s*([\s\S]+?)(?=\s*(?:📋\s*Tipo:|📝\s*Motivo:|Código de cita:|$))/i);
+                const extractedTipo = extractField(/(?:📋\s*)?Tipo:\s*([\s\S]+?)(?=\s*(?:📝\s*Motivo:|Código de cita:|$))/i);
+                const extractedMotivo = extractField(/(?:📝\s*)?Motivo:\s*([\s\S]+?)(?=\s*(?:Código de cita:|$))/i);
 
-                if (mascotaMatch) mascotaNombre = mascotaMatch[1].trim();
-                if (clienteMatch) clienteNombre = clienteMatch[1].trim();
-                if (tipoMatch) tipo = tipoMatch[1].trim();
-                if (motivoMatch) motivo = motivoMatch[1].trim();
+                // Solo sobrescribir si lo extraído es válido
+                if (extractedMascota) mascotaNombre = extractedMascota;
+                if (extractedCliente) clienteNombre = extractedCliente;
+                if (extractedVeterinario) veterinarioNombre = extractedVeterinario;
+                if (extractedTipo && !classification?.inferredTipo) tipo = extractedTipo;
+                if (extractedMotivo) motivo = extractedMotivo;
+            }
+
+            let clienteEmail = null;
+            if (Array.isArray(attendees) && attendees.length > 0) {
+                const preferredAttendee = attendees.find(att => att?.email && !att?.organizer) || attendees.find(att => att?.email);
+                clienteEmail = preferredAttendee?.email || null;
             }
 
             return {
                 google_event_id: id,
                 titulo: summary || 'Evento importado',
                 descripcion: description || 'Evento importado desde Google Calendar',
-                fecha_inicio: start.dateTime || start.date,
-                fecha_fin: end.dateTime || end.date,
+                fecha_inicio: start?.dateTime || start?.date || null,
+                fecha_fin: end?.dateTime || end?.date || null,
                 tipo: tipo,
                 motivo: motivo,
                 estado_google: status || 'confirmed',
-                estado_vetplus: this.mapGoogleStatusToVetPlus(status, start.dateTime || start.date),
+                estado_vetplus: this.mapGoogleStatusToVetPlus(status, start?.dateTime || start?.date),
                 ultima_modificacion: updated,
                 mascota_nombre: mascotaNombre,
                 cliente_nombre: clienteNombre,
+                veterinario_nombre: veterinarioNombre,
+                cliente_email: clienteEmail,
                 requiere_matching: !mascotaNombre || !clienteNombre // Indica si necesita matching manual
             };
 
@@ -845,15 +1311,68 @@ class GoogleCalendarService {
             }
 
             console.log('🔍 Detectando cambios desde:', lastSyncTime);
+            const calendarId = await this.getActiveCalendarId();
 
-            // Obtener eventos modificados desde la última sincronización
-            const response = await this.calendar.events.list({
-                calendarId: this.config.calendar_id || 'primary',
-                updatedMin: lastSyncTime,
-                singleEvents: true,
-                orderBy: 'updated',
-                maxResults: 100
-            });
+            // Obtener eventos modificados desde la última sincronización.
+            // Si Google rechaza updatedMin por antigüedad (410), se reintenta con ventanas cada vez más recientes.
+            let response;
+            let effectiveUpdatedMin = lastSyncTime;
+
+            const attemptWindows = [
+                lastSyncTime,
+                new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+                new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+            ];
+
+            let lastTooOldError = null;
+
+            for (const candidateUpdatedMin of attemptWindows) {
+                try {
+                    effectiveUpdatedMin = candidateUpdatedMin;
+                    response = await this.calendar.events.list({
+                        calendarId,
+                        updatedMin: effectiveUpdatedMin,
+                        singleEvents: true,
+                        orderBy: 'updated',
+                        maxResults: 100
+                    });
+                    lastTooOldError = null;
+                    break;
+                } catch (error) {
+                    const status = error?.status || error?.code || error?.response?.status;
+                    const causeMessage = String(error?.cause?.message || error?.message || '').toLowerCase();
+                    const isTooOldUpdatedMin = status === 410 && causeMessage.includes('minimum modification time lies too far in the past');
+
+                    if (status === 404) {
+                        return {
+                            success: true,
+                            changes: [],
+                            total_changes: 0,
+                            effective_updated_min: null,
+                            warning: `No se encontró el calendario '${calendarId}'. Verifica el ID exacto en Configuración > Calendar.`
+                        };
+                    }
+
+                    if (!isTooOldUpdatedMin) {
+                        throw error;
+                    }
+
+                    lastTooOldError = error;
+                    console.warn(`⚠️ updatedMin demasiado antiguo (${candidateUpdatedMin}). Reintentando con una ventana más reciente...`);
+                }
+            }
+
+            // Si Google sigue rechazando todas las ventanas, no romper la operación: devolver sin cambios y advertencia.
+            if (!response && lastTooOldError) {
+                console.warn('⚠️ Google rechazó todas las ventanas de updatedMin. Se omiten cambios en esta ejecución para evitar error 500.');
+                return {
+                    success: true,
+                    changes: [],
+                    total_changes: 0,
+                    effective_updated_min: null,
+                    warning: 'Google rechazó updatedMin por antigüedad en todas las ventanas intentadas (410).'
+                };
+            }
 
             if (!response.data.items) {
                 console.log('📅 No hay eventos para procesar');
@@ -868,29 +1387,48 @@ class GoogleCalendarService {
             const changes = [];
             
             for (const event of response.data.items) {
-                // Solo procesar eventos que parecen ser de VetPlus
-                if (this.isVetPlusEvent(event)) {
-                    const changeType = this.determineChangeType(event);
-                    const parsedEvent = this.parseGoogleEventToVetPlus(event);
-                    
-                    if (parsedEvent) {
-                        // Detectar cambios específicos en respuestas de asistentes
-                        const attendeeChanges = this.detectAttendeeChanges(event);
-                        
-                        changes.push({
-                            change_type: changeType,
-                            google_event: event,
-                            parsed_data: parsedEvent,
-                            attendee_changes: attendeeChanges,
-                            event_status: event.status,
-                            updated_at: event.updated
-                        });
+                const changeType = this.determineChangeType(event);
+                const classification = this.classifyEventForImport(event);
 
-                        console.log(`📝 Cambio detectado: ${changeType} - ${event.summary}`);
-                        if (attendeeChanges.length > 0) {
-                            console.log(`👥 Respuestas de asistentes:`, attendeeChanges);
-                        }
-                    }
+                // Los eventos eliminados deben procesarse siempre aunque Google devuelva payload parcial.
+                const shouldProcess = changeType === 'deleted' ? Boolean(event?.id) : classification.isAppointment;
+                if (!shouldProcess) {
+                    continue;
+                }
+
+                const parsedEvent = this.parseGoogleEventToVetPlus(event, classification) || {
+                    google_event_id: event?.id || null,
+                    titulo: event?.summary || 'Evento eliminado',
+                    descripcion: event?.description || '',
+                    fecha_inicio: event?.start?.dateTime || event?.start?.date || null,
+                    fecha_fin: event?.end?.dateTime || event?.end?.date || null,
+                    tipo: 'control',
+                    motivo: 'Sincronizado desde Google Calendar',
+                    estado_google: event?.status || 'cancelled',
+                    estado_vetplus: this.mapGoogleStatusToVetPlus(event?.status || 'cancelled', event?.start?.dateTime || event?.start?.date),
+                    ultima_modificacion: event?.updated || new Date().toISOString(),
+                    mascota_nombre: null,
+                    cliente_nombre: null,
+                    veterinario_nombre: null,
+                    cliente_email: null,
+                    requiere_matching: false
+                };
+
+                // Detectar cambios específicos en respuestas de asistentes
+                const attendeeChanges = this.detectAttendeeChanges(event);
+
+                changes.push({
+                    change_type: changeType,
+                    google_event: event,
+                    parsed_data: parsedEvent,
+                    attendee_changes: attendeeChanges,
+                    event_status: event.status,
+                    updated_at: event.updated
+                });
+
+                console.log(`📝 Cambio detectado: ${changeType} - ${event.summary}`);
+                if (attendeeChanges.length > 0) {
+                    console.log(`👥 Respuestas de asistentes:`, attendeeChanges);
                 }
             }
 
@@ -900,14 +1438,28 @@ class GoogleCalendarService {
                 success: true,
                 changes: changes,
                 total_changes: changes.length,
+                effective_updated_min: effectiveUpdatedMin,
                 last_check: new Date().toISOString()
             };
 
         } catch (error) {
             console.error('Error detectando cambios en Google Calendar:', error);
+
+            if (error?.code === 'CALENDAR_NOT_FOUND' || this.getErrorStatusCode(error) === 404) {
+                return {
+                    success: true,
+                    changes: [],
+                    total_changes: 0,
+                    effective_updated_min: null,
+                    warning: error.message
+                };
+            }
+
+            const errorPayload = this.buildGoogleErrorPayload(error);
+
             return {
                 success: false,
-                error: error.message
+                ...errorPayload
             };
         }
     }
@@ -939,14 +1491,7 @@ class GoogleCalendarService {
      * Verificar si un evento es de VetPlus
      */
     isVetPlusEvent(event) {
-        const summary = event.summary || '';
-        const description = event.description || '';
-        
-        return summary.includes('VetPlus') || 
-               summary.includes('Cita') || 
-               summary.includes('Consulta') ||
-               description.includes('VetPlus') ||
-               description.includes('Código de cita:');
+        return this.classifyEventForImport(event).isAppointment;
     }
 
     /**
@@ -1045,9 +1590,10 @@ class GoogleCalendarService {
             // Configurar el canal de notificaciones
             const channelId = `vetplus-${Date.now()}`;
             const expiration = Date.now() + (7 * 24 * 60 * 60 * 1000); // 7 días
+            const calendarId = await this.getActiveCalendarId();
 
             const response = await this.calendar.events.watch({
-                calendarId: this.config.calendar_id || 'primary',
+                calendarId,
                 resource: {
                     id: channelId,
                     type: 'web_hook',
@@ -1299,20 +1845,20 @@ class GoogleCalendarService {
             const tentativeCount = requiredAttendees.filter(a => a.responseStatus === 'tentative').length;
             const noResponseCount = requiredAttendees.filter(a => a.responseStatus === 'needsAction').length;
 
-            let suggestedStatus = 'pendiente';
+            let suggestedStatus = 'confirmada';
             let statusReason = '';
 
             if (acceptedCount > 0 && declinedCount === 0) {
                 suggestedStatus = 'confirmada';
                 statusReason = `${acceptedCount} asistente(s) aceptaron`;
             } else if (declinedCount > 0) {
-                suggestedStatus = 'cancelada';
+                suggestedStatus = 'no_asistio';
                 statusReason = `${declinedCount} asistente(s) rechazaron`;
             } else if (tentativeCount > 0 && acceptedCount === 0) {
-                suggestedStatus = 'pendiente';
+                suggestedStatus = 'confirmada';
                 statusReason = `${tentativeCount} asistente(s) están indecisos`;
             } else {
-                suggestedStatus = 'pendiente';
+                suggestedStatus = 'confirmada';
                 statusReason = `${noResponseCount} asistente(s) no han respondido`;
             }
 

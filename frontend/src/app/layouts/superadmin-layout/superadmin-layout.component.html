@@ -1,0 +1,47 @@
+<div class="sa-shell">
+  <!-- Sidebar -->
+  <aside class="sa-sidebar">
+    <div class="sa-logo">
+      <mat-icon>pets</mat-icon>
+      <span>VetPlus<br><small>Platform Admin</small></span>
+    </div>
+
+    <nav class="sa-nav">
+      <a routerLink="/superadmin/dashboard" routerLinkActive="active"
+         [routerLinkActiveOptions]="{exact:true}" class="sa-nav-item">
+        <mat-icon>dashboard</mat-icon>
+        <span>Dashboard</span>
+      </a>
+      <a routerLink="/superadmin/clinicas/nueva" routerLinkActive="active" class="sa-nav-item">
+        <mat-icon>add_business</mat-icon>
+        <span>Nueva clínica</span>
+      </a>
+    </nav>
+
+    <div class="sa-footer">
+      <div class="sa-profile">
+        <mat-icon>account_circle</mat-icon>
+        <div class="sa-profile-info">
+          <span class="sa-profile-name">{{ svc.profile()?.nombre }}</span>
+          <span class="sa-profile-email">{{ svc.profile()?.email }}</span>
+        </div>
+      </div>
+      <div class="sa-footer-actions">
+        <button mat-icon-button
+                routerLink="/superadmin/cambiar-password"
+                matTooltip="Cambiar contraseña"
+                class="sa-change-pwd">
+          <mat-icon>key</mat-icon>
+        </button>
+        <button mat-icon-button (click)="logout()" matTooltip="Cerrar sesión" class="sa-logout">
+          <mat-icon>logout</mat-icon>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Content -->
+  <main class="sa-content">
+    <router-outlet />
+  </main>
+</div>

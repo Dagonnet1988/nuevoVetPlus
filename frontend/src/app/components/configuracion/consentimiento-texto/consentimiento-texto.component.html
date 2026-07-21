@@ -1,0 +1,115 @@
+<!-- Loading -->
+@if (cargando()) {
+  <div class="ct-loading">
+    <mat-spinner diameter="40"></mat-spinner>
+    <p>Cargando texto del consentimiento…</p>
+  </div>
+}
+
+@if (!cargando()) {
+  <div class="ct-container">
+
+    <!-- Header -->
+    <div class="ct-header">
+      <button mat-icon-button routerLink="/configuracion" class="back-btn">
+        <mat-icon>arrow_back</mat-icon>
+      </button>
+      <div>
+        <h1 class="ct-title">
+          <mat-icon class="ct-title-icon">gavel</mat-icon>
+          Texto de Consentimiento
+        </h1>
+        <p class="ct-subtitle">Edita el texto legal que firmarán los propietarios</p>
+      </div>
+    </div>
+
+    <!-- Info versión actual -->
+    @if (versionActual()) {
+      <div class="ct-version-badge">
+        <mat-icon>verified</mat-icon>
+        <span>Versión activa: <strong>v{{ versionActual()!.id_version }}</strong></span>
+        <span class="ct-version-date">— guardada el {{ versionActual()!.created_at | date:'dd-MM-yy h:mm a' }}</span>
+      </div>
+    }
+
+    <!-- Aviso importante -->
+    <div class="ct-warning">
+      <mat-icon>info</mat-icon>
+      <p>
+        Al guardar se crea una <strong>nueva versión</strong>. Los consentimientos ya firmados
+        conservan el texto de la versión con la que fueron firmados (auditoría).
+      </p>
+    </div>
+
+    <!-- Formulario -->
+    <mat-card class="ct-card">
+      <mat-card-content>
+        <form [formGroup]="form" (ngSubmit)="guardar()">
+
+          <!-- Título -->
+          <mat-form-field appearance="outline" class="ct-full">
+            <mat-label>Título del documento</mat-label>
+            <input matInput formControlName="titulo" placeholder="Ej: Autorización de Tratamiento de Datos Personales" />
+            <mat-hint>Aparece como encabezado del formulario de firma</mat-hint>
+            @if (form.get('titulo')!.invalid && form.get('titulo')!.touched) {
+              <mat-error>
+                @if (form.get('titulo')!.hasError('required')) { El título es requerido }
+                @if (form.get('titulo')!.hasError('minlength')) { Mínimo 3 caracteres }
+                @if (form.get('titulo')!.hasError('maxlength')) { Máximo 200 caracteres }
+              </mat-error>
+            }
+          </mat-form-field>
+
+          <!-- Texto legal -->
+          <mat-form-field appearance="outline" class="ct-full">
+            <mat-label>Texto legal</mat-label>
+            <textarea
+              matInput
+              formControlName="textoLegal"
+              rows="20"
+              placeholder="Escriba aquí el texto completo del consentimiento…"
+              class="ct-textarea"
+            ></textarea>
+            <mat-hint>
+              Placeholders disponibles:
+              <strong>[NOMBRE_CLINICA]</strong>,
+              <strong>[NIT]</strong>,
+              <strong>[DIRECCION]</strong>,
+              <strong>[EMAIL_CLINICA]</strong>
+            </mat-hint>
+            @if (form.get('textoLegal')!.invalid && form.get('textoLegal')!.touched) {
+              <mat-error>
+                @if (form.get('textoLegal')!.hasError('required')) { El texto es requerido }
+                @if (form.get('textoLegal')!.hasError('minlength')) { Mínimo 20 caracteres }
+              </mat-error>
+            }
+          </mat-form-field>
+
+          <!-- Acciones -->
+          <div class="ct-actions">
+            <button mat-button type="button" routerLink="/configuracion">Cancelar</button>
+            <button
+              mat-raised-button
+              color="primary"
+              type="submit"
+              [disabled]="guardando() || form.invalid"
+            >
+              @if (guardando()) {
+                <mat-spinner diameter="20" class="btn-spinner"></mat-spinner>
+                Guardando…
+              }
+              @if (!guardando()) {
+                <ng-container>
+                  <mat-icon>save</mat-icon>
+                  Guardar nueva versión
+                </ng-container>
+              }
+            </button>
+          </div>
+
+        </form>
+      </mat-card-content>
+    </mat-card>
+
+  </div>
+}

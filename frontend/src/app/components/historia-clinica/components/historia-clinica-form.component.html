@@ -1,0 +1,755 @@
+<div class="historia-form-container">
+
+  <!-- Header -->
+  <div class="form-header">
+    <button mat-icon-button (click)="cancelar()">
+      <mat-icon>arrow_back</mat-icon>
+    </button>
+    <div class="header-titles">
+      <h1>{{ isEdit() ? 'Editar Historia Clínica' : 'Historia Clínica' }}</h1>
+      <p>Completa todos los campos requeridos</p>
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="loading-container">
+      <mat-spinner diameter="48"></mat-spinner>
+    </div>
+  } @else {
+    <form [formGroup]="form" (ngSubmit)="guardar()">
+
+      <!-- SECCION GENERAL -->
+      <mat-card class="form-section">
+        <mat-card-header>
+          <mat-card-title>Información General</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <div formGroupName="general">
+            <div class="form-grid">
+              <mat-form-field appearance="outline" class="field-compact">
+                <mat-label>Tipo de documento *</mat-label>
+                <mat-select formControlName="tipo_documento">
+                  @for (t of tiposDocumento; track t.value) {
+                    <mat-option [value]="t.value">
+                      <mat-icon>{{ t.icon }}</mat-icon>
+                      {{ t.label }}
+                    </mat-option>
+                  }
+                </mat-select>
+                @if (isTipoBloqueado(tipoActual)) {
+                  <mat-hint style="color:#b45309;">
+                    Ya existe este tipo para la cita. Está bloqueado para evitar duplicados.
+                  </mat-hint>
+                }
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="field-medium">
+                <mat-label>Paciente *</mat-label>
+                <input
+                  matInput
+                  [formControl]="pacienteSearchCtrl"
+                  [matAutocomplete]="pacienteAuto"
+                  placeholder="Buscar paciente, especie o propietario">
+                <mat-autocomplete
+                  #pacienteAuto="matAutocomplete"
+                  [displayWith]="displayMascota"
+                  (optionSelected)="onPacienteSelected($event.option.value)">
+                  @for (m of mascotasFiltradas(); track m.id_mascota) {
+                    <mat-option [value]="m">
+                      {{ m.nombre }} ({{ m.especie }}) — {{ m.cliente_nombre }}
+                    </mat-option>
+                  }
+                  @if (mascotasFiltradas().length === 0) {
+                    <mat-option disabled>Sin resultados</mat-option>
+                  }
+                </mat-autocomplete>
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="field-medium">
+                <mat-label>Veterinario *</mat-label>
+                <mat-select formControlName="id_veterinario">
+                  @for (v of veterinarios(); track v.id) {
+                    <mat-option [value]="v.id">{{ v.nombre }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+              @if (isEdit()) {
+                <mat-form-field appearance="outline" class="field-compact">
+                  <mat-label>Estado</mat-label>
+                  <mat-select formControlName="estado">
+                    @for (e of estados; track e.value) {
+                      <mat-option [value]="e.value">
+                        <mat-icon>{{ e.icon }}</mat-icon>
+                        {{ e.label }}
+                      </mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+              }
+            </div>
+
+            @if (mascotaSeleccionada()) {
+              <div class="patient-summary-panel">
+                <h3 class="patient-summary-title">
+                  <mat-icon>pets</mat-icon>
+                  Resumen del Paciente
+                </h3>
+                <div class="patient-summary-groups">
+                  <div class="summary-group">
+                    <p class="summary-group-title">Datos de la Mascota</p>
+                    <div class="summary-grid">
+                      <div class="summary-item">
+                        <span class="summary-label">Paciente</span>
+                        <span class="summary-value">{{ mascotaSeleccionada().nombre || 'No disponible' }}</span>
+                      </div>
+                      <div class="summary-item">
+                        <span class="summary-label">Especie</span>
+                        <span class="summary-value">{{ mascotaSeleccionada().especie || 'No disponible' }}</span>
+                      </div>
+                      <div class="summary-item">
+                        <span class="summary-label">Raza</span>
+                        <span class="summary-value">{{ mascotaSeleccionada().raza || 'No disponible' }}</span>
+                      </div>
+                      <div class="summary-item">
+                        <span class="summary-label">Sexo</span>
+                        <span class="summary-value">{{ formatSexo(mascotaSeleccionada().sexo) }}</span>
+                      </div>
+                      <div class="summary-item">
+                        <span class="summary-label">Edad</span>
+                        <span class="summary-value">{{ calcularEdad(mascotaSeleccionada().fecha_nacimiento) }}</span>
+                      </div>
+                      <div class="summary-item">
+                        <span class="summary-label">Nacimiento</span>
+                        <span class="summary-value">{{ mascotaSeleccionada().fecha_nacimiento ? (mascotaSeleccionada().fecha_nacimiento | date:'dd-MM-yy') : 'No disponible' }}</span>
+                      </div>
+                      <div class="summary-item">
+                        <span class="summary-label">Peso</span>
+                        <span class="summary-value">{{ mascotaSeleccionada().peso ? (mascotaSeleccionada().peso + ' kg') : 'No disponible' }}</span>
+                      </div>
+                      <div class="summary-item">
+                        <span class="summary-label">Color/Pelaje</span>
+                        <span class="summary-value">{{ mascotaSeleccionada().color || 'No disponible' }}</span>
+                      </div>
+                      <div class="summary-item">
+                        <span class="summary-label">Esterilizado</span>
+                        <span class="summary-value">{{ mascotaSeleccionada().esterilizado ? 'Sí' : 'No' }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="summary-group">
+                    <p class="summary-group-title">Datos del Propietario</p>
+                    <div class="summary-grid summary-grid-owner">
+                      <div class="summary-item">
+                        <span class="summary-label">Propietario</span>
+                        <span class="summary-value">{{ mascotaSeleccionada().cliente_nombre || 'No disponible' }}</span>
+                      </div>
+                      <div class="summary-item">
+                        <span class="summary-label">Cédula</span>
+                        <span class="summary-value">{{ mascotaSeleccionada().cliente_cedula || 'No disponible' }}</span>
+                      </div>
+                      <div class="summary-item">
+                        <span class="summary-label">Teléfono</span>
+                        <span class="summary-value">{{ mascotaSeleccionada().cliente_telefono || 'No disponible' }}</span>
+                      </div>
+                      <div class="summary-item">
+                        <span class="summary-label">Email</span>
+                        <span class="summary-value">{{ mascotaSeleccionada().cliente_email || 'No disponible' }}</span>
+                      </div>
+                      <div class="summary-item summary-item-full">
+                        <span class="summary-label">Dirección</span>
+                        <span class="summary-value summary-value-wrap">{{ mascotaSeleccionada().cliente_direccion || 'No disponible' }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- VALORACION INICIAL -->
+      @if (tipoActual === 'valoracion_inicial') {
+        <mat-card class="form-section">
+          <mat-card-header>
+            <mat-card-title>
+              <mat-icon>assignment</mat-icon>
+              Valoración
+            </mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <mat-accordion multi>
+
+              <mat-expansion-panel [disabled]="!canAnamnesis" [expanded]="canAnamnesis">
+                <mat-expansion-panel-header>
+                  <mat-panel-title>
+                    Anamnesis
+                    @if (!canAnamnesis) { <span class="step-hint">— Selecciona un paciente primero</span> }
+                  </mat-panel-title>
+                </mat-expansion-panel-header>
+                <div class="form-grid" formGroupName="anamnesis">
+                  <mat-form-field appearance="outline" class="field-third">
+                    <mat-label>Remitido por</mat-label>
+                    <textarea matInput formControlName="remitido_por" cdkTextareaAutosize cdkAutosizeMinRows="2"></textarea>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="field-third">
+                    <mat-label>Antigüedad signos</mat-label>
+                    <textarea matInput formControlName="antiguedad_signos" cdkTextareaAutosize cdkAutosizeMinRows="2"></textarea>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="field-third">
+                    <mat-label>Medicación previa</mat-label>
+                    <textarea matInput formControlName="medicacion_previa" cdkTextareaAutosize cdkAutosizeMinRows="2"></textarea>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="field-third">
+                    <mat-label>Enfermedades anteriores</mat-label>
+                    <textarea matInput formControlName="enfermedades_anteriores" cdkTextareaAutosize cdkAutosizeMinRows="2"></textarea>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="field-third">
+                    <mat-label>Actividad física</mat-label>
+                    <textarea matInput formControlName="actividad_fisica" cdkTextareaAutosize cdkAutosizeMinRows="2"></textarea>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="full-width">
+                    <mat-label>Anamnesis (descripción) *</mat-label>
+                    <textarea matInput formControlName="anamnesis" cdkTextareaAutosize cdkAutosizeMinRows="3"></textarea>
+                    @if (gAnamnesis.get('anamnesis')?.invalid && gAnamnesis.get('anamnesis')?.touched) {
+                      <mat-error>La anamnesis es obligatoria</mat-error>
+                    }
+                  </mat-form-field>
+                </div>
+              </mat-expansion-panel>
+
+              <mat-expansion-panel [disabled]="!canValoracion" [expanded]="canValoracion">
+                <mat-expansion-panel-header>
+                  <mat-panel-title>
+                    Valoración Estática / Dinámica
+                    @if (!canValoracion) { <span class="step-hint">— Completa la anamnesis primero</span> }
+                  </mat-panel-title>
+                </mat-expansion-panel-header>
+                <div class="form-grid" formGroupName="valoracion">
+                  <mat-form-field appearance="outline" class="field-half">
+                    <mat-label>Valoración estática *</mat-label>
+                    <textarea matInput formControlName="valoracion_estatica" cdkTextareaAutosize cdkAutosizeMinRows="3"></textarea>
+                    @if (gValoracion.get('valoracion_estatica')?.invalid && gValoracion.get('valoracion_estatica')?.touched) {
+                      <mat-error>La valoración estática es obligatoria</mat-error>
+                    }
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="field-half">
+                    <mat-label>Valoración dinámica</mat-label>
+                    <textarea matInput formControlName="valoracion_dinamica" cdkTextareaAutosize cdkAutosizeMinRows="3"></textarea>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="field-half">
+                    <mat-label>Hallazgos musculares</mat-label>
+                    <textarea matInput formControlName="hallazgos_musculares" cdkTextareaAutosize cdkAutosizeMinRows="3"></textarea>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="field-half">
+                    <mat-label>Hallazgos osteoarticulares</mat-label>
+                    <textarea matInput formControlName="hallazgos_osteoarticulares" cdkTextareaAutosize cdkAutosizeMinRows="3"></textarea>
+                  </mat-form-field>
+                </div>
+              </mat-expansion-panel>
+
+              <mat-expansion-panel [disabled]="!canPerimetria">
+                <mat-expansion-panel-header>
+                  <mat-panel-title>
+                    Perimetría (cm)
+                    @if (!canPerimetria) { <span class="step-hint">— Completa la valoración estática primero</span> }
+                  </mat-panel-title>
+                </mat-expansion-panel-header>
+                <div class="perimetria-grid" formGroupName="perimetria">
+                  <div class="perimetria-group">
+                    <h4>Miembro Torácico Derecho (MTD)</h4>
+                    <mat-form-field appearance="outline"><mat-label>MTD 1</mat-label><input matInput type="number" formControlName="perimetria_mtd_1"></mat-form-field>
+                    <mat-form-field appearance="outline"><mat-label>MTD 2</mat-label><input matInput type="number" formControlName="perimetria_mtd_2"></mat-form-field>
+                  </div>
+                  <div class="perimetria-group">
+                    <h4>Miembro Torácico Izquierdo (MTI)</h4>
+                    <mat-form-field appearance="outline"><mat-label>MTI 1</mat-label><input matInput type="number" formControlName="perimetria_mti_1"></mat-form-field>
+                    <mat-form-field appearance="outline"><mat-label>MTI 2</mat-label><input matInput type="number" formControlName="perimetria_mti_2"></mat-form-field>
+                  </div>
+                  <div class="perimetria-group">
+                    <h4>Miembro Pélvico Derecho (MPD)</h4>
+                    <mat-form-field appearance="outline"><mat-label>MPD 1</mat-label><input matInput type="number" formControlName="perimetria_mpd_1"></mat-form-field>
+                    <mat-form-field appearance="outline"><mat-label>MPD 2</mat-label><input matInput type="number" formControlName="perimetria_mpd_2"></mat-form-field>
+                  </div>
+                  <div class="perimetria-group">
+                    <h4>Miembro Pélvico Izquierdo (MPI)</h4>
+                    <mat-form-field appearance="outline"><mat-label>MPI 1</mat-label><input matInput type="number" formControlName="perimetria_mpi_1"></mat-form-field>
+                    <mat-form-field appearance="outline"><mat-label>MPI 2</mat-label><input matInput type="number" formControlName="perimetria_mpi_2"></mat-form-field>
+                  </div>
+                </div>
+              </mat-expansion-panel>
+
+              <!-- GONIOMETRÍA -->
+              <mat-expansion-panel [disabled]="!canPerimetria">
+                <mat-expansion-panel-header>
+                  <mat-panel-title>
+                    Goniometría (°)
+                    @if (!canPerimetria) { <span class="step-hint">— Completa la valoración estática primero</span> }
+                  </mat-panel-title>
+                </mat-expansion-panel-header>
+                <div formGroupName="goniometria">
+                  <div class="gonio-grid">
+                    <!-- Miembro Torácico Derecho -->
+                    <div class="gonio-group">
+                      <h4>Miembro Torácico Derecho</h4>
+                      <div class="gonio-row">
+                        <span class="gonio-label">Hombro</span>
+                        <mat-form-field appearance="outline"><mat-label>Flexión</mat-label><input matInput type="number" formControlName="gonio_hombro_flexion_d"></mat-form-field>
+                        <mat-form-field appearance="outline"><mat-label>Extensión</mat-label><input matInput type="number" formControlName="gonio_hombro_extension_d"></mat-form-field>
+                      </div>
+                      <div class="gonio-row">
+                        <span class="gonio-label">Codo</span>
+                        <mat-form-field appearance="outline"><mat-label>Flexión</mat-label><input matInput type="number" formControlName="gonio_codo_flexion_d"></mat-form-field>
+                        <mat-form-field appearance="outline"><mat-label>Extensión</mat-label><input matInput type="number" formControlName="gonio_codo_extension_d"></mat-form-field>
+                      </div>
+                      <div class="gonio-row">
+                        <span class="gonio-label">Carpo</span>
+                        <mat-form-field appearance="outline"><mat-label>Flexión</mat-label><input matInput type="number" formControlName="gonio_carpo_flexion_d"></mat-form-field>
+                        <mat-form-field appearance="outline"><mat-label>Extensión</mat-label><input matInput type="number" formControlName="gonio_carpo_extension_d"></mat-form-field>
+                      </div>
+                    </div>
+                    <!-- Miembro Torácico Izquierdo -->
+                    <div class="gonio-group">
+                      <h4>Miembro Torácico Izquierdo</h4>
+                      <div class="gonio-row">
+                        <span class="gonio-label">Hombro</span>
+                        <mat-form-field appearance="outline"><mat-label>Flexión</mat-label><input matInput type="number" formControlName="gonio_hombro_flexion_i"></mat-form-field>
+                        <mat-form-field appearance="outline"><mat-label>Extensión</mat-label><input matInput type="number" formControlName="gonio_hombro_extension_i"></mat-form-field>
+                      </div>
+                      <div class="gonio-row">
+                        <span class="gonio-label">Codo</span>
+                        <mat-form-field appearance="outline"><mat-label>Flexión</mat-label><input matInput type="number" formControlName="gonio_codo_flexion_i"></mat-form-field>
+                        <mat-form-field appearance="outline"><mat-label>Extensión</mat-label><input matInput type="number" formControlName="gonio_codo_extension_i"></mat-form-field>
+                      </div>
+                      <div class="gonio-row">
+                        <span class="gonio-label">Carpo</span>
+                        <mat-form-field appearance="outline"><mat-label>Flexión</mat-label><input matInput type="number" formControlName="gonio_carpo_flexion_i"></mat-form-field>
+                        <mat-form-field appearance="outline"><mat-label>Extensión</mat-label><input matInput type="number" formControlName="gonio_carpo_extension_i"></mat-form-field>
+                      </div>
+                    </div>
+                    <!-- Miembro Pélvico Derecho -->
+                    <div class="gonio-group">
+                      <h4>Miembro Pélvico Derecho</h4>
+                      <div class="gonio-row">
+                        <span class="gonio-label">Cadera</span>
+                        <mat-form-field appearance="outline"><mat-label>Flexión</mat-label><input matInput type="number" formControlName="gonio_cadera_flexion_d"></mat-form-field>
+                        <mat-form-field appearance="outline"><mat-label>Extensión</mat-label><input matInput type="number" formControlName="gonio_cadera_extension_d"></mat-form-field>
+                      </div>
+                      <div class="gonio-row">
+                        <span class="gonio-label">Rodilla</span>
+                        <mat-form-field appearance="outline"><mat-label>Flexión</mat-label><input matInput type="number" formControlName="gonio_rodilla_flexion_d"></mat-form-field>
+                        <mat-form-field appearance="outline"><mat-label>Extensión</mat-label><input matInput type="number" formControlName="gonio_rodilla_extension_d"></mat-form-field>
+                      </div>
+                      <div class="gonio-row">
+                        <span class="gonio-label">Tarso</span>
+                        <mat-form-field appearance="outline"><mat-label>Flexión</mat-label><input matInput type="number" formControlName="gonio_tarso_flexion_d"></mat-form-field>
+                        <mat-form-field appearance="outline"><mat-label>Extensión</mat-label><input matInput type="number" formControlName="gonio_tarso_extension_d"></mat-form-field>
+                      </div>
+                    </div>
+                    <!-- Miembro Pélvico Izquierdo -->
+                    <div class="gonio-group">
+                      <h4>Miembro Pélvico Izquierdo</h4>
+                      <div class="gonio-row">
+                        <span class="gonio-label">Cadera</span>
+                        <mat-form-field appearance="outline"><mat-label>Flexión</mat-label><input matInput type="number" formControlName="gonio_cadera_flexion_i"></mat-form-field>
+                        <mat-form-field appearance="outline"><mat-label>Extensión</mat-label><input matInput type="number" formControlName="gonio_cadera_extension_i"></mat-form-field>
+                      </div>
+                      <div class="gonio-row">
+                        <span class="gonio-label">Rodilla</span>
+                        <mat-form-field appearance="outline"><mat-label>Flexión</mat-label><input matInput type="number" formControlName="gonio_rodilla_flexion_i"></mat-form-field>
+                        <mat-form-field appearance="outline"><mat-label>Extensión</mat-label><input matInput type="number" formControlName="gonio_rodilla_extension_i"></mat-form-field>
+                      </div>
+                      <div class="gonio-row">
+                        <span class="gonio-label">Tarso</span>
+                        <mat-form-field appearance="outline"><mat-label>Flexión</mat-label><input matInput type="number" formControlName="gonio_tarso_flexion_i"></mat-form-field>
+                        <mat-form-field appearance="outline"><mat-label>Extensión</mat-label><input matInput type="number" formControlName="gonio_tarso_extension_i"></mat-form-field>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </mat-expansion-panel>
+
+              <mat-expansion-panel [disabled]="!canExploracion">
+                <mat-expansion-panel-header>
+                  <mat-panel-title>
+                    Pruebas Ortopédicas y Evaluación Neurológica
+                    @if (!canExploracion) { <span class="step-hint">— Completa la valoración estática primero</span> }
+                  </mat-panel-title>
+                </mat-expansion-panel-header>
+                <div formGroupName="exploracion">
+                  <div class="form-grid">
+                    <mat-form-field appearance="outline"><mat-label>Prueba cajón</mat-label><input matInput formControlName="prueba_cajon"></mat-form-field>
+                    <mat-form-field appearance="outline"><mat-label>Compresión tibial</mat-label><input matInput formControlName="prueba_compresion_tibial"></mat-form-field>
+                    <mat-form-field appearance="outline"><mat-label>Prueba Ortolani</mat-label><input matInput formControlName="prueba_ortolani"></mat-form-field>
+                    <mat-form-field appearance="outline"><mat-label>Luxación patelar</mat-label><input matInput formControlName="luxacion_patelar"></mat-form-field>
+                    <mat-form-field appearance="outline"><mat-label>Sensibilidad</mat-label><input matInput formControlName="sensibilidad"></mat-form-field>
+                    <mat-form-field appearance="outline"><mat-label>Propiocepción</mat-label><input matInput formControlName="propiocepcion"></mat-form-field>
+                    <mat-form-field appearance="outline"><mat-label>Equilibrio</mat-label><input matInput formControlName="equilibrio"></mat-form-field>
+                    <mat-form-field appearance="outline"><mat-label>Panículo</mat-label><input matInput formControlName="paniculo"></mat-form-field>
+                  </div>
+
+                  <!-- Reflejos -->
+                  <h4 class="section-subtitle">Reflejos</h4>
+
+                  <!-- Torácicos: MTD / MTI -->
+                  <div class="reflejos-container">
+                    <div class="reflejos-header-row">
+                      <span></span>
+                      <span>MTD</span>
+                      <span>MTI</span>
+                    </div>
+                    <div class="reflejos-data-row">
+                      <span class="reflejos-label">Tricipital</span>
+                      <mat-form-field appearance="outline"><input matInput formControlName="reflejo_tricipital_d"></mat-form-field>
+                      <mat-form-field appearance="outline"><input matInput formControlName="reflejo_tricipital_i"></mat-form-field>
+                    </div>
+                    <div class="reflejos-data-row">
+                      <span class="reflejos-label">Flexor</span>
+                      <mat-form-field appearance="outline"><input matInput formControlName="reflejo_flexor_tor_d"></mat-form-field>
+                      <mat-form-field appearance="outline"><input matInput formControlName="reflejo_flexor_tor_i"></mat-form-field>
+                    </div>
+                  </div>
+
+                  <!-- Pélvicos: MPD / MPI -->
+                  <div class="reflejos-container" style="margin-top: 12px">
+                    <div class="reflejos-header-row">
+                      <span></span>
+                      <span>MPD</span>
+                      <span>MPI</span>
+                    </div>
+                    <div class="reflejos-data-row">
+                      <span class="reflejos-label">Patelar</span>
+                      <mat-form-field appearance="outline"><input matInput formControlName="reflejo_patelar_d"></mat-form-field>
+                      <mat-form-field appearance="outline"><input matInput formControlName="reflejo_patelar_i"></mat-form-field>
+                    </div>
+                    <div class="reflejos-data-row">
+                      <span class="reflejos-label">Tibial Craneal</span>
+                      <mat-form-field appearance="outline"><input matInput formControlName="reflejo_tibial_craneal_d"></mat-form-field>
+                      <mat-form-field appearance="outline"><input matInput formControlName="reflejo_tibial_craneal_i"></mat-form-field>
+                    </div>
+                    <div class="reflejos-data-row">
+                      <span class="reflejos-label">Ciático</span>
+                      <mat-form-field appearance="outline"><input matInput formControlName="reflejo_ciatico_d"></mat-form-field>
+                      <mat-form-field appearance="outline"><input matInput formControlName="reflejo_ciatico_i"></mat-form-field>
+                    </div>
+                    <div class="reflejos-data-row">
+                      <span class="reflejos-label">Flexor</span>
+                      <mat-form-field appearance="outline"><input matInput formControlName="reflejo_flexor_pelv_d"></mat-form-field>
+                      <mat-form-field appearance="outline"><input matInput formControlName="reflejo_flexor_pelv_i"></mat-form-field>
+                    </div>
+                  </div>
+
+                  <div class="form-grid" style="margin-top: 12px">
+                    <mat-form-field appearance="outline" class="full-width">
+                      <mat-label>Observaciones a la palpación</mat-label>
+                      <textarea matInput formControlName="observaciones_palpacion" cdkTextareaAutosize cdkAutosizeMinRows="2"></textarea>
+                    </mat-form-field>
+                  </div>
+                </div>
+              </mat-expansion-panel>
+
+              <mat-expansion-panel [disabled]="!canDiagnostico"
+                                   [expanded]="canDiagnostico && expandDiagnostico()"
+                                   (closed)="expandDiagnostico.set(false)">
+                <mat-expansion-panel-header>
+                  <mat-panel-title>
+                    Diagnóstico y Plan
+                    @if (!canDiagnostico) { <span class="step-hint">— Completa los pasos anteriores primero</span> }
+                  </mat-panel-title>
+                </mat-expansion-panel-header>
+                <div class="form-grid" formGroupName="diagnostico">
+                  <mat-form-field appearance="outline" class="full-width">
+                    <mat-label>Diagnóstico *</mat-label>
+                    <textarea matInput formControlName="diagnostico" cdkTextareaAutosize cdkAutosizeMinRows="3"></textarea>
+                    @if (gDiagnostico.get('diagnostico')?.invalid && gDiagnostico.get('diagnostico')?.touched) {
+                      <mat-error>El diagnóstico es obligatorio</mat-error>
+                    }
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="field-third">
+                    <mat-label>Tratamiento</mat-label>
+                    <textarea matInput formControlName="tratamiento" cdkTextareaAutosize cdkAutosizeMinRows="3"></textarea>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="field-third">
+                    <mat-label>Recomendaciones</mat-label>
+                    <textarea matInput formControlName="recomendaciones" cdkTextareaAutosize cdkAutosizeMinRows="3"></textarea>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="field-third">
+                    <mat-label>Próxima cita</mat-label>
+                    <textarea matInput formControlName="proxima_cita" cdkTextareaAutosize cdkAutosizeMinRows="2"></textarea>
+                  </mat-form-field>
+
+                  <div class="upload-box full-width">
+                    <div class="upload-header">
+                      <p class="upload-title">Imágenes y Archivos Diagnósticos</p>
+                      <input #diagFilesInput type="file" multiple style="display:none"
+                             accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.txt,.xls,.xlsx"
+                             (change)="onImagenesDiagnosticasSelected($event)">
+                      <button mat-stroked-button type="button" (click)="diagFilesInput.click()">
+                        <mat-icon>upload_file</mat-icon>
+                        Subir archivos
+                      </button>
+                    </div>
+                    <p class="upload-hint">Formatos permitidos: fotos, PDF, Excel y TXT. Puedes subir uno o varios archivos.</p>
+
+                    @if (imagenesDiagnosticasFiles().length > 0) {
+                      <div class="upload-list">
+                        @for (f of imagenesDiagnosticasFiles(); track $index; let i = $index) {
+                          <div class="upload-item">
+                            <div class="upload-item-main">
+                              <mat-icon>description</mat-icon>
+                              <span class="upload-item-name">{{ f.name }}</span>
+                              <span class="upload-item-size">{{ formatFileSize(f.size) }}</span>
+                            </div>
+                            <button mat-icon-button type="button" color="warn" (click)="removeImagenDiagnostica(i)">
+                              <mat-icon>close</mat-icon>
+                            </button>
+                          </div>
+                        }
+                      </div>
+                    }
+                  </div>
+                </div>
+              </mat-expansion-panel>
+
+            </mat-accordion>
+          </mat-card-content>
+        </mat-card>
+      }
+
+      <!-- SEGUIMIENTO -->
+      @if (tipoActual === 'seguimiento') {
+        <mat-card class="form-section">
+          <mat-card-header>
+            <mat-card-title>
+              <mat-icon>repeat</mat-icon>
+              Terapia / Hidroterapia
+            </mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="form-grid" formGroupName="seguimiento">
+              <mat-form-field appearance="outline">
+                <mat-label>Número de sesión *</mat-label>
+                <input matInput type="number" formControlName="numero_sesion">
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Observaciones en casa</mat-label>
+                <textarea matInput formControlName="observaciones_en_casa" cdkTextareaAutosize cdkAutosizeMinRows="3"></textarea>
+              </mat-form-field>
+              <div class="full-width">
+                <label class="section-subtitle" style="display:block; margin-bottom: 6px;">Ejercicios realizados</label>
+                @for (cat of ejerciciosChecklistConfig; track cat.key) {
+                  <div class="ejercicios-categoria-bloque">
+                    <mat-checkbox
+                      [disabled]="isTipoBloqueado(tipoActual)"
+                      [checked]="ejerciciosCategoriasActivas()[cat.key]"
+                      (change)="onToggleCategoriaEjercicios(cat.key, $event.checked)">
+                      {{ cat.label }}
+                    </mat-checkbox>
+
+                    @if (ejerciciosCategoriasActivas()[cat.key]) {
+                      <div class="ejercicios-checklist">
+                        <div class="ejercicios-checklist-grid" *ngIf="cat.key !== 'agentes'">
+                          @for (e of cat.ejercicios; track e) {
+                            <mat-checkbox
+                              [disabled]="isTipoBloqueado(tipoActual)"
+                              [checked]="isEjercicioSeleccionado(cat.key, e)"
+                              (change)="onToggleEjercicio(cat.key, e, $event.checked)">
+                              {{ e }}
+                            </mat-checkbox>
+                          }
+                        </div>
+
+                        <div *ngIf="cat.key === 'agentes'">
+                          @for (e of cat.ejercicios; track e) {
+                            <div class="ejercicios-agente-row">
+                              <mat-checkbox
+                                [disabled]="isTipoBloqueado(tipoActual)"
+                                [checked]="isEjercicioSeleccionado(cat.key, e)"
+                                (change)="onToggleEjercicio(cat.key, e, $event.checked)">
+                                {{ e }}
+                              </mat-checkbox>
+
+                              <mat-form-field appearance="outline" class="ejercicios-agente-zona">
+                                <mat-label>Zona</mat-label>
+                                <input
+                                  matInput
+                                    [disabled]="isTipoBloqueado(tipoActual) || !isEjercicioSeleccionado(cat.key, e)"
+                                  [value]="getZonaAgente(e)"
+                                  (input)="onZonaAgenteChange(e, $any($event.target).value)">
+                              </mat-form-field>
+                            </div>
+                          }
+                        </div>
+                      </div>
+                    }
+                  </div>
+                }
+
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>Otros ejercicios / detalle adicional</mat-label>
+                  <textarea matInput formControlName="ejercicios_realizados" cdkTextareaAutosize cdkAutosizeMinRows="2"></textarea>
+                </mat-form-field>
+              </div>
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Recomendaciones para casa</mat-label>
+                <textarea matInput formControlName="recomendaciones_casa" cdkTextareaAutosize cdkAutosizeMinRows="3"></textarea>
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Notas clínicas</mat-label>
+                <textarea matInput formControlName="notas_clinicas" cdkTextareaAutosize cdkAutosizeMinRows="3"></textarea>
+              </mat-form-field>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      }
+
+      <!-- FORMULA -->
+      @if (tipoActual === 'formula') {
+        <mat-card class="form-section">
+          <mat-card-header>
+            <mat-card-title>
+              <mat-icon>medication</mat-icon>
+              Fórmula Médica
+            </mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="medicamentos-header">
+              <h3>Medicamentos</h3>
+              <button mat-stroked-button type="button" (click)="addMedicamento()" [disabled]="isTipoBloqueado(tipoActual)">
+                <mat-icon>add</mat-icon> Agregar medicamento
+              </button>
+            </div>
+            @if (medicamentosArray.length === 0) {
+              <p class="no-items">Sin medicamentos. Haz clic en "Agregar medicamento".</p>
+            }
+            @for (med of medicamentosArray.controls; track $index; let i = $index) {
+              <mat-card class="medicamento-card" [formGroup]="$any(med)">
+                <mat-card-content>
+                  <div class="form-grid">
+                    <mat-form-field appearance="outline" class="med-inline med-main">
+                      <mat-label>Medicamento *</mat-label>
+                      <input
+                        matInput
+                        formControlName="medicamento"
+                        [matAutocomplete]="medicamentoAuto"
+                        (focus)="updateMedicamentosFiltrados($any(med).get('medicamento')?.value || '')">
+                      <mat-autocomplete #medicamentoAuto="matAutocomplete">
+                        @for (medicamento of medicamentosFiltrados(); track medicamento) {
+                          <mat-option [value]="medicamento">{{ medicamento }}</mat-option>
+                        }
+                        @if (medicamentosSugeridos().length === 0) {
+                          <mat-option disabled>Sin medicamentos guardados todavía</mat-option>
+                        } @else if (medicamentosFiltrados().length === 0) {
+                          <mat-option disabled>Sin coincidencias</mat-option>
+                        }
+                      </mat-autocomplete>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="med-inline">
+                      <mat-label>Dosis por toma</mat-label>
+                      <input matInput formControlName="dosis">
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="med-inline">
+                      <mat-label>Cada cuanto</mat-label>
+                      <input matInput formControlName="frecuencia">
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="med-inline">
+                      <mat-label>Tiempo total</mat-label>
+                      <input matInput formControlName="duracion">
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="med-inline">
+                      <mat-label>Cantidad total</mat-label>
+                      <input matInput formControlName="cantidad">
+                      @if (getCantidadSugerida($any(med)); as sugerenciaCantidad) {
+                        <mat-hint>{{ sugerenciaCantidad }}</mat-hint>
+                      }
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="full-width">
+                      <mat-label>Indicaciones para el propietario</mat-label>
+                      <textarea matInput formControlName="instrucciones" cdkTextareaAutosize cdkAutosizeMinRows="2"></textarea>
+                    </mat-form-field>
+                  </div>
+                </mat-card-content>
+                <mat-card-actions>
+                  <button mat-icon-button type="button" color="warn" (click)="removeMedicamento(i)" [disabled]="isTipoBloqueado(tipoActual)">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </mat-card-actions>
+              </mat-card>
+            }
+            <mat-divider style="margin: 16px 0"></mat-divider>
+          </mat-card-content>
+        </mat-card>
+      }
+
+      <!-- REMISION -->
+      @if (tipoActual === 'remision') {
+        <mat-card class="form-section">
+          <mat-card-header>
+            <mat-card-title>
+              <mat-icon>send</mat-icon>
+              Remisión
+            </mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="form-grid" formGroupName="remision">
+              <mat-form-field appearance="outline">
+                <mat-label>Motivo de remisión *</mat-label>
+                <input matInput formControlName="motivo">
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Especialidad de destino</mat-label>
+                <input matInput formControlName="especialidad_destino">
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Profesional destino</mat-label>
+                <input matInput formControlName="profesional_destino">
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Institución destino</mat-label>
+                <input matInput formControlName="institucion_destino">
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Texto de remisión</mat-label>
+                <textarea matInput formControlName="texto_remision" cdkTextareaAutosize cdkAutosizeMinRows="5"></textarea>
+              </mat-form-field>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      }
+
+      @if (isEdit()) {
+        <mat-card class="form-section edit-reason-card">
+          <mat-card-header>
+            <mat-card-title>
+              <mat-icon>edit_note</mat-icon>
+              Motivo de modificación
+            </mat-card-title>
+            <mat-card-subtitle>Obligatorio — explica qué cambió y por qué</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Motivo (mínimo 10 caracteres) *</mat-label>
+              <textarea matInput formControlName="motivo_modificacion" rows="3"
+                placeholder="Ej: Correción de diagnóstico según resultados de laboratorio del 28/04/2026..."></textarea>
+              @if (form.get('motivo_modificacion')?.invalid && form.get('motivo_modificacion')?.touched) {
+                <mat-error>El motivo de modificación es obligatorio (mínimo 10 caracteres)</mat-error>
+              }
+            </mat-form-field>
+          </mat-card-content>
+        </mat-card>
+      }
+
+      <div class="form-actions">
+        <button mat-stroked-button type="button" (click)="cancelar()">Cancelar</button>
+        <button mat-raised-button color="primary" type="button" (click)="guardar()" [disabled]="saving() || form.invalid || isTipoBloqueado(tipoActual)">
+          @if (saving()) {
+            <mat-spinner diameter="20" color="accent"></mat-spinner>
+          } @else {
+            <mat-icon>save</mat-icon>
+          }
+          {{ isEdit() ? 'Guardar cambios' : 'Guardar historia' }}
+        </button>
+      </div>
+
+    </form>
+  }
+</div>

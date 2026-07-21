@@ -1,0 +1,45 @@
+<div class="sa-login-page">
+  <div class="sa-login-card">
+    <div class="sa-login-logo">
+      <img src="DA logo.png" alt="DA" class="sa-logo-icon" />
+      <h1>DA Developments<br><span>Desarrollo web · Soporte y mantenimiento</span></h1>
+    </div>
+
+    <p class="sa-login-subtitle">Panel de administración de plataforma</p>
+
+    <form (ngSubmit)="submit()" #f="ngForm" autocomplete="off">
+      <mat-form-field appearance="outline" class="sa-field">
+        <mat-label>Email</mat-label>
+        <input matInput type="email" [(ngModel)]="email" name="email"
+               autocomplete="username" required />
+        <mat-icon matSuffix>email</mat-icon>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="sa-field">
+        <mat-label>Contraseña</mat-label>
+        <input matInput [type]="showPassword ? 'text' : 'password'"
+               [(ngModel)]="password" name="password" autocomplete="current-password" required />
+        <button mat-icon-button matSuffix type="button" (click)="showPassword = !showPassword">
+          <mat-icon>{{ showPassword ? 'visibility_off' : 'visibility' }}</mat-icon>
+        </button>
+      </mat-form-field>
+
+      @if (error()) {
+        <p class="sa-error">{{ error() }}</p>
+      }
+
+      <button mat-flat-button type="submit" class="sa-submit-btn"
+              [disabled]="loading()">
+        @if (loading()) {
+          <mat-spinner diameter="20" />
+        } @else {
+          Ingresar
+        }
+      </button>
+    </form>
+
+    <div class="sa-footer">
+      <a href="mailto:contacto@dadev.co">contacto@dadev.co</a>
+    </div>
+  </div>
+</div>

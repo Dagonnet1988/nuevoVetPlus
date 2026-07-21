@@ -1,11 +1,21 @@
 import jwt from 'jsonwebtoken';
+import { randomUUID } from 'crypto';
 import { query } from '../config/database.js';
 
-// Configuración JWT
+// Configuración JWT — fail-fast en producción si no hay secreto configurado
+const _jwtSecret = (() => {
+  if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('[FATAL] JWT_SECRET no está configurada. El servidor no puede iniciar en producción sin esta variable de entorno.');
+  }
+  console.warn('[WARN] JWT_SECRET no configurada. Usando clave de desarrollo. NUNCA usar en producción.');
+  return 'vetplus_dev_only_secret_do_not_use_in_prod';
+})();
+
 const JWT_CONFIG = {
-  secret: process.env.JWT_SECRET || 'vetplus_super_secret_key_2024',
-  expiresIn: process.env.JWT_EXPIRES_IN || '1h', // Cambiado de 24h a 1h
-  refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '12h', // 12 horas para refresh token
+  secret: _jwtSecret,
+  expiresIn: process.env.JWT_EXPIRES_IN || '1h',
+  refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '12h',
   issuer: 'VetPlus',
   audience: 'vetplus-users'
 };
@@ -16,15 +26,18 @@ const JWT_CONFIG = {
  * @returns {String} Token JWT
  */
 const generateToken = (user) => {
+  const sessionKey = randomUUID();
   const payload = {
     id: user.id_usuario,
     email: user.email,
     rol: user.rol,
     nombre: user.nombre,
+    tenant_id: user.id_tenant,
     iat: Math.floor(Date.now() / 1000)
   };
 
   return jwt.sign(payload, JWT_CONFIG.secret, {
+    jwtid: sessionKey,
     expiresIn: JWT_CONFIG.expiresIn,
     issuer: JWT_CONFIG.issuer,
     audience: JWT_CONFIG.audience
@@ -117,10 +130,16 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
-    // Verificar si el token está en la blacklist
+    const decoded = verifyToken(token);
+    const tokenJtiKey = decoded?.jti ? `jti:${decoded.jti}` : null;
+
+    // Verificar revocación por token exacto o por jti de sesión
     const blacklistedToken = await query(
-      'SELECT token FROM vetplus_auth.blacklisted_tokens WHERE token = $1',
-      [token]
+      `SELECT token
+       FROM vetplus_auth.blacklisted_tokens
+       WHERE token = $1 OR ($2::text IS NOT NULL AND token = $2)
+       LIMIT 1`,
+      [token, tokenJtiKey]
     );
 
     if (blacklistedToken.rows.length > 0) {
@@ -131,11 +150,35 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
-    const decoded = verifyToken(token);
-    
+    // Verificar si hubo cierre forzado posterior para esta sesión/token.
+    const forcedLogout = await query(
+      `SELECT 1
+       FROM system.session_audit
+       WHERE id_usuario = $1
+         AND tipo_evento = 'FORCE_LOGOUT'
+         AND (
+               ($2::text IS NOT NULL AND COALESCE(detalles->>'session_key', '') = $2)
+               OR ($2::text IS NULL AND $3::bigint IS NOT NULL AND timestamp >= to_timestamp($3))
+             )
+       LIMIT 1`,
+      [decoded.id, decoded?.jti || null, decoded?.iat || null]
+    );
+
+    if (forcedLogout.rows.length > 0) {
+      return res.status(401).json({
+        success: false,
+        message: 'Sesión cerrada por administrador',
+        error: 'FORCE_LOGOUT'
+      });
+    }
+
     // Verificar que el usuario existe y está activo
     const userResult = await query(
-      'SELECT id_usuario, email, nombre, rol, activo FROM vetplus_auth.usuarios WHERE id_usuario = $1',
+      `SELECT u.id_usuario, u.email, u.nombre, u.rol, u.activo, u.id_tenant,
+              t.estado AS tenant_estado
+       FROM vetplus_auth.usuarios u
+       LEFT JOIN system.tenants t ON t.id_tenant = u.id_tenant
+       WHERE u.id_usuario = $1`,
       [decoded.id]
     );
 
@@ -157,13 +200,29 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
+    if (user.id_tenant && user.tenant_estado !== 'active') {
+      return res.status(403).json({
+        success: false,
+        message: 'La clínica está suspendida o inactiva',
+        error: 'TENANT_INACTIVE'
+      });
+    }
+
     // Agregar información actualizada del usuario al request
     req.user = {
       id: user.id_usuario,
       id_usuario: user.id_usuario,
       email: user.email,
       nombre: user.nombre,
-      rol: user.rol
+      rol: user.rol,
+      tenant_id: user.id_tenant
+    };
+
+    req.authToken = {
+      raw: token,
+      jti: decoded?.jti || null,
+      exp: decoded?.exp || null,
+      iat: decoded?.iat || null
     };
 
     // Debug logging temporal
@@ -239,17 +298,26 @@ const optionalAuth = async (req, res, next) => {
         
         // Verificar que el usuario existe y está activo
         const userResult = await query(
-          'SELECT id_usuario, email, nombre, rol, activo FROM vetplus_auth.usuarios WHERE id_usuario = $1',
+          `SELECT u.id_usuario, u.email, u.nombre, u.rol, u.activo, u.id_tenant,
+                  t.estado AS tenant_estado
+           FROM vetplus_auth.usuarios u
+           LEFT JOIN system.tenants t ON t.id_tenant = u.id_tenant
+           WHERE u.id_usuario = $1`,
           [decoded.id]
         );
 
-        if (userResult.rows.length > 0 && userResult.rows[0].activo) {
+        if (
+          userResult.rows.length > 0 &&
+          userResult.rows[0].activo &&
+          (!userResult.rows[0].id_tenant || userResult.rows[0].tenant_estado === 'active')
+        ) {
           const user = userResult.rows[0];
           req.user = {
             id: user.id_usuario,
             email: user.email,
             nombre: user.nombre,
-            rol: user.rol
+            rol: user.rol,
+            tenant_id: user.id_tenant
           };
         }
       } catch (error) {

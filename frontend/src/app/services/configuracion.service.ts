@@ -1,8 +1,9 @@
 import { Injectable, signal } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
+import { AuthService } from './auth.service';
 
 // ===============================
 // INTERFACES DE CONFIGURACIÓN
@@ -15,6 +16,7 @@ export interface EmpresaConfig {
   direccion: string;
   telefono: string;
   email: string;
+  ciudad?: string;
   sitio_web?: string;
   logo_url?: string;
   eslogan?: string;
@@ -24,9 +26,6 @@ export interface EmpresaConfig {
 
   // Configuración de numeración
   configuracion_numeracion: {
-    factura_prefijo: string;
-    factura_siguiente: number;
-    factura_digitos: number;
     cita_prefijo: string;
     cita_siguiente: number;
     cita_digitos: number;
@@ -56,14 +55,18 @@ export interface HorarioAtencion {
 
 export interface DiaEspecial {
   id?: string;
+  id_tenant?: string | null;
   fecha: string;
   descripcion: string;
-  tipo: 'festivo' | 'no_laborable' | 'horario_especial';
+  tipo: 'festivo' | 'no_laborable' | 'horario_especial' | 'cumpleanos' | 'ausencia';
   horario_especial?: {
     hora_inicio: string;
     hora_fin: string;
   };
   activo: boolean;
+  editable?: boolean;
+  origen?: 'tenant' | 'global';
+  metadata?: Record<string, any>;
 }
 
 // ===============================
@@ -74,7 +77,8 @@ export interface GoogleCalendarConfig {
   id?: string;
   activo: boolean;
   cliente_id: string;
-  cliente_secret: string;
+  cliente_secret?: string;
+  has_client_secret?: boolean;
   calendar_id: string;
   sync_automatico: boolean;
   intervalo_sync: number; // minutos
@@ -84,6 +88,10 @@ export interface GoogleCalendarConfig {
     cirugia: string;
     vacunacion: string;
     control: string;
+    domicilio?: string;
+    valoracion?: string;
+    terapia?: string;
+    hidroterapia?: string;
   };
   configuracion_eventos: {
     duracion_default: number; // minutos
@@ -91,6 +99,7 @@ export interface GoogleCalendarConfig {
     incluir_cliente: boolean;
     incluir_mascota: boolean;
     incluir_veterinario: boolean;
+    invitar_propietario_calendario: boolean;
   };
   ultima_sincronizacion?: string;
   estado_oauth?: 'pendiente' | 'autorizado' | 'error';
@@ -119,143 +128,79 @@ export interface SyncStats {
   proxima_ejecucion: string;
 }
 
-// ===============================
-// WHATSAPP INTERFACES
-// ===============================
+export interface EmailConfig {
+  id_config_correo?: string;
+  proveedor: 'smtp';
+  auth_mode?: 'smtp' | 'gmail_oauth';
+  nombre_remitente?: string;
+  correo_remitente: string;
+  correo_respuesta?: string;
+  smtp_host?: string;
+  smtp_port?: number;
+  smtp_secure?: boolean;
+  smtp_usuario?: string;
+  smtp_password?: string;
+  tiene_password?: boolean;
+  oauth_client_id?: string;
+  oauth_client_secret?: string;
+  oauth_email?: string;
+  oauth_connected?: boolean;
+  oauth_redirect_uri?: string;
+  activa?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
 
-export interface WhatsAppConfig {
-  activo: boolean;
-  numero_telefono: string;
-  nombre_empresa: string;
-
-  // Templates de mensajes
-  templates: {
-    confirmacion_cita: string;
-    recordatorio_cita: string;
-    cancelacion_cita: string;
-    factura_enviada: string;
-    formula_enviada: string;
-    recordatorio_pago: string;
-  };
-
-  // Configuración de envíos
-  configuracion_envios: {
-    enviar_confirmaciones: boolean;
-    enviar_recordatorios: boolean;
-    tiempo_recordatorio: number; // horas antes
-    enviar_facturas: boolean;
-    enviar_formulas: boolean;
-    reintentos_max: number;
-    tiempo_entre_reintentos: number; // minutos
-  };
-
-  // Horarios de envío
-  horarios_envio: {
-    hora_inicio: string;
-    hora_fin: string;
-    dias_activos: number[]; // 0-6, Domingo = 0
-  };
-
-  // Notificaciones automáticas
-  notificaciones_automaticas?: {
-    activo: boolean;
-    auto_cita_confirmada: boolean;
-    auto_cita_recordatorio: boolean;
-    auto_consulta_completada: boolean;
-    auto_factura_generada: boolean;
-    limite_diario: number;
-    intervalo_minimo_minutos: number;
+export interface EmailModuleStatus {
+  configured: boolean;
+  config: Omit<EmailConfig, 'smtp_password'> | null;
+  stats: {
+    total: string;
+    enviados: string;
+    fallidos: string;
   };
 }
 
-export interface WhatsAppStatus {
-  conectado: boolean;
-  numero_vinculado: string;
-  estado_conexion: 'conectado' | 'desconectado' | 'conectando' | 'error';
-  ultimo_heartbeat: string;
-  qr_code?: string; // Base64 del QR si no está conectado
-  info_dispositivo?: {
-    nombre: string;
-    navegador: string;
-    plataforma: string;
-  };
+export interface EmailTemplateConfig {
+  id_template: string;
+  clave_template: string;
+  nombre_template: string;
+  descripcion?: string;
+  asunto: string;
+  cuerpo_html: string;
+  cuerpo_text?: string;
+  mensaje?: string;
+  variables_permitidas: string[];
+  activa: boolean;
+  updated_at?: string;
 }
 
-export interface WhatsAppStats {
-  mensajes_enviados_hoy: number;
-  mensajes_enviados_mes: number;
-  mensajes_fallidos_hoy: number;
-  mensajes_pendientes: number;
-
-  // Desglose por tipo
-  tipos_mensajes: {
-    confirmaciones: number;
-    recordatorios: number;
-    facturas: number;
-    formulas: number;
-    otros: number;
-  };
-
-  // Estadísticas históricas
-  historico_mensual: {
-    mes: string;
-    enviados: number;
-    fallidos: number;
-  }[];
-}
-
-export interface WhatsAppMessage {
+export interface EmailDeliveryItem {
   id: string;
-  numero_destino: string;
-  tipo: 'texto' | 'documento' | 'imagen';
-  contenido: string;
-  estado: 'pendiente' | 'enviado' | 'entregado' | 'leido' | 'fallido';
-  intentos: number;
-  fecha_creacion: string;
-  fecha_envio?: string;
-  error_mensaje?: string;
-
-  // Contexto del mensaje
-  contexto?: {
-    tipo: 'confirmacion' | 'recordatorio' | 'factura' | 'formula' | 'cancelacion' | 'manual';
-    referencia_id?: string;
-    cliente_nombre?: string;
-  };
+  fuente: 'system' | 'clinical';
+  tipo_envio: string;
+  destinatario_email: string;
+  propietario_nombre?: string | null;
+  asunto: string;
+  estado: 'enviado' | 'fallido';
+  provider_message_id?: string | null;
+  detalle_error?: string | null;
+  metadata?: Record<string, any>;
+  created_at: string;
+  sent_at?: string | null;
+  adjuntos_count?: number;
 }
 
-export interface WhatsAppLimites {
-  limite_diario: number;
-  limite_por_hora: number;
-  intervalo_minimo: number; // segundos
-  max_reintentos: number;
-
-  // Límites por tipo
-  limitar_confirmaciones: boolean;
-  limite_confirmaciones_dia: number;
-  limitar_recordatorios: boolean;
-  limite_recordatorios_dia: number;
-  limitar_facturas: boolean;
-  limite_facturas_dia: number;
-  limitar_manuales: boolean;
-  limite_manuales_dia: number;
-
-  // Pausas automáticas
-  pausas_automaticas: boolean;
-  pausa_limite_hora: number; // minutos
-  pausa_limite_dia: number; // horas
-}
-
-export interface WhatsAppEstadoLimites {
-  mensajes_hoy: number;
-  mensajes_hora: number;
-  pausado: boolean;
-  pausa_hasta?: Date;
-  limites_por_tipo: {
-    confirmaciones: number;
-    recordatorios: number;
-    facturas: number;
-    manuales: number;
-  };
+export interface EmailDeliveryDetail extends EmailDeliveryItem {
+  copy?: {
+    to?: string | null;
+    subject?: string | null;
+    text?: string | null;
+    html?: string | null;
+    reply_to?: string | null;
+    attachments?: Array<{ filename?: string | null; contentType?: string | null; size?: number | null }>;
+  } | null;
+  can_retry?: boolean;
 }
 
 @Injectable({
@@ -263,14 +208,18 @@ export interface WhatsAppEstadoLimites {
 })
 export class ConfiguracionService {
   private readonly API_URL = environment.apiUrl;
+  private readonly BACKEND_URL = environment.backendUrl;
 
   // Signals para estado reactivo
   public empresaConfig = signal<EmpresaConfig | null>(null);
   public googleCalendarConfig = signal<GoogleCalendarConfig | null>(null);
-  public whatsappConfig = signal<WhatsAppConfig | null>(null);
   public loading = signal<boolean>(false);
+  private bootstrapped = false;
 
-  constructor(private http: HttpClient) {
+  constructor(
+    private http: HttpClient,
+    private authService: AuthService
+  ) {
     this.loadConfigurations();
   }
 
@@ -281,9 +230,12 @@ export class ConfiguracionService {
   getEmpresaConfig(): Observable<EmpresaConfig> {
     return this.http.get<any>(`${this.API_URL}/admin/empresa/config`).pipe(
       map((response: any) => {
-        if (response.success && response.data) {
-          this.empresaConfig.set(response.data);
-          return response.data;
+        if (response.success) {
+          const normalizedConfig = response.data
+            ? this.normalizeEmpresaConfig(response.data)
+            : this.createEmptyEmpresaConfig();
+          this.empresaConfig.set(normalizedConfig);
+          return normalizedConfig;
         }
         throw new Error('Error obteniendo configuración de empresa');
       })
@@ -291,11 +243,14 @@ export class ConfiguracionService {
   }
 
   updateEmpresaConfig(config: EmpresaConfig): Observable<EmpresaConfig> {
-    return this.http.put<any>(`${this.API_URL}/admin/empresa/config`, config).pipe(
+    const payload = this.toApiEmpresaConfig(config);
+
+    return this.http.put<any>(`${this.API_URL}/admin/empresa/config`, payload).pipe(
       map((response: any) => {
         if (response.success && response.data) {
-          this.empresaConfig.set(response.data);
-          return response.data;
+          const normalizedConfig = this.normalizeEmpresaConfig(response.data);
+          this.empresaConfig.set(normalizedConfig);
+          return normalizedConfig;
         }
         throw new Error('Error actualizando configuración de empresa');
       })
@@ -346,13 +301,23 @@ export class ConfiguracionService {
     );
   }
 
-  getSiguienteNumeroFactura(): Observable<number> {
-    return this.http.get<any>(`${this.API_URL}/admin/empresa/siguiente-numero/factura`).pipe(
+  updateDiaEspecial(id: string, dia: DiaEspecial): Observable<DiaEspecial> {
+    return this.http.put<any>(`${this.API_URL}/admin/empresa/dias-especiales/${id}`, dia).pipe(
       map((response: any) => {
-        if (response.success && response.numero) {
-          return response.numero;
+        if (response.success && response.data) {
+          return response.data;
         }
-        return 1;
+        throw new Error('Error actualizando día especial');
+      })
+    );
+  }
+
+  deleteDiaEspecial(id: string): Observable<void> {
+    return this.http.delete<any>(`${this.API_URL}/admin/empresa/dias-especiales/${id}`).pipe(
+      map((response: any) => {
+        if (!response.success) {
+          throw new Error('Error eliminando día especial');
+        }
       })
     );
   }
@@ -370,23 +335,29 @@ export class ConfiguracionService {
             id: response.data.id_config,
             activo: response.data.activo,
             cliente_id: response.data.cliente_id,
-            cliente_secret: response.data.cliente_secret,
+            cliente_secret: '',
+            has_client_secret: !!response.data.has_client_secret,
             calendar_id: response.data.calendar_id,
             sync_automatico: response.data.sync_automatico,
-            intervalo_sync: 30, // valor por defecto
-            prefijo_eventos: 'VetPlus', // valor por defecto
+            intervalo_sync: response.data.intervalo_sync ?? 30,
+            prefijo_eventos: response.data.prefijo_eventos || 'QI',
             mapeo_colores: {
-              consulta: '#2196f3',
-              cirugia: '#f44336',
-              vacunacion: '#4caf50',
-              control: '#ff9800'
+              consulta: response.data.mapeo_colores?.consulta || '#46d6db',
+              cirugia: response.data.mapeo_colores?.cirugia || '#5484ed',
+              vacunacion: response.data.mapeo_colores?.vacunacion || '#51b749',
+              control: response.data.mapeo_colores?.control || '#fbd75b',
+              domicilio: response.data.mapeo_colores?.domicilio || '#51b749',
+              valoracion: response.data.mapeo_colores?.valoracion || '#fbd75b',
+              terapia: response.data.mapeo_colores?.terapia || '#46d6db',
+              hidroterapia: response.data.mapeo_colores?.hidroterapia || '#5484ed'
             },
             configuracion_eventos: {
-              duracion_default: 30,
-              recordatorio_default: 30,
-              incluir_cliente: true,
-              incluir_mascota: true,
-              incluir_veterinario: true
+              duracion_default: response.data.configuracion_eventos?.duracion_default ?? 60,
+              recordatorio_default: response.data.configuracion_eventos?.recordatorio_default ?? 30,
+              incluir_cliente: response.data.configuracion_eventos?.incluir_cliente ?? true,
+              incluir_mascota: response.data.configuracion_eventos?.incluir_mascota ?? true,
+              incluir_veterinario: response.data.configuracion_eventos?.incluir_veterinario ?? true,
+              invitar_propietario_calendario: response.data.configuracion_eventos?.invitar_propietario_calendario ?? false
             }
           };
           this.googleCalendarConfig.set(config);
@@ -397,22 +368,28 @@ export class ConfiguracionService {
           activo: false,
           cliente_id: '',
           cliente_secret: '',
+          has_client_secret: false,
           calendar_id: 'primary',
           sync_automatico: true,
           intervalo_sync: 30,
-          prefijo_eventos: 'VetPlus',
+          prefijo_eventos: 'QI',
           mapeo_colores: {
-            consulta: '#2196f3',
-            cirugia: '#f44336',
-            vacunacion: '#4caf50',
-            control: '#ff9800'
+            consulta: '#46d6db',
+            cirugia: '#5484ed',
+            vacunacion: '#51b749',
+            control: '#fbd75b',
+            domicilio: '#51b749',
+            valoracion: '#fbd75b',
+            terapia: '#46d6db',
+            hidroterapia: '#5484ed'
           },
           configuracion_eventos: {
-            duracion_default: 30,
+            duracion_default: 60,
             recordatorio_default: 30,
             incluir_cliente: true,
             incluir_mascota: true,
-            incluir_veterinario: true
+            incluir_veterinario: true,
+            invitar_propietario_calendario: false
           }
         };
         this.googleCalendarConfig.set(defaultConfig);
@@ -425,22 +402,28 @@ export class ConfiguracionService {
           activo: false,
           cliente_id: '',
           cliente_secret: '',
+          has_client_secret: false,
           calendar_id: 'primary',
           sync_automatico: true,
           intervalo_sync: 30,
-          prefijo_eventos: 'VetPlus',
+          prefijo_eventos: 'QI',
           mapeo_colores: {
-            consulta: '#2196f3',
-            cirugia: '#f44336',
-            vacunacion: '#4caf50',
-            control: '#ff9800'
+            consulta: '#46d6db',
+            cirugia: '#5484ed',
+            vacunacion: '#51b749',
+            control: '#fbd75b',
+            domicilio: '#51b749',
+            valoracion: '#fbd75b',
+            terapia: '#46d6db',
+            hidroterapia: '#5484ed'
           },
           configuracion_eventos: {
-            duracion_default: 30,
+            duracion_default: 60,
             recordatorio_default: 30,
             incluir_cliente: true,
             incluir_mascota: true,
-            incluir_veterinario: true
+            incluir_veterinario: true,
+            invitar_propietario_calendario: false
           }
         };
         this.googleCalendarConfig.set(defaultConfig);
@@ -457,7 +440,10 @@ export class ConfiguracionService {
       cliente_secret: config.cliente_secret,
       calendar_id: config.calendar_id || 'primary',
       sync_automatico: config.sync_automatico,
-      prefijo_eventos: config.prefijo_eventos || 'VetPlus'
+      intervalo_sync: config.intervalo_sync,
+      prefijo_eventos: config.prefijo_eventos || 'QI',
+      mapeo_colores: config.mapeo_colores,
+      configuracion_eventos: config.configuracion_eventos
     };
 
     return this.http.post<any>(`${this.API_URL}/google-calendar/simple/configure`, backendConfig).pipe(
@@ -468,23 +454,29 @@ export class ConfiguracionService {
             id: response.data.id_config,
             activo: response.data.activo,
             cliente_id: response.data.cliente_id,
-            cliente_secret: response.data.cliente_secret,
+            cliente_secret: '',
+            has_client_secret: !!response.data.has_client_secret,
             calendar_id: response.data.calendar_id,
             sync_automatico: response.data.sync_automatico,
-            intervalo_sync: 30,
-            prefijo_eventos: response.data.prefijo_eventos || 'VetPlus',
+            intervalo_sync: response.data.intervalo_sync ?? config.intervalo_sync ?? 30,
+            prefijo_eventos: response.data.prefijo_eventos || config.prefijo_eventos || 'QI',
             mapeo_colores: {
-              consulta: '#2196f3',
-              cirugia: '#f44336',
-              vacunacion: '#4caf50',
-              control: '#ff9800'
+              consulta: response.data.mapeo_colores?.consulta || config.mapeo_colores?.consulta || '#46d6db',
+              cirugia: response.data.mapeo_colores?.cirugia || config.mapeo_colores?.cirugia || '#5484ed',
+              vacunacion: response.data.mapeo_colores?.vacunacion || config.mapeo_colores?.vacunacion || '#51b749',
+              control: response.data.mapeo_colores?.control || config.mapeo_colores?.control || '#fbd75b',
+              domicilio: response.data.mapeo_colores?.domicilio || config.mapeo_colores?.domicilio || '#51b749',
+              valoracion: response.data.mapeo_colores?.valoracion || config.mapeo_colores?.valoracion || '#fbd75b',
+              terapia: response.data.mapeo_colores?.terapia || config.mapeo_colores?.terapia || '#46d6db',
+              hidroterapia: response.data.mapeo_colores?.hidroterapia || config.mapeo_colores?.hidroterapia || '#5484ed'
             },
             configuracion_eventos: {
-              duracion_default: 30,
-              recordatorio_default: 30,
-              incluir_cliente: true,
-              incluir_mascota: true,
-              incluir_veterinario: true
+              duracion_default: response.data.configuracion_eventos?.duracion_default ?? config.configuracion_eventos?.duracion_default ?? 60,
+              recordatorio_default: response.data.configuracion_eventos?.recordatorio_default ?? config.configuracion_eventos?.recordatorio_default ?? 30,
+              incluir_cliente: response.data.configuracion_eventos?.incluir_cliente ?? config.configuracion_eventos?.incluir_cliente ?? true,
+              incluir_mascota: response.data.configuracion_eventos?.incluir_mascota ?? config.configuracion_eventos?.incluir_mascota ?? true,
+              incluir_veterinario: response.data.configuracion_eventos?.incluir_veterinario ?? config.configuracion_eventos?.incluir_veterinario ?? true,
+              invitar_propietario_calendario: response.data.configuracion_eventos?.invitar_propietario_calendario ?? config.configuracion_eventos?.invitar_propietario_calendario ?? false
             }
           };
           this.googleCalendarConfig.set(frontendConfig);
@@ -545,6 +537,169 @@ export class ConfiguracionService {
     return this.http.post<any>(`${this.API_URL}/google-calendar/sync-changes`, {});
   }
 
+  // ===============================
+  // CORREO (SMTP INDEPENDIENTE)
+  // ===============================
+
+  getEmailConfig(): Observable<EmailConfig | null> {
+    return this.http.get<any>(`${this.API_URL}/admin/email/config`).pipe(
+      map((response: any) => {
+        if (response.success) {
+          return response.data || null;
+        }
+        throw new Error('Error obteniendo configuración de correo');
+      })
+    );
+  }
+
+  updateEmailConfig(config: EmailConfig): Observable<EmailConfig> {
+    return this.http.put<any>(`${this.API_URL}/admin/email/config`, config).pipe(
+      map((response: any) => {
+        if (response.success && response.data) {
+          return response.data;
+        }
+        throw new Error('Error guardando configuración de correo');
+      })
+    );
+  }
+
+  testEmailConfig(email_prueba?: string): Observable<{ message: string }> {
+    return this.http.post<any>(`${this.API_URL}/admin/email/test`, { email_prueba }).pipe(
+      map((response: any) => {
+        if (response.success) {
+          return { message: response.message || 'Correo de prueba enviado' };
+        }
+        throw new Error('No fue posible validar la configuración de correo');
+      })
+    );
+  }
+
+  getEmailModuleStatus(): Observable<EmailModuleStatus> {
+    return this.http.get<any>(`${this.API_URL}/admin/email/status`).pipe(
+      map((response: any) => {
+        if (response.success && response.data) {
+          return response.data as EmailModuleStatus;
+        }
+        throw new Error('Error obteniendo estado del módulo de correo');
+      })
+    );
+  }
+
+  getEmailDeliveries(params?: {
+    limit?: number;
+    offset?: number;
+    estado?: 'enviado' | 'fallido';
+    search?: string;
+    receptor?: string;
+    fecha_desde?: string;
+    fecha_hasta?: string;
+  }): Observable<{ data: EmailDeliveryItem[]; pagination: { total: number; limit: number; offset: number; hasMore: boolean } }> {
+    const queryParams: Record<string, string> = {};
+
+    if (typeof params?.limit === 'number') queryParams['limit'] = String(params.limit);
+    if (typeof params?.offset === 'number') queryParams['offset'] = String(params.offset);
+    if (params?.estado) queryParams['estado'] = params.estado;
+    if (params?.search) queryParams['search'] = params.search;
+    if (params?.receptor) queryParams['receptor'] = params.receptor;
+    if (params?.fecha_desde) queryParams['fecha_desde'] = params.fecha_desde;
+    if (params?.fecha_hasta) queryParams['fecha_hasta'] = params.fecha_hasta;
+
+    return this.http.get<any>(`${this.API_URL}/admin/email/deliveries`, { params: queryParams }).pipe(
+      map((response: any) => {
+        if (response.success) {
+          return {
+            data: Array.isArray(response.data) ? response.data as EmailDeliveryItem[] : [],
+            pagination: response.pagination || { total: 0, limit: 20, offset: 0, hasMore: false }
+          };
+        }
+        throw new Error('Error obteniendo historial de correos');
+      })
+    );
+  }
+
+  getEmailDeliveryDetail(source: 'system' | 'clinical', id: string): Observable<EmailDeliveryDetail> {
+    return this.http.get<any>(`${this.API_URL}/admin/email/deliveries/${source}/${id}`).pipe(
+      map((response: any) => {
+        if (response.success && response.data) {
+          return response.data as EmailDeliveryDetail;
+        }
+        throw new Error('Error obteniendo detalle del envío');
+      })
+    );
+  }
+
+  retryEmailDelivery(source: 'system' | 'clinical', id: string): Observable<{ message: string }> {
+    return this.http.post<any>(`${this.API_URL}/admin/email/deliveries/${source}/${id}/retry`, {}).pipe(
+      map((response: any) => {
+        if (response.success) {
+          return { message: response.message || 'Correo reenviado correctamente' };
+        }
+        throw new Error('No fue posible reenviar el correo');
+      })
+    );
+  }
+
+  getEmailTemplates(): Observable<EmailTemplateConfig[]> {
+    return this.http.get<any>(`${this.API_URL}/admin/email/templates`).pipe(
+      map((response: any) => {
+        if (response.success && Array.isArray(response.data)) {
+          return response.data as EmailTemplateConfig[];
+        }
+        return [];
+      })
+    );
+  }
+
+  getEmailTemplate(key: string): Observable<EmailTemplateConfig> {
+    return this.http.get<any>(`${this.API_URL}/admin/email/templates/${key}`).pipe(
+      map((response: any) => {
+        if (response.success && response.data) {
+          return response.data as EmailTemplateConfig;
+        }
+        throw new Error('No se pudo obtener la plantilla solicitada');
+      })
+    );
+  }
+
+  updateEmailTemplate(key: string, payload: Partial<EmailTemplateConfig>): Observable<EmailTemplateConfig> {
+    return this.http.put<any>(`${this.API_URL}/admin/email/templates/${key}`, payload).pipe(
+      map((response: any) => {
+        if (response.success && response.data) {
+          return response.data as EmailTemplateConfig;
+        }
+        throw new Error('No se pudo actualizar la plantilla');
+      })
+    );
+  }
+
+  resetEmailTemplate(key: string): Observable<EmailTemplateConfig> {
+    return this.http.post<any>(`${this.API_URL}/admin/email/templates/${key}/reset`, {}).pipe(
+      map((response: any) => {
+        if (response.success && response.data) {
+          return response.data as EmailTemplateConfig;
+        }
+        throw new Error('No se pudo restaurar la plantilla');
+      })
+    );
+  }
+
+  getGoogleEmailAuthUrl(): Observable<string> {
+    return this.http.get<any>(`${this.API_URL}/admin/email/google/auth-url`).pipe(
+      map((response: any) => {
+        if (response.success && response.authUrl) {
+          return response.authUrl;
+        }
+        throw new Error('No se pudo obtener URL de autorización de Google');
+      })
+    );
+  }
+
+  disconnectGoogleEmail(): Observable<{ message: string }> {
+    return this.http.post<any>(`${this.API_URL}/admin/email/google/disconnect`, {}).pipe(
+      map((response: any) => ({ message: response.message || 'Google desconectado' }))
+    );
+  }
+
   toggleScheduler(): Observable<any> {
     return this.http.get<any>(`${this.API_URL}/google-calendar/scheduler/status`);
   }
@@ -556,158 +711,6 @@ export class ConfiguracionService {
           return response.data;
         }
         throw new Error('Error obteniendo estadísticas del scheduler');
-      })
-    );
-  }
-
-  // ===============================
-  // WHATSAPP
-  // ===============================
-
-  getWhatsAppStatus(): Observable<WhatsAppStatus> {
-    return this.http.get<any>(`${this.API_URL}/whatsapp/status`).pipe(
-      map((response: any) => {
-        if (response.success && response.data) {
-          return response.data;
-        }
-        throw new Error('Error obteniendo estado de WhatsApp');
-      })
-    );
-  }
-
-  getWhatsAppQR(): Observable<string> {
-    return this.http.get<any>(`${this.API_URL}/whatsapp/qr`).pipe(
-      map((response: any) => {
-        if (response.success && response.qr_code) {
-          return response.qr_code;
-        }
-        throw new Error('Error obteniendo código QR');
-      })
-    );
-  }
-
-  restartWhatsApp(): Observable<any> {
-    return this.http.post<any>(`${this.API_URL}/whatsapp/restart`, {});
-  }
-
-  logoutWhatsApp(): Observable<any> {
-    return this.http.post<any>(`${this.API_URL}/whatsapp/logout`, {});
-  }
-
-  testWhatsAppMessage(numero: string, mensaje: string): Observable<any> {
-    return this.http.post<any>(`${this.API_URL}/whatsapp/test-message`, { numero, mensaje });
-  }
-
-  getWhatsAppStats(): Observable<WhatsAppStats> {
-    return this.http.get<any>(`${this.API_URL}/whatsapp/stats`).pipe(
-      map((response: any) => {
-        if (response.success && response.data) {
-          return response.data;
-        }
-        throw new Error('Error obteniendo estadísticas de WhatsApp');
-      })
-    );
-  }
-
-  getWhatsAppMessages(filtros?: { fecha_inicio?: string; fecha_fin?: string; estado?: string }): Observable<WhatsAppMessage[]> {
-    let params = new HttpParams();
-    if (filtros?.fecha_inicio) params = params.set('fecha_inicio', filtros.fecha_inicio);
-    if (filtros?.fecha_fin) params = params.set('fecha_fin', filtros.fecha_fin);
-    if (filtros?.estado) params = params.set('estado', filtros.estado);
-
-    return this.http.get<any>(`${this.API_URL}/whatsapp/messages`, { params }).pipe(
-      map((response: any) => {
-        if (response.success && response.data) {
-          return response.data;
-        }
-        return [];
-      })
-    );
-  }
-
-  retryWhatsAppMessage(logId: string): Observable<any> {
-    return this.http.post<any>(`${this.API_URL}/whatsapp/retry/${logId}`, {});
-  }
-
-  getWhatsAppConfig(): Observable<WhatsAppConfig> {
-    return this.http.get<any>(`${this.API_URL}/admin/empresa/whatsapp`).pipe(
-      map((response: any) => {
-        if (response.success && response.data) {
-          this.whatsappConfig.set(response.data);
-          return response.data;
-        }
-        throw new Error('Error obteniendo configuración de WhatsApp');
-      })
-    );
-  }
-
-  updateWhatsAppConfig(config: WhatsAppConfig): Observable<WhatsAppConfig> {
-    return this.http.put<any>(`${this.API_URL}/admin/empresa/whatsapp`, config).pipe(
-      map((response: any) => {
-        if (response.success && response.data) {
-          this.whatsappConfig.set(response.data);
-          return response.data;
-        }
-        throw new Error('Error actualizando configuración de WhatsApp');
-      })
-    );
-  }
-
-  // ===============================
-  // LÍMITES Y CONTROL DE WHATSAPP
-  // ===============================
-
-  getWhatsAppLimites(): Observable<WhatsAppLimites> {
-    return this.http.get<any>(`${this.API_URL}/admin/empresa/whatsapp/limites`).pipe(
-      map((response: any) => {
-        if (response.success && response.data) {
-          return response.data;
-        }
-        throw new Error('Error obteniendo límites de WhatsApp');
-      })
-    );
-  }
-
-  updateWhatsAppLimites(limites: WhatsAppLimites): Observable<WhatsAppLimites> {
-    return this.http.put<any>(`${this.API_URL}/admin/empresa/whatsapp/limites`, limites).pipe(
-      map((response: any) => {
-        if (response.success && response.data) {
-          return response.data;
-        }
-        throw new Error('Error actualizando límites de WhatsApp');
-      })
-    );
-  }
-
-  getWhatsAppEstadoLimites(): Observable<WhatsAppEstadoLimites> {
-    return this.http.get<any>(`${this.API_URL}/admin/empresa/whatsapp/estado-limites`).pipe(
-      map((response: any) => {
-        if (response.success && response.data) {
-          return response.data;
-        }
-        throw new Error('Error obteniendo estado de límites');
-      })
-    );
-  }
-
-  resetWhatsAppContadores(): Observable<any> {
-    return this.http.post<any>(`${this.API_URL}/admin/empresa/whatsapp/reset-contadores`, {}).pipe(
-      map((response: any) => {
-        if (response.success) {
-          return response;
-        }
-        throw new Error('Error reseteando contadores');
-      })
-    );
-  }
-
-  reanudarWhatsAppEnvios(): Observable<any> {
-    return this.http.post<any>(`${this.API_URL}/admin/empresa/whatsapp/reanudar`, {}).pipe(
-      map((response: any) => {
-        if (response.success) {
-          return response;
-        }
-        throw new Error('Error reanudando envíos');
       })
     );
   }
@@ -743,6 +746,14 @@ export class ConfiguracionService {
   // ===============================
 
   private loadConfigurations(): void {
+    if (this.bootstrapped) return;
+    this.bootstrapped = true;
+
+    // Evita llamadas /admin/empresa/config sin sesión activa.
+    if (!this.authService.isAuthenticated() || !this.authService.getToken()) {
+      return;
+    }
+
     // Cargar configuraciones básicas al inicializar el servicio
     this.getEmpresaConfig().subscribe({
       next: () => {},
@@ -809,5 +820,140 @@ export class ConfiguracionService {
   getDayName(dayIndex: number): string {
     const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
     return days[dayIndex] || '';
+  }
+
+  // ===============================
+  // TEXTO DE CONSENTIMIENTO
+  // ===============================
+
+  getTextoConsentimiento(): Observable<{ version: { id_version: number; titulo: string; texto_legal: string; activa: boolean; created_at: string } }> {
+    return this.http.get<any>(`${this.API_URL}/config/consentimiento/texto`);
+  }
+
+  updateTextoConsentimiento(titulo: string, textoLegal: string): Observable<{ message: string; version: any }> {
+    return this.http.put<any>(`${this.API_URL}/config/consentimiento/texto`, { titulo, textoLegal });
+  }
+
+  getAbsoluteAssetUrl(url?: string): string {
+    if (!url) return '';
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    return `${this.BACKEND_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+  }
+
+  private normalizeEmpresaConfig(data: any): EmpresaConfig {
+    const sitioWebValue = data?.sitio_web ?? '';
+
+    return {
+      ...data,
+      sitio_web: sitioWebValue,
+      horarios: this.normalizeHorariosFromApi(data?.horarios),
+      configuracion_general: this.safeParseJson(data?.configuracion_general, {
+        moneda: 'COP',
+        zona_horaria: 'America/Bogota',
+        idioma: 'es',
+        formato_fecha: 'DD-MM-YY',
+        formato_hora: 'h:mm A'
+      }),
+      configuracion_numeracion: this.safeParseJson(data?.configuracion_numeracion, {
+        cita_prefijo: 'CIT',
+        cita_siguiente: 1,
+        cita_digitos: 6
+      })
+    } as EmpresaConfig;
+  }
+
+  private createEmptyEmpresaConfig(): EmpresaConfig {
+    return {
+      nombre_empresa: '',
+      nit: '',
+      direccion: '',
+      telefono: '',
+      email: '',
+      ciudad: '',
+      sitio_web: '',
+      eslogan: '',
+      logo_url: '',
+      horarios: this.generateDefaultHorarios(),
+      configuracion_general: {
+        moneda: 'COP',
+        zona_horaria: 'America/Bogota',
+        idioma: 'es',
+        formato_fecha: 'DD-MM-YY',
+        formato_hora: 'h:mm A'
+      },
+      configuracion_numeracion: {
+        cita_prefijo: 'CIT',
+        cita_siguiente: 1,
+        cita_digitos: 6
+      }
+    };
+  }
+
+  private toApiEmpresaConfig(config: EmpresaConfig): any {
+    const sitioWebValue = config.sitio_web ?? '';
+
+    return {
+      ...config,
+      sitio_web: sitioWebValue,
+      horarios: this.mapHorariosToApi(config.horarios)
+    };
+  }
+
+  private normalizeHorariosFromApi(horarios: any): HorarioAtencion[] {
+    if (!Array.isArray(horarios) || horarios.length === 0) {
+      return this.generateDefaultHorarios();
+    }
+
+    const normalized = horarios.map((h: any) => ({
+      dia_semana: Number(h.dia_semana),
+      activo: h.activo ?? !h.cerrado,
+      hora_inicio: h.hora_inicio ?? h.hora_apertura ?? '08:00',
+      hora_fin: h.hora_fin ?? h.hora_cierre ?? '17:00',
+      hora_almuerzo_inicio: h.hora_almuerzo_inicio ?? '12:00',
+      hora_almuerzo_fin: h.hora_almuerzo_fin ?? '13:00'
+    }));
+
+    const byDay = new Map<number, HorarioAtencion>();
+    normalized.forEach((h) => {
+      if (!Number.isNaN(h.dia_semana) && h.dia_semana >= 0 && h.dia_semana <= 6) {
+        byDay.set(h.dia_semana, h);
+      }
+    });
+
+    return Array.from({ length: 7 }, (_, day) =>
+      byDay.get(day) || {
+        dia_semana: day,
+        activo: day >= 1 && day <= 5,
+        hora_inicio: '08:00',
+        hora_fin: '17:00',
+        hora_almuerzo_inicio: '12:00',
+        hora_almuerzo_fin: '13:00'
+      }
+    );
+  }
+
+  private mapHorariosToApi(horarios: HorarioAtencion[] = []): Array<{ dia_semana: number; hora_apertura: string | null; hora_cierre: string | null; cerrado: boolean; notas: string | null }> {
+    return horarios.map((h) => {
+      const cerrado = !h.activo;
+      return {
+        dia_semana: h.dia_semana,
+        hora_apertura: cerrado ? null : h.hora_inicio,
+        hora_cierre: cerrado ? null : h.hora_fin,
+        cerrado,
+        notas: null
+      };
+    });
+  }
+
+  private safeParseJson<T>(value: unknown, fallback: T): T {
+    if (!value) return fallback;
+    if (typeof value === 'object') return value as T;
+    if (typeof value !== 'string') return fallback;
+
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return fallback;
+    }
   }
 }

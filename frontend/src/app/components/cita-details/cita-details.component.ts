@@ -1,22 +1,28 @@
-import { Component, OnInit, signal, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, OnInit, signal, inject, Inject } from '@angular/core';
+import { CommonModule, Location } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
-import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { MatTabsModule } from '@angular/material/tabs';
+import { MatBadgeModule } from '@angular/material/badge';
+import { MatListModule } from '@angular/material/list';
 import { MatDividerModule } from '@angular/material/divider';
-import { MatDialog } from '@angular/material/dialog';
+import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { FormsModule } from '@angular/forms';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { environment } from '../../../environments/environment';
 
 import { CitasService } from '../../services/citas.service';
 import { ConsultasService } from '../../services/consultas.service';
+import { AuthService } from '../../services/auth.service';
+import { HistoriaClinica, HistoriaClinicaService } from '../../services/historia-clinica.service';
 import { Cita, TIPOS_CITA, ESTADOS_CITA } from '../../models/cita.interface';
-import { CitaFormComponent } from '../cita-form/cita-form.component';
 
 @Component({
   selector: 'app-cita-details',
@@ -27,11 +33,10 @@ import { CitaFormComponent } from '../cita-form/cita-form.component';
     MatButtonModule,
     MatIconModule,
     MatChipsModule,
-    MatMenuModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
     MatTooltipModule,
-    MatTabsModule,
+    MatBadgeModule,
     MatDividerModule
   ],
   templateUrl: './cita-details.component.html',
@@ -40,10 +45,14 @@ import { CitaFormComponent } from '../cita-form/cita-form.component';
 export class CitaDetailsComponent implements OnInit {
   private router = inject(Router);
   private route = inject(ActivatedRoute);
+  private location = inject(Location);
   private citasService = inject(CitasService);
   private consultasService = inject(ConsultasService);
+  private authService = inject(AuthService);
+  private historiaClinicaService = inject(HistoriaClinicaService);
   private snackBar = inject(MatSnackBar);
   private dialog = inject(MatDialog);
+  private sanitizer = inject(DomSanitizer);
 
   // Callback para notificar al calendario padre sobre cambios
   onStateUpdated?: () => void;
@@ -52,6 +61,10 @@ export class CitaDetailsComponent implements OnInit {
   loading = signal(false);
   cita = signal<Cita | null>(null);
   updating = signal(false);
+  historiaClinicaAsociada = signal<boolean>(false);
+  documentosCita = signal<HistoriaClinica[]>([]);
+  loadingDocumentos = signal(false);
+  documentosPanelOpen = signal(false);
 
   // Constants
   tiposCita = TIPOS_CITA;
@@ -79,6 +92,8 @@ export class CitaDetailsComponent implements OnInit {
         const citaTransformada = this.transformarCitaParaTemplate(response.data);
         console.log('🔄 Cita transformada:', citaTransformada);
         this.cita.set(citaTransformada);
+        await this.refreshHistoriaClinicaStatus(citaTransformada.id_cita);
+        await this.loadDocumentosCita(citaTransformada.id_cita);
 
         // Debug: verificar transiciones disponibles
         console.log('🎯 Verificando transiciones después de cargar cita...');
@@ -107,8 +122,15 @@ export class CitaDetailsComponent implements OnInit {
     const cita = this.cita();
     if (!cita || this.updating()) return;
 
+    const blockedReason = this.getTransitionBlockReason(nuevoEstado);
+    if (blockedReason) {
+      this.snackBar.open(blockedReason, 'Cerrar', { duration: 5000 });
+      return;
+    }
+
     const confirmMessage = this.getConfirmationMessage(nuevoEstado);
-    if (!confirm(confirmMessage)) return;
+    const confirmed = await this.openConfirmDialog('Confirmar cambio de estado', confirmMessage, 'Confirmar');
+    if (!confirmed) return;
 
     try {
       this.updating.set(true);
@@ -122,12 +144,28 @@ export class CitaDetailsComponent implements OnInit {
         // Actualizar el estado local
         const citaActualizada = { ...cita, estado: nuevoEstado as any };
         this.cita.set(citaActualizada);
+        await this.refreshHistoriaClinicaStatus(cita.id_cita);
+        await this.loadDocumentosCita(cita.id_cita);
 
         this.snackBar.open(
           `Estado actualizado a ${this.getEstadoLabel(nuevoEstado)}`,
           'Cerrar',
           { duration: 3000 }
         );
+
+        if (nuevoEstado === 'completada') {
+          const docs = await this.loadDocumentosCitaWithRetry(cita.id_cita);
+
+          if (!docs.length) {
+            this.snackBar.open(
+              'Cita completada. Aún no hay documentos listos para enviar. Intenta en unos segundos desde "Documentos de cita".',
+              'Cerrar',
+              { duration: 5500 }
+            );
+          } else {
+            this.openPostCompletionDeliveryDialog(docs.length);
+          }
+        }
 
         // Notificar al calendario para que se refresque
         if (this.onStateUpdated) {
@@ -176,7 +214,8 @@ export class CitaDetailsComponent implements OnInit {
     const cita = this.cita();
     if (!cita || this.updating()) return;
 
-    const motivo = prompt('Motivo de cancelación (opcional):');
+    const motivo = await this.openCancelReasonDialog();
+    if (motivo === null) return;
 
     try {
       this.updating.set(true);
@@ -256,60 +295,32 @@ export class CitaDetailsComponent implements OnInit {
     }
   }
 
-  onGoToFacturacion(): void {
-    const cita = this.cita();
-    console.log('🎯 Cita completa:', cita);
-    console.log('🎯 Mascota cliente:', cita?.mascota?.cliente);
-    console.log('🎯 cliente_documento plano:', cita?.cliente_documento);
-
-    if (!cita || cita.estado !== 'completada') {
-      this.snackBar.open('Solo se puede facturar citas completadas', 'Cerrar', { duration: 3000 });
-      return;
-    }
-
-    // Navegar a facturación con los datos precargados
-    const queryParams = {
-      citaId: cita.id_cita,
-      clienteNombre: cita.mascota?.cliente?.nombre || cita.cliente_nombre,
-      clienteDocumento: cita.mascota?.cliente?.documento || cita.cliente_documento,
-      clienteTelefono: cita.mascota?.cliente?.telefono || cita.cliente_telefono,
-      clienteEmail: cita.mascota?.cliente?.email || cita.cliente_email,
-      clienteDireccion: cita.mascota?.cliente?.direccion || cita.cliente_direccion,
-      mascotaNombre: cita.mascota?.nombre || cita.mascota_nombre,
-      mascotaId: cita.id_mascota
-    };
-
-    console.log('🎯 QueryParams a enviar:', queryParams);
-
-    this.router.navigate(['/facturacion/nueva'], {
-      queryParams
-    });
-  }
 
   async onViewHistoriaClinica(): Promise<void> {
     const cita = this.cita();
     if (!cita) return;
 
+    // En cita en curso siempre se lleva al formulario.
+    // La validación de duplicados por tipo ocurre al guardar en el módulo de historias.
+    if (cita.estado === 'en_curso') {
+      this.navigateToHistoriaCreationFromCita(cita);
+      return;
+    }
+
     try {
       console.log('🔍 Buscando historia clínica para cita:', cita.id_cita);
 
-      const response = await this.consultasService.getConsultaFromAppointment(cita.id_cita).toPromise();
+      const response = await this.historiaClinicaService.getHistoriaByCitaId(cita.id_cita).toPromise();
 
       if (response?.success && response.data) {
         console.log('✅ Historia clínica encontrada:', response.data);
 
-        // Comportamiento inteligente según el estado de la cita
-        if (cita.estado === 'en_curso') {
-          // Si está en curso, ir a EDITAR la historia clínica
-          this.router.navigate(['/historia-clinica', response.data.id_consulta, 'editar']);
-        } else {
-          // Si está completada u otro estado, ir a VER la historia clínica (solo lectura)
-          this.router.navigate(['/historia-clinica', response.data.id_consulta]);
-        }
+        // Si está completada u otro estado, ir a VER la historia clínica (solo lectura)
+        this.router.navigate(['/historia-clinica', response.data.id_historia]);
       } else {
         console.log('⚠️ No se encontró historia clínica para esta cita');
 
-        if (cita.estado === 'en_curso' || cita.estado === 'completada') {
+        if (cita.estado === 'completada') {
           this.snackBar.open('No se encontró historia clínica para esta cita', 'Cerrar', {
             duration: 4000
           });
@@ -325,7 +336,7 @@ export class CitaDetailsComponent implements OnInit {
       console.error('❌ Error obteniendo historia clínica:', error);
 
       if (error.status === 404) {
-        if (cita.estado === 'en_curso' || cita.estado === 'completada') {
+        if (cita.estado === 'completada') {
           this.snackBar.open('No se encontró historia clínica para esta cita', 'Cerrar', { duration: 4000 });
         } else {
           this.snackBar.open(
@@ -349,14 +360,151 @@ export class CitaDetailsComponent implements OnInit {
   getHistoriaClinicaButtonText(): string {
     const cita = this.cita();
     if (cita?.estado === 'en_curso') {
-      return 'Editar Historia Clínica';
+      return this.historiaClinicaAsociada() ? 'Crear otro documento clínico' : 'Crear Historia Clínica';
     } else if (cita?.estado === 'completada') {
       return 'Ver Historia Clínica';
     }
     return 'Historia Clínica';
   }
 
+  getDocumentoTipoLabel(tipo: string): string {
+    return this.historiaClinicaService.getTipoLabel(tipo as any);
+  }
+
+  private getHistoriaTipoDocumentoFromCita(cita: Cita): 'valoracion_inicial' | 'seguimiento' {
+    const tipo = String(cita.tipo || '').toLowerCase();
+    return (tipo === 'valoracion' || tipo === 'control') ? 'valoracion_inicial' : 'seguimiento';
+  }
+
+  private navigateToHistoriaCreationFromCita(cita: Cita): void {
+    this.router.navigate(['/historia-clinica/nueva'], {
+      queryParams: {
+        id_mascota: cita.id_mascota,
+        id_veterinario: cita.id_veterinario,
+        id_cita: cita.id_cita,
+        tipo_documento: this.getHistoriaTipoDocumentoFromCita(cita)
+      }
+    });
+  }
+
+  async onToggleDocumentosPanel(): Promise<void> {
+    const cita = this.cita();
+    if (!cita) return;
+
+    await this.loadDocumentosCita(cita.id_cita);
+
+    const dialogRef = this.dialog.open(CitaDocumentosListDialogComponent, {
+      width: '520px',
+      maxWidth: '94vw',
+      data: {
+        estadoCita: cita.estado,
+        documentos: this.documentosCita(),
+        getTipoLabel: (tipo: string) => this.getDocumentoTipoLabel(tipo),
+        formatDate: (fecha: string) => this.formatDateCompact(fecha),
+      }
+    });
+
+    const result = await dialogRef.afterClosed().toPromise();
+    if (!result) return;
+
+    if (result.action === 'open-pdf' && result.idHistoria) {
+      this.verDocumentoCita(result.idHistoria);
+      return;
+    }
+
+    if (result.action === 'send-one' && result.idHistoria) {
+      const doc = this.documentosCita().find((d) => d.id_historia === result.idHistoria);
+      if (doc) await this.onEnviarDocumento(doc);
+      return;
+    }
+
+    if (result.action === 'send-all') {
+      await this.onEnviarTodosDocumentos();
+      return;
+    }
+
+    if (result.action === 'send-whatsapp-all') {
+      this.enviarDocumentosPorWhatsApp(this.documentosCita());
+      return;
+    }
+
+    if (result.action === 'send-both-all') {
+      await this.onEnviarTodosDocumentos();
+      this.enviarDocumentosPorWhatsApp(this.documentosCita());
+    }
+  }
+
+  verDocumentoCita(idHistoria: string): void {
+    const historyRef = this.documentosCita().find((d) => d.id_historia === idHistoria);
+    this.openDocumentoPdfModal(idHistoria, historyRef?.codigo_historia || 'Documento clínico');
+  }
+
+  async onEnviarDocumento(historia: HistoriaClinica): Promise<void> {
+    const cita = this.cita();
+    if (!cita || !historia?.id_historia || this.updating()) return;
+    if (cita.estado !== 'completada') {
+      this.snackBar.open('Solo puedes enviar documentos cuando la cita esté completada.', 'Cerrar', { duration: 4000 });
+      return;
+    }
+
+    const confirmar = await this.openConfirmDialog(
+      'Enviar documento',
+      `¿Enviar ${this.historiaClinicaService.getTipoLabel(historia.tipo_documento)} (${historia.codigo_historia}) al propietario por correo?`,
+      'Enviar'
+    );
+    if (!confirmar) return;
+
+    try {
+      this.updating.set(true);
+      const response = await this.historiaClinicaService.sendHistoriaByEmail(historia.id_historia).toPromise();
+      this.snackBar.open(response?.message || 'Documento enviado por correo', 'Cerrar', { duration: 3500 });
+    } catch (error: any) {
+      this.snackBar.open(error?.error?.message || 'No se pudo enviar el documento', 'Cerrar', { duration: 4000 });
+    } finally {
+      this.updating.set(false);
+    }
+  }
+
+  async onEnviarTodosDocumentos(force = false): Promise<void> {
+    const cita = this.cita();
+    if (!cita || (!force && this.updating())) return;
+    if (cita.estado !== 'completada') {
+      this.snackBar.open('Solo puedes enviar documentos cuando la cita esté completada.', 'Cerrar', { duration: 4000 });
+      return;
+    }
+
+    const docs = this.documentosCita();
+    if (!docs.length) {
+      this.snackBar.open('No hay documentos para enviar en esta cita', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    try {
+      this.updating.set(true);
+      await this.historiaClinicaService.sendCitaDocumentosByEmail(cita.id_cita).toPromise();
+      this.snackBar.open('Correo enviado', 'Cerrar', { duration: 3200 });
+    } catch (error: any) {
+      this.snackBar.open(error?.error?.message || 'No se pudieron enviar los documentos', 'Cerrar', { duration: 4000 });
+    } finally {
+      this.updating.set(false);
+    }
+  }
+
   onBack(): void {
+    if (window.history.length > 1) {
+      this.location.back();
+      return;
+    }
+
+    const from = this.route.snapshot.queryParamMap.get('from');
+
+    if (from === 'calendario') {
+      this.router.navigate(['/citas'], {
+        queryParams: { view: 'calendario' }
+      });
+      return;
+    }
+
     this.router.navigate(['/citas']);
   }
 
@@ -412,6 +560,50 @@ export class CitaDetailsComponent implements OnInit {
     }
   }
 
+  formatDateCompact(dateString: string | null | undefined): string {
+    if (!dateString) return 'Fecha no disponible';
+
+    try {
+      const fecha = this.parseLocalDate(dateString);
+      return new Intl.DateTimeFormat('es-CO', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+      }).format(fecha);
+    } catch (error) {
+      console.error('Error formateando fecha compacta:', error);
+      return 'Fecha no válida';
+    }
+  }
+
+  formatDateWithWeekday(dateString: string | null | undefined): string {
+    if (!dateString) return 'Fecha no disponible';
+
+    try {
+      const fecha = this.parseLocalDate(dateString);
+      const parts = new Intl.DateTimeFormat('es-CO', {
+        weekday: 'long',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+      }).formatToParts(fecha);
+
+      const weekday = (parts.find((p) => p.type === 'weekday')?.value || '').trim();
+      const day = (parts.find((p) => p.type === 'day')?.value || '').trim();
+      const month = (parts.find((p) => p.type === 'month')?.value || '').replace('.', '').trim();
+      const year = (parts.find((p) => p.type === 'year')?.value || '').trim();
+
+      const weekdayCapitalized = weekday
+        ? weekday.charAt(0).toUpperCase() + weekday.slice(1)
+        : '';
+
+      return `${weekdayCapitalized} ${day} de ${month} de ${year}`.trim();
+    } catch (error) {
+      console.error('Error formateando fecha con día:', error);
+      return 'Fecha no válida';
+    }
+  }
+
   calculateDuration(): string {
     const cita = this.cita();
     if (!cita || !cita.fecha_inicio || !cita.fecha_fin) return '';
@@ -450,8 +642,13 @@ export class CitaDetailsComponent implements OnInit {
     const cita = this.cita();
     if (!cita) return false;
 
-    // No se puede editar si está cancelada o completada
-    return !['cancelada', 'completada'].includes(cita.estado);
+    // En curso: sólo administrador puede editar la cita
+    if (cita.estado === 'en_curso' && this.authService.isVet()) {
+      return false;
+    }
+
+    // No se puede editar si está completada o no asistió
+    return !['completada', 'no_asistio'].includes(cita.estado);
   }
 
   canCancelCita(): boolean {
@@ -460,6 +657,21 @@ export class CitaDetailsComponent implements OnInit {
 
     // Solo se puede cancelar si no está ya cancelada o completada
     return !['cancelada', 'completada'].includes(cita.estado);
+  }
+
+  canTransitionTo(estadoDestino: string): boolean {
+    return !this.getTransitionBlockReason(estadoDestino);
+  }
+
+  getTransitionBlockReason(estadoDestino: string): string | null {
+    const cita = this.cita();
+    if (!cita) return 'No hay cita cargada';
+
+    if (estadoDestino === 'completada' && !this.historiaClinicaAsociada()) {
+      return 'Para cerrar la cita debes tener historia clínica asociada y finalizada.';
+    }
+
+    return null;
   }
 
   getAvailableStatusTransitions(): Array<{value: string, label: string, color: string}> {
@@ -474,12 +686,13 @@ export class CitaDetailsComponent implements OnInit {
 
     // Definir transiciones permitidas
     const transitions: {[key: string]: string[]} = {
-      'pendiente': ['confirmada', 'cancelada'],
-      'confirmada': ['en_curso', 'cancelada', 'no_asistio'],
-      'en_curso': ['completada', 'cancelada'],
+      // Compatibilidad con estados legados
+      'pendiente': ['confirmada'],
+      'cancelada': ['no_asistio'],
+      'confirmada': ['en_curso', 'no_asistio'],
+      'en_curso': ['completada', 'no_asistio'],
       'completada': [], // No se puede cambiar desde completada
-      'cancelada': [], // No se puede cambiar desde cancelada
-      'no_asistio': ['pendiente'] // Se puede reprogramar
+      'no_asistio': []
     };
 
     const allowedTransitions = transitions[currentStatus] || [];
@@ -511,6 +724,32 @@ export class CitaDetailsComponent implements OnInit {
     }
   }
 
+  private async openConfirmDialog(title: string, message: string, confirmText: string): Promise<boolean> {
+    const dialogRef = this.dialog.open(CitaConfirmDialogComponent, {
+      width: '420px',
+      data: { title, message, confirmText, cancelText: 'Cancelar' }
+    });
+
+    const result = await dialogRef.afterClosed().toPromise();
+    return Boolean(result);
+  }
+
+  private async openCancelReasonDialog(): Promise<string | null> {
+    const dialogRef = this.dialog.open(CitaCancelReasonDialogComponent, {
+      width: '460px',
+      data: {
+        title: 'Cancelar cita',
+        subtitle: 'Puedes registrar una razón breve de cancelación (opcional).',
+        confirmText: 'Cancelar cita',
+        cancelText: 'Volver'
+      }
+    });
+
+    const result = await dialogRef.afterClosed().toPromise();
+    if (result === undefined) return null;
+    return typeof result === 'string' ? result.trim() : '';
+  }
+
   getSyncStatusInfo() {
     const cita = this.cita();
     if (!cita) return null;
@@ -534,19 +773,221 @@ export class CitaDetailsComponent implements OnInit {
 
   getStatusIcon(estado: string): string {
     const icons: { [key: string]: string } = {
-      'pendiente': 'schedule',
       'confirmada': 'check_circle',
       'en_curso': 'play_circle',
       'completada': 'task_alt',
+      'pendiente': 'schedule',
       'cancelada': 'cancel',
       'no_asistio': 'event_busy'
     };
     return icons[estado] || 'radio_button_unchecked';
   }
 
-  canShowFacturacion(): boolean {
+  getStatusActionClass(estado: string): string {
+    const classes: { [key: string]: string } = {
+      confirmada: 'status-btn-confirmada',
+      en_curso: 'status-btn-curso',
+      completada: 'status-btn-completada',
+      no_asistio: 'status-btn-no-asistio',
+      pendiente: 'status-btn-pendiente',
+      cancelada: 'status-btn-cancelada'
+    };
+    return classes[estado] || 'status-btn-default';
+  }
+
+  hasStateActions(): boolean {
+    return this.getAvailableStatusTransitions().length > 0;
+  }
+
+  getAssetUrl(assetUrl?: string | null): string {
+    if (!assetUrl) return '';
+    if (/^https?:\/\//i.test(assetUrl)) return assetUrl;
+
+    const apiBase = environment.apiUrl.replace(/\/api\/?$/, '');
+    return `${apiBase}${assetUrl.startsWith('/') ? '' : '/'}${assetUrl}`;
+  }
+
+  private async refreshHistoriaClinicaStatus(citaId: string): Promise<void> {
+    try {
+      const response = await this.historiaClinicaService.getHistoriaByCitaId(citaId).toPromise();
+      this.historiaClinicaAsociada.set(Boolean(response?.success && response?.data));
+    } catch (error: any) {
+      if (error?.status === 404) {
+        this.historiaClinicaAsociada.set(false);
+        return;
+      }
+      // Fallback conservador: no bloquear flujo visual si hay error temporal de red
+      this.historiaClinicaAsociada.set(false);
+    }
+  }
+
+  private async loadDocumentosCita(citaId: string): Promise<void> {
+    try {
+      this.loadingDocumentos.set(true);
+      const response = await this.historiaClinicaService.getHistoriasByCitaId(citaId).toPromise();
+      const docs = Array.isArray(response?.data) ? response.data : [];
+      this.documentosCita.set(docs);
+    } catch (error: any) {
+      if (error?.status === 404) {
+        this.documentosCita.set([]);
+      } else {
+        this.documentosCita.set([]);
+      }
+    } finally {
+      this.loadingDocumentos.set(false);
+    }
+  }
+
+  private async loadDocumentosCitaWithRetry(citaId: string, maxAttempts = 3): Promise<HistoriaClinica[]> {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      await this.loadDocumentosCita(citaId);
+      const docs = this.documentosCita();
+      if (docs.length > 0) return docs;
+
+      if (attempt < maxAttempts) {
+        await this.wait(450 * attempt);
+      }
+    }
+
+    return this.documentosCita();
+  }
+
+  private wait(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private openPostCompletionDeliveryDialog(totalDocs: number): void {
+    this.dialog.open(CitaPostCompletionDeliveryDialogComponent, {
+      width: '520px',
+      maxWidth: '94vw',
+      data: {
+        totalDocs,
+        isBusy: () => this.updating(),
+        onEmail: async () => {
+          await this.onEnviarTodosDocumentos(true);
+        },
+        onWhatsapp: () => {
+          this.enviarDocumentosPorWhatsApp(this.documentosCita());
+        },
+        onBoth: async () => {
+          await this.onEnviarTodosDocumentos(true);
+          this.enviarDocumentosPorWhatsApp(this.documentosCita());
+        }
+      }
+    });
+  }
+
+  private enviarDocumentosPorWhatsApp(docs: HistoriaClinica[]): void {
+    if (!docs.length) {
+      this.snackBar.open('No hay documentos para compartir por WhatsApp', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
     const cita = this.cita();
-    return cita?.estado === 'completada';
+    const mascota = cita?.mascota?.nombre || 'tu mascota';
+    const propietario = cita?.mascota?.cliente?.nombre || 'propietario';
+    const fechaCita = this.formatearFechaWhatsApp(cita?.fecha_inicio || null);
+    const lineasDocs = docs
+      .slice(0, 8)
+      .map((d, idx) => `${idx + 1}. ${this.historiaClinicaService.getTipoLabel(d.tipo_documento)} (${d.codigo_historia})`)
+      .join('\n');
+
+    const mensaje =
+      `Hola ${propietario}, te compartimos los documentos clínicos de la cita de ${mascota}` +
+      `${fechaCita ? ` del ${fechaCita}` : ''}: ${lineasDocs}.\n` +
+      `Si requieres ayuda con algo responde este mensaje y te apoyamos.`;
+
+    const telefono = cita?.mascota?.cliente?.telefono || null;
+    const numero = this.normalizarTelefonoWhatsApp(telefono);
+    const waUrl = numero
+      ? `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`
+      : `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
+    const popup = window.open(waUrl, '_blank', 'noopener');
+    if (!popup) {
+      this.snackBar.open('No se pudo abrir WhatsApp Web/App', 'Cerrar', { duration: 3500 });
+      return;
+    }
+
+    this.snackBar.open('Abriendo WhatsApp Web/App...', 'Cerrar', { duration: 2200 });
+  }
+
+  private normalizarTelefonoWhatsApp(raw: string | null | undefined): string | null {
+    const digits = String(raw || '').replace(/\D+/g, '');
+    if (!digits) return null;
+
+    const withoutZeros = digits.startsWith('00') ? digits.slice(2) : digits;
+    if (withoutZeros.length === 10) return `57${withoutZeros}`;
+    if (withoutZeros.length >= 11 && withoutZeros.length <= 15) return withoutZeros;
+    return null;
+  }
+
+  private formatearFechaWhatsApp(dateString: string | null): string {
+    if (!dateString) return '';
+
+    const date = this.parseLocalDate(dateString);
+    if (Number.isNaN(date.getTime())) return '';
+
+    const parts = new Intl.DateTimeFormat('es-CO', {
+      weekday: 'long',
+      day: '2-digit',
+      month: 'long'
+    }).formatToParts(date);
+
+    const weekdayRaw = (parts.find((p) => p.type === 'weekday')?.value || '').trim();
+    const day = (parts.find((p) => p.type === 'day')?.value || '').trim();
+    const monthRaw = (parts.find((p) => p.type === 'month')?.value || '').trim();
+
+    const weekday = weekdayRaw ? weekdayRaw.charAt(0).toUpperCase() + weekdayRaw.slice(1) : '';
+    const month = monthRaw ? monthRaw.charAt(0).toUpperCase() + monthRaw.slice(1) : '';
+
+    if (!weekday || !day || !month) return '';
+    return `${weekday} ${day} de ${month}`;
+  }
+
+  private openDocumentoPdfModal(idHistoria: string, codigoHistoria: string): void {
+    const dialogRef = this.dialog.open(CitaDocumentoPdfDialogComponent, {
+      width: '92vw',
+      maxWidth: '1100px',
+      height: '88vh',
+      data: {
+        title: `PDF ${codigoHistoria}`,
+        loading: true,
+        pdfUrl: null,
+        error: null,
+      },
+    });
+
+    this.historiaClinicaService.getPDFBlob(idHistoria).subscribe({
+      next: (response) => {
+        const blob = response.body;
+        if (!blob) {
+          dialogRef.componentInstance.updateState({
+            loading: false,
+            error: 'No se recibió un PDF válido',
+            pdfUrl: null,
+          });
+          return;
+        }
+
+        const url = URL.createObjectURL(blob.type ? blob : new Blob([blob], { type: 'application/pdf' }));
+        const safeUrl = this.sanitizer.bypassSecurityTrustResourceUrl(url);
+
+        dialogRef.componentInstance.updateState({
+          loading: false,
+          error: null,
+          pdfUrl: safeUrl,
+        });
+
+        dialogRef.afterClosed().subscribe(() => URL.revokeObjectURL(url));
+      },
+      error: (error: any) => {
+        dialogRef.componentInstance.updateState({
+          loading: false,
+          error: error?.error?.message || 'No se pudo cargar el PDF del documento',
+          pdfUrl: null,
+        });
+      }
+    });
   }
 
   // ===============================
@@ -570,6 +1011,7 @@ export class CitaDetailsComponent implements OnInit {
         nombre: citaData.mascota_nombre || 'Sin nombre',
         especie: citaData.especie || citaData.mascota_especie || 'No especificado',
         raza: citaData.raza || citaData.mascota_raza,
+        foto_url: citaData.mascota_foto_url || citaData.foto_url,
         cliente: {
           nombre: citaData.cliente_nombre || 'Sin nombre',
           documento: citaData.cliente_documento,
@@ -582,7 +1024,8 @@ export class CitaDetailsComponent implements OnInit {
       veterinario: {
         nombre: citaData.veterinario_nombre || 'Sin asignar',
         especialidad: citaData.veterinario_especialidad,
-        email: citaData.veterinario_email
+        email: citaData.veterinario_email,
+        avatar_url: citaData.veterinario_avatar_url
       }
     };
 
@@ -595,4 +1038,313 @@ export class CitaDetailsComponent implements OnInit {
 
     return citaTransformada;
   }
+}
+
+interface CitaConfirmDialogData {
+  title: string;
+  message: string;
+  confirmText?: string;
+  cancelText?: string;
+}
+
+@Component({
+  selector: 'app-cita-confirm-dialog',
+  standalone: true,
+  imports: [CommonModule, MatDialogModule, MatButtonModule, MatIconModule],
+  template: `
+    <h2 mat-dialog-title>
+      <mat-icon>help</mat-icon>
+      {{ data.title }}
+    </h2>
+    <mat-dialog-content>
+      <p>{{ data.message }}</p>
+    </mat-dialog-content>
+    <mat-dialog-actions align="end">
+      <button mat-button (click)="dialogRef.close(false)">{{ data.cancelText || 'Cancelar' }}</button>
+      <button mat-raised-button color="primary" (click)="dialogRef.close(true)">{{ data.confirmText || 'Confirmar' }}</button>
+    </mat-dialog-actions>
+  `,
+  styles: [`
+    h2[mat-dialog-title] { display:flex; align-items:center; gap:8px; }
+    mat-dialog-content p { margin: 0; line-height: 1.4; }
+  `]
+})
+export class CitaConfirmDialogComponent {
+  constructor(
+    public dialogRef: MatDialogRef<CitaConfirmDialogComponent>,
+    @Inject(MAT_DIALOG_DATA) public data: CitaConfirmDialogData
+  ) {}
+}
+
+interface CitaCancelReasonDialogData {
+  title: string;
+  subtitle?: string;
+  confirmText?: string;
+  cancelText?: string;
+}
+
+@Component({
+  selector: 'app-cita-cancel-reason-dialog',
+  standalone: true,
+  imports: [CommonModule, FormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule],
+  template: `
+    <h2 mat-dialog-title>{{ data.title }}</h2>
+    <mat-dialog-content>
+      @if (data.subtitle) {
+        <p class="subtitle">{{ data.subtitle }}</p>
+      }
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Motivo de cancelación</mat-label>
+        <textarea matInput rows="3" [(ngModel)]="reason" placeholder="Ej: cliente solicitó reagendar"></textarea>
+      </mat-form-field>
+    </mat-dialog-content>
+    <mat-dialog-actions align="end">
+      <button mat-button (click)="dialogRef.close(undefined)">{{ data.cancelText || 'Volver' }}</button>
+      <button mat-raised-button color="warn" (click)="dialogRef.close(reason || '')">{{ data.confirmText || 'Cancelar cita' }}</button>
+    </mat-dialog-actions>
+  `,
+  styles: [`
+    .subtitle { margin: 0 0 12px 0; color: #607d8b; }
+    .full-width { width: 100%; }
+  `]
+})
+export class CitaCancelReasonDialogComponent {
+  reason = '';
+
+  constructor(
+    public dialogRef: MatDialogRef<CitaCancelReasonDialogComponent>,
+    @Inject(MAT_DIALOG_DATA) public data: CitaCancelReasonDialogData
+  ) {}
+}
+
+interface CitaDocumentoPdfDialogData {
+  title: string;
+  loading: boolean;
+  error: string | null;
+  pdfUrl: SafeResourceUrl | null;
+}
+
+@Component({
+  selector: 'app-cita-documento-pdf-dialog',
+  standalone: true,
+  imports: [CommonModule, MatDialogModule, MatButtonModule, MatIconModule, MatProgressSpinnerModule],
+  template: `
+    <h2 mat-dialog-title>
+      <mat-icon>picture_as_pdf</mat-icon>
+      {{ data.title }}
+    </h2>
+    <mat-dialog-content class="pdf-dialog-content">
+      @if (data.loading) {
+        <div class="pdf-state">
+          <mat-spinner diameter="36"></mat-spinner>
+          <span>Cargando PDF...</span>
+        </div>
+      } @else if (data.error) {
+        <div class="pdf-state error">
+          <mat-icon>error</mat-icon>
+          <span>{{ data.error }}</span>
+        </div>
+      } @else if (data.pdfUrl) {
+        <iframe [src]="data.pdfUrl" title="Vista previa PDF"></iframe>
+      }
+    </mat-dialog-content>
+    <mat-dialog-actions align="end">
+      <button mat-button (click)="dialogRef.close()">Cerrar</button>
+    </mat-dialog-actions>
+  `,
+  styles: [`
+    h2[mat-dialog-title] { display:flex; align-items:center; gap:8px; }
+    .pdf-dialog-content {
+      min-height: 65vh;
+      padding-top: 8px;
+    }
+    .pdf-state {
+      height: 60vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: #475569;
+    }
+    .pdf-state.error mat-icon { color: #dc2626; }
+    iframe {
+      width: 100%;
+      height: 70vh;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: #fff;
+    }
+  `]
+})
+export class CitaDocumentoPdfDialogComponent {
+  constructor(
+    public dialogRef: MatDialogRef<CitaDocumentoPdfDialogComponent>,
+    @Inject(MAT_DIALOG_DATA) public data: CitaDocumentoPdfDialogData
+  ) {}
+
+  updateState(partial: Partial<CitaDocumentoPdfDialogData>): void {
+    this.data = { ...this.data, ...partial };
+  }
+}
+
+interface CitaDocumentosListDialogData {
+  estadoCita: string;
+  documentos: HistoriaClinica[];
+  getTipoLabel: (tipo: string) => string;
+  formatDate: (fecha: string) => string;
+}
+
+@Component({
+  selector: 'app-cita-documentos-list-dialog',
+  standalone: true,
+  imports: [CommonModule, MatDialogModule, MatButtonModule, MatIconModule, MatListModule],
+  template: `
+    <h2 mat-dialog-title>
+      <mat-icon>folder</mat-icon>
+      Documentos de cita
+    </h2>
+    <mat-dialog-content class="docs-dialog-content">
+      @if (!data.documentos.length) {
+        <div class="docs-empty">
+          <mat-icon>folder_off</mat-icon>
+          <span>No hay documentos para esta cita.</span>
+        </div>
+      } @else {
+        <mat-nav-list>
+          @for (doc of data.documentos; track doc.id_historia) {
+            <button mat-list-item (click)="openPdf(doc.id_historia)">
+              <mat-icon matListItemIcon>picture_as_pdf</mat-icon>
+              <div matListItemTitle>{{ doc.codigo_historia }}</div>
+              <div matListItemLine>{{ data.getTipoLabel(doc.tipo_documento) }} · {{ data.formatDate(doc.fecha) }}</div>
+            </button>
+          }
+        </mat-nav-list>
+      }
+    </mat-dialog-content>
+    <mat-dialog-actions align="end" class="docs-dialog-actions">
+      @if (data.estadoCita === 'completada' && data.documentos.length) {
+        <div class="docs-actions-group">
+          <button mat-stroked-button color="primary" (click)="sendAll()">
+            <mat-icon>mail</mat-icon>
+            Correo
+          </button>
+          <button mat-stroked-button color="accent" (click)="sendWhatsappAll()">
+            <mat-icon>chat</mat-icon>
+            WhatsApp
+          </button>
+          <button mat-stroked-button (click)="sendBothAll()">
+            <mat-icon>alt_route</mat-icon>
+            Ambos
+          </button>
+        </div>
+      } @else {
+        <span></span>
+      }
+      <button mat-button (click)="dialogRef.close()">Cerrar</button>
+    </mat-dialog-actions>
+  `,
+  styles: [`
+    h2[mat-dialog-title] { display:flex; align-items:center; gap:8px; }
+    .docs-dialog-content { min-height: 120px; max-height: 52vh; }
+    .docs-empty {
+      min-height: 96px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 8px;
+      color: #64748b;
+    }
+    .docs-dialog-actions {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .docs-actions-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+  `]
+})
+export class CitaDocumentosListDialogComponent {
+  constructor(
+    public dialogRef: MatDialogRef<CitaDocumentosListDialogComponent>,
+    @Inject(MAT_DIALOG_DATA) public data: CitaDocumentosListDialogData
+  ) {}
+
+  openPdf(idHistoria: string): void {
+    this.dialogRef.close({ action: 'open-pdf', idHistoria });
+  }
+
+  sendAll(): void {
+    this.dialogRef.close({ action: 'send-all' });
+  }
+
+  sendWhatsappAll(): void {
+    this.dialogRef.close({ action: 'send-whatsapp-all' });
+  }
+
+  sendBothAll(): void {
+    this.dialogRef.close({ action: 'send-both-all' });
+  }
+}
+
+interface CitaPostCompletionDeliveryDialogData {
+  totalDocs: number;
+  isBusy?: () => boolean;
+  onEmail?: () => void | Promise<void>;
+  onWhatsapp?: () => void | Promise<void>;
+  onBoth?: () => void | Promise<void>;
+}
+
+@Component({
+  selector: 'app-cita-post-completion-delivery-dialog',
+  standalone: true,
+  imports: [CommonModule, MatDialogModule, MatButtonModule, MatIconModule],
+  template: `
+    <h2 mat-dialog-title>
+      <mat-icon>mark_email_read</mat-icon>
+      Cita completada
+    </h2>
+    <mat-dialog-content>
+      <p>Hay {{ data.totalDocs }} documento(s) clínico(s) listos para enviar al propietario.</p>
+      <p>Selecciona el medio de envío. Esta ventana solo se cierra con el botón Cerrar.</p>
+    </mat-dialog-content>
+    <mat-dialog-actions align="end" class="delivery-actions">
+      <button mat-stroked-button color="primary" (click)="data.onEmail?.()" [disabled]="data.isBusy?.()">
+        <mat-icon>mail</mat-icon>
+        Correo
+      </button>
+      <button mat-stroked-button color="accent" (click)="data.onWhatsapp?.()" [disabled]="data.isBusy?.()">
+        <mat-icon>chat</mat-icon>
+        WhatsApp Web
+      </button>
+      <button mat-stroked-button (click)="data.onBoth?.()" [disabled]="data.isBusy?.()">
+        <mat-icon>alt_route</mat-icon>
+        Ambos
+      </button>
+      <button mat-button (click)="dialogRef.close()">Cerrar</button>
+    </mat-dialog-actions>
+  `,
+  styles: [`
+    h2[mat-dialog-title] { display:flex; align-items:center; gap:8px; }
+    mat-dialog-content p { margin: 0 0 8px; line-height: 1.45; }
+    .delivery-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+  `]
+})
+export class CitaPostCompletionDeliveryDialogComponent {
+  constructor(
+    public dialogRef: MatDialogRef<CitaPostCompletionDeliveryDialogComponent>,
+    @Inject(MAT_DIALOG_DATA) public data: CitaPostCompletionDeliveryDialogData
+  ) {}
 }

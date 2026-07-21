@@ -61,10 +61,18 @@ export class PacientesService {
   // OPERACIONES DE MASCOTAS
   // ===============================
 
-  getMascotas(page: number = 1, limit: number = 10, filters?: PacienteFilter): Observable<PacienteResponse> {
+  getMascotas(
+    page: number = 1,
+    limit: number = 10,
+    filters?: PacienteFilter,
+    sortBy: string = 'nombre',
+    sortOrder: 'ASC' | 'DESC' = 'ASC'
+  ): Observable<PacienteResponse> {
     let params = new HttpParams()
       .set('page', page.toString())
-      .set('limit', limit.toString());
+      .set('limit', limit.toString())
+      .set('sortBy', sortBy)
+      .set('sortOrder', sortOrder);
 
     if (filters?.search) {
       params = params.set('search', filters.search);
@@ -87,7 +95,14 @@ export class PacientesService {
   }
 
   getMascotasByCliente(clienteId: string): Observable<Mascota[]> {
-    return this.http.get<Mascota[]>(`${this.API_URL}/pets/client/${clienteId}`
+    return this.http.get<any>(`${this.API_URL}/clients/${clienteId}`).pipe(
+      map((response: any) => {
+        if (Array.isArray(response)) return response as Mascota[];
+        if (Array.isArray(response?.data)) return response.data as Mascota[];
+        if (Array.isArray(response?.data?.mascotas)) return response.data.mascotas as Mascota[];
+        if (Array.isArray(response?.mascotas)) return response.mascotas as Mascota[];
+        return [] as Mascota[];
+      })
     );
   }
 
@@ -103,8 +118,8 @@ export class PacientesService {
     return this.http.put<CreatePacienteResponse>(`${this.API_URL}/pacientes/${id}`, paciente);
   }
 
-  deleteMascota(id: string): Observable<any> {
-    return this.http.delete(`${this.API_URL}/pacientes/mascota/${id}`);
+  inactivarMascota(id: string, motivo: 'Fallecida' | 'Transferida' | 'Error de registro' | 'Otro'): Observable<any> {
+    return this.http.patch(`${this.API_URL}/pacientes/mascota/${id}/inactivar`, { motivo });
   }
 
   // ===============================

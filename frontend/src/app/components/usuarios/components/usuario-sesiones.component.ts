@@ -1,9 +1,13 @@
 import { Component, OnInit, signal, computed, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { MatTableModule } from '@angular/material/table';
 import { MatPaginatorModule, MatPaginator, PageEvent } from '@angular/material/paginator';
 import { MatSortModule } from '@angular/material/sort';
@@ -15,20 +19,26 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatBadgeModule } from '@angular/material/badge';
 import { ViewChild } from '@angular/core';
 
-import { 
+import {
   UsuariosService,
   Usuario,
-  SesionActiva
+  SesionActiva,
+  FiltroSesiones
 } from '../../../services/usuarios.service';
+import { AuthService } from '../../../services/auth.service';
 
 @Component({
   selector: 'app-usuario-sesiones',
   standalone: true,
   imports: [
     CommonModule,
+    FormsModule,
     MatCardModule,
     MatButtonModule,
     MatIconModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
     MatTableModule,
     MatPaginatorModule,
     MatSortModule,
@@ -47,16 +57,22 @@ export class UsuarioSesionesComponent implements OnInit {
 
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private location = inject(Location);
   private usuariosService = inject(UsuariosService);
+  private authService = inject(AuthService);
   private snackBar = inject(MatSnackBar);
 
   // Signals
   loading = signal(false);
   usuario = signal<Usuario | null>(null);
+  usuariosFiltro = signal<Usuario[]>([]);
   sesiones = signal<SesionActiva[]>([]);
   sesionesActivas = signal<SesionActiva[]>([]);
   totalSesiones = 0;
   pageSize = 25;
+  estadoFiltro = signal<'activas' | 'cerradas' | 'todas'>('activas');
+  usuarioFiltroId = signal('');
+  textoFiltro = signal('');
 
   // Table configuration
   displayedColumns = [
@@ -71,36 +87,53 @@ export class UsuarioSesionesComponent implements OnInit {
   ];
 
   // Computed
-  usuarioId = computed(() => this.route.snapshot.paramMap.get('id') || '');
-  sesionesActivasCount = computed(() => this.sesionesActivas().length);
-  
-  estadisticasSesiones = computed(() => {
-    const todas = this.sesiones();
-    const activas = this.sesionesActivas();
-    
-    const dispositivos = new Set(todas.map(s => this.getDeviceType(s.dispositivo)));
-    const navegadores = new Set(todas.map(s => s.navegador.split(' ')[0]));
-    const ubicaciones = new Set(todas.map(s => s.ubicacion).filter(Boolean));
-    
-    return {
-      total_sesiones: todas.length,
-      sesiones_activas: activas.length,
-      dispositivos_unicos: dispositivos.size,
-      navegadores_unicos: navegadores.size,
-      ubicaciones_unicas: ubicaciones.size,
-      sesion_mas_larga: this.getSesionMasLarga(todas)
-    };
+  private explicitUsuarioId = computed(() => {
+    const fromParam = this.route.snapshot.paramMap.get('id');
+    const fromQuery = this.route.snapshot.queryParamMap.get('id');
+    return fromParam || fromQuery || '';
   });
 
+  usuarioId = computed(() => {
+    const explicit = this.explicitUsuarioId();
+    if (explicit) return explicit;
+    if (this.authService.hasRole('admin')) return '';
+    return this.authService.currentUser()?.id_usuario || '';
+  });
+
+  isGlobalView = computed(() => this.authService.hasRole('admin') && !this.explicitUsuarioId());
+  canManageSessions = computed(() => this.authService.hasRole('admin'));
+  sesionesActivasCount = computed(() => this.sesionesActivas().length);
+
   ngOnInit(): void {
-    this.loadUsuario();
+    if (!this.isGlobalView()) {
+      this.loadUsuario();
+    }
+    if (this.canManageSessions()) {
+      this.loadUsuariosFiltro();
+    }
     this.loadSesiones();
+  }
+
+  private loadUsuariosFiltro(): void {
+    this.usuariosService.getUsuarios(1, 200).subscribe({
+      next: (usuarios) => {
+        const list = Array.isArray(usuarios) ? usuarios : [];
+        this.usuariosFiltro.set(
+          list
+            .filter((u: Usuario) => u.rol !== 'admin')
+            .sort((a: Usuario, b: Usuario) => (`${a.nombre} ${a.apellido}`).localeCompare(`${b.nombre} ${b.apellido}`))
+        );
+      },
+      error: () => {
+        this.usuariosFiltro.set([]);
+      }
+    });
   }
 
   private loadUsuario(): void {
     const id = this.usuarioId();
     if (!id) {
-      this.router.navigate(['/usuarios']);
+      this.router.navigate(['/dashboard']);
       return;
     }
 
@@ -111,41 +144,59 @@ export class UsuarioSesionesComponent implements OnInit {
       error: (error) => {
         console.error('Error cargando usuario:', error);
         this.snackBar.open('Error cargando información del usuario', 'Cerrar', { duration: 3000 });
-        this.router.navigate(['/usuarios']);
+        this.router.navigate(['/dashboard']);
       }
     });
   }
 
   private loadSesiones(): void {
     const id = this.usuarioId();
-    if (!id) return;
 
     this.loading.set(true);
-    
-    // Cargar sesiones activas
-    this.usuariosService.getSesionesActivas(id).subscribe({
-      next: (sesionesActivas) => {
-        this.sesionesActivas.set(sesionesActivas || []);
-        
-        // Para el historial completo, usar mock data por ahora
-        const todasLasSesiones = [
-          ...sesionesActivas || [],
-          ...this.getMockHistorialSesiones()
-        ];
-        
-        this.sesiones.set(todasLasSesiones);
-        this.totalSesiones = todasLasSesiones.length;
+
+    const filtros: FiltroSesiones = {
+      estado: this.estadoFiltro(),
+      exclude_admins: true
+    };
+
+    if (id) {
+      filtros.id_usuario = id;
+    } else if (this.usuarioFiltroId()) {
+      filtros.id_usuario = this.usuarioFiltroId();
+    }
+
+    if (this.textoFiltro().trim()) {
+      filtros.search = this.textoFiltro().trim();
+    }
+
+    this.usuariosService.getSesionesActivas(filtros).subscribe({
+      next: (sesionesResponse) => {
+        const accesos = Array.isArray(sesionesResponse) ? sesionesResponse : [];
+        this.sesionesActivas.set(accesos.filter(s => s.activa));
+        this.sesiones.set(accesos);
+        this.totalSesiones = accesos.length;
         this.loading.set(false);
       },
       error: (error) => {
         console.error('Error cargando sesiones:', error);
-        const mockSesiones = this.getMockSesiones();
-        this.sesiones.set(mockSesiones);
-        this.sesionesActivas.set(mockSesiones.filter(s => s.activa));
-        this.totalSesiones = mockSesiones.length;
+        this.sesiones.set([]);
+        this.sesionesActivas.set([]);
+        this.totalSesiones = 0;
         this.loading.set(false);
+        this.snackBar.open('No se pudieron cargar los accesos del usuario', 'Cerrar', { duration: 3000 });
       }
     });
+  }
+
+  aplicarFiltros(): void {
+    this.loadSesiones();
+  }
+
+  limpiarFiltros(): void {
+    this.estadoFiltro.set('activas');
+    this.usuarioFiltroId.set('');
+    this.textoFiltro.set('');
+    this.loadSesiones();
   }
 
   // Acciones
@@ -194,10 +245,24 @@ export class UsuarioSesionesComponent implements OnInit {
   }
 
   volverAlPerfil(): void {
-    const id = this.usuarioId();
-    if (id) {
-      this.router.navigate(['/usuarios', id]);
+    if (window.history.length > 1) {
+      this.location.back();
+      return;
     }
+
+    if (this.isGlobalView()) {
+      this.router.navigate(['/usuarios']);
+      return;
+    }
+
+    if (this.authService.hasRole('admin')) {
+      const id = this.usuarioId();
+      if (id) {
+        this.router.navigate(['/usuarios', id]);
+        return;
+      }
+    }
+    this.router.navigate(['/perfil']);
   }
 
   onPageChange(event: PageEvent): void {
@@ -221,15 +286,15 @@ export class UsuarioSesionesComponent implements OnInit {
     const now = new Date();
     const date = new Date(fecha);
     const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-    
+
     if (diffInHours < 1) return 'Hace menos de 1 hora';
     if (diffInHours < 24) return `Hace ${diffInHours} horas`;
     if (diffInHours < 48) return 'Hace 1 día';
-    
+
     const diffInDays = Math.floor(diffInHours / 24);
     if (diffInDays < 7) return `Hace ${diffInDays} días`;
     if (diffInDays < 30) return `Hace ${Math.floor(diffInDays / 7)} semanas`;
-    
+
     return this.formatearFecha(fecha);
   }
 
@@ -237,13 +302,25 @@ export class UsuarioSesionesComponent implements OnInit {
     const inicio = new Date(fechaInicio);
     const fin = fechaFin ? new Date(fechaFin) : new Date();
     const diffInMinutes = Math.floor((fin.getTime() - inicio.getTime()) / (1000 * 60));
-    
+
     if (diffInMinutes < 60) return `${diffInMinutes} min`;
-    
+
     const hours = Math.floor(diffInMinutes / 60);
     const minutes = diffInMinutes % 60;
-    
+
     return `${hours}h ${minutes}m`;
+  }
+
+  formatearDuracionSesion(sesion: SesionActiva): string {
+    if (typeof sesion.duracion_segundos === 'number') {
+      const totalMinutes = Math.max(0, Math.floor(sesion.duracion_segundos / 60));
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      if (hours > 0) return `${hours}h ${minutes}m`;
+      return `${minutes} min`;
+    }
+
+    return this.calcularDuracionSesion(sesion.fecha_inicio, sesion.fecha_logout || undefined);
   }
 
   getDeviceType(dispositivo: string): string {
@@ -279,110 +356,10 @@ export class UsuarioSesionesComponent implements OnInit {
     return '🌍';
   }
 
-  private getSesionMasLarga(sesiones: SesionActiva[]): string {
-    if (sesiones.length === 0) return '0 min';
-    
-    let maxDuration = 0;
-    sesiones.forEach(sesion => {
-      const duracion = this.calcularDuracionEnMinutos(sesion.fecha_inicio, sesion.ultima_actividad);
-      if (duracion > maxDuration) {
-        maxDuration = duracion;
-      }
-    });
-    
-    if (maxDuration < 60) return `${maxDuration} min`;
-    
-    const hours = Math.floor(maxDuration / 60);
-    const minutes = maxDuration % 60;
-    
-    return `${hours}h ${minutes}m`;
-  }
-
   private calcularDuracionEnMinutos(fechaInicio: string, fechaFin: string): number {
     const inicio = new Date(fechaInicio);
     const fin = new Date(fechaFin);
     return Math.floor((fin.getTime() - inicio.getTime()) / (1000 * 60));
   }
 
-  // Mock data para desarrollo
-  private getMockSesiones(): SesionActiva[] {
-    const usuario = this.usuario();
-    if (!usuario) return [];
-
-    return [
-      {
-        id_sesion: '1',
-        id_usuario: usuario.id_usuario,
-        usuario_nombre: `${usuario.nombre} ${usuario.apellido}`,
-        ip_address: '192.168.1.100',
-        user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        ubicacion: 'Bogotá, Colombia',
-        fecha_inicio: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
-        ultima_actividad: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-        dispositivo: 'Windows Desktop',
-        navegador: 'Chrome 91',
-        activa: true
-      },
-      {
-        id_sesion: '2',
-        id_usuario: usuario.id_usuario,
-        usuario_nombre: `${usuario.nombre} ${usuario.apellido}`,
-        ip_address: '192.168.1.101',
-        user_agent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Mobile/15E148 Safari/604.1',
-        ubicacion: 'Bogotá, Colombia',
-        fecha_inicio: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
-        ultima_actividad: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-        dispositivo: 'iPhone',
-        navegador: 'Safari Mobile',
-        activa: true
-      }
-    ];
-  }
-
-  private getMockHistorialSesiones(): SesionActiva[] {
-    const usuario = this.usuario();
-    if (!usuario) return [];
-
-    return [
-      {
-        id_sesion: '3',
-        id_usuario: usuario.id_usuario,
-        usuario_nombre: `${usuario.nombre} ${usuario.apellido}`,
-        ip_address: '192.168.1.100',
-        user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        ubicacion: 'Bogotá, Colombia',
-        fecha_inicio: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-        ultima_actividad: new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString(),
-        dispositivo: 'Windows Desktop',
-        navegador: 'Chrome 91',
-        activa: false
-      },
-      {
-        id_sesion: '4',
-        id_usuario: usuario.id_usuario,
-        usuario_nombre: `${usuario.nombre} ${usuario.apellido}`,
-        ip_address: '192.168.1.102',
-        user_agent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        ubicacion: 'Medellín, Colombia',
-        fecha_inicio: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
-        ultima_actividad: new Date(Date.now() - 44 * 60 * 60 * 1000).toISOString(),
-        dispositivo: 'MacBook Pro',
-        navegador: 'Chrome 90',
-        activa: false
-      },
-      {
-        id_sesion: '5',
-        id_usuario: usuario.id_usuario,
-        usuario_nombre: `${usuario.nombre} ${usuario.apellido}`,
-        ip_address: '192.168.1.103',
-        user_agent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
-        ubicacion: 'Cali, Colombia',
-        fecha_inicio: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
-        ultima_actividad: new Date(Date.now() - 70 * 60 * 60 * 1000).toISOString(),
-        dispositivo: 'Linux Desktop',
-        navegador: 'Firefox 89',
-        activa: false
-      }
-    ];
-  }
 }

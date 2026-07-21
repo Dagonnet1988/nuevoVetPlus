@@ -19,8 +19,13 @@ import {
 
 import { authenticateToken, authorize } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validateRequest.js';
+import { cacheInvalidation, intelligentCaching, reportsCache } from '../middleware/performance.js';
 
 const router = express.Router();
+
+router.use(cacheInvalidation(['.*pets.*', '.*pacientes.*', '.*clients.*', '.*clientes.*']));
+
+const petsReadCache = intelligentCaching({ ttl: 60 });
 
 // 🔒 Todas las rutas requieren autenticación
 router.use(authenticateToken);
@@ -28,7 +33,7 @@ router.use(authenticateToken);
 // ✅ CREAR MASCOTA
 // POST /api/clinical/pets
 router.post('/',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateCreatePet,
     validateRequest,
     createPet
@@ -37,9 +42,10 @@ router.post('/',
 // ✅ OBTENER TODAS LAS MASCOTAS (con filtros y paginación)
 // GET /api/clinical/pets?limit=20&offset=0&especie=Perro&cliente=uuid
 router.get('/',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validatePetSearch,
     validateRequest,
+    petsReadCache,
     getPets
 );
 
@@ -47,31 +53,34 @@ router.get('/',
 // GET /api/clinical/pets/stats
 router.get('/stats',
     authorize(['admin', 'vet']),
+    reportsCache,
     getPetStats
 );
 
 // ✅ OBTENER MASCOTAS POR CLIENTE
 // GET /api/clinical/pets/client/:id
 router.get('/client/:id',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateClientId,
     validateRequest,
+    petsReadCache,
     getPetsByClient
 );
 
 // ✅ OBTENER MASCOTA POR ID
 // GET /api/clinical/pets/:id
 router.get('/:id',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validatePetId,
     validateRequest,
+    petsReadCache,
     getPetById
 );
 
 // ✅ ACTUALIZAR MASCOTA
 // PUT /api/clinical/pets/:id
 router.put('/:id',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateUpdatePet,
     validateRequest,
     updatePet

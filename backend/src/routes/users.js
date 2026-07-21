@@ -1,4 +1,8 @@
 import express from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs/promises';
+import { fileURLToPath } from 'url';
 import { authenticateToken, authorize } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 import { query } from '../config/database.js';
@@ -14,9 +18,56 @@ import {
     deactivateUser,
     changeUserRole,
     reactivateUser,
-    getUserStats
+    getUserStats,
+    uploadFirma,
+    uploadAvatar
 } from '../controllers/userController.js';
 import passwordResetController from '../controllers/passwordResetController.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
+
+// Multer para firmas
+const firmaStorage = multer.diskStorage({
+    destination: async (req, file, cb) => {
+        const dest = path.join(__dirname, '../../uploads/firmas');
+        await fs.mkdir(dest, { recursive: true }).catch(() => {});
+        cb(null, dest);
+    },
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname).toLowerCase() || '.png';
+        cb(null, `firma-${req.params.id}-${Date.now()}${ext}`);
+    }
+});
+const uploadFirmaMiddleware = multer({
+    storage: firmaStorage,
+    limits: { fileSize: 3 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        if (['image/png', 'image/jpeg'].includes(file.mimetype)) cb(null, true);
+        else cb(new Error('Solo se permiten PNG o JPG'));
+    }
+});
+
+// Multer para avatar
+const avatarStorage = multer.diskStorage({
+    destination: async (req, file, cb) => {
+        const dest = path.join(__dirname, '../../uploads/avatars');
+        await fs.mkdir(dest, { recursive: true }).catch(() => {});
+        cb(null, dest);
+    },
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
+        cb(null, `avatar-${req.params.id}-${Date.now()}${ext}`);
+    }
+});
+const uploadAvatarMiddleware = multer({
+    storage: avatarStorage,
+    limits: { fileSize: 3 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        if (['image/png', 'image/jpeg', 'image/webp'].includes(file.mimetype)) cb(null, true);
+        else cb(new Error('Solo se permiten PNG, JPG o WEBP'));
+    }
+});
 
 const router = express.Router();
 
@@ -29,26 +80,9 @@ router.use(authenticateToken);
  * @access  Private (solo admin)
  */
 router.post('/',
-    (req, res, next) => {
-        console.log('🔍 POST /api/auth/users - Iniciando creación de usuario');
-        console.log('📝 Datos recibidos:', JSON.stringify(req.body, null, 2));
-        next();
-    },
     authorize(['admin']),
-    (req, res, next) => {
-        console.log('✅ Autorización pasada');
-        next();
-    },
     validateCreateUser,
-    (req, res, next) => {
-        console.log('✅ Validaciones de esquema pasadas');
-        next();
-    },
     validateRequest,
-    (req, res, next) => {
-        console.log('✅ ValidateRequest middleware pasado');
-        next();
-    },
     createUser
 );
 
@@ -104,12 +138,12 @@ router.put('/:id/role',
     (req, res, next) => {
         // Validación específica para cambio de rol
         const { rol } = req.body;
-        const validRoles = ['admin', 'vet', 'aux_admin', 'aux_vet'];
+        const validRoles = ['admin', 'vet', 'aux'];
         
         if (!rol || !validRoles.includes(rol)) {
             return res.status(400).json({
                 success: false,
-                message: 'Rol inválido. Debe ser admin, vet, aux_admin o aux_vet'
+                message: 'Rol inválido. Debe ser admin, vet o aux'
             });
         }
         
@@ -239,6 +273,26 @@ router.post('/:id/set-password',
 router.post('/:id/force-password-change',
     authorize(['admin']),
     passwordResetController.forcePasswordChange
+);
+
+/**
+ * @route   POST /api/auth/users/:id/firma
+ * @desc    Subir imagen de firma del veterinario
+ * @access  Private (propio vet o admin)
+ */
+router.post('/:id/firma',
+    uploadFirmaMiddleware.single('firma'),
+    uploadFirma
+);
+
+/**
+ * @route   POST /api/auth/users/:id/avatar
+ * @desc    Subir avatar de usuario
+ * @access  Private (propio usuario o admin)
+ */
+router.post('/:id/avatar',
+    uploadAvatarMiddleware.single('avatar'),
+    uploadAvatar
 );
 
 export default router;

@@ -2,11 +2,78 @@ import { query } from '../config/database.js';
 import { validationResult } from 'express-validator/lib/index.js';
 import { v4 as uuidv4 } from 'uuid';
 
+let clientesUpdatedByColumnExistsCache = null;
+
+const hasClientesUpdatedByColumn = async () => {
+  if (clientesUpdatedByColumnExistsCache !== null) {
+    return clientesUpdatedByColumnExistsCache;
+  }
+
+  try {
+    const result = await query(
+      `SELECT COUNT(*)::int AS total
+       FROM information_schema.columns
+       WHERE table_schema = 'clinical'
+         AND table_name = 'clientes'
+         AND column_name = 'updated_by'`
+    );
+
+    clientesUpdatedByColumnExistsCache = Number(result.rows[0]?.total || 0) === 1;
+    return clientesUpdatedByColumnExistsCache;
+  } catch {
+    clientesUpdatedByColumnExistsCache = false;
+    return false;
+  }
+};
+
+const logClientActivity = async ({ req, type, description, entityId, payload }) => {
+  try {
+    await query(
+      `INSERT INTO system.activity_log (
+         id_log,
+         id_usuario,
+         tipo_actividad,
+         descripcion,
+         url,
+         metodo_http,
+         status_code,
+         duracion_ms,
+         ip_address,
+         user_agent,
+         request_data,
+         response_data,
+         id_tenant,
+         id_entidad_afectada
+       ) VALUES (
+         uuid_generate_v4(),
+         $1, $2, $3, $4, $5, 200, 0, $6, $7, $8, $9, $10, $11
+       )`,
+      [
+        req.user?.id || null,
+        type,
+        description,
+        req.originalUrl || req.url || '/api/clinical/clients',
+        req.method || 'SYSTEM',
+        req.ip || null,
+        req.get?.('user-agent') || null,
+        JSON.stringify(payload || {}),
+        null,
+        req.tenantId || null,
+        entityId || null
+      ]
+    );
+  } catch (error) {
+    console.warn('⚠️ No se pudo registrar activity_log de clientes:', error.message);
+  }
+};
+
 /**
  * Crear nuevo cliente
  */
 export async function createClient(req, res) {
   try {
+    const tenantId = req.tenantId;
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -32,8 +99,8 @@ export async function createClient(req, res) {
     const queryText = `
       INSERT INTO clinical.clientes (
         id_cliente, nombre, telefono, email, direccion, cedula,
-        fecha_nacimiento, notas, activo, created_at, updated_at, created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $9)
+        fecha_nacimiento, notas, activo, created_at, updated_at, created_by, id_tenant
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $9, $10)
       RETURNING *
     `;
 
@@ -46,7 +113,8 @@ export async function createClient(req, res) {
       cedula || null,
       fecha_nacimiento || null,
       notas || null,
-      req.user.id
+      req.user.id,
+      tenantId
     ];
 
     const result = await query(queryText, values);
@@ -81,8 +149,11 @@ export async function createClient(req, res) {
  */
 export async function getClients(req, res) {
   try {
+    const tenantId = req.tenantId;
+
     const {
       search,
+      activo,
       page = 1,
       limit = 50,
       sortBy = 'nombre',
@@ -101,14 +172,25 @@ export async function getClients(req, res) {
         cedula,
         fecha_nacimiento,
         activo,
+        consentimiento_firmado,
         created_at,
-        (SELECT COUNT(*) FROM clinical.mascotas WHERE id_cliente = c.id_cliente) as total_mascotas
+        (SELECT COUNT(*) FROM clinical.mascotas WHERE id_cliente = c.id_cliente AND activo = true) as total_mascotas,
+        (
+          SELECT m.foto_url
+          FROM clinical.mascotas m
+          WHERE m.id_cliente = c.id_cliente
+            AND m.activo = true
+            AND m.foto_url IS NOT NULL
+            AND TRIM(m.foto_url) <> ''
+          ORDER BY m.created_at ASC
+          LIMIT 1
+        ) as foto_primer_mascota
       FROM clinical.clientes c
-      WHERE 1=1
+      WHERE c.id_tenant = $1
     `;
     
-    const queryParams = [];
-    let paramCount = 0;
+    const queryParams = [tenantId];
+    let paramCount = 1;
 
     // Filtro de búsqueda
     if (search) {
@@ -122,12 +204,26 @@ export async function getClients(req, res) {
       queryParams.push(`%${search}%`);
     }
 
+    if (activo !== undefined) {
+      paramCount++;
+      queryText += ` AND c.activo = $${paramCount}`;
+      queryParams.push(activo === 'true');
+    }
+
     // Ordenamiento
-    const allowedSortFields = ['nombre', 'telefono', 'email', 'created_at'];
-    const sortField = allowedSortFields.includes(sortBy) ? sortBy : 'nombre';
+    const sortFieldMap = {
+      nombre: "LOWER(COALESCE(nombre, ''))",
+      telefono: "LOWER(COALESCE(telefono, ''))",
+      email: "LOWER(COALESCE(email, ''))",
+      created_at: 'created_at'
+    };
+    const sortField = Object.prototype.hasOwnProperty.call(sortFieldMap, sortBy)
+      ? sortFieldMap[sortBy]
+      : "LOWER(COALESCE(nombre, ''))";
     const order = sortOrder.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
-    
-    queryText += ` ORDER BY ${sortField} ${order}`;
+
+    // Orden case-insensitive para textos y consistente para empates.
+    queryText += ` ORDER BY ${sortField} ${order}, created_at DESC`;
 
     // Paginación
     paramCount++;
@@ -141,17 +237,25 @@ export async function getClients(req, res) {
     const result = await query(queryText, queryParams);
 
     // Contar total para paginación
-    let countQuery = `SELECT COUNT(*) as total FROM clinical.clientes WHERE 1=1`;
-    const countParams = [];
+    let countQuery = `SELECT COUNT(*) as total FROM clinical.clientes WHERE id_tenant = $1`;
+    const countParams = [tenantId];
+    let countParamCount = 1;
     
     if (search) {
+      countParamCount++;
       countQuery += ` AND (
-        LOWER(nombre) LIKE LOWER($1) OR 
-        telefono LIKE $1 OR 
-        LOWER(email) LIKE LOWER($1) OR
-        cedula LIKE $1
+        LOWER(nombre) LIKE LOWER($${countParamCount}) OR 
+        telefono LIKE $${countParamCount} OR 
+        LOWER(email) LIKE LOWER($${countParamCount}) OR
+        cedula LIKE $${countParamCount}
       )`;
       countParams.push(`%${search}%`);
+    }
+
+    if (activo !== undefined) {
+      countParamCount++;
+      countQuery += ` AND activo = $${countParamCount}`;
+      countParams.push(activo === 'true');
     }
 
     const countResult = await query(countQuery, countParams);
@@ -161,7 +265,7 @@ export async function getClients(req, res) {
       success: true,
       message: 'Clientes obtenidos exitosamente',
       data: {
-        clients: result.rows,
+        clientes: result.rows,
         pagination: {
           currentPage: parseInt(page),
           limit: parseInt(limit),
@@ -187,6 +291,7 @@ export async function getClients(req, res) {
 export async function getClientById(req, res) {
   try {
     const { id } = req.params;
+    const tenantId = req.tenantId;
 
     const queryText = `
       SELECT 
@@ -200,6 +305,9 @@ export async function getClientById(req, res) {
                 'nombre', m.nombre,
                 'especie', m.especie,
                 'raza', m.raza,
+                'sexo', m.sexo,
+                'peso', m.peso,
+                'foto_url', m.foto_url,
                 'edad_años', EXTRACT(YEAR FROM AGE(m.fecha_nacimiento)),
                 'activo', m.activo
               )
@@ -209,11 +317,11 @@ export async function getClientById(req, res) {
         ) as mascotas
       FROM clinical.clientes c
       LEFT JOIN clinical.mascotas m ON c.id_cliente = m.id_cliente
-      WHERE c.id_cliente = $1
+      WHERE c.id_cliente = $1 AND c.id_tenant = $2
       GROUP BY c.id_cliente
     `;
 
-    const result = await query(queryText, [id]);
+    const result = await query(queryText, [id, tenantId]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -243,6 +351,8 @@ export async function getClientById(req, res) {
  */
 export async function updateClient(req, res) {
   try {
+    const tenantId = req.tenantId;
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -264,34 +374,84 @@ export async function updateClient(req, res) {
       activo
     } = req.body;
 
-    const queryText = `
-      UPDATE clinical.clientes SET
-        nombre = $1,
-        telefono = $2,
-        email = $3,
-        direccion = $4,
-        cedula = $5,
-        fecha_nacimiento = $6,
-        notas = $7,
-        activo = $8,
-        updated_at = CURRENT_TIMESTAMP,
-        updated_by = $9
-      WHERE id_cliente = $10
-      RETURNING *
-    `;
+    if (activo === false) {
+      const activePetsResult = await query(
+        `SELECT COUNT(*) AS active_pets
+         FROM clinical.mascotas
+         WHERE id_cliente = $1
+           AND id_tenant = $2
+           AND activo = true`,
+        [id, tenantId]
+      );
 
-    const values = [
-      nombre,
-      telefono,
-      email,
-      direccion,
-      cedula,
-      fecha_nacimiento,
-      notas,
-      activo !== undefined ? activo : true,
-      req.user.id,
-      id
-    ];
+      const activePets = parseInt(activePetsResult.rows[0]?.active_pets || '0', 10);
+      if (activePets > 0) {
+        return res.status(409).json({
+          success: false,
+          message: `No se puede desactivar el propietario porque tiene ${activePets} mascota(s) activa(s).`
+        });
+      }
+    }
+
+    const canUseUpdatedBy = await hasClientesUpdatedByColumn();
+
+    const queryText = canUseUpdatedBy
+      ? `
+          UPDATE clinical.clientes SET
+            nombre = $1,
+            telefono = $2,
+            email = $3,
+            direccion = $4,
+            cedula = $5,
+            fecha_nacimiento = $6,
+            notas = $7,
+            activo = $8,
+            updated_at = CURRENT_TIMESTAMP,
+            updated_by = $9
+          WHERE id_cliente = $10 AND id_tenant = $11
+          RETURNING *
+        `
+      : `
+          UPDATE clinical.clientes SET
+            nombre = $1,
+            telefono = $2,
+            email = $3,
+            direccion = $4,
+            cedula = $5,
+            fecha_nacimiento = $6,
+            notas = $7,
+            activo = $8,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id_cliente = $9 AND id_tenant = $10
+          RETURNING *
+        `;
+
+    const values = canUseUpdatedBy
+      ? [
+          nombre,
+          telefono,
+          email,
+          direccion,
+          cedula,
+          fecha_nacimiento,
+          notas,
+          activo !== undefined ? activo : true,
+          req.user?.id || null,
+          id,
+          tenantId
+        ]
+      : [
+          nombre,
+          telefono,
+          email,
+          direccion,
+          cedula,
+          fecha_nacimiento,
+          notas,
+          activo !== undefined ? activo : true,
+          id,
+          tenantId
+        ];
 
     const result = await query(queryText, values);
 
@@ -332,33 +492,94 @@ export async function updateClient(req, res) {
 export async function deleteClient(req, res) {
   try {
     const { id } = req.params;
+    const tenantId = req.tenantId;
 
-    // Verificar si el cliente tiene mascotas activas
-    const checkPetsQuery = `
-      SELECT COUNT(*) as pets_count 
-      FROM clinical.mascotas 
-      WHERE id_cliente = $1 AND activo = true
-    `;
-    
-    const petsResult = await query(checkPetsQuery, [id]);
-    const activePets = parseInt(petsResult.rows[0].pets_count);
+    const clientResult = await query(
+      `SELECT id_cliente, nombre, activo
+       FROM clinical.clientes
+       WHERE id_cliente = $1 AND id_tenant = $2`,
+      [id, tenantId]
+    );
 
-    if (activePets > 0) {
-      return res.status(400).json({
+    if (clientResult.rows.length === 0) {
+      return res.status(404).json({
         success: false,
-        message: `No se puede eliminar el cliente. Tiene ${activePets} mascota(s) activa(s)`
+        message: 'Cliente no encontrado'
       });
     }
 
-    // Soft delete del cliente
-    const queryText = `
-      UPDATE clinical.clientes
-      SET activo = false, updated_at = CURRENT_TIMESTAMP, updated_by = $2
-      WHERE id_cliente = $1
+    const client = clientResult.rows[0];
+
+    // Si tiene mascotas asociadas no se elimina físicamente; se desactiva.
+    const checkPetsQuery = `
+      SELECT
+        COUNT(*) AS pets_count,
+        COUNT(*) FILTER (WHERE activo = true) AS active_pets_count
+      FROM clinical.mascotas
+      WHERE id_cliente = $1 AND id_tenant = $2
+    `;
+    
+    const petsResult = await query(checkPetsQuery, [id, tenantId]);
+    const totalPets = parseInt(petsResult.rows[0].pets_count, 10);
+    const activePets = parseInt(petsResult.rows[0].active_pets_count, 10);
+
+    if (activePets > 0) {
+      return res.status(409).json({
+        success: false,
+        message: `No se puede desactivar el propietario porque tiene ${activePets} mascota(s) activa(s).`
+      });
+    }
+
+    if (totalPets > 0) {
+      if (!client.activo) {
+        return res.json({
+          success: true,
+          message: `Cliente "${client.nombre}" ya está desactivado`
+        });
+      }
+
+      const canUseUpdatedBy = await hasClientesUpdatedByColumn();
+      const softDeleteQuery = canUseUpdatedBy
+        ? `
+            UPDATE clinical.clientes
+            SET activo = false, updated_at = CURRENT_TIMESTAMP, updated_by = $3
+            WHERE id_cliente = $1 AND id_tenant = $2
+            RETURNING nombre
+          `
+        : `
+            UPDATE clinical.clientes
+            SET activo = false, updated_at = CURRENT_TIMESTAMP
+            WHERE id_cliente = $1 AND id_tenant = $2
+            RETURNING nombre
+          `;
+
+      const softDeleteResult = await query(
+        softDeleteQuery,
+        canUseUpdatedBy ? [id, tenantId, req.user?.id || null] : [id, tenantId]
+      );
+
+      await logClientActivity({
+        req,
+        type: 'CLIENT_MANAGEMENT',
+        description: `Propietario desactivado: ${softDeleteResult.rows[0].nombre} (mascotas asociadas: ${totalPets})`,
+        entityId: id,
+        payload: { action: 'deactivate', reason: 'has_related_pets', totalPets }
+      });
+
+      return res.json({
+        success: true,
+        message: `Cliente "${softDeleteResult.rows[0].nombre}" desactivado automáticamente porque tiene ${totalPets} mascota(s) asociada(s)`
+      });
+    }
+
+    // Sin mascotas asociadas: eliminación física permitida.
+    const hardDeleteQuery = `
+      DELETE FROM clinical.clientes
+      WHERE id_cliente = $1 AND id_tenant = $2
       RETURNING nombre
     `;
 
-    const result = await query(queryText, [id, req.user.id]);
+    const result = await query(hardDeleteQuery, [id, tenantId]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -367,13 +588,75 @@ export async function deleteClient(req, res) {
       });
     }
 
+    await logClientActivity({
+      req,
+      type: 'CLIENT_MANAGEMENT',
+      description: `Propietario eliminado definitivamente: ${result.rows[0].nombre} (sin mascotas asociadas)`,
+      entityId: id,
+      payload: { action: 'hard_delete', reason: 'no_related_pets' }
+    });
+
     res.json({
       success: true,
-      message: `Cliente "${result.rows[0].nombre}" desactivado exitosamente`
+      message: `Cliente "${result.rows[0].nombre}" eliminado definitivamente (sin mascotas asociadas)`
     });
 
   } catch (error) {
     console.error('Error eliminando cliente:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor',
+      error: error.message
+    });
+  }
+}
+
+/**
+ * Reactivar cliente
+ */
+export async function restoreClient(req, res) {
+  try {
+    const { id } = req.params;
+    const tenantId = req.tenantId;
+
+    const canUseUpdatedBy = await hasClientesUpdatedByColumn();
+    const restoreQuery = canUseUpdatedBy
+      ? `UPDATE clinical.clientes
+         SET activo = true, updated_at = CURRENT_TIMESTAMP, updated_by = $3
+         WHERE id_cliente = $1 AND id_tenant = $2
+         RETURNING id_cliente, nombre, activo`
+      : `UPDATE clinical.clientes
+         SET activo = true, updated_at = CURRENT_TIMESTAMP
+         WHERE id_cliente = $1 AND id_tenant = $2
+         RETURNING id_cliente, nombre, activo`;
+
+    const result = await query(
+      restoreQuery,
+      canUseUpdatedBy ? [id, tenantId, req.user?.id || null] : [id, tenantId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Cliente no encontrado'
+      });
+    }
+
+    await logClientActivity({
+      req,
+      type: 'CLIENT_MANAGEMENT',
+      description: `Propietario reactivado: ${result.rows[0].nombre}`,
+      entityId: id,
+      payload: { action: 'restore' }
+    });
+
+    res.json({
+      success: true,
+      message: `Cliente "${result.rows[0].nombre}" reactivado exitosamente`,
+      data: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error reactivando cliente:', error);
     res.status(500).json({
       success: false,
       message: 'Error interno del servidor',

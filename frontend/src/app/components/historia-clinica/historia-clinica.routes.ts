@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { AuthGuard } from '../../utils/guards/auth.guard';
 import { RoleGuard } from '../../utils/guards/role.guard';
+import { unsavedChangesGuard } from '../../guards/unsaved-changes.guard';
 
 export const historiaClinicaRoutes: Routes = [
   {
@@ -16,6 +17,7 @@ export const historiaClinicaRoutes: Routes = [
     path: 'nueva',
     loadComponent: () => import('./components/historia-clinica-form.component').then(c => c.HistoriaClinicaFormComponent),
     canActivate: [AuthGuard, RoleGuard],
+    canDeactivate: [unsavedChangesGuard],
     data: {
       roles: ['admin', 'vet'],
       title: 'Nueva Historia Clínica'
@@ -26,7 +28,7 @@ export const historiaClinicaRoutes: Routes = [
     loadComponent: () => import('./components/historia-clinica-details.component').then(c => c.HistoriaClinicaDetailsComponent),
     canActivate: [AuthGuard, RoleGuard],
     data: {
-      roles: ['admin', 'vet', 'assistant'],
+      roles: ['admin', 'vet', 'aux'],
       title: 'Detalles de Historia Clínica'
     }
   },
@@ -34,6 +36,7 @@ export const historiaClinicaRoutes: Routes = [
     path: ':id/editar',
     loadComponent: () => import('./components/historia-clinica-form.component').then(c => c.HistoriaClinicaFormComponent),
     canActivate: [AuthGuard, RoleGuard],
+    canDeactivate: [unsavedChangesGuard],
     data: {
       roles: ['admin', 'vet'],
       title: 'Editar Historia Clínica'

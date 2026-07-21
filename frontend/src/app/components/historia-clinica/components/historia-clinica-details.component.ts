@@ -1,1076 +1,674 @@
-import { Component, OnInit, signal, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { Router, ActivatedRoute } from '@angular/router';
+import { Component, OnInit, signal } from '@angular/core';
+import { CommonModule, Location } from '@angular/common';
+import { ActivatedRoute, Router } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { MatChipsModule } from '@angular/material/chips';
 import { MatDividerModule } from '@angular/material/divider';
-import { MatTabsModule } from '@angular/material/tabs';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatChipsModule } from '@angular/material/chips';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { environment } from '../../../../environments/environment';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 
-import { ConsultasService, ConsultaClinica } from '../../../services/consultas.service';
+import {
+  HistoriaClinicaService, HistoriaClinica, TipoDocumento,
+  DatosValoracionInicial, DatosSeguimiento, DatosFormula, DatosRemision,
+  TIPO_LABELS, TIPO_COLORS, TIPO_ICONS
+} from '../../../services/historia-clinica.service';
+import { AnularHistoriaDialogComponent } from './anular-historia-dialog.component';
 
 @Component({
   selector: 'app-historia-clinica-details',
   standalone: true,
   imports: [
     CommonModule,
-    MatCardModule,
-    MatButtonModule,
-    MatIconModule,
-    MatChipsModule,
-    MatDividerModule,
-    MatTabsModule,
-    MatProgressSpinnerModule,
-    MatSnackBarModule,
-    MatMenuModule,
-    MatDialogModule
+    MatCardModule, MatButtonModule, MatIconModule, MatDividerModule,
+    MatSnackBarModule, MatProgressSpinnerModule, MatChipsModule,
+    MatMenuModule, MatTooltipModule, MatDialogModule
   ],
-  template: `
-    <div class="historia-clinica-details-container">
-      @if (loading()) {
-        <div class="loading-container">
-          <mat-spinner diameter="50"></mat-spinner>
-          <p>Cargando historia clínica...</p>
-        </div>
-      } @else if (consulta()) {
-        <!-- Header -->
-        <div class="details-header">
-          <div class="header-content">
-            <button mat-icon-button (click)="goBack()" class="back-button">
-              <mat-icon>arrow_back</mat-icon>
-            </button>
-            <div class="title-section">
-              <h1 class="details-title">
-                <mat-icon class="title-icon">assignment</mat-icon>
-                Historia Clínica {{ consulta()!.codigo_consulta }}
-              </h1>
-              <p class="details-subtitle">{{ formatearFecha(consulta()!.fecha_consulta) }}</p>
-            </div>
-            <div class="actions-section">
-              <button mat-stroked-button (click)="exportHistoriaClinica()">
-                <mat-icon>file_download</mat-icon>
-                Exportar
-              </button>
-              <button mat-raised-button
-                      color="primary"
-                      (click)="editHistoriaClinica()">
-                <mat-icon>edit</mat-icon>
-                Editar
-              </button>
-              <button mat-icon-button [matMenuTriggerFor]="actionsMenu">
-                <mat-icon>more_vert</mat-icon>
-              </button>
-              <mat-menu #actionsMenu="matMenu">
-                <button mat-menu-item (click)="duplicateHistoriaClinica()">
-                  <mat-icon>content_copy</mat-icon>
-                  Duplicar
-                </button>
-                <mat-divider></mat-divider>
-                <button mat-menu-item (click)="deleteHistoriaClinica()" class="delete-item">
-                  <mat-icon>delete</mat-icon>
-                  Eliminar
-                </button>
-              </mat-menu>
-            </div>
-          </div>
-        </div>
-
-        <!-- Estado y información básica -->
-        <mat-card class="status-card">
-          <mat-card-content>
-            <div class="status-row">
-              <div class="status-info">
-                <mat-chip [style.background-color]="getEstadoColor(consulta()!.estado)"
-                          [style.color]="'white'"
-                          class="status-chip">
-                  {{ consulta()!.estado }}
-                </mat-chip>
-                <div class="basic-info">
-                  <span class="info-label">Código:</span>
-                  <span class="codigo-consulta">{{ consulta()!.codigo_consulta }}</span>
-                </div>
-              </div>
-              <div class="patient-summary">
-                <div class="patient-avatar">
-                  @if (consulta()!.mascota?.foto) {
-                    <img [src]="consulta()!.mascota?.foto" alt="Foto de {{ consulta()!.mascota?.nombre }}" class="patient-photo">
-                  } @else {
-                    <mat-icon>pets</mat-icon>
-                  }
-                </div>
-                <div class="patient-info">
-                  <h3>{{ consulta()!.mascota?.nombre }}</h3>
-                  <p>{{ consulta()!.mascota?.especie }} - {{ consulta()!.mascota?.raza }}</p>
-                  @if (consulta()!.mascota?.fecha_nacimiento) {
-                    <p><strong>Fecha nacimiento:</strong> {{ formatearFecha(consulta()!.mascota?.fecha_nacimiento!) }}</p>
-                  }
-                  @if (consulta()!.mascota?.peso) {
-                    <p><strong>Peso:</strong> {{ consulta()!.mascota?.peso }} kg</p>
-                  }
-                  <p><strong>Propietario:</strong> {{ consulta()!.mascota?.cliente?.nombre || 'No especificado' }}</p>
-                  @if (consulta()!.mascota?.cliente?.telefono) {
-                    <p><strong>Teléfono:</strong> {{ consulta()!.mascota?.cliente?.telefono }}</p>
-                  }
-                  @if (consulta()!.mascota?.cliente?.email) {
-                    <p><strong>Email:</strong> {{ consulta()!.mascota?.cliente?.email }}</p>
-                  }
-                </div>
-              </div>
-            </div>
-          </mat-card-content>
-        </mat-card>
-
-        <!-- Contenido principal en tabs -->
-        <mat-card class="content-card">
-          <mat-card-content>
-            <mat-tab-group>
-              <!-- Tab: Información general -->
-              <mat-tab label="Información General">
-                <div class="tab-content">
-                  <div class="info-grid">
-                    <div class="info-section">
-                      <h4><mat-icon>person</mat-icon> Veterinario</h4>
-                      <p>{{ consulta()!.veterinario?.nombre || 'No asignado' }}</p>
-                    </div>
-
-                    <div class="info-section">
-                      <h4><mat-icon>schedule</mat-icon> Fecha y Hora</h4>
-                      <p>{{ formatearFecha(consulta()!.fecha_consulta) }}</p>
-                    </div>
-
-                    @if (consulta()!.proxima_cita) {
-                      <div class="info-section">
-                        <h4><mat-icon>event</mat-icon> Próxima Cita</h4>
-                        <p>{{ formatearFecha(consulta()!.proxima_cita!) }}</p>
-                      </div>
-                    }
-                  </div>
-
-                  <mat-divider></mat-divider>
-
-                  <div class="content-section">
-                    <h4><mat-icon>assignment</mat-icon> Motivo de Consulta</h4>
-                    <div class="content-text">
-                      {{ consulta()!.motivo }}
-                    </div>
-                  </div>
-
-                  @if (consulta()!.diagnostico) {
-                    <div class="content-section">
-                      <h4><mat-icon>healing</mat-icon> Diagnóstico</h4>
-                      <div class="content-text">
-                        {{ consulta()!.diagnostico }}
-                      </div>
-                    </div>
-                  }
-
-                  @if (consulta()!.tratamiento) {
-                    <div class="content-section">
-                      <h4><mat-icon>medication</mat-icon> Tratamiento</h4>
-                      <div class="content-text">
-                        {{ consulta()!.tratamiento }}
-                      </div>
-                    </div>
-                  }
-
-                  @if (consulta()!.medicamentos) {
-                    <div class="content-section">
-                      <h4><mat-icon>local_pharmacy</mat-icon> Medicamentos Recetados</h4>
-                      <div class="medicamentos-list">
-                        @if (isMedicamentosArray(consulta()!.medicamentos)) {
-                          @for (medicamento of consulta()!.medicamentos; track $index) {
-                            @if (typeof medicamento === 'object' && medicamento !== null) {
-                              <div class="medicamento-item">
-                                <div class="medicamento-header">
-                                  <strong>{{ medicamento.nombre || 'Medicamento' }}</strong>
-                                </div>
-                                <div class="medicamento-details">
-                                  @if (medicamento.dosis) {
-                                    <span class="medicamento-info"><strong>Dosis:</strong> {{ medicamento.dosis }}</span>
-                                  }
-                                  @if (medicamento.frecuencia) {
-                                    <span class="medicamento-info"><strong>Frecuencia:</strong> {{ medicamento.frecuencia }}</span>
-                                  }
-                                  @if (medicamento.duracion) {
-                                    <span class="medicamento-info"><strong>Duración:</strong> {{ medicamento.duracion }}</span>
-                                  }
-                                  @if (medicamento.indicaciones) {
-                                    <div class="medicamento-indicaciones">
-                                      <strong>Indicaciones:</strong> {{ medicamento.indicaciones }}
-                                    </div>
-                                  }
-                                </div>
-                              </div>
-                            }
-                          }
-                        } @else if (typeof consulta()!.medicamentos === 'string') {
-                          <div class="medicamento-item">
-                            <div class="medicamento-text">{{ consulta()!.medicamentos }}</div>
-                          </div>
-                        }
-                      </div>
-                    </div>
-                  }
-
-                  @if (consulta()!.notas) {
-                    <div class="content-section">
-                      <h4><mat-icon>notes</mat-icon> Notas Adicionales</h4>
-                      <div class="content-text">
-                        {{ consulta()!.notas }}
-                      </div>
-                    </div>
-                  }
-                </div>
-              </mat-tab>
-
-              <!-- Tab: Examen físico -->
-              <mat-tab label="Examen Físico">
-                <div class="tab-content">
-                  <div class="vitals-grid">
-                    @if (consulta()!.temperatura !== null && consulta()!.temperatura !== undefined) {
-                      <div class="vital-card">
-                        <mat-icon class="vital-icon temperature">thermostat</mat-icon>
-                        <div class="vital-info">
-                          <span class="vital-value">{{ consulta()!.temperatura }}°C</span>
-                          <span class="vital-label">Temperatura</span>
-                        </div>
-                      </div>
-                    }
-
-                    @if (consulta()!.peso !== null && consulta()!.peso !== undefined) {
-                      <div class="vital-card">
-                        <mat-icon class="vital-icon weight">monitor_weight</mat-icon>
-                        <div class="vital-info">
-                          <span class="vital-value">{{ consulta()!.peso }} kg</span>
-                          <span class="vital-label">Peso</span>
-                        </div>
-                      </div>
-                    }
-
-                    @if (consulta()!.frecuencia_cardiaca !== null && consulta()!.frecuencia_cardiaca !== undefined) {
-                      <div class="vital-card">
-                        <mat-icon class="vital-icon heart">favorite</mat-icon>
-                        <div class="vital-info">
-                          <span class="vital-value">{{ consulta()!.frecuencia_cardiaca }} bpm</span>
-                          <span class="vital-label">Frecuencia Cardíaca</span>
-                        </div>
-                      </div>
-                    }
-
-                    @if (consulta()!.frecuencia_respiratoria !== null && consulta()!.frecuencia_respiratoria !== undefined) {
-                      <div class="vital-card">
-                        <mat-icon class="vital-icon respiratory">air</mat-icon>
-                        <div class="vital-info">
-                          <span class="vital-value">{{ consulta()!.frecuencia_respiratoria }} rpm</span>
-                          <span class="vital-label">Frecuencia Respiratoria</span>
-                        </div>
-                      </div>
-                    }
-                  </div>
-
-                  @if (consulta()!.observaciones_examen) {
-                    <mat-divider></mat-divider>
-                    <div class="content-section">
-                      <h4><mat-icon>visibility</mat-icon> Observaciones del Examen</h4>
-                      <div class="content-text">
-                        {{ consulta()!.observaciones_examen }}
-                      </div>
-                    </div>
-                  }
-                </div>
-              </mat-tab>
-
-              <!-- Tab: Archivos -->
-              <mat-tab label="Archivos">
-                <div class="tab-content">
-                  <div class="files-section">
-                    <div class="files-header">
-                      <h4><mat-icon>attach_file</mat-icon> Archivos Adjuntos</h4>
-                      <button mat-stroked-button (click)="uploadFile()">
-                        <mat-icon>cloud_upload</mat-icon>
-                        Subir Archivo
-                      </button>
-                    </div>
-
-                    @if (archivos().length > 0) {
-                      <div class="files-list">
-                        @for (archivo of archivos(); track archivo.id) {
-                          <div class="file-item">
-                            <mat-icon class="file-icon">{{ getFileIcon(archivo.tipo) }}</mat-icon>
-                            <div class="file-info">
-                              <span class="file-name">{{ archivo.nombre }}</span>
-                              <span class="file-meta">{{ archivo.tamano }} - {{ formatearFecha(archivo.fecha_subida) }}</span>
-                            </div>
-                            <div class="file-actions">
-                              <button mat-icon-button (click)="downloadFile(archivo)">
-                                <mat-icon>download</mat-icon>
-                              </button>
-                              <button mat-icon-button (click)="deleteFile(archivo)" class="delete-btn">
-                                <mat-icon>delete</mat-icon>
-                              </button>
-                            </div>
-                          </div>
-                        }
-                      </div>
-                    } @else {
-                      <div class="no-files">
-                        <mat-icon>folder_open</mat-icon>
-                        <p>No hay archivos adjuntos</p>
-                      </div>
-                    }
-                  </div>
-                </div>
-              </mat-tab>
-
-              <!-- Tab: Historial -->
-              <mat-tab label="Historial">
-                <div class="tab-content">
-                  <div class="timeline">
-                    <div class="timeline-item">
-                      <div class="timeline-icon created">
-                        <mat-icon>add_circle</mat-icon>
-                      </div>
-                      <div class="timeline-content">
-                        <h5>Historia clínica creada</h5>
-                        <p>{{ formatearFecha(consulta()!.fecha_creacion || consulta()!.fecha_consulta) }}</p>
-                      </div>
-                    </div>
-
-                    @if (consulta()!.fecha_actualizacion && consulta()!.fecha_actualizacion !== consulta()!.fecha_creacion) {
-                      <div class="timeline-item">
-                        <div class="timeline-icon updated">
-                          <mat-icon>edit</mat-icon>
-                        </div>
-                        <div class="timeline-content">
-                          <h5>Última actualización</h5>
-                          <p>{{ formatearFecha(consulta()!.fecha_actualizacion!) }}</p>
-                        </div>
-                      </div>
-                    }
-
-                    @if (consulta()!.estado === 'Completada') {
-                      <div class="timeline-item">
-                        <div class="timeline-icon completed">
-                          <mat-icon>check_circle</mat-icon>
-                        </div>
-                        <div class="timeline-content">
-                          <h5>Historia clínica completada</h5>
-                          <p>{{ formatearFecha(consulta()!.fecha_actualizacion || consulta()!.fecha_consulta) }}</p>
-                        </div>
-                      </div>
-                    }
-                  </div>
-                </div>
-              </mat-tab>
-            </mat-tab-group>
-          </mat-card-content>
-        </mat-card>
-      } @else {
-        <div class="error-container">
-          <mat-icon>error_outline</mat-icon>
-          <h3>Consulta no encontrada</h3>
-          <p>La consulta solicitada no existe o no tienes permisos para verla.</p>
-          <button mat-raised-button color="primary" (click)="goBack()">
-            Volver al listado
-          </button>
-        </div>
-      }
-    </div>
-  `,
-  styles: [`
-    .consulta-details-container {
-      padding: 24px;
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-
-    /* Header */
-    .details-header {
-      margin-bottom: 24px;
-    }
-
-    .header-content {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-
-    .back-button {
-      background: rgba(46, 125, 50, 0.1);
-      color: #2e7d32;
-    }
-
-    .title-section {
-      flex: 1;
-    }
-
-    .details-title {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin: 0 0 8px 0;
-      font-size: 28px;
-      font-weight: 500;
-      color: #2e7d32;
-    }
-
-    .title-icon {
-      font-size: 32px;
-      width: 32px;
-      height: 32px;
-    }
-
-    .details-subtitle {
-      margin: 0;
-      color: #666;
-      font-size: 16px;
-    }
-
-    .actions-section {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-    }
-
-    .delete-item {
-      color: #f44336 !important;
-    }
-
-    /* Status card */
-    .status-card {
-      margin-bottom: 24px;
-      border-radius: 12px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
-
-    .status-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 24px;
-    }
-
-    .status-info {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-
-    .status-chip {
-      font-weight: 500;
-      font-size: 14px;
-    }
-
-    .basic-info {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .info-label {
-      color: #666;
-      font-size: 14px;
-    }
-
-    .codigo-consulta {
-      font-family: 'Courier New', monospace;
-      font-weight: 600;
-      color: #2e7d32;
-      background: rgba(46, 125, 50, 0.1);
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 12px;
-    }
-
-    .patient-summary {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-
-    .patient-avatar {
-      width: 48px;
-      height: 48px;
-      border-radius: 50%;
-      background: #2e7d32;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      overflow: hidden;
-    }
-
-    .patient-photo {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      border-radius: 50%;
-    }
-
-    .patient-info h3 {
-      margin: 0 0 4px 0;
-      font-size: 18px;
-      font-weight: 500;
-    }
-
-    .patient-info p {
-      margin: 2px 0;
-      font-size: 14px;
-      color: #666;
-    }
-
-    /* Content card */
-    .content-card {
-      border-radius: 12px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
-
-    .tab-content {
-      padding: 24px 0;
-    }
-
-    /* Info sections */
-    .info-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 24px;
-      margin-bottom: 24px;
-    }
-
-    .info-section h4 {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 0 0 8px 0;
-      font-size: 16px;
-      font-weight: 500;
-      color: #2e7d32;
-    }
-
-    .info-section p {
-      margin: 0;
-      color: #333;
-      font-size: 14px;
-    }
-
-    .content-section {
-      margin: 24px 0;
-    }
-
-    .content-section h4 {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 0 0 12px 0;
-      font-size: 16px;
-      font-weight: 500;
-      color: #2e7d32;
-    }
-
-    .content-text {
-      background: #f8f9fa;
-      padding: 16px;
-      border-radius: 8px;
-      border-left: 4px solid #2e7d32;
-      line-height: 1.6;
-      white-space: pre-wrap;
-    }
-
-    /* Medicamentos */
-    .medicamentos-list {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .medicamento-item {
-      background: #f8f9fa;
-      padding: 16px;
-      border-radius: 8px;
-      border-left: 4px solid #2196f3;
-    }
-
-    .medicamento-header {
-      margin-bottom: 8px;
-      font-size: 16px;
-      color: #1976d2;
-    }
-
-    .medicamento-details {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      font-size: 14px;
-    }
-
-    .medicamento-info {
-      color: #666;
-    }
-
-    .medicamento-info:not(:last-child)::after {
-      content: '•';
-      margin-left: 12px;
-      color: #ccc;
-    }
-
-    .medicamento-indicaciones {
-      width: 100%;
-      margin-top: 8px;
-      padding-top: 8px;
-      border-top: 1px solid #e0e0e0;
-      color: #666;
-    }
-
-    .medicamento-text {
-      background: #f8f9fa;
-      padding: 16px;
-      border-radius: 8px;
-      border-left: 4px solid #2196f3;
-      line-height: 1.6;
-      white-space: pre-wrap;
-    }
-
-    /* Vitals */
-    .vitals-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 16px;
-      margin-bottom: 24px;
-    }
-
-    .vital-card {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 16px;
-      background: white;
-      border: 1px solid #e0e0e0;
-      border-radius: 8px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
-
-    .vital-icon {
-      font-size: 24px;
-      width: 24px;
-      height: 24px;
-      padding: 8px;
-      border-radius: 50%;
-    }
-
-    .vital-icon.temperature { background: rgba(255, 152, 0, 0.1); color: #ff9800; }
-    .vital-icon.weight { background: rgba(156, 39, 176, 0.1); color: #9c27b0; }
-    .vital-icon.heart { background: rgba(244, 67, 54, 0.1); color: #f44336; }
-    .vital-icon.respiratory { background: rgba(33, 150, 243, 0.1); color: #2196f3; }
-
-    .vital-info {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .vital-value {
-      font-size: 18px;
-      font-weight: 600;
-      color: #333;
-    }
-
-    .vital-label {
-      font-size: 12px;
-      color: #666;
-    }
-
-    /* Files */
-    .files-section {
-      min-height: 200px;
-    }
-
-    .files-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-    }
-
-    .files-header h4 {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 0;
-      font-size: 16px;
-      font-weight: 500;
-      color: #2e7d32;
-    }
-
-    .files-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .file-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px;
-      background: #f8f9fa;
-      border-radius: 8px;
-      border: 1px solid #e0e0e0;
-    }
-
-    .file-icon {
-      color: #666;
-    }
-
-    .file-info {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .file-name {
-      font-weight: 500;
-      color: #333;
-    }
-
-    .file-meta {
-      font-size: 12px;
-      color: #666;
-    }
-
-    .file-actions {
-      display: flex;
-      gap: 4px;
-    }
-
-    .delete-btn {
-      color: #f44336;
-    }
-
-    .no-files {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 48px;
-      text-align: center;
-      color: #666;
-    }
-
-    .no-files mat-icon {
-      font-size: 48px;
-      width: 48px;
-      height: 48px;
-      margin-bottom: 16px;
-      opacity: 0.5;
-    }
-
-    /* Timeline */
-    .timeline {
-      position: relative;
-      padding-left: 48px;
-    }
-
-    .timeline::before {
-      content: '';
-      position: absolute;
-      left: 31px;
-      top: 0;
-      bottom: 0;
-      width: 2px;
-      background: #e0e0e0;
-    }
-
-    .timeline-item {
-      position: relative;
-      margin-bottom: 24px;
-      display: flex;
-      align-items: flex-start;
-      gap: 16px;
-    }
-
-    .timeline-icon {
-      position: relative;
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      flex-shrink: 0;
-      z-index: 1;
-    }
-
-    .timeline-icon.created { background: #4caf50; }
-    .timeline-icon.updated { background: #ff9800; }
-    .timeline-icon.completed { background: #2196f3; }
-
-    .timeline-content h5 {
-      margin: 0 0 4px 0;
-      font-weight: 500;
-      color: #333;
-    }
-
-    .timeline-content p {
-      margin: 0;
-      font-size: 14px;
-      color: #666;
-    }
-
-    /* Loading and error states */
-    .loading-container,
-    .error-container {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 48px;
-      text-align: center;
-    }
-
-    .loading-container p,
-    .error-container p {
-      margin: 16px 0;
-      color: #666;
-    }
-
-    .error-container mat-icon {
-      font-size: 64px;
-      width: 64px;
-      height: 64px;
-      color: #f44336;
-      margin-bottom: 16px;
-    }
-
-    .error-container h3 {
-      margin: 0 0 8px 0;
-      color: #333;
-    }
-
-    /* Responsive */
-    @media (max-width: 768px) {
-      .consulta-details-container {
-        padding: 16px;
-      }
-
-      .header-content {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 16px;
-      }
-
-      .details-title {
-        font-size: 24px;
-      }
-
-      .status-row {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 16px;
-      }
-
-      .patient-summary {
-        justify-content: center;
-      }
-
-      .info-grid {
-        grid-template-columns: 1fr;
-        gap: 16px;
-      }
-
-      .vitals-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .files-header {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 12px;
-      }
-    }
-  `]
+  templateUrl: './historia-clinica-details.component.html',
+  styleUrl: './historia-clinica-details.component.css'
 })
 export class HistoriaClinicaDetailsComponent implements OnInit {
-  private router = inject(Router);
-  private route = inject(ActivatedRoute);
-  private consultasService = inject(ConsultasService);
-  private snackBar = inject(MatSnackBar);
-  private dialog = inject(MatDialog);
+  loading  = signal(true);
+  sendingEmail = signal(false);
+  historia = signal<HistoriaClinica | null>(null);
+  private returnMascotaId: string | null = null;
 
-  // Signals
-  loading = signal(false);
-  consulta = signal<ConsultaClinica | null>(null);
-  archivos = signal<any[]>([]);
+  constructor(
+    private historiaService: HistoriaClinicaService,
+    private snackBar: MatSnackBar,
+    private router: Router,
+    private route: ActivatedRoute,
+    private location: Location,
+    private dialog: MatDialog,
+    private sanitizer: DomSanitizer
+  ) {}
 
   ngOnInit(): void {
-    const consultaId = this.route.snapshot.paramMap.get('id');
-    if (consultaId) {
-      this.loadHistoriaClinica(consultaId);
-      // Comentado hasta implementar el backend de archivos
-      // this.loadArchivos(consultaId);
+    this.returnMascotaId = this.route.snapshot.queryParamMap.get('id_mascota');
+    const id = this.route.snapshot.paramMap.get('id');
+    if (id) {
+      this.loadHistoria(id);
     }
   }
 
-  private loadHistoriaClinica(id: string): void {
+  loadHistoria(id: string): void {
     this.loading.set(true);
-    this.consultasService.getConsultaById(id).subscribe({
-      next: (response) => {
-        console.log('🔍 Respuesta del backend:', response);
-        if (response?.success && response.data) {
-          this.consulta.set(response.data);
-          console.log('✅ Historia clínica cargada:', response.data);
-        } else {
-          throw new Error('Respuesta inválida del servidor');
-        }
+    this.historiaService.getHistoriaById(id).subscribe({
+      next: (res) => {
+        this.historia.set(res.data);
         this.loading.set(false);
       },
-      error: (error) => {
-        console.error('❌ Error cargando historia clínica:', error);
+      error: () => {
         this.snackBar.open('Error cargando historia clínica', 'Cerrar', { duration: 3000 });
         this.loading.set(false);
       }
     });
   }
 
-  private loadArchivos(consultaId: string): void {
-    this.consultasService.getArchivos(consultaId).subscribe({
-      next: (archivos) => {
-        this.archivos.set(Array.isArray(archivos) ? archivos : []);
+  editar(): void {
+    const h = this.historia();
+    if (h) {
+      this.router.navigate(['/historia-clinica', h.id_historia, 'editar'], {
+        queryParams: this.returnMascotaId ? { id_mascota: this.returnMascotaId } : undefined
+      });
+    }
+  }
+
+  irACita(): void {
+    const h = this.historia();
+    if (h?.id_cita) {
+      this.router.navigate(['/citas', h.id_cita]);
+    }
+  }
+
+  getArchivoUrl(rutaArchivo?: string | null): string {
+    if (!rutaArchivo) return '';
+    if (/^https?:\/\//i.test(rutaArchivo)) return rutaArchivo;
+
+    const apiBase = environment.apiUrl.replace(/\/api\/?$/, '');
+    return `${apiBase}${rutaArchivo.startsWith('/') ? '' : '/'}${rutaArchivo}`;
+  }
+
+  abrirAdjunto(rutaArchivo?: string | null): void {
+    const url = this.getArchivoUrl(rutaArchivo);
+    if (!url) {
+      this.snackBar.open('No se encontró la ruta del archivo', 'Cerrar', { duration: 2500 });
+      return;
+    }
+    window.open(url, '_blank', 'noopener');
+  }
+
+  descargarAdjunto(nombre: string, rutaArchivo?: string | null): void {
+    const url = this.getArchivoUrl(rutaArchivo);
+    if (!url) {
+      this.snackBar.open('No se encontró la ruta del archivo', 'Cerrar', { duration: 2500 });
+      return;
+    }
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = nombre || 'adjunto';
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.click();
+  }
+
+  formatFileSize(bytes?: number): string {
+    if (!bytes || bytes <= 0) return '';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let size = bytes;
+    let idx = 0;
+    while (size >= 1024 && idx < units.length - 1) {
+      size /= 1024;
+      idx++;
+    }
+    return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[idx]}`;
+  }
+
+  isImageFile(mimeType?: string | null, nombreArchivo?: string | null): boolean {
+    const mime = (mimeType || '').toLowerCase();
+    if (mime.startsWith('image/')) return true;
+
+    const filename = (nombreArchivo || '').toLowerCase();
+    return /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/.test(filename);
+  }
+
+  getFileExtension(mimeType?: string | null, nombreArchivo?: string | null): string {
+    const filename = (nombreArchivo || '').toLowerCase();
+    const fromName = filename.includes('.') ? filename.split('.').pop() || '' : '';
+    if (fromName) return fromName;
+
+    const mime = (mimeType || '').toLowerCase();
+    if (mime.includes('pdf')) return 'pdf';
+    if (mime.includes('spreadsheet') || mime.includes('excel')) return 'xlsx';
+    if (mime.includes('word')) return 'docx';
+    if (mime.includes('csv')) return 'csv';
+    if (mime.includes('text')) return 'txt';
+    return 'file';
+  }
+
+  getFileTypeLabel(mimeType?: string | null, nombreArchivo?: string | null): string {
+    const ext = this.getFileExtension(mimeType, nombreArchivo);
+    return ext.slice(0, 4).toUpperCase();
+  }
+
+  getFileTypeClass(mimeType?: string | null, nombreArchivo?: string | null): string {
+    const ext = this.getFileExtension(mimeType, nombreArchivo);
+    if (['pdf', 'xls', 'xlsx', 'csv', 'doc', 'docx', 'txt', 'jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
+      return `file-${ext}`;
+    }
+    return 'file-generic';
+  }
+
+  getFileTypeIcon(mimeType?: string | null, nombreArchivo?: string | null): string {
+    const ext = this.getFileExtension(mimeType, nombreArchivo);
+    if (ext === 'pdf') return 'picture_as_pdf';
+    if (ext === 'xls' || ext === 'xlsx' || ext === 'csv') return 'table_chart';
+    if (ext === 'doc' || ext === 'docx' || ext === 'txt') return 'article';
+    return 'insert_drive_file';
+  }
+
+  isPdfFile(mimeType?: string | null, nombreArchivo?: string | null): boolean {
+    const mime = (mimeType || '').toLowerCase();
+    if (mime.includes('pdf')) return true;
+
+    const filename = (nombreArchivo || '').toLowerCase();
+    return filename.endsWith('.pdf');
+  }
+
+  getSafePdfThumbnailUrl(rutaArchivo?: string | null): SafeResourceUrl {
+    const url = this.getArchivoUrl(rutaArchivo);
+    const thumbUrl = `${url}#page=1&view=FitH&toolbar=0&navpanes=0&scrollbar=0`;
+    return this.sanitizer.bypassSecurityTrustResourceUrl(thumbUrl);
+  }
+
+  volver(): void {
+    if (window.history.length > 1) {
+      this.location.back();
+      return;
+    }
+
+    this.router.navigate(['/historia-clinica'], {
+      queryParams: this.returnMascotaId ? { id_mascota: this.returnMascotaId } : undefined
+    });
+  }
+
+  verPDF(): void {
+    const h = this.historia();
+    if (h) this.historiaService.openPDF(h.id_historia);
+  }
+
+  enviarAlPropietario(): void {
+    const h = this.historia();
+    if (!h || this.sendingEmail()) return;
+
+    if (h.estado === 'Cancelado') {
+      this.snackBar.open('No se puede enviar un documento anulado', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    this.sendingEmail.set(true);
+    this.historiaService.sendHistoriaByEmail(h.id_historia).subscribe({
+      next: (response) => {
+        this.snackBar.open(response?.message || 'Documento enviado por correo', 'Cerrar', { duration: 3500 });
+        this.sendingEmail.set(false);
       },
       error: (error) => {
-        console.error('Error cargando archivos:', error);
-        this.archivos.set([]);
+        this.snackBar.open(error?.error?.message || 'No se pudo enviar el documento', 'Cerrar', { duration: 4000 });
+        this.sendingEmail.set(false);
       }
     });
   }
 
-  // Método helper para verificar si medicamentos es un array
-  isMedicamentosArray(medicamentos: any): boolean {
-    return Array.isArray(medicamentos);
+  enviarResumenPorWhatsApp(): void {
+    const h = this.historia();
+    if (!h) return;
+    if (h.estado === 'Cancelado') {
+      this.snackBar.open('No se puede compartir un documento anulado por WhatsApp', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    const tipo = this.getTipoLabel(h.tipo_documento);
+    const fecha = this.formatFecha(h.fecha);
+    const mensaje =
+      `Hola ${h.cliente_nombre || 'propietario'}, te compartimos el resumen de ${tipo} (${h.codigo_historia})` +
+      ` de ${h.mascota_nombre || 'tu mascota'} con fecha ${fecha}.` +
+      ` Si necesitas el PDF, te lo reenviamos por correo desde VetPlus.`;
+
+    const numero = this.normalizarTelefonoWhatsApp((h as any).cliente_telefono || null);
+    const waUrl = numero
+      ? `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`
+      : `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
+    const popup = window.open(waUrl, '_blank', 'noopener');
+    if (!popup) {
+      this.snackBar.open('No se pudo abrir WhatsApp', 'Cerrar', { duration: 3500 });
+      return;
+    }
+
+    this.snackBar.open('Abriendo WhatsApp Web/App…', 'Cerrar', { duration: 2200 });
   }
+
+  private normalizarTelefonoWhatsApp(raw: string | null | undefined): string | null {
+    const digits = String(raw || '').replace(/\D+/g, '');
+    if (!digits) return null;
+
+    const withoutZeros = digits.startsWith('00') ? digits.slice(2) : digits;
+    if (withoutZeros.length === 10) return `57${withoutZeros}`;
+    if (withoutZeros.length >= 11 && withoutZeros.length <= 15) return withoutZeros;
+    return null;
+  }
+
+  imprimir(): void {
+    window.print();
+  }
+
+  anular(): void {
+    const h = this.historia();
+    if (!h) return;
+    const ref = this.dialog.open(AnularHistoriaDialogComponent, {
+      width: '480px',
+      data: { codigo: h.codigo_historia },
+    });
+    ref.afterClosed().subscribe((result) => {
+      if (!result) return;
+      this.historiaService.deleteHistoria(h.id_historia, result.motivo).subscribe({
+        next: () => {
+          this.snackBar.open('Documento anulado', 'Cerrar', { duration: 2500 });
+          this.router.navigate(['/historia-clinica'], {
+            queryParams: this.returnMascotaId ? { id_mascota: this.returnMascotaId } : undefined
+          });
+        },
+        error: () => this.snackBar.open('Error al anular', 'Cerrar', { duration: 3000 })
+      });
+    });
+  }
+
+  reactivar(): void {
+    const h = this.historia();
+    if (!h) return;
+
+    this.historiaService.reactivateHistoria(h.id_historia).subscribe({
+      next: () => {
+        this.snackBar.open('Historia reactivada', 'Cerrar', { duration: 2500 });
+        this.loadHistoria(h.id_historia);
+      },
+      error: () => this.snackBar.open('Error al reactivar', 'Cerrar', { duration: 3000 })
+    });
+  }
+
+  // UI Helpers
+  getTipoLabel(tipo: TipoDocumento): string { return TIPO_LABELS[tipo] ?? tipo; }
+  getTipoColor(tipo: TipoDocumento): string { return TIPO_COLORS[tipo] ?? '#666'; }
+  getTipoIcon(tipo: TipoDocumento): string  { return TIPO_ICONS[tipo] ?? 'assignment'; }
 
   getEstadoColor(estado: string): string {
-    const estadosConfig: Record<string, string> = {
-      'En Curso': '#ff9800',
-      'Completada': '#4caf50',
-      'Cancelada': '#f44336'
-    };
-    return estadosConfig[estado] || '#666';
+    return ({ Borrador: '#9e9e9e', Completado: '#43a047', Cancelado: '#e53935' } as any)[estado] ?? '#666';
   }
 
-  formatearFecha(fecha: string): string {
-    return new Date(fecha).toLocaleDateString('es-ES', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  formatFecha(fecha: string): string {
+    if (!fecha) return '-';
+    return new Date(fecha).toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' });
   }
 
-  getFileIcon(tipo: string): string {
-    const iconMap: Record<string, string> = {
-      'pdf': 'picture_as_pdf',
-      'image': 'image',
-      'doc': 'description',
-      'video': 'videocam'
-    };
-    return iconMap[tipo] || 'attach_file';
+  // Typed accessors for the datos union
+  get datosVI(): DatosValoracionInicial | null {
+    const h = this.historia();
+    return h?.tipo_documento === 'valoracion_inicial' ? (h.datos as DatosValoracionInicial) : null;
+  }
+  get datosSeg(): DatosSeguimiento | null {
+    const h = this.historia();
+    return h?.tipo_documento === 'seguimiento' ? (h.datos as DatosSeguimiento) : null;
   }
 
-  goBack(): void {
-    this.router.navigate(['/historia-clinica']);
+  get seguimientoChecklist(): Array<{ titulo: string; items: string[] }> {
+    return this.parseSeguimientoChecklist(this.datosSeg?.ejercicios_realizados ?? '').grupos;
   }
 
-  editHistoriaClinica(): void {
-    this.router.navigate(['/historia-clinica', this.consulta()!.id_consulta, 'editar']);
+  get seguimientoOtrosEjercicios(): string {
+    return this.parseSeguimientoChecklist(this.datosSeg?.ejercicios_realizados ?? '').otros;
+  }
+  get datosFormula(): DatosFormula | null {
+    const h = this.historia();
+    return h?.tipo_documento === 'formula' ? (h.datos as DatosFormula) : null;
+  }
+  get datosRemision(): DatosRemision | null {
+    const h = this.historia();
+    return h?.tipo_documento === 'remision' ? (h.datos as DatosRemision) : null;
   }
 
-  exportHistoriaClinica(): void {
-    const consulta = this.consulta();
-    if (!consulta) return;
+  get perimetriaRows(): Array<{ miembro: string; medicion1: string; medicion2: string }> {
+    const d = this.datosVI;
+    if (!d) return [];
 
-    this.consultasService.exportarConsulta(consulta.id_consulta).subscribe({
-      next: (blob) => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `historia-clinica-${consulta.codigo_consulta}.pdf`;
-        a.click();
-        window.URL.revokeObjectURL(url);
+    const rows = [
+      { miembro: 'Miembro torácico derecho (MTD)', m1: d.perimetria_mtd_1, m2: d.perimetria_mtd_2 },
+      { miembro: 'Miembro torácico izquierdo (MTI)', m1: d.perimetria_mti_1, m2: d.perimetria_mti_2 },
+      { miembro: 'Miembro pélvico derecho (MPD)', m1: d.perimetria_mpd_1, m2: d.perimetria_mpd_2 },
+      { miembro: 'Miembro pélvico izquierdo (MPI)', m1: d.perimetria_mpi_1, m2: d.perimetria_mpi_2 }
+    ];
+
+    return rows
+      .filter((r) => this.hasDisplayValue(r.m1) || this.hasDisplayValue(r.m2))
+      .map((r) => ({
+        miembro: r.miembro,
+        medicion1: this.formatMeasurement(r.m1),
+        medicion2: this.formatMeasurement(r.m2)
+      }));
+  }
+
+  get goniometriaGroups(): Array<{
+    titulo: string;
+    rows: Array<{ articulacion: string; flexion: string; extension: string }>;
+  }> {
+    const g = this.datosVI?.goniometria;
+    if (!g || typeof g !== 'object') return [];
+
+    const groups = [
+      {
+        titulo: 'Miembro torácico derecho',
+        suffix: 'd',
+        articulaciones: ['hombro', 'codo', 'carpo']
       },
-      error: (error) => {
-        console.error('Error exportando historia clínica:', error);
-        this.snackBar.open('Error exportando historia clínica', 'Cerrar', { duration: 3000 });
-      }
-    });
-  }
-
-  duplicateHistoriaClinica(): void {
-    const consulta = this.consulta();
-    if (!consulta) return;
-
-    this.router.navigate(['/historia-clinica/nueva'], {
-      queryParams: { duplicate: consulta.id_consulta }
-    });
-  }
-
-  deleteHistoriaClinica(): void {
-    const consulta = this.consulta();
-    if (!consulta) return;
-
-    if (confirm(`¿Estás seguro de eliminar la historia clínica ${consulta.codigo_consulta}?`)) {
-      this.consultasService.deleteConsulta(consulta.id_consulta).subscribe({
-        next: () => {
-          this.snackBar.open('Historia clínica eliminada exitosamente', 'Cerrar', { duration: 3000 });
-          this.goBack();
-        },
-        error: (error) => {
-          console.error('Error eliminando historia clínica:', error);
-          this.snackBar.open('Error eliminando historia clínica', 'Cerrar', { duration: 3000 });
-        }
-      });
-    }
-  }
-
-  uploadFile(): void {
-    // Implementar lógica de subida de archivos
-    this.snackBar.open('Funcionalidad de subida de archivos en desarrollo', 'Cerrar', { duration: 3000 });
-  }
-
-  downloadFile(archivo: any): void {
-    this.consultasService.downloadArchivo(archivo.id).subscribe({
-      next: (blob) => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = archivo.nombre;
-        a.click();
-        window.URL.revokeObjectURL(url);
+      {
+        titulo: 'Miembro torácico izquierdo',
+        suffix: 'i',
+        articulaciones: ['hombro', 'codo', 'carpo']
       },
-      error: (error) => {
-        console.error('Error descargando archivo:', error);
-        this.snackBar.open('Error descargando archivo', 'Cerrar', { duration: 3000 });
+      {
+        titulo: 'Miembro pélvico derecho',
+        suffix: 'd',
+        articulaciones: ['cadera', 'rodilla', 'tarso']
+      },
+      {
+        titulo: 'Miembro pélvico izquierdo',
+        suffix: 'i',
+        articulaciones: ['cadera', 'rodilla', 'tarso']
       }
-    });
+    ];
+
+    return groups
+      .map((group) => {
+        const rows = group.articulaciones
+          .map((articulacion) => {
+            const flexRaw = g[`${articulacion}_flexion_${group.suffix}`];
+            const extRaw = g[`${articulacion}_extension_${group.suffix}`];
+            return {
+              articulacion: this.humanizeKey(articulacion),
+              flexion: this.formatMeasurement(flexRaw, '°'),
+              extension: this.formatMeasurement(extRaw, '°')
+            };
+          })
+          .filter((row) => row.flexion !== '-' || row.extension !== '-');
+
+        return { titulo: group.titulo, rows };
+      })
+      .filter((group) => group.rows.length > 0);
   }
 
-  deleteFile(archivo: any): void {
-    if (confirm(`¿Estás seguro de eliminar el archivo ${archivo.nombre}?`)) {
-      this.consultasService.deleteArchivo(archivo.id).subscribe({
-        next: () => {
-          this.snackBar.open('Archivo eliminado exitosamente', 'Cerrar', { duration: 3000 });
-          this.loadArchivos(this.consulta()!.id_consulta);
-        },
-        error: (error) => {
-          console.error('Error eliminando archivo:', error);
-          this.snackBar.open('Error eliminando archivo', 'Cerrar', { duration: 3000 });
-        }
-      });
+  get reflejosGroups(): Array<{
+    titulo: string;
+    colD: string;
+    colI: string;
+    rows: Array<{ nombre: string; derecho: string; izquierdo: string }>;
+  }> {
+    const r = this.datosVI?.reflejos;
+    if (!r || typeof r !== 'object') return [];
+
+    const groups = [
+      {
+        titulo: 'Torácico',
+        colD: 'MTD',
+        colI: 'MTI',
+        items: [
+          { nombre: 'Tricipital', d: 'tricipital_d', i: 'tricipital_i' },
+          { nombre: 'Flexor torácico', d: 'flexor_tor_d', i: 'flexor_tor_i' }
+        ]
+      },
+      {
+        titulo: 'Pélvico',
+        colD: 'MPD',
+        colI: 'MPI',
+        items: [
+          { nombre: 'Patelar', d: 'patelar_d', i: 'patelar_i' },
+          { nombre: 'Tibial craneal', d: 'tibial_craneal_d', i: 'tibial_craneal_i' },
+          { nombre: 'Ciático', d: 'ciatico_d', i: 'ciatico_i' },
+          { nombre: 'Flexor pélvico', d: 'flexor_pelv_d', i: 'flexor_pelv_i' }
+        ]
+      }
+    ];
+
+    return groups
+      .map((group) => {
+        const rows = group.items
+          .map((item) => ({
+            nombre: item.nombre,
+            derecho: this.formatCompactValue(r[item.d]),
+            izquierdo: this.formatCompactValue(r[item.i])
+          }))
+          .filter((item) => item.derecho !== '-' || item.izquierdo !== '-');
+
+        return {
+          titulo: group.titulo,
+          colD: group.colD,
+          colI: group.colI,
+          rows
+        };
+      })
+      .filter((group) => group.rows.length > 0);
+  }
+
+  get observacionesPalpacion(): string {
+    const r = this.datosVI?.reflejos;
+    if (!r || typeof r !== 'object') return '';
+    return String(r['observaciones_palpacion'] || '').trim();
+  }
+
+  get datosCompletos(): Array<{ campo: string; valor: string }> {
+    const datos = this.historia()?.datos as Record<string, any> | null | undefined;
+    if (!datos || typeof datos !== 'object') return [];
+
+    const camposYaMostrados = this.getRenderedKeysForCurrentType();
+
+    return Object.entries(datos)
+      .filter(([key]) => !camposYaMostrados.has(key))
+      .filter(([, value]) => this.hasDisplayValue(value))
+      .map(([key, value]) => ({
+        campo: this.humanizeKey(key),
+        valor: this.stringifyValue(value)
+      }));
+  }
+
+  private getRenderedKeysForCurrentType(): Set<string> {
+    const tipo = this.historia()?.tipo_documento;
+
+    if (tipo === 'valoracion_inicial') {
+      return new Set([
+        'remitido_por',
+        'anamnesis',
+        'antiguedad_signos',
+        'medicacion_previa',
+        'enfermedades_anteriores',
+        'actividad_fisica',
+        'valoracion_estatica',
+        'valoracion_dinamica',
+        'hallazgos_musculares',
+        'hallazgos_osteoarticulares',
+        'perimetria_mtd_1',
+        'perimetria_mtd_2',
+        'perimetria_mti_1',
+        'perimetria_mti_2',
+        'perimetria_mpd_1',
+        'perimetria_mpd_2',
+        'perimetria_mpi_1',
+        'perimetria_mpi_2',
+        'goniometria',
+        'prueba_cajon',
+        'prueba_compresion_tibial',
+        'prueba_ortolani',
+        'luxacion_patelar',
+        'sensibilidad',
+        'propiocepcion',
+        'equilibrio',
+        'paniculo',
+        'reflejos',
+        'diagnostico',
+        'tratamiento',
+        'recomendaciones',
+        'proxima_cita',
+        'costo'
+      ]);
     }
+
+    if (tipo === 'seguimiento') {
+      return new Set([
+        'numero_sesion',
+        'observaciones_en_casa',
+        'ejercicios_realizados',
+        'recomendaciones_casa',
+        'notas_clinicas',
+        'costo'
+      ]);
+    }
+
+    if (tipo === 'formula') {
+      return new Set([
+        'medicamentos',
+        'plan_terapeutico',
+        'notas'
+      ]);
+    }
+
+    if (tipo === 'remision') {
+      return new Set([
+        'motivo',
+        'especialidad_destino',
+        'profesional_destino',
+        'institucion_destino',
+        'texto_remision'
+      ]);
+    }
+
+    return new Set<string>();
+  }
+
+  private hasDisplayValue(value: any): boolean {
+    if (value === null || value === undefined) return false;
+    if (typeof value === 'string') return value.trim().length > 0;
+    if (Array.isArray(value)) return value.length > 0;
+    if (typeof value === 'object') return Object.keys(value).length > 0;
+    return true;
+  }
+
+  private humanizeKey(key: string): string {
+    return key
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  private stringifyValue(value: any): string {
+    if (value === null || value === undefined) return '-';
+    if (typeof value === 'boolean') return value ? 'Sí' : 'No';
+    if (typeof value === 'number') return String(value);
+    if (typeof value === 'string') return value.trim();
+
+    if (Array.isArray(value)) {
+      if (value.every((item) => typeof item !== 'object' || item === null)) {
+        return value.map((item) => String(item)).join(', ');
+      }
+
+      return value
+        .map((item, index) => {
+          if (item && typeof item === 'object') {
+            const detail = Object.entries(item)
+              .filter(([, v]) => this.hasDisplayValue(v))
+              .map(([k, v]) => `${this.humanizeKey(k)}: ${this.stringifyValue(v)}`)
+              .join(' · ');
+            return `${index + 1}. ${detail}`;
+          }
+          return `${index + 1}. ${String(item)}`;
+        })
+        .join('\n');
+    }
+
+    if (typeof value === 'object') {
+      return Object.entries(value)
+        .filter(([, v]) => this.hasDisplayValue(v))
+        .map(([k, v]) => `${this.humanizeKey(k)}: ${this.stringifyValue(v)}`)
+        .join('\n');
+    }
+
+    return String(value);
+  }
+
+  private formatMeasurement(value: any, unit = 'cm'): string {
+    if (!this.hasDisplayValue(value)) return '-';
+    const num = Number(value);
+    if (Number.isFinite(num)) {
+      const display = Number.isInteger(num) ? String(num) : num.toFixed(1);
+      return `${display} ${unit}`;
+    }
+    return `${String(value)} ${unit}`;
+  }
+
+  private formatCompactValue(value: any): string {
+    if (!this.hasDisplayValue(value)) return '-';
+    if (typeof value === 'boolean') return value ? 'Sí' : 'No';
+    if (typeof value === 'number') return String(value);
+    if (typeof value === 'string') return value.trim();
+    return this.stringifyValue(value).replace(/\n/g, ' · ');
+  }
+
+  private parseSeguimientoChecklist(rawEjercicios: string): {
+    grupos: Array<{ titulo: string; items: string[] }>;
+    otros: string;
+  } {
+    const raw = String(rawEjercicios || '');
+    if (!raw.trim()) return { grupos: [], otros: '' };
+
+    const lines = raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const groups: Array<{ titulo: string; items: string[] }> = [];
+    let otros = '';
+
+    lines.forEach((line) => {
+      const idx = line.indexOf(':');
+      if (idx <= 0) return;
+
+      const key = line.slice(0, idx).trim();
+      const value = line.slice(idx + 1).trim();
+      if (!value) return;
+
+      if (/^otros$/i.test(key)) {
+        otros = value;
+        return;
+      }
+
+      const items = value
+        .split(',')
+        .map((i) => i.trim())
+        .filter(Boolean);
+
+      if (!items.length) return;
+      groups.push({ titulo: this.prettySeguimientoGroupTitle(key), items });
+    });
+
+    return { grupos: groups, otros };
+  }
+
+  private prettySeguimientoGroupTitle(rawTitle: string): string {
+    return rawTitle
+      .replace(/^ejercicios\s+de\s+/i, '')
+      .replace(/\s+y\s+/gi, ' y ')
+      .trim()
+      .replace(/^[a-záéíóúñ]/, (m) => m.toUpperCase());
   }
 }

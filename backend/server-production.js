@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import { randomUUID } from 'crypto';
 import DBInit from './src/database/DBInit.js';
 
 // Importar configuración de producción
@@ -10,12 +11,11 @@ import { productionConfig, validateConfig, getConfigByEnvironment } from './src/
 
 // Importar rutas
 import authRoutes from './src/routes/auth.js';
-import financialRoutes from './src/routes/index.js';
-import financialConfigRoutes from './src/routes/financialConfig.js';
 import clinicalRoutes from './src/routes/clinical.js';
 import auditRoutes from './src/routes/audit.js';
 import googleCalendarRoutes from './src/routes/googleCalendar.js';
-import reportsRoutes from './src/routes/reports.js';
+import emailConfigRoutes from './src/routes/emailConfigRoutes.js';
+import documentEmailRoutes from './src/routes/documentEmailRoutes.js';
 
 // Importar middleware de auditoría
 import { setAuditContext, auditActivity, auditAuthActivity } from './src/middleware/auditMiddleware.js';
@@ -28,7 +28,6 @@ import {
     generalRateLimit,
     authRateLimit,
     adminRateLimit,
-    reportsRateLimit,
     endpointRateLimit,
     rateLimitStats
 } from './src/middleware/rateLimiter.js';
@@ -52,7 +51,6 @@ import {
 import {
     intelligentCompression,
     intelligentCaching,
-    reportsCache,
     configCache,
     paginatedCache,
     performanceHeaders,
@@ -92,18 +90,55 @@ console.log('═'.repeat(60));
 // Configurar trust proxy para obtener IP real
 app.set('trust proxy', 1);
 
+// Request ID para trazabilidad mínima en logs y respuestas
+app.use((req, res, next) => {
+    const headerRequestId = req.headers['x-request-id'];
+    req.id = typeof headerRequestId === 'string' && headerRequestId.trim()
+        ? headerRequestId.trim()
+        : randomUUID();
+    res.setHeader('X-Request-Id', req.id);
+    next();
+});
+
 // ============ MIDDLEWARE DE SEGURIDAD AVANZADA ============
 
 // Helmet con configuración personalizada
 app.use(helmet(config.security.helmet));
 
-// CORS optimizado
+const corsOriginRules = (config.security.corsOrigins || [])
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+function escapeRegex(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+const compiledCorsRules = corsOriginRules.map((rule) => {
+    if (rule === '*') {
+        return /^.*$/i;
+    }
+    const regexPattern = `^${escapeRegex(rule).replace(/\\\*/g, '[^.\\/:]+')}$`;
+    return new RegExp(regexPattern, 'i');
+});
+
+function isOriginAllowed(origin) {
+    if (!origin) return true;
+    if (compiledCorsRules.length === 0) return false;
+    return compiledCorsRules.some((rule) => rule.test(origin));
+}
+
+// CORS optimizado (soporta patrones wildcard como https://*.vetplus.com)
 app.use(cors({
-    origin: config.security.corsOrigins,
+    origin: (origin, callback) => {
+        if (isOriginAllowed(origin)) {
+            return callback(null, true);
+        }
+        return callback(new Error(`Origen no permitido por CORS: ${origin}`));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    exposedHeaders: ['X-Total-Count', 'X-Cache', 'X-RateLimit-Remaining']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Tenant-Slug', 'X-Request-Id'],
+    exposedHeaders: ['X-Total-Count', 'X-Cache', 'X-RateLimit-Remaining', 'X-Request-Id']
 }));
 
 // Rate limiting global
@@ -131,6 +166,7 @@ app.use(preventSQLInjection);
 
 // Logging avanzado
 if (config.logging.requests) {
+    morgan.token('reqId', (req) => req.id || 'unknown');
     app.use(morgan(config.app.env === 'production' ? 'combined' : 'dev'));
 }
 
@@ -179,9 +215,7 @@ app.get('/', intelligentCaching({ ttl: 3600 }), (req, res) => {
             modules: [
                 'authentication',
                 'clinical_management', 
-                'financial_system',
                 'google_calendar',
-                'reports_analytics',
                 'audit_system'
             ],
             endpoints: {
@@ -203,18 +237,6 @@ app.use('/api/auth',
     authRoutes
 );
 
-app.use('/api/financial', 
-    endpointRateLimit('financial.*'),
-    intelligentCaching({ ttl: 300 }),
-    financialRoutes
-);
-
-app.use('/api/financial/config', 
-    adminRateLimit,
-    configCache,
-    financialConfigRoutes
-);
-
 app.use('/api/clinical', 
     endpointRateLimit('clinical.*'),
     paginatedCache,
@@ -231,10 +253,14 @@ app.use('/api/google-calendar',
     googleCalendarRoutes
 );
 
-app.use('/api/reports', 
-    reportsRateLimit,
-    reportsCache,
-    reportsRoutes
+app.use('/api/admin/email',
+    adminRateLimit,
+    emailConfigRoutes
+);
+
+app.use('/api/clinical/notificaciones',
+    endpointRateLimit('clinical.*'),
+    documentEmailRoutes
 );
 
 // ============ MIDDLEWARE DE MANEJO DE ERRORES ============
@@ -305,8 +331,6 @@ app.use((req, res) => {
             '/health',
             '/api/auth',
             '/api/clinical',
-            '/api/financial',
-            '/api/reports',
             '/api/google-calendar',
             '/api/audit'
         ],
@@ -384,9 +408,7 @@ async function startServer() {
             console.log('🏥 Módulos Activos:');
             console.log('   ✅ Autenticación y Usuarios');
             console.log('   ✅ Gestión Clínica Completa');
-            console.log('   ✅ Sistema Financiero');
             console.log('   ✅ Google Calendar Integration');
-            console.log('   ✅ Reportes y Analytics');
             console.log('   ✅ Sistema de Auditoría');
             console.log('═'.repeat(60));
             console.log('🛡️  Seguridad Production Ready:');

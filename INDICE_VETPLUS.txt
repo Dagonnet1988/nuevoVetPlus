@@ -1,0 +1,58 @@
+# ÍNDICE DEL PROYECTO VETPLUS
+
+## ESTRUCTURA DE CARPETAS PRINCIPALES
+
+### BACKEND
+- controllers/
+- database/
+- middleware/
+- routes/
+- services/
+- utils/
+- validators/
+
+### FRONTEND
+- app/
+- environments/
+- public/
+- styles/
+
+## MÓDULOS BACKEND
+1. Autenticación (auth)
+2. Clínico (clinical)
+3. Configuraciones (config)
+4. Calendario (google-calendar)
+5. Auditoría (audit)
+
+## COMPONENTES ANGULAR PRINCIPALES
+- auth/
+- citas/
+- pacientes/
+- calendario/
+- configuracion/
+- dashboard/
+
+## MODELOS DE BASE DE DATOS
+- usuario
+- cliente
+- mascota
+- consulta_clinica
+- calendario_cita
+
+## ENDPOINTS API DESTACADOS
+
+### Autenticación
+- POST /api/auth/login
+- POST /api/auth/logout
+
+### Pacientes
+- GET /api/pacientes
+- POST /api/pacientes
+
+### Citas
+- GET /api/citas
+- POST /api/citas
+
+### Calendario
+- GET /api/google-calendar/events
+- POST /api/google-calendar/events

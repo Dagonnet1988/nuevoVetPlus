@@ -1,10 +1,12 @@
-import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZoneChangeDetection } from '@angular/core';
+import { ApplicationConfig, LOCALE_ID, provideBrowserGlobalErrorListeners, provideZoneChangeDetection } from '@angular/core';
+import { DATE_PIPE_DEFAULT_OPTIONS } from '@angular/common';
 import { provideRouter } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { provideHttpClient, withInterceptorsFromDi, HTTP_INTERCEPTORS } from '@angular/common/http';
 import { provideNativeDateAdapter } from '@angular/material/core';
 import { routes } from './app.routes';
 import { AuthInterceptor } from './utils/interceptors/auth.interceptor';
+import { SuperadminInterceptor } from './utils/interceptors/superadmin.interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -13,10 +15,25 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes),
     provideAnimationsAsync(),
     provideNativeDateAdapter(),
+    {
+      provide: LOCALE_ID,
+      useValue: 'es-CO'
+    },
+    {
+      provide: DATE_PIPE_DEFAULT_OPTIONS,
+      useValue: {
+        dateFormat: 'dd-MM-yy h:mm a'
+      }
+    },
     provideHttpClient(withInterceptorsFromDi()),
     {
       provide: HTTP_INTERCEPTORS,
       useClass: AuthInterceptor,
+      multi: true
+    },
+    {
+      provide: HTTP_INTERCEPTORS,
+      useClass: SuperadminInterceptor,
       multi: true
     }
   ]

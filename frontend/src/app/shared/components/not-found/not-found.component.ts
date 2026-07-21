@@ -31,15 +31,15 @@ import { MatIconModule } from '@angular/material/icon';
 
         <!-- Actions -->
         <div class="error-actions">
-          <button mat-raised-button 
-                  color="primary" 
+          <button mat-raised-button
+                  color="primary"
                   routerLink="/dashboard"
                   class="action-button">
             <mat-icon>home</mat-icon>
             Ir al Dashboard
           </button>
-          
-          <button mat-button 
+
+          <button mat-button
                   (click)="goBack()"
                   class="action-button">
             <mat-icon>arrow_back</mat-icon>
@@ -128,31 +128,6 @@ import { MatIconModule } from '@angular/material/icon';
       margin: 0;
       color: #666;
       font-size: 14px;
-    }
-
-    /* Dark theme */
-    .dark-theme .not-found-container {
-      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-    }
-
-    .dark-theme .error-title {
-      color: #fff;
-    }
-
-    .dark-theme .error-message {
-      color: #b3b3b3;
-    }
-
-    .dark-theme .help-section {
-      background: rgba(30, 30, 30, 0.8);
-    }
-
-    .dark-theme .help-section h3 {
-      color: #81c784;
-    }
-
-    .dark-theme .help-section p {
-      color: #b3b3b3;
     }
 
     /* Responsive */

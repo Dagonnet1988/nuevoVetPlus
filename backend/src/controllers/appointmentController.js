@@ -1,7 +1,9 @@
-import { query } from '../config/database.js';
+import { query, getClient } from '../config/database.js';
 import { v4 as uuidv4 } from 'uuid';
 import googleCalendarService from '../services/googleCalendar.js';
 import appointmentConflictService from '../services/appointmentConflictService.js';
+import { sendEmail } from '../services/emailService.js';
+import { renderEmailTemplate } from '../services/emailTemplateService.js';
 
 /**
  * Convertir fecha a formato Colombia (sin zona horaria)
@@ -36,22 +38,140 @@ const convertirFechaAColombia = (fechaStr) => {
  */
 const ESTADO_MAPPING = {
     // Frontend -> Base de datos
-    'pendiente': 'pendiente',
+    // Compatibilidad legada
+    'pendiente': 'confirmada',
     'confirmada': 'confirmada', 
     'en_curso': 'en_curso',
     'completada': 'completada',
-    'cancelada': 'cancelada',
+    'cancelada': 'no_asistio',
     'no_asistio': 'no_asistio'
 };
 
 const ESTADO_REVERSE_MAPPING = {
     // Base de datos -> Frontend
-    'pendiente': 'pendiente',
+    // Compatibilidad legada
+    'pendiente': 'confirmada',
     'confirmada': 'confirmada',
     'en_curso': 'en_curso', 
     'completada': 'completada',
-    'cancelada': 'cancelada',
+    'cancelada': 'no_asistio',
     'no_asistio': 'no_asistio'
+};
+
+const ESTADOS_CITA_PERMITIDOS = ['confirmada', 'en_curso', 'completada', 'no_asistio'];
+const DIAS_BLOQUEADOS_TIPOS = new Set(['no_laborable']);
+
+const extractDateOnly = (value) => {
+    if (!value) return null;
+    const raw = String(value).trim();
+    const match = raw.match(/(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : null;
+};
+
+const getBogotaDateOnlyFromDate = (value) => {
+    if (!(value instanceof Date) || Number.isNaN(value.getTime())) return null;
+    return value.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+};
+
+const getTenantDiasEspeciales = async (tenantId) => {
+    const result = await query(
+        `SELECT fecha, descripcion, tipo, hora_inicio, hora_fin
+         FROM system.dias_especiales
+         WHERE activo = true
+           AND (id_tenant IS NULL OR id_tenant = $1)`,
+        [tenantId]
+    );
+
+    return result.rows.map((row) => ({
+        fecha: row.fecha,
+        descripcion: row.descripcion,
+        tipo: row.tipo,
+        horario_especial: row.hora_inicio && row.hora_fin
+            ? { hora_inicio: row.hora_inicio, hora_fin: row.hora_fin }
+            : undefined,
+        activo: true
+    }));
+};
+
+const getBlockingDiaEspecial = (diasEspeciales, fechaYmd) => {
+    if (!fechaYmd) return null;
+
+    return diasEspeciales.find((dia) => {
+        const tipo = String(dia?.tipo || '').trim();
+        return dia?.fecha === fechaYmd && DIAS_BLOQUEADOS_TIPOS.has(tipo);
+    }) || null;
+};
+
+const parseHourMinutesToTotal = (value) => {
+    const raw = String(value || '').trim();
+    const match = raw.match(/^(\d{2}):(\d{2})/);
+    if (!match) return null;
+    return Number(match[1]) * 60 + Number(match[2]);
+};
+
+const parseDateToMinutes = (value) => {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.getHours() * 60 + d.getMinutes();
+};
+
+const getHorarioEspecialByDate = (diasEspeciales, fechaYmd) => {
+    if (!fechaYmd) return null;
+    return diasEspeciales.find((dia) => dia?.fecha === fechaYmd && String(dia?.tipo || '').trim() === 'horario_especial') || null;
+};
+
+const validateDateTimeAgainstSpecialDays = ({ diasEspeciales, fechaInicio, fechaFin }) => {
+    const fechaYmd = extractDateOnly(fechaInicio);
+    if (!fechaYmd) {
+        return { blocked: false };
+    }
+
+    const diaNoLaborable = getBlockingDiaEspecial(diasEspeciales, fechaYmd);
+    if (diaNoLaborable) {
+        return {
+            blocked: true,
+            code: 'SPECIAL_DAY_BLOCKED',
+            message: `No se pueden agendar citas el ${fechaYmd} (${diaNoLaborable.tipo}).`,
+            data: {
+                fecha: fechaYmd,
+                tipo: diaNoLaborable.tipo,
+                descripcion: diaNoLaborable.descripcion || null
+            }
+        };
+    }
+
+    const horarioEspecial = getHorarioEspecialByDate(diasEspeciales, fechaYmd);
+    if (!horarioEspecial) {
+        return { blocked: false };
+    }
+
+    const allowedStart = parseHourMinutesToTotal(horarioEspecial?.horario_especial?.hora_inicio);
+    const allowedEnd = parseHourMinutesToTotal(horarioEspecial?.horario_especial?.hora_fin);
+    const slotStart = parseDateToMinutes(fechaInicio);
+    const slotEnd = parseDateToMinutes(fechaFin);
+
+    if (
+        allowedStart === null ||
+        allowedEnd === null ||
+        slotStart === null ||
+        slotEnd === null ||
+        slotStart < allowedStart ||
+        slotEnd > allowedEnd
+    ) {
+        return {
+            blocked: true,
+            code: 'SPECIAL_DAY_BLOCKED',
+            message: `No se pueden agendar citas fuera del horario permitido (${horarioEspecial?.horario_especial?.hora_inicio || '--:--'}-${horarioEspecial?.horario_especial?.hora_fin || '--:--'}) el ${fechaYmd}.`,
+            data: {
+                fecha: fechaYmd,
+                tipo: 'horario_especial',
+                descripcion: horarioEspecial.descripcion || null,
+                horario_especial: horarioEspecial.horario_especial || null
+            }
+        };
+    }
+
+    return { blocked: false };
 };
 
 /**
@@ -93,11 +213,280 @@ const generateAppointmentCode = () => {
     return `CIT-${timestamp}`;
 };
 
+const MAX_RECURRING_OCCURRENCES = 200;
+
+const toLocalDate = (value) => {
+    const d = new Date(value);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds(), 0);
+};
+
+const diffMinutes = (start, end) => {
+    return Math.round((end.getTime() - start.getTime()) / (1000 * 60));
+};
+
+const capitalizeFirst = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return raw;
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+};
+
+const formatDateTimeForEmail = (value) => {
+    if (!value) return '';
+    const d = new Date(value);
+    const locale = 'es-CO';
+    const timeZone = 'America/Bogota';
+
+    const weekday = capitalizeFirst(new Intl.DateTimeFormat(locale, { weekday: 'long', timeZone }).format(d));
+    const day = new Intl.DateTimeFormat(locale, { day: '2-digit', timeZone }).format(d);
+    const month = capitalizeFirst(new Intl.DateTimeFormat(locale, { month: 'long', timeZone }).format(d));
+    const year = new Intl.DateTimeFormat(locale, { year: 'numeric', timeZone }).format(d);
+    const time = new Intl.DateTimeFormat(locale, {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+        timeZone
+    }).format(d);
+
+    return `${weekday} ${day} de ${month} de ${year} a las ${time}`;
+};
+
+const sendAppointmentEmailByTemplate = async ({
+    tenantId,
+    userId,
+    appointment,
+    templateKey
+}) => {
+    const to = String(appointment?.cliente_email || '').trim();
+    if (!to) return;
+
+    const rendered = await renderEmailTemplate({
+        tenantId,
+        key: templateKey,
+        userId,
+        variables: {
+            cliente_nombre: appointment?.cliente_nombre || 'cliente',
+            mascota_nombre: appointment?.mascota_nombre || 'mascota',
+            fecha_hora: formatDateTimeForEmail(appointment?.fecha_inicio),
+            clinica_nombre: (await getClinicBranding(tenantId)).clinicName
+        }
+    });
+
+    if (!rendered) return;
+
+    await sendEmail({
+        tenantId,
+        to,
+        subject: rendered.asunto_render,
+        html: rendered.cuerpo_html_render,
+        text: rendered.cuerpo_text_render || undefined,
+        logContext: {
+            tipo_envio: templateKey,
+            userId,
+            metadata: {
+                id_cita: appointment?.id_cita,
+                codigo_cita: appointment?.codigo_cita || null
+            }
+        }
+    });
+};
+
+const buildRecurringOccurrences = ({
+    fechaInicio,
+    fechaFin,
+    frecuencia,
+    intervalo,
+    diasSemana,
+    totalOcurrencias,
+    fechaHasta
+}) => {
+    const inicioBase = toLocalDate(fechaInicio);
+    const finBase = toLocalDate(fechaFin);
+    const durationMinutes = diffMinutes(inicioBase, finBase);
+
+    if (durationMinutes <= 0) {
+        throw new Error('La fecha_fin debe ser posterior a la fecha_inicio');
+    }
+
+    const until = fechaHasta ? new Date(`${fechaHasta}T23:59:59`) : null;
+    const interval = Math.max(1, Number(intervalo || 1));
+    const limit = Math.min(Number(totalOcurrencias || 0) || MAX_RECURRING_OCCURRENCES, MAX_RECURRING_OCCURRENCES);
+    const occurrences = [];
+
+    if (frecuencia === 'daily') {
+        let cursor = new Date(inicioBase);
+        while (occurrences.length < limit) {
+            if (until && cursor > until) break;
+
+            const start = new Date(cursor);
+            const end = new Date(start.getTime() + durationMinutes * 60000);
+            occurrences.push({ start, end });
+
+            cursor.setDate(cursor.getDate() + interval);
+        }
+
+        return occurrences;
+    }
+
+    const validDays = Array.isArray(diasSemana) && diasSemana.length > 0
+        ? Array.from(new Set(diasSemana.map((d) => Number(d)).filter((d) => d >= 0 && d <= 6))).sort((a, b) => a - b)
+        : [inicioBase.getDay()];
+
+    let dayCursor = new Date(inicioBase);
+    while (occurrences.length < limit) {
+        if (until && dayCursor > until) break;
+
+        const diffDays = Math.floor((new Date(dayCursor.getFullYear(), dayCursor.getMonth(), dayCursor.getDate()).getTime()
+            - new Date(inicioBase.getFullYear(), inicioBase.getMonth(), inicioBase.getDate()).getTime()) / (1000 * 60 * 60 * 24));
+        const weekIndex = Math.floor(diffDays / 7);
+
+        if (weekIndex % interval === 0 && validDays.includes(dayCursor.getDay())) {
+            const start = new Date(dayCursor);
+            start.setHours(inicioBase.getHours(), inicioBase.getMinutes(), inicioBase.getSeconds(), 0);
+            const end = new Date(start.getTime() + durationMinutes * 60000);
+            occurrences.push({ start, end });
+        }
+
+        dayCursor.setDate(dayCursor.getDate() + 1);
+    }
+
+    return occurrences;
+};
+
+const isOutboundGoogleSyncEnabled = () => {
+    return String(process.env.GOOGLE_SYNC_OUTBOUND_ENABLED ?? 'false').toLowerCase() === 'true';
+};
+
+let consultasClinicasTableExistsCache = null;
+let rescheduleAuditColumnsCache = null;
+
+const getClinicBranding = async (tenantId = null) => {
+    try {
+        const result = await query(
+            `SELECT nombre_empresa, direccion
+             FROM system.configuracion_empresa
+             WHERE activa = true
+               AND ($1::uuid IS NULL OR id_tenant = $1)
+             ORDER BY updated_at DESC NULLS LAST, created_at DESC
+             LIMIT 1`,
+            [tenantId || null]
+        );
+
+        const row = result.rows[0] || null;
+        return {
+            clinicName: row?.nombre_empresa || process.env.CLINIC_NAME || 'VetPlus Clínica',
+            clinicAddress: row?.direccion || process.env.CLINIC_ADDRESS || 'VetPlus Clínica'
+        };
+    } catch {
+        return {
+            clinicName: process.env.CLINIC_NAME || 'VetPlus Clínica',
+            clinicAddress: process.env.CLINIC_ADDRESS || 'VetPlus Clínica'
+        };
+    }
+};
+
+const shouldInviteOwnerToGoogleCalendar = async (tenantId = null) => {
+    if (!tenantId) {
+        return false;
+    }
+
+    try {
+        const result = await query(
+            `SELECT sync_preferences
+             FROM vetplus_auth.google_calendar_config
+             WHERE is_active = true
+               AND configured_by IN (
+                   SELECT id_usuario
+                   FROM vetplus_auth.usuarios
+                   WHERE id_tenant = $1
+               )
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [tenantId]
+        );
+
+        const prefs = result.rows[0]?.sync_preferences || {};
+        const raw = prefs?.configuracion_eventos?.invitar_propietario_calendario;
+
+        if (typeof raw === 'boolean') {
+            return raw;
+        }
+
+        if (typeof raw === 'string') {
+            return raw.trim().toLowerCase() === 'true';
+        }
+
+        return false;
+    } catch {
+        return false;
+    }
+};
+
+const hasConsultasClinicasTable = async () => {
+    if (consultasClinicasTableExistsCache !== null) {
+        return consultasClinicasTableExistsCache;
+    }
+
+    try {
+        const result = await query("SELECT to_regclass('clinical.consultas_clinicas') AS table_name");
+        consultasClinicasTableExistsCache = Boolean(result.rows[0]?.table_name);
+        return consultasClinicasTableExistsCache;
+    } catch {
+        consultasClinicasTableExistsCache = false;
+        return false;
+    }
+};
+
+const hasRescheduleAuditColumns = async () => {
+    if (rescheduleAuditColumnsCache !== null) {
+        return rescheduleAuditColumnsCache;
+    }
+
+    try {
+        const result = await query(
+            `SELECT COUNT(*)::int AS total
+             FROM information_schema.columns
+             WHERE table_schema = 'clinical'
+               AND table_name = 'calendario_citas'
+               AND column_name IN (
+                   'fue_reagendada',
+                   'cantidad_reagendamientos',
+                   'ultima_reagendacion_at',
+                   'ultima_reagendacion_por'
+               )`
+        );
+
+        rescheduleAuditColumnsCache = Number(result.rows[0]?.total || 0) === 4;
+        return rescheduleAuditColumnsCache;
+    } catch {
+        rescheduleAuditColumnsCache = false;
+        return false;
+    }
+};
+
 /**
  * Sincronizar cita con Google Calendar
  */
 const syncAppointmentWithGoogle = async (appointmentData, action = 'create') => {
     try {
+        if (!isOutboundGoogleSyncEnabled()) {
+            if (appointmentData?.id_cita) {
+                await query(`
+                    UPDATE clinical.calendario_citas
+                    SET
+                        google_sync_status = 'disabled',
+                        google_sync_error = 'Sincronizacion saliente deshabilitada (solo Google -> VetPlus)',
+                        last_google_sync = CURRENT_TIMESTAMP
+                    WHERE id_cita = $1
+                `, [appointmentData.id_cita]);
+            }
+
+            return {
+                success: true,
+                skipped: true,
+                message: 'Sincronizacion saliente deshabilitada (solo Google -> VetPlus)'
+            };
+        }
+
         // Verificar si Google Calendar está configurado
         if (!await googleCalendarService.hasValidTokens()) {
             return {
@@ -108,6 +497,7 @@ const syncAppointmentWithGoogle = async (appointmentData, action = 'create') => 
 
         const {
             id_cita,
+            id_tenant,
             fecha_inicio,
             fecha_fin,
             tipo,
@@ -142,6 +532,8 @@ const syncAppointmentWithGoogle = async (appointmentData, action = 'create') => 
 
         const formattedStartDateTime = formatDateForGoogle(fecha_inicio);
         const formattedEndDateTime = formatDateForGoogle(fecha_fin);
+        const { clinicName, clinicAddress } = await getClinicBranding(id_tenant);
+        const inviteOwnerToCalendar = await shouldInviteOwnerToGoogleCalendar(id_tenant);
 
         console.log('📅 Fechas formateadas para Google:', {
             original_start: fecha_inicio,
@@ -153,7 +545,7 @@ const syncAppointmentWithGoogle = async (appointmentData, action = 'create') => 
 
         // Crear descripción detallada para el evento
         const description = `
-📅 Cita Veterinaria - VetPlus
+    📅 Cita Veterinaria - ${clinicName}
 
 🐕 Mascota: ${mascota_nombre}
 👤 Cliente: ${cliente_nombre}
@@ -165,12 +557,12 @@ Código de cita: ${appointmentData.codigo_cita}
         `.trim();
 
         const eventData = {
-            summary: `${tipo} - ${mascota_nombre} (${cliente_nombre})`,
+            summary: `Cita Veterinaria - ${clinicName}`,
             description,
             startDateTime: formattedStartDateTime,
             endDateTime: formattedEndDateTime,
-            attendeeEmail: cliente_email,
-            location: process.env.CLINIC_ADDRESS || 'VetPlus Clínica'
+            attendeeEmail: inviteOwnerToCalendar ? cliente_email : null,
+            location: clinicAddress
         };
 
         let result;
@@ -262,9 +654,11 @@ export const createAppointment = async (req, res) => {
             tipo,
             motivo,
             notas,
-            observaciones,
-            precio
+            observaciones
         } = req.body;
+
+        // El frontend puede enviar "observaciones" en lugar de "notas" — normalizar
+        const notasFinales = notas || observaciones;
         
         console.log('📝 Campos extraídos:', {
             id_mascota,
@@ -274,8 +668,7 @@ export const createAppointment = async (req, res) => {
             tipo,
             motivo,
             notas,
-            observaciones,
-            precio
+            observaciones
         });
         
         // Validar campos requeridos
@@ -350,10 +743,29 @@ export const createAppointment = async (req, res) => {
         const codigo_cita = generateAppointmentCode();
         const created_by = req.user.id;
         
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+
+        // Regla de negocio: no laborable bloquea todo el día; horario especial solo permite franja configurada.
+        const diasEspeciales = await getTenantDiasEspeciales(tenantId);
+        const specialValidation = validateDateTimeAgainstSpecialDays({
+            diasEspeciales,
+            fechaInicio: fechaInicioFormato,
+            fechaFin: fechaFinFormato
+        });
+
+        if (specialValidation.blocked) {
+            return res.status(409).json({
+                success: false,
+                message: specialValidation.message,
+                code: specialValidation.code,
+                data: specialValidation.data
+            });
+        }
+
         // Verificar que la mascota existe
         const mascotaResult = await query(
-            'SELECT id_mascota, nombre FROM clinical.mascotas WHERE id_mascota = $1 AND activo = true',
-            [id_mascota]
+            'SELECT id_mascota, nombre FROM clinical.mascotas WHERE id_mascota = $1 AND id_tenant = $2 AND activo = true',
+            [id_mascota, tenantId]
         );
         
         if (mascotaResult.rows.length === 0) {
@@ -376,46 +788,35 @@ export const createAppointment = async (req, res) => {
             });
         }
         
-        // Verificar conflictos de horario (BD + Google Calendar)
-        const conflictCheck = await appointmentConflictService.checkAllConflicts(
-            id_veterinario, 
-            fecha_inicio, 
-            fecha_fin
-        );
-        
-        if (conflictCheck.hasConflicts) {
-            // Sugerir horarios alternativos
-            const suggestions = await appointmentConflictService.suggestAlternativeSlots(
-                id_veterinario,
-                fecha_inicio,
-                Math.ceil((new Date(fecha_fin) - new Date(fecha_inicio)) / (1000 * 60)), // duración en minutos
-                3
-            );
-            
-            return res.status(409).json({
-                success: false,
-                message: 'El veterinario ya tiene compromisos programados en ese horario',
-                conflict_details: conflictCheck,
-                suggested_alternatives: suggestions.suggestions || []
-            });
-        }
+        // Regla de negocio actual: se permiten citas simultáneas/solapadas por veterinario.
         
         // Crear la cita
         const insertQuery = `
             INSERT INTO clinical.calendario_citas (
                 id_cita, codigo_cita, id_mascota, id_veterinario,
-                fecha_inicio, fecha_fin, tipo, motivo, notas, created_by
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                fecha_inicio, fecha_fin, tipo, estado, motivo, notas, created_by, id_tenant
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             RETURNING *
         `;
         
         const result = await query(insertQuery, [
             id_cita, codigo_cita, id_mascota, id_veterinario,
-            fechaInicioFormato, fechaFinFormato, tipo, motivo, notas, created_by
+            fechaInicioFormato, fechaFinFormato, tipo, 'confirmada', motivo, notasFinales, created_by, tenantId
         ]);
         
         // Obtener información completa de la cita creada
         const citaCompleta = await getAppointmentWithDetails(id_cita);
+
+        try {
+            await sendAppointmentEmailByTemplate({
+                tenantId,
+                userId: req.user?.id_usuario || req.user?.id || null,
+                appointment: citaCompleta,
+                templateKey: 'cita_agendada'
+            });
+        } catch (mailError) {
+            console.error('No se pudo enviar correo de cita agendada:', mailError.message);
+        }
         
         // Sincronizar con Google Calendar (de forma asíncrona)
         const syncResult = await syncAppointmentWithGoogle(citaCompleta, 'create');
@@ -427,8 +828,10 @@ export const createAppointment = async (req, res) => {
             success: true,
             message: 'Cita creada exitosamente',
             data: citaTransformada,
-            google_sync: syncResult.success ? 'synced' : 'failed',
-            google_sync_message: syncResult.success ? 'Sincronizada con Google Calendar' : syncResult.error
+            google_sync: syncResult.skipped ? 'disabled' : (syncResult.success ? 'synced' : 'failed'),
+            google_sync_message: syncResult.skipped
+                ? syncResult.message
+                : (syncResult.success ? 'Sincronizada con Google Calendar' : syncResult.error)
         });
         
     } catch (error) {
@@ -436,6 +839,261 @@ export const createAppointment = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error interno del servidor',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+/**
+ * Previsualizar citas periódicas sin crear registros
+ */
+export const previewRecurringAppointments = async (req, res) => {
+    try {
+        const {
+            fecha_inicio,
+            fecha_fin,
+            recurrencia
+        } = req.body;
+
+        const frecuencia = recurrencia?.frecuencia || 'weekly';
+        const intervalo = Number(recurrencia?.intervalo || 1);
+        const diasSemana = recurrencia?.dias_semana || [];
+        const totalOcurrencias = Number(recurrencia?.total_ocurrencias || 12);
+        const fechaHasta = recurrencia?.fecha_hasta || null;
+
+        const ocurrencias = buildRecurringOccurrences({
+            fechaInicio: fecha_inicio,
+            fechaFin: fecha_fin,
+            frecuencia,
+            intervalo,
+            diasSemana,
+            totalOcurrencias,
+            fechaHasta
+        });
+
+        return res.json({
+            success: true,
+            data: {
+                total: ocurrencias.length,
+                ocurrencias: ocurrencias.map((o, index) => ({
+                    indice: index + 1,
+                    fecha_inicio: o.start.toISOString(),
+                    fecha_fin: o.end.toISOString()
+                }))
+            }
+        });
+    } catch (error) {
+        return res.status(400).json({
+            success: false,
+            message: error.message || 'No se pudo previsualizar la recurrencia'
+        });
+    }
+};
+
+/**
+ * Crear serie de citas periódicas materializando ocurrencias en calendario_citas
+ */
+export const createRecurringAppointments = async (req, res) => {
+    let txClient = null;
+    try {
+        const {
+            id_mascota,
+            id_veterinario,
+            fecha_inicio,
+            fecha_fin,
+            tipo,
+            motivo,
+            notas,
+            observaciones,
+            recurrencia,
+            ocurrencias_editadas
+        } = req.body;
+
+        const notasFinales = notas || observaciones || null;
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+        const createdBy = req.user?.id || req.user?.id_usuario || null;
+
+        const frecuencia = recurrencia?.frecuencia || 'weekly';
+        const intervalo = Number(recurrencia?.intervalo || 1);
+        const diasSemana = recurrencia?.dias_semana || [];
+        const totalOcurrencias = Number(recurrencia?.total_ocurrencias || 12);
+        const fechaHasta = recurrencia?.fecha_hasta || null;
+
+        const ocurrenciasRegla = buildRecurringOccurrences({
+            fechaInicio: fecha_inicio,
+            fechaFin: fecha_fin,
+            frecuencia,
+            intervalo,
+            diasSemana,
+            totalOcurrencias,
+            fechaHasta
+        });
+
+        const ocurrencias = Array.isArray(ocurrencias_editadas) && ocurrencias_editadas.length > 0
+            ? ocurrencias_editadas
+                .map((item, idx) => {
+                    const start = item?.fecha_inicio ? toLocalDate(item.fecha_inicio) : null;
+                    const end = item?.fecha_fin ? toLocalDate(item.fecha_fin) : null;
+                    if (!start || !end || end <= start) return null;
+                    return {
+                        start,
+                        end,
+                        tipo: item?.tipo || tipo,
+                        indice: Number(item?.indice || idx + 1)
+                    };
+                })
+                .filter(Boolean)
+            : ocurrenciasRegla.map((o, idx) => ({ ...o, tipo, indice: idx + 1 }));
+
+        if (!ocurrencias.length) {
+            return res.status(400).json({
+                success: false,
+                message: 'La regla no genera ocurrencias válidas'
+            });
+        }
+
+        // Regla de negocio: no laborable bloquea el día completo; horario especial bloquea fuera de franja.
+        const diasEspeciales = await getTenantDiasEspeciales(tenantId);
+        const ocurrenciasBloqueadas = [];
+
+        for (const occ of ocurrencias) {
+            const startDateTime = occ.start instanceof Date ? occ.start : occ?.fecha_inicio;
+            const endDateTime = occ.end instanceof Date ? occ.end : occ?.fecha_fin;
+            const validation = validateDateTimeAgainstSpecialDays({
+                diasEspeciales,
+                fechaInicio: startDateTime,
+                fechaFin: endDateTime
+            });
+
+            if (validation.blocked) {
+                ocurrenciasBloqueadas.push({
+                    fecha: validation.data?.fecha || extractDateOnly(startDateTime),
+                    tipo: validation.data?.tipo || null,
+                    descripcion: validation.data?.descripcion || null,
+                    horario_especial: validation.data?.horario_especial || null
+                });
+            }
+        }
+
+        if (ocurrenciasBloqueadas.length > 0) {
+            const fechas = Array.from(new Set(ocurrenciasBloqueadas.map((d) => d.fecha))).slice(0, 5).join(', ');
+            return res.status(409).json({
+                success: false,
+                message: `La serie incluye fechas no agendables (${fechas}).`,
+                code: 'SPECIAL_DAY_BLOCKED',
+                data: {
+                    total_bloqueadas: ocurrenciasBloqueadas.length,
+                    muestras: ocurrenciasBloqueadas.slice(0, 5)
+                }
+            });
+        }
+
+        txClient = await getClient();
+        await txClient.query('BEGIN');
+
+        const duracionMinutos = diffMinutes(toLocalDate(fecha_inicio), toLocalDate(fecha_fin));
+
+        const serieResult = await txClient.query(
+            `INSERT INTO clinical.calendario_series (
+                id_mascota, id_veterinario, tipo, estado_inicial, motivo, notas,
+                duracion_minutos, fecha_inicio_base, frecuencia, intervalo,
+                dias_semana, total_ocurrencias, fecha_hasta, id_tenant, created_by, updated_by
+            ) VALUES (
+                $1,$2,$3,'confirmada',$4,$5,
+                $6,$7,$8,$9,
+                $10,$11,$12,$13,$14,$14
+            )
+            RETURNING id_serie, codigo_serie`,
+            [
+                id_mascota,
+                id_veterinario,
+                tipo,
+                motivo || null,
+                notasFinales,
+                duracionMinutos,
+                convertirFechaAColombia(fecha_inicio),
+                frecuencia,
+                intervalo,
+                diasSemana,
+                Math.min(ocurrencias.length, MAX_RECURRING_OCCURRENCES),
+                fechaHasta,
+                tenantId,
+                createdBy
+            ]
+        );
+
+        const serie = serieResult.rows[0];
+        const createdIds = [];
+
+        for (let i = 0; i < ocurrencias.length; i++) {
+            const occ = ocurrencias[i];
+            const id_cita = uuidv4();
+            const codigo_cita = generateAppointmentCode();
+            const tipoOcurrencia = occ.tipo || tipo;
+            const indiceSerie = occ.indice || (i + 1);
+
+            const insert = await txClient.query(
+                `INSERT INTO clinical.calendario_citas (
+                    id_cita, codigo_cita, id_mascota, id_veterinario,
+                    fecha_inicio, fecha_fin, tipo, estado, motivo, notas,
+                    id_tenant, created_by, id_serie, indice_serie
+                ) VALUES (
+                    $1,$2,$3,$4,
+                    $5,$6,$7,'confirmada',$8,$9,
+                    $10,$11,$12,$13
+                ) RETURNING id_cita`,
+                [
+                    id_cita,
+                    codigo_cita,
+                    id_mascota,
+                    id_veterinario,
+                    convertirFechaAColombia(occ.start.toISOString()),
+                    convertirFechaAColombia(occ.end.toISOString()),
+                    tipoOcurrencia,
+                    motivo || null,
+                    notasFinales,
+                    tenantId,
+                    createdBy,
+                    serie.id_serie,
+                    indiceSerie
+                ]
+            );
+
+            createdIds.push(insert.rows[0].id_cita);
+        }
+
+        await txClient.query('COMMIT');
+        txClient.release();
+        txClient = null;
+
+        // Sync fuera de transacción para no bloquear creación masiva
+        for (const idCita of createdIds) {
+            const citaCompleta = await getAppointmentWithDetails(idCita, tenantId);
+            if (citaCompleta) {
+                await syncAppointmentWithGoogle(citaCompleta, 'create');
+            }
+        }
+
+        return res.status(201).json({
+            success: true,
+            message: 'Serie de citas creada exitosamente',
+            data: {
+                id_serie: serie.id_serie,
+                codigo_serie: serie.codigo_serie,
+                total_citas: createdIds.length,
+                citas: createdIds
+            }
+        });
+    } catch (error) {
+        if (txClient) {
+            try { await txClient.query('ROLLBACK'); } catch {}
+            txClient.release();
+        }
+
+        console.error('Error creando citas periódicas:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'No se pudo crear la serie de citas',
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
@@ -457,25 +1115,21 @@ export const getAppointments = async (req, res) => {
             id_mascota
         } = req.query;
         
-        // 🔍 DEBUG: Log de parámetros recibidos
-        console.log('🔍 [FILTROS] Parámetros recibidos:', {
-            limit, offset, fecha_inicio, fecha_fin, estado, tipo, id_veterinario, id_mascota
-        });
-        
-        let whereConditions = ['1=1']; // No excluir ningún estado por defecto
-        let queryParams = [];
-        let paramCount = 0;
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+        let whereConditions = [`c.id_tenant = $1`]; // Filtrar por tenant
+        let queryParams = [tenantId];
+        let paramCount = 1;
         
         // Construir filtros dinámicos
         if (fecha_inicio) {
             paramCount++;
-            whereConditions.push(`c.fecha_inicio >= $${paramCount}`);
+            whereConditions.push(`c.fecha_inicio >= $${paramCount}::date`);
             queryParams.push(fecha_inicio);
         }
         
         if (fecha_fin) {
             paramCount++;
-            whereConditions.push(`c.fecha_inicio <= $${paramCount}`);
+            whereConditions.push(`c.fecha_inicio < ($${paramCount}::date + INTERVAL '1 day')`);
             queryParams.push(fecha_fin);
         }
         
@@ -495,7 +1149,6 @@ export const getAppointments = async (req, res) => {
         
         if (id_veterinario) {
             paramCount++;
-            console.log(`🔍 [FILTRO VETERINARIO] Aplicando filtro: id_veterinario = "${id_veterinario}" (tipo: ${typeof id_veterinario})`);
             whereConditions.push(`c.id_veterinario = $${paramCount}`);
             queryParams.push(id_veterinario);
         }
@@ -508,11 +1161,8 @@ export const getAppointments = async (req, res) => {
         
         const whereClause = whereConditions.join(' AND ');
         
-        // 🔍 DEBUG: Log de query final
-        console.log('🔍 [QUERY] WHERE clause:', whereClause);
-        console.log('🔍 [QUERY] Parámetros:', queryParams);
-        console.log('🔍 [QUERY] Ejecutando query...');
-        
+        const hasConsultasTable = await hasConsultasClinicasTable();
+
         // Query principal
         const mainQuery = `
             SELECT 
@@ -525,13 +1175,12 @@ export const getAppointments = async (req, res) => {
                 cl.email as cliente_email,
                 v.nombre as veterinario_nombre,
                 v.email as veterinario_email,
-                con.codigo_consulta,
-                con.diagnostico
+                ${hasConsultasTable ? 'con.codigo_consulta, con.diagnostico' : 'NULL::text as codigo_consulta, NULL::text as diagnostico'}
             FROM clinical.calendario_citas c
             LEFT JOIN clinical.mascotas m ON c.id_mascota = m.id_mascota
             LEFT JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
             LEFT JOIN vetplus_auth.usuarios v ON c.id_veterinario = v.id_usuario
-            LEFT JOIN clinical.consultas_clinicas con ON c.id_consulta = con.id_consulta
+            ${hasConsultasTable ? 'LEFT JOIN clinical.consultas_clinicas con ON c.id_consulta = con.id_consulta' : ''}
             WHERE ${whereClause}
             ORDER BY c.fecha_inicio ASC
             LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}
@@ -553,15 +1202,6 @@ export const getAppointments = async (req, res) => {
             query(mainQuery, queryParams),
             query(countQuery, countParams)
         ]);
-        
-        console.log(`🔍 [RESULTADO] Se encontraron ${result.rows.length} citas`);
-        if (id_veterinario) {
-            console.log(`🔍 [FILTRO VET] Citas para veterinario ${id_veterinario}:`, result.rows.map(r => ({
-                id: r.id_cita,
-                vet: r.veterinario_nombre, 
-                fecha: r.fecha_inicio
-            })));
-        }
         
         const total = parseInt(countResult.rows[0].total);
         const totalPages = Math.ceil(total / limit);
@@ -594,7 +1234,7 @@ export const getAppointments = async (req, res) => {
 export const getAppointmentById = async (req, res) => {
     try {
         const { id } = req.params;
-        const cita = await getAppointmentWithDetails(id);
+        const cita = await getAppointmentWithDetails(id, req.tenantId ?? req.user?.tenant_id);
         
         if (!cita) {
             return res.status(404).json({
@@ -629,10 +1269,11 @@ export const updateAppointment = async (req, res) => {
         const { id } = req.params;
         const updateData = req.body;
         
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
         // Verificar que la cita existe
         const citaExistente = await query(
-            'SELECT * FROM clinical.calendario_citas WHERE id_cita = $1',
-            [id]
+            'SELECT * FROM clinical.calendario_citas WHERE id_cita = $1 AND id_tenant = $2',
+            [id, tenantId]
         );
         
         if (citaExistente.rows.length === 0) {
@@ -643,43 +1284,47 @@ export const updateAppointment = async (req, res) => {
         }
         
         const cita = citaExistente.rows[0];
-        
-        // Si se está actualizando fecha/hora, verificar conflictos
-        if (updateData.fecha_inicio || updateData.fecha_fin) {
-            const nuevaFechaInicio = updateData.fecha_inicio || cita.fecha_inicio;
-            const nuevaFechaFin = updateData.fecha_fin || cita.fecha_fin;
-            const veterinarioId = updateData.id_veterinario || cita.id_veterinario;
-            
-            const conflictCheck = await appointmentConflictService.checkAllConflicts(
-                veterinarioId,
-                nuevaFechaInicio,
-                nuevaFechaFin,
-                id // Excluir la cita actual
-            );
-            
-            if (conflictCheck.hasConflicts) {
-                // Sugerir horarios alternativos
-                const suggestions = await appointmentConflictService.suggestAlternativeSlots(
-                    veterinarioId,
-                    nuevaFechaInicio,
-                    Math.ceil((new Date(nuevaFechaFin) - new Date(nuevaFechaInicio)) / (1000 * 60)),
-                    3
-                );
-                
-                return res.status(409).json({
-                    success: false,
-                    message: 'El veterinario ya tiene compromisos programados en ese horario',
-                    conflict_details: conflictCheck,
-                    suggested_alternatives: suggestions.suggestions || []
-                });
-            }
+
+        // Regla de negocio: no laborable bloquea día completo; horario especial bloquea fuera de franja.
+        const effectiveFechaInicio = updateData.fecha_inicio !== undefined ? updateData.fecha_inicio : cita.fecha_inicio;
+        const effectiveFechaFin = updateData.fecha_fin !== undefined ? updateData.fecha_fin : cita.fecha_fin;
+        const diasEspeciales = await getTenantDiasEspeciales(tenantId);
+        const specialValidation = validateDateTimeAgainstSpecialDays({
+            diasEspeciales,
+            fechaInicio: effectiveFechaInicio,
+            fechaFin: effectiveFechaFin
+        });
+
+        if (specialValidation.blocked) {
+            return res.status(409).json({
+                success: false,
+                message: specialValidation.message,
+                code: specialValidation.code,
+                data: specialValidation.data
+            });
         }
+        
+        // Regla de negocio actual: se permiten citas simultáneas/solapadas por veterinario.
         
         // Mapear estado del frontend a la base de datos si está presente
         if (updateData.estado) {
             updateData.estado = mapFrontendToDb(updateData.estado);
             console.log(`🔄 Mapeando estado en updateAppointment: ${updateData.estado}`);
+
+            if (!ESTADOS_CITA_PERMITIDOS.includes(updateData.estado)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Estado de cita no permitido. Use: confirmada, en_curso, completada o no_asistio'
+                });
+            }
         }
+
+        const hasFechaInicioChange = updateData.fecha_inicio !== undefined
+            && new Date(updateData.fecha_inicio).getTime() !== new Date(cita.fecha_inicio).getTime();
+        const hasFechaFinChange = updateData.fecha_fin !== undefined
+            && new Date(updateData.fecha_fin).getTime() !== new Date(cita.fecha_fin).getTime();
+        const hasRescheduleChange = hasFechaInicioChange || hasFechaFinChange;
+        const canPersistRescheduleAudit = hasRescheduleChange ? await hasRescheduleAuditColumns() : false;
         
         // Construir query de actualización dinámico
         const updateFields = [];
@@ -690,6 +1335,12 @@ export const updateAppointment = async (req, res) => {
             'id_mascota', 'id_veterinario', 'fecha_inicio', 'fecha_fin',
             'tipo', 'estado', 'motivo', 'notas', 'id_consulta', 'recordatorio_enviado'
         ];
+
+        // El frontend envía "observaciones" pero la columna en DB se llama "notas"
+        if (updateData.observaciones !== undefined && updateData.notas === undefined) {
+            updateData.notas = updateData.observaciones;
+        }
+        delete updateData.observaciones;
         
         allowedFields.forEach(field => {
             if (updateData[field] !== undefined) {
@@ -698,6 +1349,16 @@ export const updateAppointment = async (req, res) => {
                 updateValues.push(updateData[field]);
             }
         });
+
+        if (hasRescheduleChange && canPersistRescheduleAudit) {
+            updateFields.push('fue_reagendada = true');
+            updateFields.push('cantidad_reagendamientos = COALESCE(cantidad_reagendamientos, 0) + 1');
+            updateFields.push('ultima_reagendacion_at = CURRENT_TIMESTAMP');
+
+            paramCount++;
+            updateFields.push(`ultima_reagendacion_por = $${paramCount}`);
+            updateValues.push(req.user?.id || null);
+        }
         
         if (updateFields.length === 0) {
             return res.status(400).json({
@@ -708,11 +1369,12 @@ export const updateAppointment = async (req, res) => {
         
         updateFields.push('updated_at = CURRENT_TIMESTAMP');
         updateValues.push(id);
+        updateValues.push(tenantId);
         
         const updateQuery = `
             UPDATE clinical.calendario_citas 
             SET ${updateFields.join(', ')}
-            WHERE id_cita = $${paramCount + 1}
+            WHERE id_cita = $${paramCount + 1} AND id_tenant = $${paramCount + 2}
             RETURNING *
         `;
         
@@ -720,6 +1382,19 @@ export const updateAppointment = async (req, res) => {
         
         // Obtener información completa de la cita actualizada
         const citaActualizada = await getAppointmentWithDetails(id);
+
+        if (hasRescheduleChange) {
+            try {
+                await sendAppointmentEmailByTemplate({
+                    tenantId,
+                    userId: req.user?.id_usuario || req.user?.id || null,
+                    appointment: citaActualizada,
+                    templateKey: 'cita_reagendada'
+                });
+            } catch (mailError) {
+                console.error('No se pudo enviar correo de cita reagendada:', mailError.message);
+            }
+        }
         
         // Sincronizar con Google Calendar si hay cambios significativos
         let syncResult = { success: true, message: 'No requiere sincronización' };
@@ -738,7 +1413,7 @@ export const updateAppointment = async (req, res) => {
             success: true,
             message: 'Cita actualizada exitosamente',
             data: citaTransformada,
-            google_sync: syncResult.success ? 'synced' : 'failed',
+            google_sync: syncResult.skipped ? 'disabled' : (syncResult.success ? 'synced' : 'failed'),
             google_sync_message: syncResult.message || syncResult.error
         });
         
@@ -756,6 +1431,7 @@ export const updateAppointment = async (req, res) => {
  * Actualizar estado de cita
  */
 export const updateAppointmentStatus = async (req, res) => {
+    let txClient = null;
     try {
         const { id } = req.params;
         const { estado, notas } = req.body;
@@ -766,11 +1442,19 @@ export const updateAppointmentStatus = async (req, res) => {
         // Mapear estado del frontend al formato de la base de datos
         const estadoDb = mapFrontendToDb(estado);
         console.log(`🔄 Mapeando estado: ${estado} -> ${estadoDb}`);
+
+        if (!ESTADOS_CITA_PERMITIDOS.includes(estadoDb)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Estado de cita no permitido. Use: confirmada, en_curso, completada o no_asistio'
+            });
+        }
         
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
         // Verificar que la cita existe antes de iniciar la transacción
         const citaExistente = await query(
-            'SELECT id_cita, estado FROM clinical.calendario_citas WHERE id_cita = $1',
-            [id]
+            'SELECT id_cita, estado, fecha_inicio, fecha_fin FROM clinical.calendario_citas WHERE id_cita = $1 AND id_tenant = $2',
+            [id, tenantId]
         );
 
         if (citaExistente.rows.length === 0) {
@@ -783,56 +1467,112 @@ export const updateAppointmentStatus = async (req, res) => {
 
         console.log('✅ Cita encontrada:', {
             id_cita: citaExistente.rows[0].id_cita,
-            estado_actual: citaExistente.rows[0].estado
+                estado_actual: citaExistente.rows[0].estado,
+                fecha_inicio_actual: citaExistente.rows[0].fecha_inicio,
+                fecha_fin_actual: citaExistente.rows[0].fecha_fin
         });
+
+        const hasConsultasTable = await hasConsultasClinicasTable();
 
         // Validación especial: No permitir completar cita sin historia clínica completada
         if (estadoDb === 'completada') {
             console.log('🔍 Validando historia clínica antes de completar cita...');
 
-            // Verificar si existe consulta clínica para esta cita
-            const consultaResult = await query(
-                'SELECT id_consulta, estado FROM clinical.consultas_clinicas WHERE id_cita = $1',
-                [id]
+            // Flujo principal actual: historias_clinicas
+            const historiaResult = await query(
+                `SELECT id_historia, estado
+                 FROM clinical.historias_clinicas
+                 WHERE id_cita = $1 AND id_tenant = $2
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [id, tenantId]
             );
 
-            if (consultaResult.rows.length === 0) {
-                console.log('❌ No se encontró consulta clínica para esta cita');
+            if (historiaResult.rows.length > 0) {
+                const historia = historiaResult.rows[0];
+
+                if (historia.estado !== 'Completado') {
+                    console.log('❌ Historia clínica no está completada:', historia.estado);
+                    return res.status(400).json({
+                        success: false,
+                        message: 'La historia clínica debe estar completada antes de marcar la cita como completada.',
+                        code: 'CONSULTATION_NOT_COMPLETED'
+                    });
+                }
+
+                console.log('✅ Validación de historia clínica (historias_clinicas) pasada');
+            } else if (hasConsultasTable) {
+                // Fallback legacy: consultas_clinicas
+                const consultaResult = await query(
+                    'SELECT id_consulta, estado FROM clinical.consultas_clinicas WHERE id_cita = $1 AND id_tenant = $2',
+                    [id, tenantId]
+                );
+
+                if (consultaResult.rows.length === 0) {
+                    console.log('❌ No se encontró historia/consulta clínica para esta cita');
+                    return res.status(400).json({
+                        success: false,
+                        message: 'No se puede completar la cita sin historia clínica. Primero debe crear y completar la historia clínica.',
+                        code: 'CONSULTATION_REQUIRED'
+                    });
+                }
+
+                const consulta = consultaResult.rows[0];
+                if (consulta.estado !== 'Completada') {
+                    console.log('❌ Consulta clínica no está completada:', consulta.estado);
+                    return res.status(400).json({
+                        success: false,
+                        message: 'La historia clínica debe estar completada antes de marcar la cita como completada.',
+                        code: 'CONSULTATION_NOT_COMPLETED'
+                    });
+                }
+
+                console.log('✅ Validación de historia clínica (consultas_clinicas legacy) pasada');
+            } else {
+                console.log('❌ No se encontró historia clínica para esta cita');
                 return res.status(400).json({
                     success: false,
                     message: 'No se puede completar la cita sin historia clínica. Primero debe crear y completar la historia clínica.',
                     code: 'CONSULTATION_REQUIRED'
                 });
             }
-
-            const consulta = consultaResult.rows[0];
-            if (consulta.estado !== 'Completada') {
-                console.log('❌ Consulta clínica no está completada:', consulta.estado);
-                return res.status(400).json({
-                    success: false,
-                    message: 'La historia clínica debe estar completada antes de marcar la cita como completada.',
-                    code: 'CONSULTATION_NOT_COMPLETED'
-                });
-            }
-
-            console.log('✅ Validación de historia clínica pasada');
         }
 
         // Iniciar transacción para operaciones múltiples
-        await query('BEGIN');
+        txClient = await getClient();
+        await txClient.query('BEGIN');
         console.log('🔄 Transacción iniciada');
 
         try {
-            const result = await query(`
+            const updateFields = ['estado = $1', 'notas = COALESCE($2, notas)', 'updated_at = CURRENT_TIMESTAMP'];
+            const updateParams = [estadoDb, notas, id, tenantId];
+
+            // Al iniciar consulta, fijar hora real de inicio y un fin tentativo (+1h)
+            // para no bloquear toda la jornada hasta que se marque como completada.
+            if (estadoDb === 'en_curso' && citaExistente.rows[0].estado !== 'en_curso') {
+                updateFields.push("fecha_inicio = date_trunc('second', CURRENT_TIMESTAMP)");
+                updateFields.push("fecha_fin = (date_trunc('second', CURRENT_TIMESTAMP) + INTERVAL '1 hour')");
+            }
+
+            // Al completar, fijar hora real de fin. Si la cita tenía inicio futuro,
+            // normalizamos también el inicio para conservar coherencia temporal.
+            if (estadoDb === 'completada') {
+                updateFields.push("fecha_fin = date_trunc('second', CURRENT_TIMESTAMP)");
+                updateFields.push("fecha_inicio = CASE WHEN fecha_inicio > date_trunc('second', CURRENT_TIMESTAMP) THEN date_trunc('second', CURRENT_TIMESTAMP) ELSE fecha_inicio END");
+            }
+
+            const result = await txClient.query(`
                 UPDATE clinical.calendario_citas
-                SET estado = $1, notas = COALESCE($2, notas), updated_at = CURRENT_TIMESTAMP
-                WHERE id_cita = $3
+                SET ${updateFields.join(', ')}
+                WHERE id_cita = $3 AND id_tenant = $4
                 RETURNING *
-            `, [estadoDb, notas, id]);
+            `, updateParams);
 
             if (result.rows.length === 0) {
                 console.log('❌ Error: UPDATE no afectó ninguna fila');
-                await query('ROLLBACK');
+                await txClient.query('ROLLBACK');
+                txClient.release();
+                txClient = null;
                 return res.status(404).json({
                     success: false,
                     message: 'Cita no encontrada'
@@ -846,16 +1586,16 @@ export const updateAppointmentStatus = async (req, res) => {
             });
             
             // 🔥 AUTO-CREAR HISTORIA CLÍNICA AL INICIAR CITA (EN CURSO)
-            if (estadoDb === 'en_curso') {
+            if (hasConsultasTable && estadoDb === 'en_curso') {
                 const citaData = result.rows[0];
                 console.log('🏥 Verificando creación de historia clínica para cita en curso...');
 
                 try {
                     // Verificar si ya existe una consulta clínica para esta cita
-                    const existingConsulta = await query(`
+                    const existingConsulta = await txClient.query(`
                         SELECT id_consulta FROM clinical.consultas_clinicas
-                        WHERE id_cita = $1
-                    `, [id]);
+                        WHERE id_cita = $1 AND id_tenant = $2
+                    `, [id, tenantId]);
 
                     if (existingConsulta.rows.length === 0) {
                         console.log('🏥 Auto-creando historia clínica para cita en curso...');
@@ -864,22 +1604,24 @@ export const updateAppointmentStatus = async (req, res) => {
                         const codigoConsulta = `CON-${Date.now().toString().slice(-8)}`;
 
                         // Crear registro de consulta clínica
-                        const consultaResult = await query(`
+                        const consultaResult = await txClient.query(`
                             INSERT INTO clinical.consultas_clinicas (
                                 id_consulta,
                                 codigo_consulta,
                                 id_mascota,
                                 id_veterinario,
                                 motivo,
-                                estado
-                            ) VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5)
+                                estado,
+                                id_tenant
+                            ) VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6)
                             RETURNING id_consulta
                         `, [
                             codigoConsulta,
                             citaData.id_mascota,
                             citaData.id_veterinario,
                             citaData.motivo || 'Consulta programada',
-                            'En Curso'
+                            'En Curso',
+                            tenantId
                         ]);
 
                         if (consultaResult.rows.length === 0) {
@@ -887,7 +1629,7 @@ export const updateAppointmentStatus = async (req, res) => {
                         }
 
                         // Vincular la consulta con la cita
-                        const updateResult = await query(`
+                        const updateResult = await txClient.query(`
                             UPDATE clinical.calendario_citas
                             SET id_consulta = $1
                             WHERE id_cita = $2
@@ -909,16 +1651,16 @@ export const updateAppointmentStatus = async (req, res) => {
             }
             
             // 🔥 AUTO-CREAR HISTORIA CLÍNICA AL COMPLETAR CITA (por compatibilidad)
-            if (estadoDb === 'completada') {
+            if (hasConsultasTable && estadoDb === 'completada') {
                 const citaData = result.rows[0];
                 console.log('🏥 Verificando creación de historia clínica para cita completada...');
 
                 try {
                     // Verificar si ya existe una consulta clínica para esta cita
-                    const existingConsulta = await query(`
+                    const existingConsulta = await txClient.query(`
                         SELECT id_consulta FROM clinical.consultas_clinicas
-                        WHERE id_cita = $1
-                    `, [id]);
+                        WHERE id_cita = $1 AND id_tenant = $2
+                    `, [id, tenantId]);
 
                     if (existingConsulta.rows.length === 0) {
                         console.log('🏥 Auto-creando historia clínica para cita completada...');
@@ -927,22 +1669,24 @@ export const updateAppointmentStatus = async (req, res) => {
                         const codigoConsulta = `CON-${Date.now().toString().slice(-8)}`;
 
                         // Crear registro de consulta clínica
-                        const consultaResult = await query(`
+                        const consultaResult = await txClient.query(`
                             INSERT INTO clinical.consultas_clinicas (
                                 id_consulta,
                                 codigo_consulta,
                                 id_mascota,
                                 id_veterinario,
                                 motivo,
-                                estado
-                            ) VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5)
+                                estado,
+                                id_tenant
+                            ) VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6)
                             RETURNING id_consulta
                         `, [
                             codigoConsulta,
                             citaData.id_mascota,
                             citaData.id_veterinario,
                             citaData.motivo || 'Consulta programada',
-                            'Completada'
+                            'Completada',
+                            tenantId
                         ]);
 
                         if (consultaResult.rows.length === 0) {
@@ -950,7 +1694,7 @@ export const updateAppointmentStatus = async (req, res) => {
                         }
 
                         // Vincular la consulta con la cita
-                        const updateResult = await query(`
+                        const updateResult = await txClient.query(`
                             UPDATE clinical.calendario_citas
                             SET id_consulta = $1
                             WHERE id_cita = $2
@@ -971,7 +1715,9 @@ export const updateAppointmentStatus = async (req, res) => {
                 }
             }
             
-            await query('COMMIT');
+            await txClient.query('COMMIT');
+            txClient.release();
+            txClient = null;
             console.log('✅ Transacción completada exitosamente');
 
             // Obtener información completa de la cita actualizada
@@ -989,52 +1735,8 @@ export const updateAppointmentStatus = async (req, res) => {
                 try {
                     // Obtener estado anterior de la cita antes de la actualización
                     const estadoAnterior = result.rows[0].estado; // Estado antes del cambio
-                    console.log(`🔄 Sincronizando cambio de estado con Google Calendar: ${estadoAnterior} → ${estadoDb}`);
-
-                    // Actualizar el evento en Google Calendar con el nuevo estado
-                    const eventUpdateData = {
-                        summary: citaActualizada.tipo ? `${citaActualizada.tipo} - ${citaActualizada.mascota_nombre} (${citaActualizada.cliente_nombre})` : `Cita - ${citaActualizada.mascota_nombre}`,
-                        description: `
-📅 Cita Veterinaria - VetPlus
-
-🐕 Mascota: ${citaActualizada.mascota_nombre}
-👤 Cliente: ${citaActualizada.cliente_nombre}
-👨‍⚕️ Veterinario: ${citaActualizada.veterinario_nombre}
-📋 Tipo: ${citaActualizada.tipo}
-📝 Motivo: ${citaActualizada.motivo || 'No especificado'}
-🔄 Estado: ${estadoDb.toUpperCase()}
-
-Código de cita: ${citaActualizada.codigo_cita}
-                        `.trim(),
-                        startDateTime: citaActualizada.fecha_inicio,
-                        endDateTime: citaActualizada.fecha_fin,
-                        attendeeEmail: citaActualizada.cliente_email,
-                        location: process.env.CLINIC_ADDRESS || 'VetPlus Clínica'
-                    };
-
-                    // Pasar el estado actual para configurar recordatorios correctamente
-                    const googleEventData = {
-                        summary: citaActualizada.tipo ? `${citaActualizada.tipo} - ${citaActualizada.mascota_nombre} (${citaActualizada.cliente_nombre})` : `Cita - ${citaActualizada.mascota_nombre}`,
-                        description: `
-📅 Cita Veterinaria - VetPlus
-
-🐕 Mascota: ${citaActualizada.mascota_nombre}
-👤 Cliente: ${citaActualizada.cliente_nombre}
-👨‍⚕️ Veterinario: ${citaActualizada.veterinario_nombre}
-📋 Tipo: ${citaActualizada.tipo}
-📝 Motivo: ${citaActualizada.motivo || 'No especificado'}
-🔄 Estado: ${estadoDb.toUpperCase()}
-
-Código de cita: ${citaActualizada.codigo_cita}
-                        `.trim(),
-                        startDateTime: citaActualizada.fecha_inicio,
-                        endDateTime: citaActualizada.fecha_fin,
-                        attendeeEmail: citaActualizada.cliente_email,
-                        location: process.env.CLINIC_ADDRESS || 'VetPlus Clínica',
-                        status: estadoDb // Agregar estado para controlar recordatorios
-                    };
-
-                    syncResult = await googleCalendarService.updateEvent(citaActualizada.google_event_id, googleEventData);
+                    console.log(`🔄 Sincronizando cambio de estado/tiempos reales con Google Calendar: ${estadoAnterior} → ${estadoDb}`);
+                    syncResult = await syncAppointmentWithGoogle(citaActualizada, 'update');
 
                     if (syncResult.success) {
                         console.log('✅ Estado sincronizado exitosamente con Google Calendar');
@@ -1063,8 +1765,10 @@ Código de cita: ${citaActualizada.codigo_cita}
                     'Cita completada y historia clínica iniciada automáticamente' :
                     'Estado de cita actualizado exitosamente',
                 data: citaTransformada,
-                google_sync: syncResult.success ? 'synced' : 'failed',
-                google_sync_message: syncResult.success ? 'Sincronizado con Google Calendar' : syncResult.error
+                google_sync: syncResult.skipped ? 'disabled' : (syncResult.success ? 'synced' : 'failed'),
+                google_sync_message: syncResult.skipped
+                    ? syncResult.message
+                    : (syncResult.success ? 'Sincronizado con Google Calendar' : syncResult.error)
             });
             
         } catch (error) {
@@ -1074,7 +1778,11 @@ Código de cita: ${citaActualizada.codigo_cita}
                 stack: error.stack,
                 code: error.code
             });
-            await query('ROLLBACK');
+            if (txClient) {
+                try { await txClient.query('ROLLBACK'); } catch {}
+                txClient.release();
+                txClient = null;
+            }
             throw error;
         }
         
@@ -1089,11 +1797,8 @@ Código de cita: ${citaActualizada.codigo_cita}
         });
 
         // Intentar hacer rollback si hay una transacción pendiente
-        try {
-            await query('ROLLBACK');
-            console.log('✅ Rollback realizado en catch principal');
-        } catch (rollbackError) {
-            console.error('❌ Error en rollback:', rollbackError.message);
+        if (txClient) {
+            try { await txClient.query('ROLLBACK'); txClient.release(); txClient = null; } catch {}
         }
 
         res.status(500).json({
@@ -1114,20 +1819,20 @@ export const cancelAppointment = async (req, res) => {
         
         const result = await query(`
             UPDATE clinical.calendario_citas 
-            SET estado = 'cancelada', 
+            SET estado = 'no_asistio', 
                 notas = CASE 
                     WHEN notas IS NULL THEN $2
-                    ELSE notas || ' | CANCELACIÓN: ' || $2
+                    ELSE notas || ' | NO ASISTIÓ: ' || $2
                 END,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id_cita = $1 AND estado != 'cancelada'
+            WHERE id_cita = $1 AND estado != 'no_asistio'
             RETURNING *
         `, [id, motivo_cancelacion || 'Sin motivo especificado']);
         
         if (result.rows.length === 0) {
             return res.status(404).json({
                 success: false,
-                message: 'Cita no encontrada o ya cancelada'
+                message: 'Cita no encontrada o ya marcada como no asistió'
             });
         }
         
@@ -1142,10 +1847,12 @@ export const cancelAppointment = async (req, res) => {
         
         res.json({
             success: true,
-            message: 'Cita cancelada exitosamente',
+            message: 'Cita marcada como no asistió',
             data: result.rows[0],
-            google_sync: syncResult.success ? 'deleted' : 'failed',
-            google_sync_message: syncResult.success ? 'Eliminada de Google Calendar' : syncResult.error
+            google_sync: syncResult.skipped ? 'disabled' : (syncResult.success ? 'deleted' : 'failed'),
+            google_sync_message: syncResult.skipped
+                ? syncResult.message
+                : (syncResult.success ? 'Eliminada de Google Calendar' : syncResult.error)
         });
         
     } catch (error) {
@@ -1225,25 +1932,28 @@ export const getAppointmentsByVet = async (req, res) => {
 export const getAppointmentsByPet = async (req, res) => {
     try {
         const { id } = req.params;
+        const tenantId = req.tenantId;
+        const hasConsultasTable = await hasConsultasClinicasTable();
         
         const petQuery = `
             SELECT 
                 c.*,
+                c.fecha_inicio as fecha_cita,
                 v.nombre as veterinario_nombre,
-                con.codigo_consulta,
-                con.diagnostico
+                ${hasConsultasTable ? 'con.codigo_consulta, con.diagnostico' : 'NULL::text as codigo_consulta, NULL::text as diagnostico'}
             FROM clinical.calendario_citas c
             LEFT JOIN vetplus_auth.usuarios v ON c.id_veterinario = v.id_usuario
-            LEFT JOIN clinical.consultas_clinicas con ON c.id_consulta = con.id_consulta
-            WHERE c.id_mascota = $1
+            ${hasConsultasTable ? 'LEFT JOIN clinical.consultas_clinicas con ON c.id_consulta = con.id_consulta AND con.id_tenant = c.id_tenant' : ''}
+            WHERE c.id_mascota = $1 AND c.id_tenant = $2
             ORDER BY c.fecha_inicio DESC
         `;
         
-        const result = await query(petQuery, [id]);
+        const result = await query(petQuery, [id, tenantId]);
+        const citas = result.rows.map(transformAppointmentForFrontend);
         
         res.json({
             success: true,
-            data: result.rows
+            data: citas
         });
         
     } catch (error) {
@@ -1262,6 +1972,7 @@ export const getAppointmentsByPet = async (req, res) => {
 export const getCalendarView = async (req, res) => {
     try {
         const { fecha_inicio, fecha_fin, id_veterinario, vista, fecha, estado, tipo } = req.query;
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
         
         let startDate, endDate;
         
@@ -1303,11 +2014,12 @@ export const getCalendarView = async (req, res) => {
         }
         
         let whereConditions = [
-            'DATE(c.fecha_inicio) >= $1',
-            'DATE(c.fecha_inicio) <= $2'
+            'c.id_tenant = $1',
+            'c.fecha_inicio >= $2::date',
+            'c.fecha_inicio < ($3::date + INTERVAL \'1 day\')'
         ];
-        let queryParams = [startDate, endDate];
-        let paramIndex = 3;
+        let queryParams = [tenantId, startDate, endDate];
+        let paramIndex = 4;
         
         // 🔍 DEBUG: Log de parámetros para calendar view
         console.log('🔍 [CALENDAR] Parámetros recibidos:', {
@@ -1398,9 +2110,20 @@ export const getCalendarView = async (req, res) => {
 export const forceSyncWithGoogle = async (req, res) => {
     try {
         const { id } = req.params;
+
+        if (!isOutboundGoogleSyncEnabled()) {
+            return res.status(200).json({
+                success: true,
+                message: 'Sincronizacion saliente deshabilitada (solo Google -> VetPlus)',
+                data: {
+                    appointment_id: id,
+                    sync_status: 'disabled'
+                }
+            });
+        }
         
-        // Solo admins y veterinarios pueden forzar sincronización
-        if (!['admin', 'vet'].includes(req.user.rol)) {
+        // Admin, veterinario y auxiliar pueden forzar sincronización
+        if (!['admin', 'vet', 'aux'].includes(req.user.rol)) {
             return res.status(403).json({
                 success: false,
                 message: 'No tienes permisos para sincronizar citas'
@@ -1419,9 +2142,9 @@ export const forceSyncWithGoogle = async (req, res) => {
 
         // Determinar la acción basada en el estado de la cita
         let action = 'create';
-        if (cita.google_event_id && cita.estado !== 'cancelada') {
+        if (cita.google_event_id && !['cancelada', 'no_asistio'].includes(cita.estado)) {
             action = 'update';
-        } else if (cita.estado === 'cancelada') {
+        } else if (['cancelada', 'no_asistio'].includes(cita.estado)) {
             action = 'delete';
         }
 
@@ -1455,11 +2178,24 @@ export const forceSyncWithGoogle = async (req, res) => {
  */
 export const syncAllPendingAppointments = async (req, res) => {
     try {
-        // Solo administradores pueden sincronizar todo
-        if (req.user.rol !== 'admin') {
+        if (!isOutboundGoogleSyncEnabled()) {
+            return res.status(200).json({
+                success: true,
+                message: 'Sincronizacion saliente deshabilitada (solo Google -> VetPlus)',
+                data: {
+                    total: 0,
+                    synced: 0,
+                    failed: 0,
+                    errors: []
+                }
+            });
+        }
+
+        // Admin, veterinario y auxiliar pueden sincronizar masivamente
+        if (!['admin', 'vet', 'aux'].includes(req.user.rol)) {
             return res.status(403).json({
                 success: false,
-                message: 'Solo los administradores pueden sincronizar todas las citas'
+                message: 'No tienes permisos para sincronizar todas las citas'
             });
         }
 
@@ -1468,7 +2204,7 @@ export const syncAllPendingAppointments = async (req, res) => {
             SELECT c.id_cita
             FROM clinical.calendario_citas c
             WHERE c.google_sync_status IN ('pending', 'failed')
-            AND c.estado NOT IN ('cancelada')
+            AND c.estado NOT IN ('cancelada', 'no_asistio')
             AND c.fecha_inicio >= CURRENT_DATE - INTERVAL '1 day'
             ORDER BY c.fecha_inicio ASC
             LIMIT 50
@@ -1632,64 +2368,82 @@ export const suggestAvailableSlots = async (req, res) => {
  */
 export const getAppointmentStats = async (req, res) => {
     try {
-        const { fecha_inicio, fecha_fin } = req.query;
-        
-        // Si no se proporcionan fechas, usar el mes actual
-        const startDate = fecha_inicio || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
-        const endDate = fecha_fin || new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0];
-        
-        const statsQueries = [
-            // Total de citas
-            `SELECT COUNT(*) as total_citas 
-             FROM clinical.calendario_citas 
-             WHERE fecha_inicio >= $1 AND fecha_inicio <= $2`,
-            
-            // Citas de hoy
-            `SELECT COUNT(*) as citas_hoy 
-             FROM clinical.calendario_citas 
-             WHERE DATE(fecha_inicio) = CURRENT_DATE`,
-             
-            // Citas pendientes
-            `SELECT COUNT(*) as citas_pendientes 
-             FROM clinical.calendario_citas 
-             WHERE estado = 'pendiente' AND fecha_inicio >= CURRENT_DATE`,
-             
-            // Citas completadas en el período
-            `SELECT COUNT(*) as citas_completadas 
-             FROM clinical.calendario_citas 
-             WHERE estado = 'completada' AND fecha_inicio >= $1 AND fecha_inicio <= $2`
-        ];
-        
-        const results = await Promise.all([
-            query(statsQueries[0], [startDate, endDate]),
-            query(statsQueries[1]),
-            query(statsQueries[2]),
-            query(statsQueries[3], [startDate, endDate])
-        ]);
-        
-        const totalCitas = parseInt(results[0].rows[0].total_citas);
-        const citasCompletadas = parseInt(results[3].rows[0].citas_completadas);
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+
+        const summaryResult = await query(
+            `WITH bounds AS (
+                SELECT
+                    CURRENT_DATE::date AS today,
+                    date_trunc('week', CURRENT_DATE)::date AS week_start,
+                    (date_trunc('week', CURRENT_DATE)::date + INTERVAL '6 day')::date AS week_end
+            )
+            SELECT
+                COUNT(*) FILTER (
+                                        WHERE c.fecha_inicio >= b.week_start
+                                            AND c.fecha_inicio < (b.week_end + INTERVAL '1 day')
+                )::int AS total_citas,
+                COUNT(*) FILTER (
+                                        WHERE c.fecha_inicio >= b.today
+                                            AND c.fecha_inicio < (b.today + INTERVAL '1 day')
+                )::int AS citas_hoy,
+                COUNT(*) FILTER (
+                                        WHERE c.fecha_inicio >= b.today
+                                                AND c.fecha_inicio < (b.today + INTERVAL '1 day')
+                        AND c.estado = 'confirmada'
+                )::int AS citas_pendientes,
+                COUNT(*) FILTER (
+                                        WHERE c.fecha_inicio >= b.today
+                                            AND c.fecha_inicio < (b.today + INTERVAL '1 day')
+                      AND c.estado = 'completada'
+                )::int AS citas_completadas
+                                ,COUNT(*) FILTER (
+                                                                                WHERE c.fecha_inicio >= b.week_start
+                                                                                        AND c.fecha_inicio < (b.week_end + INTERVAL '1 day')
+                                            AND c.estado = 'no_asistio'
+                                )::int AS citas_canceladas_semana
+            FROM clinical.calendario_citas c
+            CROSS JOIN bounds b
+            WHERE c.id_tenant = $1`,
+            [tenantId]
+        );
+
+        const totalCitas = parseInt(summaryResult.rows[0].total_citas || 0, 10);
+        const citasHoy = parseInt(summaryResult.rows[0].citas_hoy || 0, 10);
+        const citasPendientes = parseInt(summaryResult.rows[0].citas_pendientes || 0, 10);
+        const citasCompletadas = parseInt(summaryResult.rows[0].citas_completadas || 0, 10);
+        const citasCanceladasSemana = parseInt(summaryResult.rows[0].citas_canceladas_semana || 0, 10);
         const tasaOcupacion = totalCitas > 0 ? Math.round((citasCompletadas / totalCitas) * 100) : 0;
         
         // Obtener estadísticas por estado
         const estadosQuery = `
+            WITH bounds AS (
+                SELECT
+                    date_trunc('week', CURRENT_DATE)::date AS week_start,
+                    (date_trunc('week', CURRENT_DATE)::date + INTERVAL '6 day')::date AS week_end
+            )
             SELECT estado, COUNT(*) as cantidad 
             FROM clinical.calendario_citas 
+            CROSS JOIN bounds b
+            WHERE id_tenant = $1
+                            AND fecha_inicio >= b.week_start
+                            AND fecha_inicio < (b.week_end + INTERVAL '1 day')
             GROUP BY estado 
             ORDER BY cantidad DESC
         `;
-        const estadosResult = await query(estadosQuery);
+        const estadosResult = await query(estadosQuery, [tenantId]);
         
         const stats = {
             total_citas: totalCitas,
-            citas_hoy: parseInt(results[1].rows[0].citas_hoy),
-            citas_pendientes: parseInt(results[2].rows[0].citas_pendientes),
+            citas_hoy: citasHoy,
+            citas_pendientes: citasPendientes,
             citas_completadas: citasCompletadas,
+            citas_canceladas_semana: citasCanceladasSemana,
             tasa_ocupacion: tasaOcupacion,
             estados: estadosResult.rows.map(row => ({
                 estado: row.estado,
                 cantidad: parseInt(row.cantidad)
-            }))
+            })),
+            periodo_estados: 'semana_actual'
         };
         
         res.json({
@@ -1838,6 +2592,14 @@ export const syncAppointmentWithCalendar = async (req, res) => {
 export const getAppointmentConsultation = async (req, res) => {
     try {
         const { id } = req.params;
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+
+        if (!(await hasConsultasClinicasTable())) {
+            return res.status(404).json({
+                success: false,
+                message: 'La tabla de consultas clínicas no está disponible en este entorno'
+            });
+        }
 
         // Validar que el ID sea un UUID válido
         if (!id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
@@ -1885,8 +2647,8 @@ export const getAppointmentConsultation = async (req, res) => {
             LEFT JOIN clinical.mascotas m ON c.id_mascota = m.id_mascota
             LEFT JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
             LEFT JOIN vetplus_auth.usuarios v ON c.id_veterinario = v.id_usuario
-            WHERE c.id_cita = $1
-        `, [id]);
+            WHERE c.id_cita = $1 AND c.id_tenant = $2
+        `, [id, tenantId]);
 
         if (citaResult.rows.length === 0) {
             return res.status(404).json({
@@ -1987,7 +2749,9 @@ const formatearFechaColombia = (timestamp) => {
 /**
  * Función auxiliar para obtener cita con detalles completos
  */
-const getAppointmentWithDetails = async (id_cita) => {
+const getAppointmentWithDetails = async (id_cita, tenantId = null) => {
+    const hasConsultasTable = await hasConsultasClinicasTable();
+    const tenantFilter = tenantId ? ' AND c.id_tenant = $2' : '';
     const detailQuery = `
         SELECT 
             c.*,
@@ -1998,6 +2762,7 @@ const getAppointmentWithDetails = async (id_cita) => {
             m.nombre as mascota_nombre,
             m.especie,
             m.raza,
+            m.foto_url as mascota_foto_url,
             m.fecha_nacimiento,
             cl.nombre as cliente_nombre,
             cl.cedula as cliente_documento,
@@ -2006,18 +2771,17 @@ const getAppointmentWithDetails = async (id_cita) => {
             cl.direccion as cliente_direccion,
             v.nombre as veterinario_nombre,
             v.email as veterinario_email,
-            con.codigo_consulta,
-            con.diagnostico,
-            con.tratamiento
+            v.avatar_url as veterinario_avatar_url,
+            ${hasConsultasTable ? 'con.codigo_consulta, con.diagnostico, con.tratamiento' : 'NULL::text as codigo_consulta, NULL::text as diagnostico, NULL::text as tratamiento'}
         FROM clinical.calendario_citas c
         LEFT JOIN clinical.mascotas m ON c.id_mascota = m.id_mascota
         LEFT JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
         LEFT JOIN vetplus_auth.usuarios v ON c.id_veterinario = v.id_usuario
-        LEFT JOIN clinical.consultas_clinicas con ON c.id_consulta = con.id_consulta
-        WHERE c.id_cita = $1
+        ${hasConsultasTable ? 'LEFT JOIN clinical.consultas_clinicas con ON c.id_consulta = con.id_consulta AND con.id_tenant = c.id_tenant' : ''}
+        WHERE c.id_cita = $1${tenantFilter}
     `;
     
-    const result = await query(detailQuery, [id_cita]);
+    const result = await query(detailQuery, tenantId ? [id_cita, tenantId] : [id_cita]);
     const cita = result.rows[0];
     
     if (cita) {

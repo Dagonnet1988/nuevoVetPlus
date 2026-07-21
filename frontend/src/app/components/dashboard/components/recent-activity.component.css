@@ -52,6 +52,15 @@
   background-color: rgba(0,0,0,0.02);
 }
 
+.activity-item.clickable {
+  cursor: pointer;
+}
+
+.activity-item.clickable:focus-visible {
+  outline: 2px solid rgba(25, 118, 210, 0.35);
+  outline-offset: -2px;
+}
+
 .activity-icon {
   width: 36px;
   height: 36px;
@@ -121,19 +130,9 @@
   color: #2e7d32;
 }
 
-.type-venta {
-  background-color: rgba(255, 152, 0, 0.1);
-  color: #ff9800;
-}
-
 .type-paciente {
   background-color: rgba(76, 175, 80, 0.1);
   color: #4caf50;
-}
-
-.type-inventario {
-  background-color: rgba(33, 150, 243, 0.1);
-  color: #2196f3;
 }
 
 .no-activity {
@@ -165,43 +164,6 @@
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-/* Dark theme */
-.dark-theme .activity-card mat-card-title {
-  color: #fff;
-}
-
-.dark-theme .activity-item {
-  border-bottom-color: #333;
-}
-
-.dark-theme .activity-item:hover {
-  background-color: rgba(255,255,255,0.02);
-}
-
-.dark-theme .activity-description {
-  color: #fff;
-}
-
-.dark-theme .activity-meta {
-  color: #b3b3b3;
-}
-
-.dark-theme .activity-time::before {
-  color: #666;
-}
-
-.dark-theme .activity-actions {
-  border-top-color: #333;
-}
-
-.dark-theme .no-activity {
-  color: #666;
-}
-
-.dark-theme .no-activity mat-icon {
-  color: #444;
 }
 
 /* Responsive */

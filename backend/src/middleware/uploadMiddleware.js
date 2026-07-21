@@ -117,18 +117,21 @@ const historiaClinicaStorage = multer.diskStorage({
 
 // Filtro de archivos para historia clínica - múltiples tipos
 const historiaClinicaFilter = (req, file, cb) => {
-  const allowedTypes = /jpeg|jpg|png|gif|webp|pdf|doc|docx|txt/;
+  const allowedTypes = /jpeg|jpg|png|gif|webp|pdf|doc|docx|txt|xls|xlsx|csv/;
   const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
   const mimetype = allowedTypes.test(file.mimetype) ||
                    file.mimetype === 'application/pdf' ||
                    file.mimetype === 'application/msword' ||
                    file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-                   file.mimetype === 'text/plain';
+                   file.mimetype === 'text/plain' ||
+                   file.mimetype === 'application/vnd.ms-excel' ||
+                   file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+                   file.mimetype === 'text/csv';
 
   if (mimetype && extname) {
     return cb(null, true);
   } else {
-    cb(new Error('Tipo de archivo no permitido. Solo se permiten: imágenes (JPEG, PNG, GIF, WebP), PDF, DOC, DOCX, TXT'), false);
+    cb(new Error('Tipo de archivo no permitido. Solo se permiten: imágenes, PDF, DOC, DOCX, TXT, XLS, XLSX, CSV'), false);
   }
 };
 

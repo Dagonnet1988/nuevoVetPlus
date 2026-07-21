@@ -26,11 +26,19 @@ export const CONFIGURACION_ROUTES: Routes = [
     }
   },
   {
-    path: 'whatsapp',
-    loadComponent: () => import('./whatsapp/whatsapp-config.component').then(m => m.WhatsAppConfigComponent),
+    path: 'correo',
+    loadComponent: () => import('./email/email-config.component').then(m => m.EmailConfigComponent),
     data: {
-      title: 'Configuración de WhatsApp',
-      breadcrumb: 'WhatsApp'
+      title: 'Configuración de Correo',
+      breadcrumb: 'Correo'
+    }
+  },
+  {
+    path: 'consentimiento-texto',
+    loadComponent: () => import('./consentimiento-texto/consentimiento-texto.component').then(m => m.ConsentimientoTextoComponent),
+    data: {
+      title: 'Texto de Consentimiento',
+      breadcrumb: 'Consentimiento'
     }
   }
 ];

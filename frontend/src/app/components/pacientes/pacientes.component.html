@@ -122,6 +122,10 @@
           <table mat-table
                  [dataSource]="dataSource"
                  matSort
+               [matSortActive]="sortActive()"
+               [matSortDirection]="sortDirection()"
+               matSortDisableClear
+               (matSortChange)="onSortChange($event)"
                  class="pacientes-table"
                  multiTemplateDataRows>
 
@@ -237,6 +241,7 @@
           <!-- Paginador -->
           <mat-paginator #paginator
                        [length]="totalRecords()"
+                       [pageIndex]="currentPage()"
                        [pageSize]="pageSize()"
                        [pageSizeOptions]="[10, 25, 50, 100]"
                        showFirstLastButtons

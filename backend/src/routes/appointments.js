@@ -2,6 +2,8 @@ import express from 'express';
 import { query } from '../config/database.js';
 import { 
     createAppointment,
+    previewRecurringAppointments,
+    createRecurringAppointments,
     getAppointments,
     getAppointmentById,
     updateAppointment,
@@ -21,6 +23,8 @@ import {
 
 import {
     validateCreateAppointment,
+    validatePreviewRecurringAppointments,
+    validateCreateRecurringAppointments,
     validateUpdateAppointment,
     validateUpdateAppointmentStatus,
     validateGetAppointments,
@@ -29,11 +33,16 @@ import {
 
 import { authenticateToken, authorize } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validateRequest.js';
+import { cacheInvalidation, intelligentCaching } from '../middleware/performance.js';
 
 const router = express.Router();
 
-// Aplicar autenticación a todas las rutas
-router.use(authenticateToken);
+router.use(cacheInvalidation(['.*appointments.*', '.*calendar.*', '.*stats.*']));
+
+const appointmentsListCache = intelligentCaching({ ttl: 30 });
+const calendarViewCache = intelligentCaching({ ttl: 30 });
+
+// Nota: authenticateToken y tenantContext ya están aplicados en clinical.js
 
 /**
  * @route   POST /api/clinical/appointments
@@ -42,10 +51,36 @@ router.use(authenticateToken);
  */
 router.post(
     '/',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateCreateAppointment,
     validateRequest,
     createAppointment
+);
+
+/**
+ * @route   POST /api/clinical/appointments/recurring/preview
+ * @desc    Previsualizar ocurrencias de citas periódicas
+ * @access  Veterinario, Admin, Auxiliar
+ */
+router.post(
+    '/recurring/preview',
+    authorize(['admin', 'vet', 'aux']),
+    validatePreviewRecurringAppointments,
+    validateRequest,
+    previewRecurringAppointments
+);
+
+/**
+ * @route   POST /api/clinical/appointments/recurring
+ * @desc    Crear serie de citas periódicas
+ * @access  Veterinario, Admin, Auxiliar
+ */
+router.post(
+    '/recurring',
+    authorize(['admin', 'vet', 'aux']),
+    validateCreateRecurringAppointments,
+    validateRequest,
+    createRecurringAppointments
 );
 
 /**
@@ -55,9 +90,10 @@ router.post(
  */
 router.get(
     '/',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateGetAppointments,
     validateRequest,
+    appointmentsListCache,
     getAppointments
 );
 
@@ -68,7 +104,8 @@ router.get(
  */
 router.get(
     '/calendar',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
+    calendarViewCache,
     getCalendarView
 );
 
@@ -79,7 +116,7 @@ router.get(
  */
 router.get(
     '/stats',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     getAppointmentStats
 );
 
@@ -95,7 +132,7 @@ router.get(
     validateRequest,
     (req, res, next) => {
         // Los veterinarios solo pueden ver sus propias citas
-        if (req.user.role === 'veterinario' && req.user.id !== req.params.id) {
+        if (req.user.rol === 'vet' && req.user.id !== req.params.id) {
             return res.status(403).json({
                 success: false,
                 message: 'No tiene permisos para ver las citas de otro veterinario'
@@ -113,7 +150,7 @@ router.get(
  */
 router.get(
     '/pet/:id',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateUUIDParam,
     validateRequest,
     getAppointmentsByPet
@@ -126,7 +163,7 @@ router.get(
  */
 router.get(
     '/:id',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateUUIDParam,
     validateRequest,
     getAppointmentById
@@ -152,7 +189,7 @@ router.put(
  */
 router.patch(
     '/:id/status',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateUpdateAppointmentStatus,
     validateRequest,
     updateAppointmentStatus
@@ -174,11 +211,11 @@ router.delete(
 /**
  * @route   POST /api/clinical/appointments/:id/sync-google
  * @desc    Forzar sincronización con Google Calendar
- * @access  Veterinario, Admin
+ * @access  Veterinario, Admin, Auxiliar
  */
 router.post(
     '/:id/sync-google',
-    authorize(['admin', 'vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateUUIDParam,
     validateRequest,
     forceSyncWithGoogle
@@ -187,22 +224,22 @@ router.post(
 /**
  * @route   POST /api/clinical/appointments/force-sync-google
  * @desc    Forzar sincronización con Google Calendar (todas las citas pendientes)
- * @access  Admin
+ * @access  Admin, Veterinario, Auxiliar
  */
 router.post(
     '/force-sync-google',
-    authorize(['admin', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     syncAllPendingAppointments
 );
 
 /**
  * @route   POST /api/clinical/appointments/sync-all-pending
  * @desc    Sincronizar todas las citas pendientes con Google Calendar
- * @access  Admin
+ * @access  Admin, Veterinario, Auxiliar
  */
 router.post(
     '/sync-all-pending',
-    authorize(['admin', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     syncAllPendingAppointments
 );
 
@@ -226,7 +263,7 @@ router.get(
  */
 router.get(
     '/vet/:id/suggest-slots',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateUUIDParam,
     validateRequest,
     suggestAvailableSlots
@@ -239,7 +276,7 @@ router.get(
  */
 router.get(
     '/veterinarians',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     async (req, res) => {
         try {
             const result = await query(`
@@ -249,7 +286,7 @@ router.get(
                     email,
                     especialidad,
                     numero_licencia
-                FROM auth.usuarios 
+                FROM vetplus_auth.usuarios 
                 WHERE rol IN ('vet', 'admin') 
                 AND activo = true
                 ORDER BY nombre ASC
@@ -278,7 +315,7 @@ router.get(
  */
 router.post(
     '/:id/sync-calendar',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateUUIDParam,
     validateRequest,
     syncAppointmentWithCalendar
@@ -291,7 +328,7 @@ router.post(
  */
 router.get(
     '/:id/consultation',
-    authorize(['admin', 'vet', 'aux_admin', 'aux_vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateUUIDParam,
     validateRequest,
     getAppointmentConsultation

@@ -163,7 +163,6 @@ export const productionConfig = {
     // Features flags
     features: {
         googleCalendar: process.env.ENABLE_GOOGLE_CALENDAR !== 'false',
-        reports: process.env.ENABLE_REPORTS !== 'false',
         audit: process.env.ENABLE_AUDIT !== 'false',
         advancedAnalytics: process.env.ENABLE_ADVANCED_ANALYTICS !== 'false',
         mobileAppApi: process.env.ENABLE_MOBILE_APP_API !== 'false'
@@ -173,8 +172,7 @@ export const productionConfig = {
     limits: {
         maxClientsPerClinic: parseInt(process.env.MAX_CLIENTS_PER_CLINIC) || 10000,
         maxPetsPerClient: parseInt(process.env.MAX_PETS_PER_CLIENT) || 50,
-        maxAppointmentsPerDay: parseInt(process.env.MAX_APPOINTMENTS_PER_DAY) || 200,
-        maxInvoiceItems: parseInt(process.env.MAX_INVOICE_ITEMS) || 100
+        maxAppointmentsPerDay: parseInt(process.env.MAX_APPOINTMENTS_PER_DAY) || 200
     },
 
     // Información de la clínica

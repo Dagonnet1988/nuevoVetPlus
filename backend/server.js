@@ -3,23 +3,41 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import fs from 'fs';
+import { randomUUID } from 'crypto';
 import DBInit from './src/database/DBInit.js';
+
+// ── Handlers globales: evitar reinicios por errores no capturados ──────────────
+process.on('uncaughtException', (err) => {
+  console.error('❌ [uncaughtException] Error no capturado:', err.message);
+  console.error(err.stack);
+  // No llamar process.exit() — dejar que el servidor siga corriendo
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ [unhandledRejection] Promesa rechazada no capturada:');
+  console.error('   Promesa:', promise);
+  console.error('   Razón:', reason);
+  // No llamar process.exit() — en Node 22+ terminaría el proceso
+});
 
 // Importar rutas
 import authRoutes from './src/routes/auth.js';
-import financialRoutes from './src/routes/index.js';
-import financialConfigRoutes from './src/routes/financialConfig.js';
 import clinicalRoutes from './src/routes/clinical.js';
 import auditRoutes from './src/routes/audit.js';
 import googleCalendarRoutes from './src/routes/googleCalendar.js';
-import reportsRoutes from './src/routes/reports.js';
 import empresaConfigRoutes from './src/routes/empresaConfigRoutes.js';
-import whatsappRoutes from './src/routes/whatsappRoutes.js';
-import notificationRoutes from './src/routes/notifications.js';
 import appointmentExportRoutes from './src/routes/appointmentExport.js';
+import configConsentimientoRoutes from './src/routes/configConsentimientoRoutes.js';
 import googleCalendarWebhookRoutes from './src/routes/googleCalendarWebhook.js';
 import systemStatusRoutes from './src/routes/systemStatus.js';
 import testRoutes from './src/routes/test.js';
+import publicRoutes from './src/routes/public.js';
+import superadminRoutes from './src/routes/superadmin.js';
+import emailConfigRoutes from './src/routes/emailConfigRoutes.js';
+import documentEmailRoutes from './src/routes/documentEmailRoutes.js';
+import { generalRateLimit, rateLimitStats } from './src/middleware/rateLimiter.js';
+import { intelligentCompression, performanceHeaders } from './src/middleware/performance.js';
 
 // Importar middleware de auditoría
 import { setAuditContext, auditActivity, auditAuthActivity } from './src/middleware/auditMiddleware.js';
@@ -27,7 +45,7 @@ import { setAuditContext, auditActivity, auditAuthActivity } from './src/middlew
 // Importar servicio de notificaciones automáticas
 // import autoNotificationService from './src/services/autoNotificationService.js'; // TEMPORALMENTE DESACTIVADO
 import googleCalendarService from './src/services/googleCalendar.js';
-import whatsAppService from './src/services/whatsappBaileysService.js';
+import syncScheduler from './src/services/syncScheduler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -35,11 +53,23 @@ const PORT = process.env.PORT || 3000;
 // Configurar trust proxy para obtener IP real
 app.set('trust proxy', 1);
 
+// Request ID para trazabilidad mínima en logs y respuestas
+app.use((req, res, next) => {
+  const headerRequestId = req.headers['x-request-id'];
+  req.id = typeof headerRequestId === 'string' && headerRequestId.trim()
+    ? headerRequestId.trim()
+    : randomUUID();
+  res.setHeader('X-Request-Id', req.id);
+  next();
+});
+
 // Middleware de seguridad
 app.use(helmet({
   crossOriginResourcePolicy: false,
   crossOriginEmbedderPolicy: false
 }));
+
+app.use(intelligentCompression);
 
 // Aplicar CORS SOLO a rutas API
 app.use('/api', cors({
@@ -47,15 +77,25 @@ app.use('/api', cors({
     process.env.FRONTEND_URL || 'http://localhost:4200',
     'http://localhost:4201'
   ],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Tenant-Slug', 'X-Request-Id'],
+  exposedHeaders: ['X-Request-Id'],
   credentials: true
 }));
+app.use('/api', performanceHeaders);
 
 // Middleware de logging
-app.use(morgan('combined'));
+morgan.token('reqId', (req) => req.id || 'unknown');
+const noisyAuthValidationRoutes = ['/api/auth/validar-email', '/api/auth/validar-documento', '/api/auth/check-email', '/api/auth/check-documento'];
+app.use(morgan(process.env.HTTP_LOG_FORMAT || (process.env.NODE_ENV === 'development' ? 'tiny' : 'combined'), {
+  skip: (req) => req.method === 'GET' && noisyAuthValidationRoutes.some((route) => req.originalUrl.startsWith(route))
+}));
 
 // Middleware para parsing JSON
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Rate limiting global y headers informativos para la API
+app.use('/api', rateLimitStats, generalRateLimit);
 
 // Middleware de auditoría
 app.use(setAuditContext);
@@ -66,7 +106,7 @@ app.get('/', (req, res) => {
   res.json({
     message: 'VetPlus API - Sistema de Gestión Veterinaria',
     version: '1.0.0',
-    modules: ['clinical', 'financial', 'auth'],
+    modules: ['clinical', 'auth'],
     status: 'active'
   });
 });
@@ -76,29 +116,63 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'OK',
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    requestId: req.id
+  });
+});
+
+app.get('/health/live', (req, res) => {
+  res.json({
+    status: 'alive',
+    timestamp: new Date().toISOString(),
+    requestId: req.id
+  });
+});
+
+app.get('/health/ready', (req, res) => {
+  res.json({
+    status: 'ready',
+    timestamp: new Date().toISOString(),
+    requestId: req.id
   });
 });
 
 // Rutas principales API
 app.use('/api/auth', auditAuthActivity, authRoutes);
-app.use('/api/financial', financialRoutes);
-app.use('/api/financial/config', financialConfigRoutes);
 app.use('/api/clinical', clinicalRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/google-calendar', googleCalendarRoutes);
-app.use('/api/reports', reportsRoutes);
 app.use('/api/admin/empresa', empresaConfigRoutes);
-app.use('/api/whatsapp', whatsappRoutes);
-app.use('/api/admin/notifications', notificationRoutes);
 app.use('/api/appointments/export', appointmentExportRoutes);
+app.use('/api/config/consentimiento', configConsentimientoRoutes);
 app.use('/api/google-calendar-webhook', googleCalendarWebhookRoutes);
 app.use('/api/system', systemStatusRoutes);
-app.use('/api/test', testRoutes);
+app.use('/api/superadmin', superadminRoutes);
+app.use('/api/admin/email', emailConfigRoutes);
+app.use('/api/clinical/notificaciones', documentEmailRoutes);
 
-// Servir archivos estáticos de /uploads con CORS abierto
+// Rutas de test — solo en desarrollo/staging, nunca en producción
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api/test', testRoutes);
+}
+
+// Rutas públicas (sin autenticación – firma de consentimiento)
+app.use('/api/public', publicRoutes);
+
+// Servir archivos estáticos de /uploads — CORS restringido a dominios conocidos
+const _allowedUploadOrigins = [
+  process.env.FRONTEND_URL || 'http://localhost:4200',
+  'http://localhost:4201'
+].filter(Boolean);
+
 app.use('/uploads', (req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  if (origin && _allowedUploadOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else if (!origin) {
+    // Petición directa (sin header origin) — permitir (ej: acceso desde el mismo servidor)
+    res.setHeader('Access-Control-Allow-Origin', _allowedUploadOrigins[0]);
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control');
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
@@ -119,6 +193,7 @@ app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({
     message: 'Error interno del servidor',
+    requestId: req.id,
     error: process.env.NODE_ENV === 'development' ? err.message : {}
   });
 });
@@ -127,7 +202,8 @@ app.use((err, req, res, next) => {
 app.use((req, res) => {
   res.status(404).json({
     message: 'Ruta no encontrada',
-    endpoint: req.originalUrl
+    endpoint: req.originalUrl,
+    requestId: req.id
   });
 });
 
@@ -136,7 +212,12 @@ async function initializeDatabase() {
   try {
     console.log('🔧 INICIALIZANDO BASE DE DATOS...');
     console.log('═'.repeat(40));
-    
+
+    // Asegurar directorios de uploads
+    ['uploads/pacientes', 'uploads/logos', 'uploads/consentimientos'].forEach(dir => {
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    });
+
     const dbInit = new DBInit();
     const success = await dbInit.initialize();
     
@@ -168,18 +249,28 @@ async function startServer() {
     // Initialize services after database is ready
     try {
       await googleCalendarService.initialize();
-      await whatsAppService.initialize();
+      await syncScheduler.initialize();
     } catch (error) {
       console.error('Error initializing services:', error);
     }
 
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`🚀 VetPlus API iniciada en puerto ${PORT}`);
       console.log(`📍 URL: http://localhost:${PORT}`);
-      console.log(`🏥 Módulos: Clínico y Financiero`);
+      console.log(`🏥 Módulos: Clínico`);
       console.log(`🔒 Autenticación: JWT habilitada`);
       console.log(`📊 Base de datos: Lista y verificada`);
       console.log(`🔔 Notificaciones automáticas: Activas`);
+    });
+
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(`❌ Puerto ${PORT} ya está en uso. Mata el proceso anterior y reinicia.`);
+        console.error(`   Ejecuta: kill $(lsof -ti:${PORT})`);
+      } else {
+        console.error('❌ Error en el servidor HTTP:', err.message);
+      }
+      process.exit(1);
     });
 
   } catch (error) {

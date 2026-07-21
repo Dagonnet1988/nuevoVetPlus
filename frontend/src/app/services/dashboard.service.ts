@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, BehaviorSubject } from 'rxjs';
+import { Observable, BehaviorSubject, forkJoin, of } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 
@@ -14,17 +14,13 @@ export interface DashboardStats {
     hoy: number;
     semana: number;
     pendientes: number;
+    canceladas_semana: number;
   };
-  ventas: {
-    dia: number;
-    mes: number;
-    año: number;
-  };
-  inventario: {
-    productos_bajo_stock: number;
-    productos_vencidos: number;
-    total_productos: number;
-  };
+}
+
+export interface DashboardNavigation {
+  route: string;
+  queryParams?: Record<string, string>;
 }
 
 export interface ChartData {
@@ -34,7 +30,7 @@ export interface ChartData {
 
 export interface RecentActivity {
   id: string;
-  tipo: 'cita' | 'venta' | 'paciente' | 'inventario';
+  tipo: 'cita' | 'paciente';
   descripcion: string;
   fecha: string;
   usuario: string;
@@ -66,26 +62,31 @@ export class DashboardService {
 
   // Estadísticas generales del dashboard
   getDashboardStats(): Observable<DashboardStats> {
-    return this.http.get<any>(`${this.API_URL}/reports/dashboard`).pipe(
-      map((response: any) => {
-        if (response.success && response.data) {
-          return this.mapBackendStatsToFrontend(response.data);
-        }
-        throw new Error('Error obteniendo estadísticas del dashboard');
+    return forkJoin({
+      pacientes: this.getPacientesDashboardStats(),
+      citas: this.getCitasDashboardStats()
+    }).pipe(
+      map(({ pacientes, citas }) => ({ pacientes, citas }))
+    );
+  }
+
+  getPacientesDashboardStats(): Observable<DashboardStats['pacientes']> {
+    return this.http.get<any>(`${this.API_URL}/clinical/pacientes/stats`).pipe(
+      map((response: any) => this.mapPacientesStats(response?.success && response?.data ? response.data : null)),
+      catchError((error) => {
+        console.warn('No se pudieron cargar estadísticas de pacientes para el dashboard:', error);
+        return of(this.getDefaultStats().pacientes);
       })
     );
   }
 
-  // Datos para gráfico de ventas mensuales - usar reportes de ventas
-  getVentasMensuales(): Observable<ChartData> {
-    return this.http.get<any>(`${this.API_URL}/reports/sales`).pipe(
-      map((response: any) => {
-        if (response.success && response.data) {
-          return this.mapVentasToChartData(response.data);
-        }
-        throw new Error('Error obteniendo datos de ventas');
-      }),
-      catchError(() => this.generateDefaultVentasChart())
+  getCitasDashboardStats(): Observable<DashboardStats['citas']> {
+    return this.http.get<any>(`${this.API_URL}/clinical/appointments/stats`).pipe(
+      map((response: any) => this.mapCitasStats(response?.success && response?.data ? response.data : null)),
+      catchError((error) => {
+        console.warn('No se pudieron cargar estadísticas de citas para el dashboard:', error);
+        return of(this.getDefaultStats().citas);
+      })
     );
   }
 
@@ -93,8 +94,22 @@ export class DashboardService {
   getCitasPorEstado(): Observable<ChartData> {
     return this.http.get<any>(`${this.API_URL}/clinical/appointments/stats`).pipe(
       map((response: any) => {
-        if (response.success && response.data && response.data.estados) {
-          const estados = response.data.estados;
+        if (response.success && response.data && Array.isArray(response.data.estados) && response.data.estados.length > 0) {
+          const acumulado = new Map<string, number>();
+
+          response.data.estados.forEach((e: any) => {
+            const estadoOriginal = String(e?.estado || '').trim();
+            if (estadoOriginal === 'en_curso') {
+              return;
+            }
+
+            const estado = estadoOriginal;
+            const cantidad = Number(e?.cantidad || 0);
+            acumulado.set(estado, (acumulado.get(estado) || 0) + cantidad);
+          });
+
+          const estados = Array.from(acumulado.entries()).map(([estado, cantidad]) => ({ estado, cantidad }));
+
           return {
             labels: estados.map((e: any) => this.formatEstadoCita(e.estado)),
             datasets: [{
@@ -124,27 +139,21 @@ export class DashboardService {
     );
   }
 
-  // Datos para gráfico de pacientes por especie - usar reportes de pacientes
-  getPacientesPorEspecie(): Observable<ChartData> {
-    return this.http.get<any>(`${this.API_URL}/reports/patients`).pipe(
-      map((response: any) => {
-        if (response.success && response.data) {
-          return this.mapPacientesToChartData(response.data);
-        }
-        throw new Error('Error obteniendo datos de pacientes');
-      }),
-      catchError(() => this.generateDefaultPacientesChart())
-    );
-  }
 
   // Actividad reciente - usar próximas citas como actividad
   getRecentActivity(limit: number = 10): Observable<RecentActivity[]> {
+    const today = this.toLocalDateString(new Date());
     return this.http.get<any>(`${this.API_URL}/clinical/appointments`, {
-      params: { limit: limit.toString(), status: 'confirmada' }
+      params: {
+        limit: '50',
+        offset: '0',
+        fecha_inicio: today,
+        estado: 'confirmada'
+      }
     }).pipe(
       map((response: any) => {
-        if (response.success && response.data) {
-          return this.mapCitasToActivity(response.data);
+        if (response.success && Array.isArray(response.data)) {
+          return this.mapCitasToActivity(response.data, limit);
         }
         return [];
       }),
@@ -157,17 +166,24 @@ export class DashboardService {
 
   // Próximas citas
   getProximasCitas(limit: number = 5): Observable<any[]> {
-    const today = new Date().toISOString().split('T')[0];
+    const today = this.toLocalDateString(new Date());
     return this.http.get<any>(`${this.API_URL}/clinical/appointments`, {
       params: {
-        limit: limit.toString(),
-        fecha_desde: today,
-        status: 'confirmada'
+        limit: '200',
+        offset: '0',
+        fecha_inicio: today
       }
     }).pipe(
       map((response: any) => {
-        if (response.success && response.data) {
-          return response.data;
+        if (response.success && Array.isArray(response.data)) {
+          return response.data
+            .filter((cita: any) => ['confirmada', 'en_curso'].includes(cita.estado))
+            .sort((a: any, b: any) => {
+              const aTime = new Date(a.fecha_inicio).getTime();
+              const bTime = new Date(b.fecha_inicio).getTime();
+              return aTime - bTime;
+            })
+            .slice(0, limit);
         }
         return [];
       }),
@@ -178,23 +194,6 @@ export class DashboardService {
     );
   }
 
-  // Alertas de inventario - usar alertas y KPIs
-  getAlertasInventario(): Observable<any[]> {
-    return this.http.get<any>(`${this.API_URL}/reports/alerts-kpis`).pipe(
-      map((response: any) => {
-        if (response.success && response.data && response.data.alertas) {
-          return response.data.alertas.filter((alerta: any) =>
-            alerta.tipo === 'stock_critico' || alerta.tipo === 'inventario'
-          );
-        }
-        return [];
-      }),
-      catchError(() => new Observable<any[]>(observer => {
-        observer.next([]);
-        observer.complete();
-      }))
-    );
-  }
 
   // Gestión de notificaciones
   getNotifications(): Notification[] {
@@ -220,114 +219,71 @@ export class DashboardService {
   }
 
   // Funciones de mapeo para convertir datos del backend al formato del frontend
-  private mapBackendStatsToFrontend(backendData: any): DashboardStats {
+  private mapBackendStatsToFrontend(pacientesData: any, citasData: any): DashboardStats {
+    return {
+      pacientes: this.mapPacientesStats(pacientesData),
+      citas: this.mapCitasStats(citasData)
+    };
+  }
+
+  private mapPacientesStats(pacientesData: any): DashboardStats['pacientes'] {
+    const total = this.toNumber(pacientesData?.totalPacientes ?? pacientesData?.total_pacientes);
+    return {
+      total,
+      nuevos_mes: this.toNumber(pacientesData?.nuevosUltimoMes ?? pacientesData?.nuevos_ultimo_mes),
+      activos: total
+    };
+  }
+
+  private mapCitasStats(citasData: any): DashboardStats['citas'] {
+    return {
+      hoy: this.toNumber(citasData?.citas_hoy),
+      semana: this.toNumber(citasData?.total_citas),
+      pendientes: this.toNumber(citasData?.citas_pendientes),
+      canceladas_semana: this.toNumber(citasData?.citas_canceladas_semana)
+    };
+  }
+
+  private toNumber(value: unknown): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private getDefaultStats(): DashboardStats {
     return {
       pacientes: {
-        total: backendData.clientes?.total_clientes || 0,
-        nuevos_mes: backendData.clientes?.clientes_nuevos || 0,
-        activos: backendData.clientes?.total_clientes || 0
+        total: 0,
+        nuevos_mes: 0,
+        activos: 0
       },
       citas: {
-        hoy: backendData.kpis?.citas_hoy || 0,
-        semana: backendData.citas?.total_citas || 0,
-        pendientes: backendData.citas?.pendientes || 0
-      },
-      ventas: {
-        dia: backendData.ventas?.total_ventas || 0,
-        mes: backendData.ventas?.total_ventas || 0,
-        año: backendData.ventas?.total_ventas || 0
-      },
-      inventario: {
-        productos_bajo_stock: backendData.inventario?.productos_criticos || 0,
-        productos_vencidos: 0, // No disponible en backend
-        total_productos: backendData.inventario?.total_productos || 0
+        hoy: 0,
+        semana: 0,
+        pendientes: 0,
+        canceladas_semana: 0
       }
     };
   }
 
-  private mapVentasToChartData(ventasData: any): ChartData {
-    // Generar datos por defecto si no hay suficiente información
-    return {
-      labels: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun'],
-      datasets: [{
-        label: 'Ventas (COP)',
-        data: [0, 0, 0, 0, 0, ventasData.total_ventas || 0],
-        borderColor: '#2e7d32',
-        backgroundColor: 'rgba(46, 125, 50, 0.1)',
-        tension: 0.4
-      }]
-    };
-  }
 
-  private mapPacientesToChartData(pacientesData: any): ChartData {
-    if (pacientesData.distribucion_especies && pacientesData.distribucion_especies.length > 0) {
-      const especies = pacientesData.distribucion_especies;
-      return {
-        labels: especies.map((e: any) => e.especie || 'Sin especificar'),
-        datasets: [{
-          data: especies.map((e: any) => e.mascotas_atendidas || 0),
-          backgroundColor: this.generateSpeciesColors(especies.length)
-        }]
-      };
-    }
-    
-    return {
-      labels: ['Sin datos'],
-      datasets: [{
-        data: [1],
-        backgroundColor: ['#e0e0e0']
-      }]
-    };
-  }
+  private mapCitasToActivity(citasData: any[], limit: number): RecentActivity[] {
+    const onlyScheduled = citasData.filter((cita: any) => cita?.estado === 'confirmada');
 
-  private generateSpeciesColors(count: number): string[] {
-    const baseColors = ['#2e7d32', '#4CAF50', '#8BC34A', '#C8E6C9', '#66BB6A', '#A5D6A7'];
-    const colors = [];
-    for (let i = 0; i < count; i++) {
-      colors.push(baseColors[i % baseColors.length]);
-    }
-    return colors;
-  }
+    const sorted = [...onlyScheduled].sort((a: any, b: any) => {
+      const dateA = new Date(a.created_at || a.fecha_inicio).getTime();
+      const dateB = new Date(b.created_at || b.fecha_inicio).getTime();
+      return dateB - dateA;
+    });
 
-  private mapCitasToActivity(citasData: any[]): RecentActivity[] {
-    return citasData.slice(0, 10).map((cita: any, index: number) => ({
-      id: cita.id || index.toString(),
+    return sorted.slice(0, limit).map((cita: any, index: number) => ({
+      id: cita.id_cita || cita.id || index.toString(),
       tipo: 'cita' as const,
-      descripcion: `Cita programada para ${cita.mascota_nombre || 'mascota'} - ${cita.tipo_cita || 'consulta'}`,
-      fecha: cita.fecha_inicio || new Date().toISOString(),
+      descripcion: `Cita agendada para ${cita.mascota_nombre || 'mascota'} - ${cita.tipo || cita.tipo_cita || 'consulta'}`,
+      fecha: cita.created_at || cita.fecha_inicio || new Date().toISOString(),
       usuario: cita.veterinario_nombre || 'Veterinario',
       icono: 'event',
       color: '#2e7d32'
     }));
-  }
-
-  private generateDefaultVentasChart(): Observable<ChartData> {
-    return new Observable(observer => {
-      observer.next({
-        labels: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun'],
-        datasets: [{
-          label: 'Ventas (COP)',
-          data: [0, 0, 0, 0, 0, 0],
-          borderColor: '#2e7d32',
-          backgroundColor: 'rgba(46, 125, 50, 0.1)',
-          tension: 0.4
-        }]
-      });
-      observer.complete();
-    });
-  }
-
-  private generateDefaultPacientesChart(): Observable<ChartData> {
-    return new Observable(observer => {
-      observer.next({
-        labels: ['Sin datos'],
-        datasets: [{
-          data: [1],
-          backgroundColor: ['#e0e0e0']
-        }]
-      });
-      observer.complete();
-    });
   }
 
   private generateDefaultCitasChart(): Observable<ChartData> {
@@ -347,9 +303,9 @@ export class DashboardService {
     const estados: { [key: string]: string } = {
       'pendiente': 'Pendiente',
       'confirmada': 'Confirmada',
-      'en_progreso': 'En Progreso',
+      'en_curso': 'En Curso',
       'completada': 'Completada',
-      'cancelada': 'Cancelada'
+      'no_asistio': 'No Asistio'
     };
     return estados[estado] || estado;
   }
@@ -358,10 +314,17 @@ export class DashboardService {
     const colores: { [key: string]: string } = {
       'pendiente': '#FF9800',
       'confirmada': '#2196F3',
-      'en_progreso': '#4CAF50',
+      'en_curso': '#4CAF50',
       'completada': '#8BC34A',
-      'cancelada': '#f44336'
+      'no_asistio': '#f44336'
     };
     return colores[estado] || '#9E9E9E';
+  }
+
+  private toLocalDateString(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 }

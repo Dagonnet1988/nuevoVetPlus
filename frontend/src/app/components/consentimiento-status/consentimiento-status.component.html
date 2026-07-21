@@ -1,0 +1,150 @@
+<!-- Cargando -->
+@if (cargando()) {
+  <div class="cs-loading">
+    <mat-spinner diameter="20"></mat-spinner>
+    <span>Verificando consentimiento…</span>
+  </div>
+}
+
+@if (!cargando() && estado()) {
+
+  <!-- Badge de estado -->
+  <div class="cs-badge-row">
+    <div class="cs-badge" [ngClass]="estado()!.estado">
+      @switch (estado()!.estado) {
+        @case ('firmado') {
+          <mat-icon>verified</mat-icon>
+          <span>Consentimiento firmado</span>
+        }
+        @case ('desactualizado') {
+          <mat-icon>update</mat-icon>
+          <span>Versión desactualizada — requiere nueva firma</span>
+        }
+        @case ('pendiente') {
+          <mat-icon>pending</mat-icon>
+          <span>Pendiente de firma</span>
+        }
+        @case ('expirado') {
+          <mat-icon>schedule</mat-icon>
+          <span>Enlace expirado</span>
+        }
+        @case ('revocado') {
+          <mat-icon>block</mat-icon>
+          <span>Consentimiento revocado</span>
+        }
+        @default {
+          <mat-icon>assignment_late</mat-icon>
+          <span>Sin consentimiento</span>
+        }
+      }
+    </div>
+
+    @if ((estado()!.estado === 'firmado' || estado()!.estado === 'desactualizado') && estado()!.consentimiento?.firmadoEn) {
+      <span class="cs-date">Firmado {{ estado()!.consentimiento!.firmadoEn | date:'dd-MM-yy' }}</span>
+    }
+  </div>
+
+  <!-- Acciones -->
+  <div class="cs-actions">
+
+    <!-- Estados no firmados → Enviar enlace de firma (correo + QR) -->
+    @if (['sin_consentimiento', 'pendiente', 'expirado', 'desactualizado', 'revocado'].includes(estado()!.estado)) {
+      <button
+        mat-stroked-button
+        color="primary"
+        [disabled]="actuando()"
+        (click)="enviarPorCorreo()"
+        matTooltip="Envía por correo el enlace de firma y el código QR"
+      >
+        <ng-container>
+          @if (actuando()) { <mat-spinner diameter="18" class="btn-spinner"></mat-spinner> }
+          @if (!actuando()) { <mat-icon>send</mat-icon> }
+          Enviar link para firmar
+        </ng-container>
+      </button>
+
+      <button
+        mat-stroked-button
+        color="accent"
+        [disabled]="actuando()"
+        (click)="enviarLinkPorWhatsApp()"
+        matTooltip="Abre WhatsApp Web/App con el link de firma"
+      >
+        <mat-icon>chat</mat-icon>
+        Enviar link por WhatsApp
+      </button>
+
+      @if (estado()!.consentimiento?.expiresAt && isLinkVigente(estado()!.consentimiento!.expiresAt!)) {
+        <button mat-icon-button (click)="copiarEnlaceFirma()" matTooltip="Copiar link de firma">
+          <mat-icon>link</mat-icon>
+        </button>
+      }
+    }
+
+    <!-- Firmado → Enviar consentimiento firmado (PDF) + Ver PDF + Revocar -->
+    @if (estado()!.estado === 'firmado') {
+      <button
+        mat-stroked-button
+        [disabled]="actuando()"
+        (click)="enviarPorCorreo()"
+        matTooltip="Envía por correo el consentimiento firmado en PDF"
+      >
+        <ng-container>
+          @if (actuando()) { <mat-spinner diameter="18" class="btn-spinner"></mat-spinner> }
+          @if (!actuando()) { <mat-icon>send</mat-icon> }
+          Enviar consentimiento por correo
+        </ng-container>
+      </button>
+
+      <button
+        mat-stroked-button
+        color="accent"
+        [disabled]="actuando()"
+        (click)="enviarConfirmacionPdfPorWhatsApp()"
+        matTooltip="Abre WhatsApp Web/App para confirmar envío del consentimiento"
+      >
+        <mat-icon>chat</mat-icon>
+        Enviar por WhatsApp
+      </button>
+
+      @if (estado()!.consentimiento?.pdfDisponible) {
+        <button
+          mat-stroked-button
+          [disabled]="actuando()"
+          (click)="descargarPDF()"
+          matTooltip="Ver PDF del consentimiento firmado"
+        >
+          <ng-container>
+            @if (actuando()) { <mat-spinner diameter="18" class="btn-spinner"></mat-spinner> }
+            @if (!actuando()) { <mat-icon>open_in_new</mat-icon> }
+            Ver PDF
+          </ng-container>
+        </button>
+      }
+      <button
+        mat-stroked-button
+        color="warn"
+        [disabled]="actuando()"
+        (click)="solicitarRevocacion()"
+        matTooltip="Revocar consentimiento a solicitud del propietario"
+      >
+        <mat-icon>block</mat-icon>
+        Revocar
+      </button>
+    }
+
+    <!-- Desactualizado → Ver PDF del anterior (si existe) + pedir nueva firma ya agregado arriba -->
+    @if (estado()!.estado === 'desactualizado' && estado()!.consentimiento?.pdfDisponible) {
+      <button
+        mat-stroked-button
+        [disabled]="actuando()"
+        (click)="descargarPDF()"
+        matTooltip="Ver PDF de la versión anterior firmada"
+      >
+        <mat-icon>open_in_new</mat-icon>
+        Ver PDF anterior
+      </button>
+    }
+
+  </div>
+}

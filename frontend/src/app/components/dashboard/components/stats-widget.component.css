@@ -158,27 +158,6 @@
   color: #2196f3;
 }
 
-/* Dark theme */
-.dark-theme .stats-title {
-  color: #b3b3b3;
-}
-
-.dark-theme .value {
-  color: #fff;
-}
-
-.dark-theme .stats-subtitle {
-  color: #666;
-}
-
-.dark-theme .view-more-btn {
-  color: #b3b3b3;
-}
-
-.dark-theme .view-more-btn:hover {
-  background-color: rgba(255,255,255,0.1);
-}
-
 /* Responsive */
 @media (max-width: 768px) {
   .stats-content {

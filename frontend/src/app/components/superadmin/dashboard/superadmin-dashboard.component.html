@@ -1,0 +1,141 @@
+<div class="sa-page">
+  <header class="sa-page-header">
+    <div>
+      <h2>Dashboard</h2>
+      <p>Resumen de todas las clínicas en la plataforma.</p>
+    </div>
+  </header>
+
+  <!-- Resumen -->
+  <div class="sa-stats-row">
+    <mat-card class="sa-stat-card">
+      <mat-icon>business</mat-icon>
+      <span class="sa-stat-value">{{ totalClinicas() }}</span>
+      <span class="sa-stat-label">Total clínicas</span>
+    </mat-card>
+    <mat-card class="sa-stat-card green">
+      <mat-icon>check_circle</mat-icon>
+      <span class="sa-stat-value">{{ totalActivas() }}</span>
+      <span class="sa-stat-label">Activas</span>
+    </mat-card>
+    <mat-card class="sa-stat-card orange" [class.sa-stat-alert]="totalSuspendidas() > 0">
+      <mat-icon>pause_circle</mat-icon>
+      <span class="sa-stat-value">{{ totalSuspendidas() }}</span>
+      <span class="sa-stat-label">Suspendidas</span>
+    </mat-card>
+  </div>
+
+  <!-- Estado -->
+  @if (loading()) {
+    <div class="sa-center">
+      <mat-spinner diameter="40" />
+    </div>
+  } @else if (error()) {
+    <p class="sa-error">{{ error() }}</p>
+  } @else if (tenants().length === 0) {
+    <div class="sa-empty">
+      <mat-icon>business_center</mat-icon>
+      <p>No hay clínicas registradas aún.</p>
+      <a mat-flat-button routerLink="/superadmin/clinicas/nueva">Crear primera clínica</a>
+    </div>
+  } @else {
+    <!-- Tabla de clínicas -->
+    <mat-card class="sa-table-card sa-desktop-table">
+      <div class="sa-table-wrap">
+        <table class="sa-table">
+          <thead>
+            <tr>
+              <th>Clínica</th>
+              <th>Plan</th>
+              <th>Estado</th>
+              <th>Usuarios</th>
+              <th>Clientes</th>
+              <th>Mascotas</th>
+              <th>Citas</th>
+              <th>Último acceso</th>
+              <th>Pago</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (t of tenants(); track t.id_tenant) {
+              <tr [class.sa-row-suspended]="t.estado === 'suspended'">
+                <td class="sa-name">{{ t.nombre }}</td>
+                <td><span class="sa-badge plan-{{ t.plan }}">{{ planLabel(t.plan) }}</span></td>
+                <td><span class="sa-badge estado-{{ t.estado }}">{{ t.estado }}</span></td>
+                <td class="sa-num">{{ t.total_usuarios }}</td>
+                <td class="sa-num">{{ t.total_clientes }}</td>
+                <td class="sa-num">{{ t.total_mascotas }}</td>
+                <td class="sa-num">{{ t.total_citas }}</td>
+                <td class="sa-date">{{ t.ultimo_acceso ? (t.ultimo_acceso | date:'dd-MM-yy h:mm a') : '—' }}</td>
+                <td>
+                  <span class="sa-pago-badge pago-{{ pagoEstado(t) }}" [matTooltip]="periodicidadLabel(t.periodicidad_pago)">
+                    {{ pagoLabel(t) }}
+                  </span>
+                </td>
+                <td class="sa-actions">
+                  <button mat-icon-button
+                          [matTooltip]="t.estado === 'active' ? 'Suspender clínica' : 'Activar clínica'"
+                          [color]="t.estado === 'active' ? 'warn' : 'primary'"
+                          [disabled]="togglingId() === t.id_tenant"
+                          (click)="toggleEstado(t)">
+                    @if (togglingId() === t.id_tenant) {
+                      <mat-spinner diameter="18" />
+                    } @else {
+                      <mat-icon>{{ t.estado === 'active' ? 'pause_circle' : 'play_circle' }}</mat-icon>
+                    }
+                  </button>
+                  <a mat-icon-button [routerLink]="['/superadmin/clinicas', t.id_tenant]"
+                     matTooltip="Ver / editar detalle">
+                    <mat-icon>arrow_forward</mat-icon>
+                  </a>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </mat-card>
+
+    <div class="sa-mobile-list">
+      @for (t of tenants(); track t.id_tenant) {
+        <mat-card class="sa-mobile-card" [class.sa-row-suspended]="t.estado === 'suspended'">
+          <div class="sa-mobile-header">
+            <div class="sa-name">{{ t.nombre }}</div>
+            <span class="sa-badge estado-{{ t.estado }}">{{ t.estado }}</span>
+          </div>
+
+          <div class="sa-mobile-grid">
+            <div><span>Plan</span><strong>{{ planLabel(t.plan) }}</strong></div>
+            <div><span>Usuarios</span><strong>{{ t.total_usuarios }}</strong></div>
+            <div><span>Clientes</span><strong>{{ t.total_clientes }}</strong></div>
+            <div><span>Mascotas</span><strong>{{ t.total_mascotas }}</strong></div>
+            <div><span>Citas</span><strong>{{ t.total_citas }}</strong></div>
+            <div><span>Pago</span><strong>{{ pagoLabel(t) }}</strong></div>
+          </div>
+
+          <div class="sa-mobile-footer">
+            <span class="sa-date">{{ t.ultimo_acceso ? (t.ultimo_acceso | date:'dd-MM-yy h:mm a') : 'Sin acceso' }}</span>
+            <div class="sa-actions">
+              <button mat-icon-button
+                      [matTooltip]="t.estado === 'active' ? 'Suspender clínica' : 'Activar clínica'"
+                      [color]="t.estado === 'active' ? 'warn' : 'primary'"
+                      [disabled]="togglingId() === t.id_tenant"
+                      (click)="toggleEstado(t)">
+                @if (togglingId() === t.id_tenant) {
+                  <mat-spinner diameter="18" />
+                } @else {
+                  <mat-icon>{{ t.estado === 'active' ? 'pause_circle' : 'play_circle' }}</mat-icon>
+                }
+              </button>
+              <a mat-icon-button [routerLink]="['/superadmin/clinicas', t.id_tenant]" matTooltip="Ver / editar detalle">
+                <mat-icon>arrow_forward</mat-icon>
+              </a>
+            </div>
+          </div>
+        </mat-card>
+      }
+    </div>
+  }
+</div>
+

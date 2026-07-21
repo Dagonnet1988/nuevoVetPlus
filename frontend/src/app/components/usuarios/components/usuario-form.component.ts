@@ -1,8 +1,8 @@
 import { Component, OnInit, Input, Output, EventEmitter, signal, computed, inject, ViewChild } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule, AbstractControl } from '@angular/forms';
 import { of } from 'rxjs';
-import { map, debounceTime, catchError } from 'rxjs/operators';
+import { map, catchError } from 'rxjs/operators';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -58,6 +58,7 @@ export class UsuarioFormComponent implements OnInit {
   private snackBar = inject(MatSnackBar);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
+  private location = inject(Location);
 
   // Signals
   loading = signal(false);
@@ -83,29 +84,25 @@ export class UsuarioFormComponent implements OnInit {
   roles = [
     { value: 'admin', label: 'Administrador', icon: 'admin_panel_settings', color: '#f44336' },
     { value: 'vet', label: 'Veterinario', icon: 'medical_services', color: '#2196f3' },
-    { value: 'aux_admin', label: 'Auxiliar Administrativo', icon: 'support_agent', color: '#4caf50' },
-    { value: 'aux_vet', label: 'Auxiliar Veterinario', icon: 'health_and_safety', color: '#ff9800' }
-  ];
-
-  especialidades = [
-    'Medicina General',
-    'Cirugía',
-    'Dermatología',
-    'Cardiología',
-    'Neurología',
-    'Oncología',
-    'Radiología',
-    'Anestesiología'
+    { value: 'aux', label: 'Auxiliar', icon: 'support_agent', color: '#4caf50' }
   ];
 
   constructor() {
     this.personalForm = this.fb.group({
       nombre: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(50)]],
       apellido: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(50)]],
-      email: ['', [Validators.required, Validators.email], [this.emailAsyncValidator.bind(this)]],
+      email: this.fb.control('', {
+        validators: [Validators.required, Validators.email],
+        asyncValidators: [this.emailAsyncValidator.bind(this)],
+        updateOn: 'blur'
+      }),
       telefono: ['', [Validators.pattern(/^[\+]?[0-9\s\-\(\)]{10,15}$/)]],
       direccion: ['', [Validators.maxLength(200)]],
-      documento: ['', [Validators.required, Validators.minLength(5), Validators.maxLength(20)], [this.documentoAsyncValidator.bind(this)]],
+      documento: this.fb.control('', {
+        validators: [Validators.required, Validators.minLength(5), Validators.maxLength(20)],
+        asyncValidators: [this.documentoAsyncValidator.bind(this)],
+        updateOn: 'blur'
+      }),
       tipo_documento: ['CC', [Validators.required]]
     });
 
@@ -229,7 +226,6 @@ export class UsuarioFormComponent implements OnInit {
     }
 
     return this.usuariosService.validarEmail(control.value, this.usuarioId).pipe(
-      debounceTime(500), // Esperar 500ms antes de hacer la petición
       map(disponible => disponible ? null : { emailTaken: true }),
       catchError(() => of(null)) // Si hay error, no bloquear el formulario
     );
@@ -241,7 +237,6 @@ export class UsuarioFormComponent implements OnInit {
     }
 
     return this.usuariosService.validarDocumento(control.value, this.usuarioId).pipe(
-      debounceTime(500), // Esperar 500ms antes de hacer la petición
       map(disponible => disponible ? null : { documentoTaken: true }),
       catchError(() => of(null)) // Si hay error, no bloquear el formulario
     );
@@ -312,10 +307,18 @@ export class UsuarioFormComponent implements OnInit {
     if (this.hasUnsavedChanges()) {
       if (confirm('¿Estás seguro de que quieres cancelar? Se perderán los cambios no guardados.')) {
         this.cancelar.emit();
+        if (window.history.length > 1) {
+          this.location.back();
+          return;
+        }
         this.router.navigate(['/usuarios']);
       }
     } else {
       this.cancelar.emit();
+      if (window.history.length > 1) {
+        this.location.back();
+        return;
+      }
       this.router.navigate(['/usuarios']);
     }
   }

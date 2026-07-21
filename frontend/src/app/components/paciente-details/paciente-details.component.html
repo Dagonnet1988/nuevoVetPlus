@@ -71,13 +71,9 @@
           Cambiar Foto
         </button>
         <mat-divider></mat-divider>
-        <button mat-menu-item (click)="generateReport()">
-          <mat-icon>description</mat-icon>
-          Generar Reporte
-        </button>
         <button mat-menu-item (click)="exportData()">
-          <mat-icon>file_download</mat-icon>
-          Exportar Datos
+          <mat-icon>description</mat-icon>
+          Exportar Historia Clinica
         </button>
         <mat-divider></mat-divider>
         <button mat-menu-item (click)="toggleStatus()" [class.warn]="paciente()?.activo">
@@ -209,8 +205,8 @@
                     <div class="contact-item">
                       <mat-icon class="contact-icon">email</mat-icon>
                       <span>{{ paciente()?.cliente?.email }}</span>
-                      <button mat-icon-button (click)="emailOwner()" matTooltip="Enviar email">
-                        <mat-icon>mail</mat-icon>
+                      <button mat-icon-button (click)="emailOwner()" matTooltip="Copiar correo">
+                        <mat-icon>content_copy</mat-icon>
                       </button>
                     </div>
                   }
@@ -233,6 +229,20 @@
                   }
                 </div>
               </div>
+
+              <!-- Consentimiento de datos personales -->
+              @if (paciente()?.cliente?.id_cliente) {
+                <mat-divider style="margin: 12px 0"></mat-divider>
+                <div class="consent-section">
+                  <span class="consent-label">Consentimiento de datos:</span>
+                  <app-consentimiento-status
+                    [idCliente]="paciente()!.cliente!.id_cliente!"
+                    [clienteNombre]="paciente()!.cliente!.nombre!"
+                    [clienteTelefono]="paciente()!.cliente!.telefono || null"
+                  />
+                </div>
+              }
+
             </mat-card-content>
           </mat-card>
 
@@ -251,7 +261,7 @@
                   <mat-icon class="stat-icon primary">medical_services</mat-icon>
                   <div class="stat-info">
                     <span class="stat-number">{{ statsResumen()?.consultas || 0 }}</span>
-                    <span class="stat-label">Consultas</span>
+                    <span class="stat-label">Historias</span>
                   </div>
                 </div>
 
@@ -264,10 +274,10 @@
                 </div>
 
                 <div class="stat-item">
-                  <mat-icon class="stat-icon warn">vaccines</mat-icon>
+                  <mat-icon class="stat-icon warn">folder</mat-icon>
                   <div class="stat-info">
-                    <span class="stat-number">{{ statsResumen()?.vacunas || 0 }}</span>
-                    <span class="stat-label">Vacunas</span>
+                    <span class="stat-number">{{ statsResumen()?.adjuntos || 0 }}</span>
+                    <span class="stat-label">Adjuntos</span>
                   </div>
                 </div>
               </div>
@@ -293,56 +303,59 @@
     <mat-tab label="Historia Médica">
       <div class="tab-content">
         <div class="history-container">
+          <div class="medical-grouped-list">
+            @for (grupo of historialAgrupado(); track grupo.key) {
+              <div class="group-row">
+                <div class="group-date">{{ formatDate(grupo.fecha) }}</div>
 
-          <!-- Filtros rápidos -->
-          <div class="history-filters">
-            <button mat-stroked-button [class.active]="activeFilter() === 'all'" (click)="setFilter('all')">
-              Todos
-            </button>
-            <button mat-stroked-button [class.active]="activeFilter() === 'consultas'" (click)="setFilter('consultas')">
-              Consultas
-            </button>
-            <button mat-stroked-button [class.active]="activeFilter() === 'vacunas'" (click)="setFilter('vacunas')">
-              Vacunas
-            </button>
-            <button mat-stroked-button [class.active]="activeFilter() === 'tratamientos'" (click)="setFilter('tratamientos')">
-              Tratamientos
-            </button>
-          </div>
-
-          <!-- Timeline de eventos médicos -->
-          <div class="medical-timeline">
-            @for (evento of filteredHistory(); track evento.id) {
-              <div class="timeline-item">
-                <div class="timeline-marker" [class]="evento.tipo">
-                  <mat-icon>{{ getEventIcon(evento.tipo) }}</mat-icon>
-                </div>
-                <div class="timeline-content">
-                  <mat-card class="event-card">
-                    <mat-card-header>
-                      <mat-card-title>{{ evento.titulo }}</mat-card-title>
-                      <mat-card-subtitle>{{ formatDate(evento.fecha) }} - {{ evento.profesional }}</mat-card-subtitle>
-                    </mat-card-header>
-                    <mat-card-content>
-                      <p>{{ evento.descripcion }}</p>
-                      @if (evento.medicamentos && evento.medicamentos.length > 0) {
-                        <div class="medications">
-                          <strong>Medicamentos:</strong>
-                          <ul>
-                            @for (med of evento.medicamentos; track med) {
-                              <li>{{ med }}</li>
-                            }
-                          </ul>
-                        </div>
+                <div class="group-columns" [class.single-column]="!shouldShowCitaColumn(grupo) || !shouldShowHistoriaColumn(grupo)">
+                  @if (shouldShowCitaColumn(grupo)) {
+                    <div
+                    class="group-compact-item cita-item"
+                    [class.muted-card]="!grupo.cita"
+                    [class.is-clickable]="!!grupo.cita"
+                    [attr.tabindex]="grupo.cita ? 0 : -1"
+                    role="button"
+                    (click)="grupo.cita && viewEventDetails(grupo.cita)"
+                    (keydown.enter)="grupo.cita && viewEventDetails(grupo.cita)"
+                    (keydown.space)="grupo.cita && viewEventDetails(grupo.cita)">
+                    <div class="compact-main">
+                      <mat-icon class="compact-icon">event</mat-icon>
+                      <span class="compact-label">Cita</span>
+                      @if (grupo.cita) {
+                        <span class="compact-sep">-</span>
+                        <span class="compact-value">{{ grupo.cita.titulo }}</span>
                       }
-                    </mat-card-content>
-                    <mat-card-actions>
-                      <button mat-button (click)="viewEventDetails(evento)">
-                        <mat-icon>visibility</mat-icon>
-                        Ver detalles
-                      </button>
-                    </mat-card-actions>
-                  </mat-card>
+                    </div>
+                    @if (grupo.cita) {
+                      <mat-icon class="compact-eye">visibility</mat-icon>
+                    }
+                    </div>
+                  }
+
+                  @if (shouldShowHistoriaColumn(grupo)) {
+                    <div
+                    class="group-compact-item historia-item"
+                    [class.muted-card]="!grupo.historias || grupo.historias.length === 0">
+                    <div class="compact-main">
+                      <mat-icon class="compact-icon">description</mat-icon>
+                      <span class="compact-label">Historia clínica</span>
+                    </div>
+                    @if (grupo.historias && grupo.historias.length > 0) {
+                      <div class="historia-links">
+                        @for (historia of grupo.historias; track historia.id) {
+                          <button
+                            type="button"
+                            class="historia-link"
+                            (click)="viewEventDetails(historia)">
+                            {{ getHistoriaTitulo(historia.tipo) }}
+                            <mat-icon>visibility</mat-icon>
+                          </button>
+                        }
+                      </div>
+                    }
+                    </div>
+                  }
                 </div>
               </div>
             } @empty {
@@ -379,7 +392,25 @@
               <mat-card class="document-card">
                 <mat-card-content>
                   <div class="document-info">
-                    <mat-icon class="document-icon">{{ getDocumentIcon(doc.tipo) }}</mat-icon>
+                    @if (isImageDocument(doc)) {
+                      <img
+                        class="document-thumb"
+                        [src]="getDocumentUrl(doc)"
+                        [alt]="doc.nombre"
+                        (click)="viewDocument(doc)"
+                        matTooltip="Ver vista previa"
+                      />
+                    } @else {
+                      <button
+                        type="button"
+                        class="document-thumb document-thumb-file pdf-doc-tile"
+                        [ngClass]="getDocumentTypeClass(doc)"
+                        (click)="viewDocument(doc)"
+                        matTooltip="Ver archivo">
+                        <mat-icon>{{ getDocumentTypeIcon(doc) }}</mat-icon>
+                        <span>{{ getDocumentTypeLabel(doc) }}</span>
+                      </button>
+                    }
                     <div class="document-details">
                       <h4>{{ doc.nombre }}</h4>
                       <p>{{ doc.descripcion }}</p>

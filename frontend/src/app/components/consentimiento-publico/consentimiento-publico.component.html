@@ -1,0 +1,130 @@
+<div class="consent-page">
+
+  <!-- ── CARGANDO ─────────────────────────────────────────────────────────── -->
+  @if (estado() === 'cargando') {
+    <div class="state-center">
+      <mat-spinner diameter="48"></mat-spinner>
+      <p class="state-label">Cargando formulario…</p>
+    </div>
+  }
+
+  <!-- ── YA FIRMADO ─────────────────────────────────────────────────────── -->
+  @if (estado() === 'ya_firmado') {
+    <div class="state-center state-ok">
+      <mat-icon class="state-icon ok">check_circle</mat-icon>
+      <h2>Consentimiento ya firmado</h2>
+      <p>Este documento fue firmado previamente. No es necesario volver a firmarlo.</p>
+    </div>
+  }
+
+  <!-- ── EXPIRADO ────────────────────────────────────────────────────────── -->
+  @if (estado() === 'expirado') {
+    <div class="state-center state-warn">
+      <mat-icon class="state-icon warn">schedule</mat-icon>
+      <h2>Enlace expirado</h2>
+      <p>Este enlace ha vencido. Solicite a la clínica que genere uno nuevo.</p>
+    </div>
+  }
+
+  <!-- ── ERROR GENÉRICO ─────────────────────────────────────────────────── -->
+  @if (estado() === 'error') {
+    <div class="state-center state-error">
+      <mat-icon class="state-icon error">error_outline</mat-icon>
+      <h2>Enlace no válido</h2>
+      <p>{{ errorMensaje() }}</p>
+    </div>
+  }
+
+  <!-- ── ÉXITO ──────────────────────────────────────────────────────────── -->
+  @if (estado() === 'exito') {
+    <div class="state-center state-ok">
+      <mat-icon class="state-icon ok">verified</mat-icon>
+      <h2>¡Consentimiento firmado!</h2>
+      <p>Su firma ha sido registrada correctamente. Puede cerrar esta ventana.</p>
+      @if (pdfNumero()) {
+        <p class="pdf-num">N.° de documento: <strong>{{ pdfNumero() }}</strong></p>
+      }
+    </div>
+  }
+
+  <!-- ── FORMULARIO PENDIENTE ───────────────────────────────────────────── -->
+  @if (estado() === 'pendiente' && datos) {
+    <div class="consent-card">
+
+      <!-- Cabecera con logo y nombre de empresa -->
+      <header class="consent-header">
+        @if (datos.empresa.logoUrl) {
+          <img [src]="datos.empresa.logoUrl" [alt]="datos.empresa.nombre" class="logo" />
+        } @else {
+          <div class="logo-fallback" [attr.aria-label]="datos.empresa.nombre">
+            {{ datos.empresa.nombre.charAt(0) || 'V' }}
+          </div>
+        }
+        <div class="header-copy">
+          <span class="kicker">Consentimiento Digital</span>
+          <h1 class="empresa-nombre">{{ datos.empresa.nombre }}</h1>
+        </div>
+      </header>
+
+      <!-- Título del consentimiento -->
+      <h2 class="version-titulo">{{ datos.version.titulo }}</h2>
+
+      <!-- Datos del titular -->
+      <section class="datos-section">
+        <p><span class="label">Titular:</span> {{ datos.cliente.nombre }}</p>
+        @if (datos.cliente.cedula) {
+          <p><span class="label">Cédula:</span> {{ datos.cliente.cedula }}</p>
+        }
+        <p class="expiry-notice">
+          <mat-icon class="expiry-icon">schedule</mat-icon>
+          Este enlace vence el <strong>{{ datos.expiresAt | date:'dd-MM-yy h:mm a' }}</strong>
+          (válido {{ datos.tokenDurationHours }}h desde su envío)
+        </p>
+      </section>
+
+      <!-- Texto legal (scroll) -->
+      <section class="texto-legal-section">
+        <p class="texto-hint">Lea el documento completo antes de firmar.</p>
+        <div class="texto-legal">{{ datos.version.textoLegal }}</div>
+      </section>
+
+      <!-- Área de firma -->
+      <section class="firma-section">
+        <p class="firma-label">Firme en el recuadro a continuación:</p>
+        <div class="canvas-wrap">
+          <canvas #signatureCanvas></canvas>
+        </div>
+        <button mat-stroked-button type="button" class="btn-limpiar" (click)="limpiarFirma()">
+          <mat-icon>delete_outline</mat-icon> Limpiar firma
+        </button>
+      </section>
+
+      <!-- Mensaje de error inline -->
+      @if (errorMensaje()) {
+        <p class="inline-error">{{ errorMensaje() }}</p>
+      }
+
+      <!-- Botón de envío -->
+      <div class="submit-row">
+        <button
+          mat-raised-button
+          color="primary"
+          [disabled]="enviando()"
+          (click)="firmarConsentimiento()"
+        >
+          @if (enviando()) {
+            <mat-spinner diameter="22" class="btn-spinner"></mat-spinner>
+            Enviando…
+          }
+          @if (!enviando()) {
+            <ng-container>
+              <mat-icon>draw</mat-icon> Firmar y enviar
+            </ng-container>
+          }
+        </button>
+      </div>
+
+    </div>
+  }
+
+</div>

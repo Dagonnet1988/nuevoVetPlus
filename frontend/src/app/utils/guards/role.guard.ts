@@ -20,8 +20,8 @@ export class RoleGuard implements CanActivate {
     }
 
     // Obtener roles permitidos desde la data de la ruta
-    const allowedRoles = route.data?.['roles'] as ('admin' | 'vet' | 'aux_admin' | 'aux_vet')[];
-    
+    const allowedRoles = route.data?.['roles'] as ('admin' | 'vet' | 'aux')[];
+
     if (!allowedRoles || allowedRoles.length === 0) {
       // Si no se especifican roles, permitir acceso a usuarios autenticados
       return true;

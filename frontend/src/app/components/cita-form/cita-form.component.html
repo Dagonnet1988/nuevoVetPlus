@@ -18,28 +18,40 @@
         </div>
       } @else {
         <form [formGroup]="citaForm" (ngSubmit)="onSubmit()" class="cita-form">
-          
+
           <!-- Información del Paciente -->
           <div class="form-section">
             <h3 class="section-title">
               <mat-icon>pets</mat-icon>
               Información del Paciente
             </h3>
-            
+
             <div class="form-row">
               <mat-form-field appearance="outline" class="full-width">
-                <mat-label>Paciente</mat-label>
-                <mat-select formControlName="id_mascota" required>
-                  <mat-option value="">Seleccionar paciente</mat-option>
-                  @for (paciente of pacientes(); track $index) {
-                    <mat-option [value]="paciente.id_mascota">
+                <mat-label>Mascota *</mat-label>
+                <input
+                  type="text"
+                  matInput
+                  formControlName="mascota_search"
+                  [matAutocomplete]="autoMascota"
+                  placeholder="Buscar por mascota o propietario"
+                  (blur)="onMascotaInputBlur()"
+                  required>
+
+                <mat-autocomplete #autoMascota="matAutocomplete"
+                                  [displayWith]="displayMascota"
+                                  (optionSelected)="onMascotaSelected($event)">
+                  @for (paciente of pacientesFiltrados(); track paciente.id) {
+                    <mat-option [value]="paciente">
                       <div class="paciente-option">
                         <span class="paciente-nombre">{{ paciente.nombre }}</span>
-                        <span class="paciente-info">{{ paciente.especie }} - {{ paciente.cliente?.nombre }}</span>
+                        <span class="paciente-info">Especie: {{ paciente.especie }} · Propietario: {{ paciente.propietario }}</span>
                       </div>
                     </mat-option>
                   }
-                </mat-select>
+                </mat-autocomplete>
+
+                <input type="hidden" formControlName="id_mascota">
                 <mat-error>
                   @if (citaForm.get('id_mascota')?.hasError('required')) {
                     El paciente es obligatorio
@@ -47,6 +59,14 @@
                 </mat-error>
               </mat-form-field>
             </div>
+
+            @if (pacienteSeleccionado()) {
+              <div class="resumen-paciente">
+                <div><strong>Mascota:</strong> {{ pacienteSeleccionado()?.nombre }}</div>
+                <div><strong>Especie/Raza:</strong> {{ pacienteSeleccionado()?.especie }} · {{ pacienteSeleccionado()?.raza }}</div>
+                <div><strong>Propietario:</strong> {{ pacienteSeleccionado()?.propietario }}</div>
+              </div>
+            }
           </div>
 
           <!-- Información del Veterinario -->
@@ -55,17 +75,20 @@
               <mat-icon>medical_services</mat-icon>
               Veterinario Asignado
             </h3>
-            
+
             <div class="form-row">
               <mat-form-field appearance="outline" class="full-width">
-                <mat-label>Veterinario</mat-label>
+                <mat-label>Profesional tratante *</mat-label>
                 <mat-select formControlName="id_veterinario" required (selectionChange)="onVeterinarioChange()">
+                  <mat-select-trigger>
+                    {{ getVeterinarioLabelById(citaForm.get('id_veterinario')?.value) }}
+                  </mat-select-trigger>
                   <mat-option value="">Seleccionar veterinario</mat-option>
                   @for (vet of veterinarios(); track vet.id) {
                     <mat-option [value]="vet.id">
                       <div class="veterinario-option">
                         <span class="vet-nombre">{{ vet.nombre }}</span>
-                        <span class="vet-especialidad">{{ vet.especialidad }}</span>
+                        <span class="vet-especialidad">· {{ vet.especialidad }}</span>
                       </div>
                     </mat-option>
                   }
@@ -85,11 +108,11 @@
               <mat-icon>schedule</mat-icon>
               Fecha y Hora
             </h3>
-            
+
             <div class="form-row">
               <mat-form-field appearance="outline" class="date-field">
                 <mat-label>Fecha</mat-label>
-                <input matInput [matDatepicker]="picker" formControlName="fecha" required 
+                <input matInput [matDatepicker]="picker" formControlName="fecha" required
                        (dateChange)="onFechaChange()" [min]="minDate">
                 <mat-datepicker-toggle matIconSuffix [for]="picker"></mat-datepicker-toggle>
                 <mat-datepicker #picker></mat-datepicker>
@@ -102,25 +125,13 @@
 
               <mat-form-field appearance="outline" class="time-field">
                 <mat-label>Hora de inicio</mat-label>
-                <input matInput type="time" formControlName="hora_inicio" required 
+                <input matInput type="time" formControlName="hora_inicio" required
                        (change)="onHoraChange()" min="07:00" max="20:00">
                 <mat-error>
                   @if (citaForm.get('hora_inicio')?.hasError('required')) {
                     La hora es obligatoria
                   }
                 </mat-error>
-              </mat-form-field>
-
-              <mat-form-field appearance="outline" class="duration-field">
-                <mat-label>Duración (minutos)</mat-label>
-                <mat-select formControlName="duracion" (selectionChange)="calculateEndTime()">
-                  <mat-option value="15">15 min</mat-option>
-                  <mat-option value="30">30 min</mat-option>
-                  <mat-option value="45">45 min</mat-option>
-                  <mat-option value="60">1 hora</mat-option>
-                  <mat-option value="90">1.5 horas</mat-option>
-                  <mat-option value="120">2 horas</mat-option>
-                </mat-select>
               </mat-form-field>
             </div>
 
@@ -137,7 +148,7 @@
                 <h4>Horarios sugeridos disponibles:</h4>
                 <div class="sugerencias-chips">
                   @for (sugerencia of sugerenciasHorario(); track $index) {
-                    <mat-chip 
+                    <mat-chip
                       (click)="selectSugerencia(sugerencia)"
                       class="sugerencia-chip">
                       {{ formatSugerencia(sugerencia) }}
@@ -148,17 +159,149 @@
             }
           </div>
 
+          @if (!isEditing()) {
+            <div class="form-section recurring-section">
+              <h3 class="section-title">
+                <mat-icon>repeat</mat-icon>
+                Cita Periódica
+              </h3>
+
+              <div class="form-row recurring-toggle-row">
+                <label class="recurring-toggle-label">
+                  <input type="checkbox" formControlName="es_periodica">
+                  <span>Repetir esta cita automáticamente</span>
+                </label>
+              </div>
+
+              @if (isRecurringEnabled()) {
+                <div class="form-row recurring-grid">
+                  <mat-form-field appearance="outline" class="recurrence-field">
+                    <mat-label>Frecuencia</mat-label>
+                    <mat-select formControlName="recurrencia_frecuencia">
+                      <mat-option value="daily">Diaria</mat-option>
+                      <mat-option value="weekly">Semanal</mat-option>
+                    </mat-select>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline" class="recurrence-field">
+                    <mat-label>Cada cuánto</mat-label>
+                    <input matInput type="number" min="1" max="12" formControlName="recurrencia_intervalo">
+                    <mat-hint>1 a 12 {{ isWeeklyRecurring() ? 'semanas' : 'días' }}</mat-hint>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline" class="recurrence-field">
+                    <mat-label>Total de citas</mat-label>
+                    <input matInput type="number" min="1" max="200" formControlName="recurrencia_total_ocurrencias">
+                    <mat-hint>Máximo 200</mat-hint>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline" class="recurrence-field">
+                    <mat-label>Hasta fecha (opcional)</mat-label>
+                    <input matInput [matDatepicker]="pickerHasta" formControlName="recurrencia_fecha_hasta">
+                    <mat-datepicker-toggle matIconSuffix [for]="pickerHasta"></mat-datepicker-toggle>
+                    <mat-datepicker #pickerHasta></mat-datepicker>
+                  </mat-form-field>
+                </div>
+
+                @if (isWeeklyRecurring()) {
+                  <div class="form-row recurring-days-row">
+                    <label class="recurring-days-label">Días de la semana</label>
+                    <div class="recurring-days-list">
+                      @for (dia of diasSemanaOpciones; track dia.value) {
+                        <button
+                          mat-stroked-button
+                          type="button"
+                          class="day-chip"
+                          [class.day-chip-active]="isDiaSeleccionado(dia.value)"
+                          (click)="toggleDiaSemana(dia.value)">
+                          {{ dia.label }}
+                        </button>
+                      }
+                    </div>
+                    @if (citaForm.get('recurrencia_dias_semana')?.touched && citaForm.get('recurrencia_dias_semana')?.hasError('required')) {
+                      <div class="recurring-error">Selecciona al menos un día para recurrencia semanal.</div>
+                    }
+                  </div>
+                }
+
+                <div class="form-row recurring-actions-row">
+                  <button
+                    mat-stroked-button
+                    type="button"
+                    color="primary"
+                    (click)="onPreviewRecurring()"
+                    [disabled]="previsualizandoSerie() || saving()">
+                    @if (previsualizandoSerie()) {
+                      <mat-spinner diameter="16"></mat-spinner>
+                    }
+                    Previsualizar serie
+                  </button>
+                </div>
+
+                @if (ocurrenciasPreview().length > 0) {
+                  <div class="form-row recurring-preview-row">
+                    <div class="preview-box">
+                      <div class="preview-title">Edita cada cita antes de crear la serie ({{ ocurrenciasEditables().length }} items):</div>
+                      <div class="preview-edit-table">
+                        @for (item of ocurrenciasEditables(); track $index) {
+                          <div class="preview-edit-row">
+                            <div class="preview-index">#{{ item.indice }}</div>
+
+                            <mat-form-field appearance="outline" class="preview-field preview-date">
+                              <mat-label>Fecha</mat-label>
+                              <input
+                                matInput
+                                type="date"
+                                [value]="item.fecha"
+                                (input)="updateOccurrenceFecha($index, $any($event.target).value)">
+                            </mat-form-field>
+
+                            <mat-form-field appearance="outline" class="preview-field preview-time">
+                              <mat-label>Hora</mat-label>
+                              <input
+                                matInput
+                                type="time"
+                                [value]="item.hora"
+                                (input)="updateOccurrenceHora($index, $any($event.target).value)">
+                            </mat-form-field>
+
+                            <mat-form-field appearance="outline" class="preview-field preview-type">
+                              <mat-label>Tipo</mat-label>
+                              <mat-select
+                                [value]="item.tipo"
+                                (selectionChange)="updateOccurrenceTipo($index, $event.value)">
+                                @for (tipo of tiposCita; track tipo.value) {
+                                  <mat-option [value]="tipo.value">{{ tipo.label }}</mat-option>
+                                }
+                              </mat-select>
+                            </mat-form-field>
+                          </div>
+                        }
+                      </div>
+                    </div>
+                  </div>
+                }
+              }
+            </div>
+          }
+
           <!-- Tipo y Detalles -->
           <div class="form-section">
             <h3 class="section-title">
               <mat-icon>assignment</mat-icon>
               Detalles de la Cita
             </h3>
-            
+
             <div class="form-row">
               <mat-form-field appearance="outline" class="tipo-field">
                 <mat-label>Tipo de cita</mat-label>
                 <mat-select formControlName="tipo" required (selectionChange)="onTipoChange()">
+                  <mat-select-trigger>
+                    <div class="tipo-option">
+                      <div class="tipo-color" [style.background-color]="getTipoColor(citaForm.get('tipo')?.value)"></div>
+                      <span>{{ getTipoLabel(citaForm.get('tipo')?.value) }}</span>
+                    </div>
+                  </mat-select-trigger>
                   @for (tipo of tiposCita; track tipo.value) {
                     <mat-option [value]="tipo.value">
                       <div class="tipo-option">
@@ -195,7 +338,7 @@
             <div class="form-row">
               <mat-form-field appearance="outline" class="full-width">
                 <mat-label>Motivo de la consulta</mat-label>
-                <textarea matInput rows="3" formControlName="motivo" 
+                <textarea matInput rows="3" formControlName="motivo"
                           placeholder="Describe el motivo de la consulta..."></textarea>
               </mat-form-field>
             </div>
@@ -203,30 +346,12 @@
             <div class="form-row">
               <mat-form-field appearance="outline" class="full-width">
                 <mat-label>Observaciones adicionales</mat-label>
-                <textarea matInput rows="2" formControlName="observaciones" 
+                <textarea matInput rows="2" formControlName="observaciones"
                           placeholder="Notas adicionales para el veterinario..."></textarea>
               </mat-form-field>
             </div>
           </div>
 
-          <!-- Precio (opcional) -->
-          @if (isEditing()) {
-            <div class="form-section">
-              <h3 class="section-title">
-                <mat-icon>attach_money</mat-icon>
-                Información Económica
-              </h3>
-              
-              <div class="form-row">
-                <mat-form-field appearance="outline" class="precio-field">
-                  <mat-label>Precio de la consulta</mat-label>
-                  <input matInput type="number" formControlName="precio" min="0" step="0.01">
-                  <span matTextPrefix>$</span>
-                  <mat-hint>Opcional - puede establecerse después</mat-hint>
-                </mat-form-field>
-              </div>
-            </div>
-          }
         </form>
       }
     </mat-card-content>
@@ -235,8 +360,8 @@
       <button mat-button type="button" (click)="onCancel()" [disabled]="saving()">
         Cancelar
       </button>
-      <button mat-raised-button color="primary" 
-              (click)="onSubmit()" 
+      <button mat-raised-button color="primary"
+              (click)="onSubmit()"
               [disabled]="citaForm.invalid || saving()">
         @if (saving()) {
           <mat-spinner diameter="16"></mat-spinner>

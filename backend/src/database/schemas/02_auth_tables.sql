@@ -9,13 +9,13 @@ CREATE TABLE vetplus_auth.usuarios (
     id_usuario UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     nombre VARCHAR(100) NOT NULL,
     apellido VARCHAR(100) NOT NULL,
-    email VARCHAR(150) UNIQUE NOT NULL,
-    documento VARCHAR(20) UNIQUE NOT NULL,
+    email VARCHAR(150) NOT NULL,
+    documento VARCHAR(20) NOT NULL,
     tipo_documento VARCHAR(10) NOT NULL CHECK (tipo_documento IN ('CC', 'CE', 'Pasaporte')),
     telefono VARCHAR(20),
     direccion TEXT,
     password_hash VARCHAR(255) NOT NULL,
-    rol VARCHAR(20) NOT NULL CHECK (rol IN ('admin', 'vet', 'aux', 'veterinario', 'auxiliar')),
+    rol VARCHAR(20) NOT NULL CHECK (rol IN ('admin', 'vet', 'aux')),
     especialidad VARCHAR(100),
     numero_licencia VARCHAR(50),
     activo BOOLEAN DEFAULT true,
@@ -27,6 +27,13 @@ CREATE TABLE vetplus_auth.usuarios (
     debe_cambiar_password BOOLEAN DEFAULT false,
     password_reset_date TIMESTAMP,
     password_reset_by UUID,
+    -- Multi-tenancy
+    id_tenant UUID NOT NULL DEFAULT system.get_default_tenant()
+        REFERENCES system.tenants(id_tenant) ON DELETE RESTRICT,
+    -- Firma del veterinario (ruta al archivo PNG/JPG subido)
+    firma_url TEXT,
+    -- Avatar general del usuario (perfil)
+    avatar_url TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -40,18 +47,6 @@ CREATE TRIGGER update_usuarios_updated_at
 ALTER TABLE vetplus_auth.usuarios 
 ADD CONSTRAINT fk_password_reset_by 
 FOREIGN KEY (password_reset_by) REFERENCES vetplus_auth.usuarios(id_usuario);
-
--- Tabla de sesiones JWT (opcional para revocación)
-CREATE TABLE vetplus_auth.sesiones (
-    id_sesion UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    id_usuario UUID NOT NULL REFERENCES vetplus_auth.usuarios(id_usuario) ON DELETE CASCADE,
-    token_jti VARCHAR(255) UNIQUE NOT NULL,
-    ip_address INET,
-    user_agent TEXT,
-    expira_en TIMESTAMP NOT NULL,
-    revocado BOOLEAN DEFAULT false,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
 
 -- Tabla de tokens blacklisteados
 CREATE TABLE vetplus_auth.blacklisted_tokens (
@@ -73,6 +68,17 @@ CREATE TABLE vetplus_auth.password_resets (
     completado BOOLEAN DEFAULT false,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMP
+);
+
+CREATE TABLE vetplus_auth.password_reset_tokens (
+    id_token UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id_usuario UUID NOT NULL REFERENCES vetplus_auth.usuarios(id_usuario) ON DELETE CASCADE,
+    token_hash VARCHAR(128) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    used_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by_ip INET,
+    UNIQUE (token_hash)
 );
 
 -- Tabla de auditoría del sistema
@@ -121,6 +127,7 @@ CREATE TABLE IF NOT EXISTS vetplus_auth.google_calendar_config (
     notification_popup BOOLEAN DEFAULT true,
     default_reminder_minutes INTEGER DEFAULT 30,
     email_reminder_hours INTEGER DEFAULT 24,
+    sync_preferences JSONB DEFAULT '{}'::jsonb,
     is_active BOOLEAN DEFAULT false,
     configured_by UUID REFERENCES vetplus_auth.usuarios(id_usuario),
     -- Campos para webhook
@@ -134,7 +141,6 @@ CREATE TABLE IF NOT EXISTS vetplus_auth.google_calendar_config (
 
 -- Comentarios en las tablas
 COMMENT ON TABLE vetplus_auth.usuarios IS 'Usuarios del sistema con roles admin, vet, aux';
-COMMENT ON TABLE vetplus_auth.sesiones IS 'Control de sesiones JWT activas';
 COMMENT ON TABLE vetplus_auth.password_resets IS 'Historial de resets de contraseña por administradores';
 COMMENT ON COLUMN vetplus_auth.usuarios.password_temporal IS 'Indica si la contraseña es temporal y debe cambiarse';
 COMMENT ON COLUMN vetplus_auth.usuarios.password_reset_date IS 'Fecha del último reset de contraseña';
@@ -158,12 +164,15 @@ CREATE INDEX idx_usuarios_email ON vetplus_auth.usuarios(email);
 CREATE INDEX idx_usuarios_rol ON vetplus_auth.usuarios(rol);
 CREATE INDEX idx_usuarios_activo ON vetplus_auth.usuarios(activo);
 CREATE INDEX idx_usuarios_password_temporal ON vetplus_auth.usuarios(password_temporal);
-CREATE INDEX idx_sesiones_usuario ON vetplus_auth.sesiones(id_usuario);
-CREATE INDEX idx_sesiones_token ON vetplus_auth.sesiones(token_jti);
+CREATE INDEX idx_usuarios_tenant ON vetplus_auth.usuarios(id_tenant);
+CREATE UNIQUE INDEX idx_usuarios_tenant_email_unique ON vetplus_auth.usuarios(id_tenant, LOWER(email));
+CREATE UNIQUE INDEX idx_usuarios_tenant_documento_unique ON vetplus_auth.usuarios(id_tenant, documento);
 CREATE INDEX idx_password_resets_admin ON vetplus_auth.password_resets(realizado_por);
 CREATE INDEX idx_password_resets_usuario ON vetplus_auth.password_resets(id_usuario);
 CREATE INDEX idx_password_resets_target ON vetplus_auth.password_resets(id_usuario);
 CREATE INDEX idx_password_resets_date ON vetplus_auth.password_resets(created_at);
+CREATE INDEX idx_password_reset_tokens_user ON vetplus_auth.password_reset_tokens(id_usuario);
+CREATE INDEX idx_password_reset_tokens_exp ON vetplus_auth.password_reset_tokens(expires_at);
 CREATE INDEX idx_auditoria_usuario ON system.log_auditoria(id_usuario);
 CREATE INDEX idx_auditoria_tabla ON system.log_auditoria(tabla_afectada);
 CREATE INDEX idx_auditoria_fecha ON system.log_auditoria(fecha);

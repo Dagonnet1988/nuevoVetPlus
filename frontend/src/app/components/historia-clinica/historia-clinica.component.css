@@ -141,26 +141,282 @@
 .filters-form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 8px;
 }
 
 .filter-row {
   display: flex;
-  gap: 16px;
-  align-items: center;
+  gap: 12px;
+  align-items: flex-start; /* flex-start para que los hints no colapsen */
   flex-wrap: wrap;
 }
 
-.paciente-field { flex: 2; min-width: 200px; }
-.veterinario-field { flex: 1.5; min-width: 150px; }
-.estado-field { flex: 1; min-width: 120px; }
-.search-field { flex: 2; min-width: 200px; }
-.date-field { flex: 1; min-width: 140px; }
+.filter-row-secondary {
+  align-items: center;
+  padding-top: 4px;
+}
 
-.clear-filters-btn {
+/* Tamaños de campos */
+.field-search  { flex: 2.5; min-width: 240px; }
+.field-tipo    { flex: 1.8; min-width: 190px; }
+.field-estado  { flex: 1.4; min-width: 170px; }
+.field-fecha   { flex: 1; min-width: 150px; }
+
+/* Botón limpiar en la misma fila que los campos */
+.btn-limpiar {
+  margin-top: 4px;   /* alineación visual con campos mat-form-field */
   height: 40px;
-  border-color: #666;
+  border-color: #999;
   color: #666;
+}
+
+/* Toggle Anulados */
+.toggle-anulados {
+  margin-top: 4px;
+}
+
+.toggle-anulados button {
+  border-color: #bdbdbd;
+  color: #666;
+}
+
+.toggle-anulados button.active {
+  border-color: #e53935;
+  color: #e53935;
+  background: rgba(229, 57, 53, 0.06);
+}
+
+/* Leyenda de estados */
+.estados-leyenda {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding: 10px 16px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+.leyenda-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+}
+
+.leyenda-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}
+
+.leyenda-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+}
+
+.leyenda-desc {
+  font-size: 12px;
+  color: #777;
+}
+
+/* Select: opciones de estado */
+.estado-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.estado-option-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.estado-option-desc {
+  font-size: 11px;
+  color: #888;
+  margin-left: auto;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Badges de estado en la tabla */
+.estado-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.estado-badge-icon {
+  font-size: 13px;
+  width: 13px;
+  height: 13px;
+}
+
+/* Badges de tipo en la tabla */
+.tipo-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.tipo-icon {
+  font-size: 13px;
+  width: 13px;
+  height: 13px;
+}
+
+/* Celda paciente / propietario */
+.paciente-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mascota-nombre {
+  font-weight: 500;
+  color: #333;
+}
+
+.cliente-nombre {
+  font-size: 12px;
+  color: #777;
+}
+
+/* Código de historia */
+.codigo {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: #2e7d32;
+  background: rgba(46, 125, 50, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+/* Icono de hint en cabeceras de columna */
+.col-hint-icon {
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
+  vertical-align: middle;
+  color: #9e9e9e;
+  margin-left: 2px;
+}
+
+/* Filas anuladas */
+.row-anulado {
+  opacity: 0.55;
+  text-decoration: line-through;
+  text-decoration-color: #bdbdbd;
+}
+
+/* Empty state */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 56px 24px;
+  text-align: center;
+  color: #777;
+}
+
+.empty-state mat-icon {
+  font-size: 72px;
+  width: 72px;
+  height: 72px;
+  margin-bottom: 16px;
+  opacity: 0.35;
+  color: #2e7d32;
+}
+
+.empty-state h3 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  font-weight: 500;
+  color: #444;
+}
+
+.empty-state p {
+  margin: 4px 0;
+  font-size: 14px;
+}
+
+/* Paginación */
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px 4px;
+  border-top: 1px solid #e0e0e0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pagination-info {
+  font-size: 14px;
+  color: #555;
+}
+
+.pagination-hint {
+  font-size: 12px;
+  color: #e57373;
+  font-style: italic;
+}
+
+.pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.page-num {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  min-width: 56px;
+  text-align: center;
+}
+
+/* Tabla con nuevo nombre de clase */
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.historias-table {
+  width: 100%;
+  background: white;
+}
+
+.historias-table .mat-mdc-header-cell {
+  font-weight: 600;
+  color: #2e7d32;
+  border-bottom: 2px solid #2e7d32;
+}
+
+.historias-table .mat-mdc-cell {
+  border-bottom: 1px solid #e0e0e0;
+  padding: 10px 8px;
 }
 
 /* Paciente seleccionado */
@@ -377,45 +633,6 @@
   }
 }
 
-/* Dark theme support */
-.dark-theme .historia-clinica-container {
-  background: #121212;
-}
-
-.dark-theme .page-title {
-  color: #4caf50;
-}
-
-.dark-theme .page-subtitle {
-  color: #aaa;
-}
-
-.dark-theme .stat-card,
-.dark-theme .filters-card,
-.dark-theme .table-card,
-.dark-theme .timeline-card,
-.dark-theme .stats-card {
-  background: #1e1e1e;
-  border: 1px solid #333;
-}
-
-.dark-theme .consultas-table {
-  background: #1e1e1e;
-}
-
-.dark-theme .consultas-table .mat-mdc-header-cell {
-  color: #4caf50;
-  border-bottom-color: #4caf50;
-}
-
-.dark-theme .consultas-table .mat-mdc-cell {
-  border-bottom-color: #333;
-}
-
-.dark-theme .consultas-table .mat-mdc-row:hover {
-  background-color: rgba(76, 175, 80, 0.1);
-}
-
 /* Filas clickeables */
 .clickable-row {
   cursor: pointer;
@@ -429,3 +646,114 @@
 .clickable-row:active {
   background-color: #e0e0e0 !important;
 }
+
+/* ── Nuevos estilos vista 2 niveles ─────────────────────────────────────────── */
+
+/* Título con nombre de paciente */
+.title-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title-paciente {
+  color: #2e7d32;
+  font-weight: 400;
+}
+
+/* Botón volver */
+.btn-back {
+  margin-right: 4px;
+}
+
+/* Toggle "Ver anulados" activo */
+.btn-anulados-active {
+  border-color: #e53935 !important;
+  color: #e53935 !important;
+  background: rgba(229, 57, 53, 0.06) !important;
+}
+
+/* Celda paciente en lista de pacientes */
+.paciente-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pet-icon {
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+  color: #2e7d32;
+  opacity: 0.7;
+}
+
+/* Contador de historias por paciente */
+.badge-total {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  background: #e8f5e9;
+  color: #2e7d32;
+  border-radius: 14px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+/* Mini-toolbar cuando se está en vista de historias de un paciente */
+.historia-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 8px 0;
+}
+
+/* Cabeceras de columna ordenables */
+.sortable-header-cell {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sortable-header-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.sortable-header-cell:hover {
+  color: #2e7d32;
+}
+.sort-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+  opacity: 0.6;
+  vertical-align: middle;
+}
+
+.historias-table .mat-column-fecha {
+  width: 170px;
+}
+
+.historias-table .mat-column-codigo {
+  width: 220px;
+}
+
+.historias-table .mat-column-tipo {
+  width: 180px;
+}
+
+.historias-table .mat-column-veterinario {
+  width: 220px;
+}
+
+.historias-table .mat-column-acciones {
+  width: 80px;
+  text-align: right;
+}
+

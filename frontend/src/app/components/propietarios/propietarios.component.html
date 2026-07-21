@@ -1,0 +1,192 @@
+<div class="page-container">
+
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-title">
+      <mat-icon class="header-icon">people</mat-icon>
+      <div>
+        <h1>Propietarios</h1>
+        <p class="header-sub">
+          {{ totalPropietarios() }} propietario{{ totalPropietarios() !== 1 ? 's' : '' }} registrado{{ totalPropietarios() !== 1 ? 's' : '' }}
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Barra de búsqueda -->
+  <mat-card class="search-card">
+    <form [formGroup]="searchForm" class="search-row">
+      <mat-form-field appearance="outline" class="search-field">
+        <mat-label>Buscar por nombre, cédula, teléfono o email</mat-label>
+        <input matInput formControlName="search" autocomplete="off" />
+        <mat-icon matPrefix>search</mat-icon>
+        @if (searchForm.get('search')!.value) {
+          <button matSuffix mat-icon-button (click)="limpiarBusqueda()" matTooltip="Limpiar">
+            <mat-icon>close</mat-icon>
+          </button>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="status-field">
+        <mat-label>Estado</mat-label>
+        <mat-select formControlName="activo">
+          <mat-option [value]="true">Activos</mat-option>
+          <mat-option [value]="false">Inactivos</mat-option>
+        </mat-select>
+      </mat-form-field>
+    </form>
+  </mat-card>
+
+  <!-- Estado de carga -->
+  @if (loading()) {
+    <div class="loading-center">
+      <mat-spinner diameter="48"></mat-spinner>
+      <p>Cargando propietarios…</p>
+    </div>
+  }
+
+  <!-- Sin resultados -->
+  @if (!loading() && propietarios().length === 0) {
+    <div class="empty-state">
+      <mat-icon class="empty-icon">person_off</mat-icon>
+      <h3>No se encontraron propietarios</h3>
+      @if (searchForm.get('search')!.value) {
+        <p>Intenta con otro término de búsqueda</p>
+        <button mat-stroked-button (click)="limpiarBusqueda()">Limpiar búsqueda</button>
+      }
+    </div>
+  }
+
+  <!-- Lista -->
+  @if (!loading() && propietarios().length > 0) {
+    <div class="propietarios-grid">
+      @for (p of propietarios(); track p.id_cliente) {
+        <mat-card class="propietario-card">
+          <div class="card-body">
+
+            <!-- Avatar + nombre -->
+            <div class="card-top">
+              <div class="avatar">
+                <mat-icon>person</mat-icon>
+              </div>
+              <div class="card-info">
+                <h3 class="nombre">{{ p.nombre }}</h3>
+                @if (p.cedula || p.documento) {
+                  <span class="cedula">CC {{ p.cedula || p.documento }}</span>
+                }
+              </div>
+              @if (!p.activo) {
+                <mat-chip class="chip-inactivo">Inactivo</mat-chip>
+              }
+            </div>
+
+            <mat-divider class="card-divider"></mat-divider>
+
+            <!-- Datos de contacto -->
+            <div class="contact-grid">
+              @if (p.telefono) {
+                <div class="contact-item">
+                  <mat-icon class="contact-icon">phone</mat-icon>
+                  <span>{{ p.telefono }}</span>
+                </div>
+              }
+              @if (p.email) {
+                <div class="contact-item">
+                  <mat-icon class="contact-icon">email</mat-icon>
+                  <span class="email-text">{{ p.email }}</span>
+                </div>
+              }
+              @if (p.direccion) {
+                <div class="contact-item">
+                  <mat-icon class="contact-icon">place</mat-icon>
+                  <span>{{ p.direccion }}</span>
+                </div>
+              }
+              @if (!p.telefono && !p.email && !p.direccion) {
+                <p class="no-contact">Sin datos de contacto</p>
+              }
+            </div>
+
+            <!-- Mascotas -->
+            @if (p.total_mascotas !== undefined) {
+              <div class="mascotas-row">
+                <mat-icon class="pets-icon">pets</mat-icon>
+                <span>{{ p.total_mascotas }} mascota{{ p.total_mascotas !== 1 ? 's' : '' }}</span>
+              </div>
+            }
+
+            <!-- Estado consentimiento -->
+            <div class="consentimiento-badge"
+                 [class.firmado]="p.consentimiento_firmado"
+                 [class.pendiente]="!p.consentimiento_firmado">
+              @if (p.consentimiento_firmado) {
+                <mat-icon>verified</mat-icon>
+                <span>Consentimiento firmado</span>
+              } @else {
+                <mat-icon>assignment_late</mat-icon>
+                <span>Sin consentimiento</span>
+              }
+            </div>
+          </div>
+
+          <!-- Acciones -->
+          <div class="card-actions">
+            <button
+              mat-stroked-button
+              (click)="verPacientes(p)"
+              matTooltip="Ver mascotas de este propietario">
+              @if (p.foto_primer_mascota) {
+                <img
+                  class="mascota-preview-btn"
+                  [src]="getMascotaPreviewUrl(p.foto_primer_mascota)"
+                  alt="Mascota"
+                  (error)="$event.target.style.display='none'" />
+              } @else {
+                <mat-icon>pets</mat-icon>
+              }
+              Ver mascotas
+            </button>
+            <button
+              mat-stroked-button
+              [color]="p.consentimiento_firmado ? '' : 'warn'"
+              (click)="gestionarConsentimiento(p)"
+              matTooltip="{{ p.consentimiento_firmado ? 'Ver PDF del consentimiento firmado' : 'Gestionar consentimiento informado' }}">
+              <mat-icon>{{ p.consentimiento_firmado ? 'picture_as_pdf' : 'assignment_late' }}</mat-icon>
+              Consentimiento
+            </button>
+            <button
+              mat-raised-button
+              color="primary"
+              (click)="abrirEditar(p)"
+              matTooltip="Editar datos de contacto">
+              <mat-icon>edit</mat-icon>
+              Editar
+            </button>
+            <button
+              mat-stroked-button
+              [color]="p.activo ? 'warn' : 'primary'"
+              (click)="cambiarEstadoPropietario(p)"
+              [matTooltip]="p.activo ? 'Desactivar/eliminar propietario' : 'Reactivar propietario'">
+              <mat-icon>{{ p.activo ? 'person_off' : 'person_add' }}</mat-icon>
+              {{ p.activo ? 'Desactivar / Eliminar' : 'Reactivar' }}
+            </button>
+          </div>
+        </mat-card>
+      }
+    </div>
+
+    <!-- Paginación -->
+    @if (totalPages() > 1) {
+      <div class="pagination-row">
+        <button mat-icon-button [disabled]="currentPage() === 1" (click)="pagina(-1)" matTooltip="Anterior">
+          <mat-icon>chevron_left</mat-icon>
+        </button>
+        <span class="page-info">Página {{ currentPage() }} de {{ totalPages() }}</span>
+        <button mat-icon-button [disabled]="currentPage() === totalPages()" (click)="pagina(1)" matTooltip="Siguiente">
+          <mat-icon>chevron_right</mat-icon>
+        </button>
+      </div>
+    }
+  }
+
+</div>

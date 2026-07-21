@@ -10,6 +10,17 @@
   background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
 }
 
+.profile-top-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 12px;
+}
+
+.top-back-button {
+  border-radius: 12px;
+  font-weight: 600;
+}
+
 /* ===============================
    ESTADOS DE CARGA Y ERROR
    =============================== */
@@ -76,6 +87,7 @@
 }
 
 .user-avatar-large {
+  position: relative;
   width: 120px;
   height: 120px;
   border-radius: 50%;
@@ -106,6 +118,18 @@
   font-size: 60px !important;
   width: 60px !important;
   height: 60px !important;
+}
+
+.avatar-upload-btn {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 34px;
+  height: 34px;
+  background: #2d3748 !important;
+  color: #fff !important;
+  border: 2px solid rgba(255,255,255,0.9);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.25);
 }
 
 .user-details {
@@ -205,6 +229,22 @@
   border-color: rgba(255,255,255,0.5) !important;
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+}
+
+.config-warning {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #edf2f7;
+  color: #2d3748;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.92rem;
+}
+
+.config-warning mat-icon {
+  color: #2b6cb0;
 }
 
 /* ===============================
@@ -530,10 +570,26 @@
   font-size: 28px !important;
   width: 28px !important;
   height: 28px !important;
+  line-height: 28px !important;
   color: #3182ce;
   padding: 8px;
   border-radius: 8px;
   background: linear-gradient(135deg, #ebf8ff 0%, #bee3f8 100%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: content-box;
+}
+
+:host ::ng-deep .sessions-list .mat-mdc-list-item-icon {
+  align-self: center;
+  margin-top: 0 !important;
+}
+
+:host ::ng-deep .sessions-list .mdc-list-item__start {
+  align-self: center !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
 }
 
 .session-title {
@@ -724,27 +780,27 @@
   .profile-container {
     padding: 16px;
   }
-  
+
   .header-content {
     flex-direction: column;
     align-items: stretch;
   }
-  
+
   .user-info {
     min-width: unset;
     flex-direction: column;
     text-align: center;
     gap: 16px;
   }
-  
+
   .user-avatar-large {
     align-self: center;
   }
-  
+
   .actions-section {
     justify-content: center;
   }
-  
+
   .stats-grid {
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 16px;
@@ -755,42 +811,42 @@
   .profile-header {
     padding: 24px 20px;
   }
-  
+
   .user-name {
     font-size: 2rem;
   }
-  
+
   .user-avatar-large {
     width: 100px;
     height: 100px;
   }
-  
+
   .user-avatar-large mat-icon {
     font-size: 50px !important;
     width: 50px !important;
     height: 50px !important;
   }
-  
+
   .user-meta {
     justify-content: center;
   }
-  
+
   .contact-info {
     align-items: center;
   }
-  
+
   .info-grid,
   .config-grid {
     grid-template-columns: 1fr;
     gap: 16px;
   }
-  
+
   .activity-meta {
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
   }
-  
+
   .session-time {
     font-size: 0.8rem;
   }
@@ -800,45 +856,45 @@
   .profile-container {
     padding: 12px;
   }
-  
+
   .profile-header {
     padding: 16px;
   }
-  
+
   .user-name {
     font-size: 1.5rem;
   }
-  
+
   .user-avatar-large {
     width: 80px;
     height: 80px;
   }
-  
+
   .user-avatar-large mat-icon {
     font-size: 40px !important;
     width: 40px !important;
     height: 40px !important;
   }
-  
+
   .stats-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .stat-content {
     gap: 12px;
   }
-  
+
   .stat-icon {
     font-size: 2rem !important;
     width: 2rem !important;
     height: 2rem !important;
     padding: 10px;
   }
-  
+
   .stat-number {
     font-size: 1.5rem;
   }
-  
+
   .action-button {
     min-width: 100px;
     height: 40px;
@@ -880,6 +936,17 @@
   font-size: 18px !important;
   width: 18px !important;
   height: 18px !important;
+  line-height: 18px !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:host ::ng-deep .profile-tabs .mdc-tab__content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 /* ===============================
@@ -920,4 +987,33 @@
 .activity-list::-webkit-scrollbar-thumb:hover,
 .sessions-list::-webkit-scrollbar-thumb:hover {
   background: #a0aec0;
+}
+
+/* Firma digital */
+.firma-section { margin-top: 4px; }
+.firma-label { font-size: 13px; font-weight: 600; color: #37474f; margin: 0 0 4px; display: flex; align-items: center; gap: 4px; }
+.firma-preview-box {
+  border: 1px solid #cfd8dc;
+  border-radius: 6px;
+  padding: 12px;
+  background: #fafafa;
+  display: inline-block;
+  max-width: 260px;
+}
+.firma-img {
+  max-width: 220px;
+  max-height: 80px;
+  object-fit: contain;
+  display: block;
+}
+.firma-placeholder {
+  border: 2px dashed #cfd8dc;
+  border-radius: 6px;
+  padding: 16px 24px;
+  text-align: center;
+  color: #b0bec5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
 }

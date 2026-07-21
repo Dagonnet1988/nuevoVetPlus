@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { AuthGuard } from './utils/guards/auth.guard';
 import { NoAuthGuard } from './utils/guards/no-auth.guard';
 import { RoleGuard } from './utils/guards/role.guard';
+import { SuperadminGuard } from './utils/guards/superadmin.guard';
 
 export const routes: Routes = [
   // Ruta raíz - redirigir al login temporalmente
@@ -27,7 +28,7 @@ export const routes: Routes = [
   {
     path: 'change-password',
     loadComponent: () => import('./layouts/auth-layout/auth-layout.component').then(m => m.AuthLayoutComponent),
-    // canActivate: [AuthGuard], // TEMPORALMENTE DESACTIVADO
+    canActivate: [AuthGuard],
     children: [
       {
         path: '',
@@ -36,11 +37,18 @@ export const routes: Routes = [
     ]
   },
 
-  // Rutas principales del sistema (temporalmente sin guards)
+  // Ruta pública de firma de consentimiento (sin autenticación)
+  {
+    path: 'consentimiento/:token',
+    loadComponent: () => import('./components/consentimiento-publico/consentimiento-publico.component')
+      .then(m => m.ConsentimientoPublicoComponent)
+  },
+
+  // Rutas principales del sistema
   {
     path: '',
     loadComponent: () => import('./layouts/main-layout/main-layout.component').then(m => m.MainLayoutComponent),
-    // canActivate: [AuthGuard], // TEMPORALMENTE DESACTIVADO
+    canActivate: [AuthGuard],
     children: [
       // Dashboard - Accesible para todos los usuarios autenticados
       {
@@ -48,20 +56,28 @@ export const routes: Routes = [
         loadComponent: () => import('./components/dashboard/dashboard.component').then(m => m.DashboardComponent)
       },
 
-      // Pacientes - Accesible para admin, vet, aux_admin, aux_vet
+      // Pacientes - Accesible para admin, vet, aux
       {
         path: 'pacientes',
         loadChildren: () => import('./components/pacientes/pacientes.routes').then(m => m.PACIENTES_ROUTES),
         canActivate: [RoleGuard],
-        data: { roles: ['admin', 'vet', 'aux_admin', 'aux_vet'] }
+        data: { roles: ['admin', 'vet', 'aux'] }
       },
 
-      // Citas - Accesible para admin, vet, aux_admin, aux_vet
+      // Propietarios - Accesible para admin, vet, aux
+      {
+        path: 'propietarios',
+        loadChildren: () => import('./components/propietarios/propietarios.routes').then(m => m.PROPIETARIOS_ROUTES),
+        canActivate: [RoleGuard],
+        data: { roles: ['admin', 'vet', 'aux'] }
+      },
+
+      // Citas - Accesible para admin, vet, aux
       {
         path: 'citas',
         loadChildren: () => import('./components/citas/citas.routes').then(m => m.CITAS_ROUTES),
         canActivate: [RoleGuard],
-        data: { roles: ['admin', 'vet', 'aux_admin', 'aux_vet'] }
+        data: { roles: ['admin', 'vet', 'aux'] }
       },
 
       // Historia Clínica - Accesible para admin, vet
@@ -72,29 +88,6 @@ export const routes: Routes = [
         data: { roles: ['admin', 'vet'] }
       },
 
-      // Inventario - Accesible para admin, vet
-      {
-        path: 'inventario',
-        loadChildren: () => import('./components/inventario/inventario.routes').then(m => m.inventarioRoutes),
-        canActivate: [RoleGuard],
-        data: { roles: ['admin', 'vet'] }
-      },
-
-      // Facturación - Accesible para admin, vet, aux_admin
-      {
-        path: 'facturacion',
-        loadChildren: () => import('./components/facturacion/facturacion.routes').then(m => m.FACTURACION_ROUTES),
-        canActivate: [RoleGuard],
-        data: { roles: ['admin', 'vet', 'aux_admin'] }
-      },
-
-      // Reportes - Accesible para admin, vet
-      {
-        path: 'reportes',
-        loadChildren: () => import('./components/reportes/reportes.routes').then(m => m.REPORTES_ROUTES),
-        canActivate: [RoleGuard],
-        data: { roles: ['admin', 'vet'] }
-      },
 
       // Usuarios - Solo admin
       {
@@ -112,19 +105,54 @@ export const routes: Routes = [
         data: { roles: ['admin'] }
       },
 
-      // Cajas - Solo admin
-      {
-        path: 'cajas',
-        loadChildren: () => import('./components/cajas/cajas.routes').then(m => m.CAJAS_ROUTES),
-        canActivate: [RoleGuard],
-        data: { roles: ['admin'] }
-      },
-
-      // Perfil temporal - placeholder
+      // Perfil de usuario (acceso por menú superior)
       {
         path: 'perfil',
-        redirectTo: '/dashboard',
-        pathMatch: 'full'
+        loadComponent: () => import('./components/usuarios/components/usuario-profile.component').then(m => m.UsuarioProfileComponent),
+        canActivate: [RoleGuard],
+        data: { roles: ['admin', 'vet'] }
+      },
+      {
+        path: 'perfil/sesiones',
+        loadComponent: () => import('./components/usuarios/components/usuario-sesiones.component').then(m => m.UsuarioSesionesComponent),
+        canActivate: [RoleGuard],
+        data: { roles: ['admin', 'vet'] }
+      }
+    ]
+  },
+
+  // ── Panel Superadmin (plataforma) ─────────────────────────────────────────
+  {
+    path: 'superadmin/login',
+    loadComponent: () => import('./components/superadmin/login/superadmin-login.component')
+      .then(m => m.SuperadminLoginComponent)
+  },
+  {
+    path: 'superadmin',
+    loadComponent: () => import('./layouts/superadmin-layout/superadmin-layout.component')
+      .then(m => m.SuperadminLayoutComponent),
+    canActivate: [SuperadminGuard],
+    children: [
+      { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
+      {
+        path: 'dashboard',
+        loadComponent: () => import('./components/superadmin/dashboard/superadmin-dashboard.component')
+          .then(m => m.SuperadminDashboardComponent)
+      },
+      {
+        path: 'clinicas/nueva',
+        loadComponent: () => import('./components/superadmin/nueva-clinica/nueva-clinica.component')
+          .then(m => m.NuevaClinicaComponent)
+      },
+      {
+        path: 'clinicas/:id',
+        loadComponent: () => import('./components/superadmin/detalle-clinica/detalle-clinica.component')
+          .then(m => m.DetalleClinicaComponent)
+      },
+      {
+        path: 'cambiar-password',
+        loadComponent: () => import('./components/superadmin/cambiar-password/cambiar-password.component')
+          .then(m => m.CambiarPasswordComponent)
       }
     ]
   },

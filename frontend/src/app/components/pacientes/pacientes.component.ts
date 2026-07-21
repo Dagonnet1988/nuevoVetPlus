@@ -1,9 +1,10 @@
 import { Component, OnInit, OnDestroy, signal, ViewChild } from '@angular/core';
+import { extractError } from '../../utils/error.utils';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { MatTableModule, MatTableDataSource } from '@angular/material/table';
 import { MatPaginatorModule, MatPaginator } from '@angular/material/paginator';
-import { MatSortModule, MatSort } from '@angular/material/sort';
+import { MatSortModule, MatSort, Sort, SortDirection } from '@angular/material/sort';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
@@ -59,6 +60,10 @@ export class PacientesComponent implements OnInit, OnDestroy {
   totalRecords = signal(0);
   pageSize = signal(10);
   currentPage = signal(0);
+  sortActive = signal<string>('paciente');
+  sortDirection = signal<SortDirection>('asc');
+  sortBy = signal<'nombre' | 'cliente_nombre'>('nombre');
+  sortOrder = signal<'ASC' | 'DESC'>('ASC');
   especies = signal<string[]>(['Perro', 'Gato']); // Inicializar con datos básicos
 
   // Tabla y datos
@@ -114,9 +119,16 @@ export class PacientesComponent implements OnInit, OnDestroy {
       activo: this.filterForm.value.activo
     };
 
-    this.pacientesService.getMascotas(this.currentPage() + 1, this.pageSize(), filters)
+    this.pacientesService.getMascotas(
+      this.currentPage() + 1,
+      this.pageSize(),
+      filters,
+      this.sortBy(),
+      this.sortOrder()
+    )
       .subscribe({
         next: (response) => {
+          const anyResponse: any = response as any;
           // Manejar diferentes estructuras de respuesta de forma robusta
           let pacientes: any[] = [];
           let total = 0;
@@ -125,6 +137,10 @@ export class PacientesComponent implements OnInit, OnDestroy {
             // Estructura: { success: true, data: { pacientes: [...], pagination: { total: ... } } }
             pacientes = response.data.pacientes || [];
             total = response.data.pagination?.total || pacientes.length;
+          } else if (anyResponse?.pagination) {
+            // Estructura: { data: [...], pagination: { total: ... } }
+            pacientes = Array.isArray(anyResponse?.data) ? anyResponse.data : [];
+            total = anyResponse.pagination?.total || pacientes.length;
           } else if (response?.data?.pacientes) {
             // Estructura: { data: { pacientes: [...] } }
             pacientes = response.data.pacientes;
@@ -140,7 +156,7 @@ export class PacientesComponent implements OnInit, OnDestroy {
           }
 
           this.dataSource.data = pacientes;
-          this.totalRecords.set(total);
+          this.totalRecords.set(Number(total || 0));
           this.loading.set(false);
         },
         error: (error) => {
@@ -148,7 +164,7 @@ export class PacientesComponent implements OnInit, OnDestroy {
           this.dataSource.data = [];
           this.totalRecords.set(0);
           this.loading.set(false);
-          this.snackBar.open('Error cargando pacientes', 'Cerrar', { duration: 3000 });
+          this.snackBar.open(extractError(error, 'Error cargando pacientes'), 'Cerrar', { duration: 3000 });
         }
       });
   }
@@ -208,12 +224,33 @@ export class PacientesComponent implements OnInit, OnDestroy {
 
   clearFilters(): void {
     this.filterForm.reset();
+    this.currentPage.set(0);
     this.loadPacientes();
   }
 
   onPageChange(event: any): void {
     this.currentPage.set(event.pageIndex);
     this.pageSize.set(event.pageSize);
+    this.loadPacientes();
+  }
+
+  onSortChange(event: Sort): void {
+    const sortMap: { [key: string]: 'nombre' | 'cliente_nombre' } = {
+      paciente: 'nombre',
+      propietario: 'cliente_nombre'
+    };
+
+    const uiActive = event.active || 'paciente';
+    const uiDirection: SortDirection = (event.direction || 'asc') as SortDirection;
+    const mappedSortBy = sortMap[uiActive] || 'nombre';
+    const mappedSortOrder: 'ASC' | 'DESC' = uiDirection === 'desc' ? 'DESC' : 'ASC';
+
+    this.sortActive.set(uiActive);
+    this.sortDirection.set(uiDirection);
+
+    this.sortBy.set(mappedSortBy);
+    this.sortOrder.set(mappedSortOrder);
+    this.currentPage.set(0);
     this.loadPacientes();
   }
 
@@ -231,8 +268,12 @@ export class PacientesComponent implements OnInit, OnDestroy {
   }
 
   viewHistory(paciente: Mascota): void {
-    // TODO: Implementar historia clínica
-    this.snackBar.open(`Historia clínica de ${paciente.nombre} - En desarrollo`, 'Cerrar', { duration: 3000 });
+    this.router.navigate(['/historia-clinica'], {
+      queryParams: {
+        id_mascota: paciente.id_mascota,
+        pacienteNombre: paciente.nombre
+      }
+    });
   }
 
   toggleStatus(paciente: Mascota): void {
@@ -259,7 +300,7 @@ export class PacientesComponent implements OnInit, OnDestroy {
         },
         error: (error) => {
           this.snackBar.open(
-            'Error al actualizar el estado del paciente',
+            extractError(error, 'Error al actualizar el estado del paciente'),
             'Cerrar',
             { duration: 3000 }
           );

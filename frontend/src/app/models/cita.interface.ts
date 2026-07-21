@@ -9,7 +9,6 @@ export interface Cita {
   estado: EstadoCita;
   motivo?: string;
   observaciones?: string;
-  precio?: number;
   google_event_id?: string;
   recordatorio_enviado?: boolean;
   fecha_creacion: string;
@@ -20,6 +19,7 @@ export interface Cita {
     nombre: string;
     especie: string;
     raza?: string;
+    foto_url?: string;
     cliente?: {
       nombre: string;
       documento?: string;
@@ -32,12 +32,14 @@ export interface Cita {
     nombre: string;
     especialidad?: string;
     email?: string;
+    avatar_url?: string;
   };
 
   // Campos planos que viene del backend (estructura flat)
   mascota_nombre?: string;
   mascota_especie?: string;
   mascota_raza?: string;
+  mascota_foto_url?: string;
   cliente_nombre?: string;
   cliente_documento?: string;
   cliente_telefono?: string;
@@ -46,13 +48,20 @@ export interface Cita {
   veterinario_nombre?: string;
   veterinario_especialidad?: string;
   veterinario_email?: string;
+  veterinario_avatar_url?: string;
 }
 
 export type TipoCita =
+  | 'valoracion'
+  | 'hidroterapia'
+  | 'terapia'
+  | 'domicilio'
+  | 'sin_clasificar'
+  | 'control'
+  // Legacy support
   | 'consulta_general'
   | 'vacunacion'
   | 'cirugia'
-  | 'control'
   | 'emergencia'
   | 'revision'
   | 'desparasitacion'
@@ -60,11 +69,9 @@ export type TipoCita =
   | 'otro';
 
 export type EstadoCita =
-  | 'pendiente'
   | 'confirmada'
   | 'en_curso'
   | 'completada'
-  | 'cancelada'
   | 'no_asistio';
 
 export interface CitaFormData {
@@ -76,7 +83,40 @@ export interface CitaFormData {
   estado?: EstadoCita;
   motivo?: string;
   observaciones?: string;
-  precio?: number;
+}
+
+export interface RecurrenciaConfig {
+  frecuencia: 'daily' | 'weekly';
+  intervalo?: number;
+  dias_semana?: number[];
+  total_ocurrencias?: number;
+  fecha_hasta?: string;
+}
+
+export interface RecurringAppointmentPayload {
+  id_mascota: string;
+  id_veterinario: string;
+  fecha_inicio: string;
+  fecha_fin: string;
+  tipo?: TipoCita;
+  motivo?: string;
+  notas?: string;
+  observaciones?: string;
+  recurrencia: RecurrenciaConfig;
+  ocurrencias_editadas?: RecurringEditedOccurrence[];
+}
+
+export interface RecurringPreviewItem {
+  indice: number;
+  fecha_inicio: string;
+  fecha_fin: string;
+}
+
+export interface RecurringEditedOccurrence {
+  indice: number;
+  fecha_inicio: string;
+  fecha_fin: string;
+  tipo?: TipoCita;
 }
 
 export interface CitaFilter {
@@ -139,22 +179,17 @@ export interface CitaStats {
 
 // Constantes para tipos y estados
 export const TIPOS_CITA: { value: TipoCita; label: string; color: string }[] = [
-  { value: 'consulta_general', label: 'Consulta General', color: '#2196f3' },
-  { value: 'vacunacion', label: 'Vacunación', color: '#4caf50' },
-  { value: 'cirugia', label: 'Cirugía', color: '#f44336' },
-  { value: 'control', label: 'Control', color: '#ff9800' },
-  { value: 'emergencia', label: 'Emergencia', color: '#e91e63' },
-  { value: 'revision', label: 'Revisión', color: '#9c27b0' },
-  { value: 'desparasitacion', label: 'Desparasitación', color: '#00bcd4' },
-  { value: 'estetica', label: 'Estética', color: '#cddc39' },
-  { value: 'otro', label: 'Otro', color: '#607d8b' }
+  { value: 'domicilio', label: 'Domicilio', color: '#51b749' },
+  { value: 'control', label: 'Control', color: '#e09a5f' },
+  { value: 'valoracion', label: 'Valoración', color: '#fbd75b' },
+  { value: 'terapia', label: 'Terapia', color: '#46d6db' },
+  { value: 'hidroterapia', label: 'Hidroterapia', color: '#5484ed' },
+  { value: 'sin_clasificar', label: 'Sin clasificar', color: '#c7d0d8' }
 ];
 
 export const ESTADOS_CITA: { value: EstadoCita; label: string; color: string }[] = [
-  { value: 'pendiente', label: 'Pendiente', color: '#ff9800' },
   { value: 'confirmada', label: 'Confirmada', color: '#2196f3' },
   { value: 'en_curso', label: 'En Curso', color: '#9c27b0' },
-  { value: 'completada', label: 'Completada', color: '#4caf50' },
-  { value: 'cancelada', label: 'Cancelada', color: '#607d8b' },
+  { value: 'completada', label: 'Completa', color: '#4caf50' },
   { value: 'no_asistio', label: 'No Asistió', color: '#f44336' }
 ];

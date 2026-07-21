@@ -1,0 +1,294 @@
+:host {
+  display: block;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 8% 12%, rgba(86, 173, 123, 0.18), transparent 42%),
+    radial-gradient(circle at 92% 88%, rgba(43, 123, 201, 0.14), transparent 40%),
+    #f4f6f9;
+}
+
+.consent-page {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+  padding: 24px 16px 48px;
+}
+
+// ── Estado centrado (cargando / éxito / error / expirado / ya_firmado) ──────
+.state-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 60vh;
+  text-align: center;
+  max-width: 380px;
+  margin: auto;
+
+  h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  p {
+    color: #555;
+    font-size: 0.95rem;
+    margin: 0;
+    line-height: 1.5;
+  }
+}
+
+.state-label {
+  color: #666;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.state-icon {
+  font-size: 56px;
+  width: 56px;
+  height: 56px;
+
+  &.ok    { color: #2e7d32; }
+  &.warn  { color: #e65100; }
+  &.error { color: #c62828; }
+}
+
+.pdf-num {
+  background: #e8f5e9;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  color: #1b5e20;
+}
+
+// ── Tarjeta principal del formulario ────────────────────────────────────────
+.consent-card {
+  width: 100%;
+  max-width: 720px;
+  background: linear-gradient(180deg, #ffffff 0%, #fcfffd 100%);
+  border-radius: 12px;
+  box-shadow: 0 14px 35px rgba(17, 50, 32, 0.12);
+  border: 1px solid rgba(46, 125, 50, 0.12);
+  padding: 28px 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+// ── Cabecera ─────────────────────────────────────────────────────────────────
+.consent-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 1px solid #e7efe7;
+  padding-bottom: 16px;
+
+  .logo {
+    height: 56px;
+    width: auto;
+    object-fit: contain;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+}
+
+.logo-fallback {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #1b5e20;
+  background: linear-gradient(145deg, #e8f5e9, #c8e6c9);
+  border: 1px solid #b9dabb;
+}
+
+.header-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kicker {
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #54755b;
+}
+
+.empresa-nombre {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin: 0;
+}
+
+.version-titulo {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+// ── Datos del titular ────────────────────────────────────────────────────────
+.datos-section {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #444;
+  }
+
+  .label {
+    font-weight: 600;
+    margin-right: 4px;
+  }
+}
+
+.expiry-notice {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.82rem !important;
+  color: #e65100 !important;
+  margin-top: 4px !important;
+}
+
+.expiry-icon {
+  font-size: 1rem;
+  width: 1rem;
+  height: 1rem;
+  color: #e65100;
+}
+
+// ── Texto legal ──────────────────────────────────────────────────────────────
+.texto-legal-section {
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid #e0e7e0;
+  border-radius: 8px;
+  padding: 12px 16px;
+  background: #fdfefe;
+}
+
+.texto-hint {
+  margin: 0 0 10px;
+  color: #5d6b5d;
+  font-size: 0.82rem;
+}
+
+.texto-legal {
+  font-size: 0.88rem;
+  color: #444;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+// ── Firma ────────────────────────────────────────────────────────────────────
+.firma-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.firma-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #555;
+  margin: 0;
+}
+
+.canvas-wrap {
+  border: 2px dashed #7aa7d9;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fbfcff 0%, #f7fbff 100%);
+  height: 180px;
+  overflow: hidden;
+  cursor: crosshair;
+
+  canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    touch-action: none;
+  }
+}
+
+.btn-limpiar {
+  align-self: flex-end;
+  font-size: 0.8rem;
+  color: #666;
+}
+
+// ── Error inline ─────────────────────────────────────────────────────────────
+.inline-error {
+  background: #ffebee;
+  border-left: 3px solid #e53935;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 0.88rem;
+  color: #c62828;
+  margin: 0;
+}
+
+// ── Botón enviar ─────────────────────────────────────────────────────────────
+.submit-row {
+  display: flex;
+  justify-content: flex-end;
+
+  button {
+    min-width: 180px;
+    height: 44px;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 10px;
+  }
+}
+
+.btn-spinner {
+  display: inline-flex;
+}
+
+// ── Responsive móvil ─────────────────────────────────────────────────────────
+@media (max-width: 480px) {
+  .consent-page {
+    padding: 12px 8px 32px;
+  }
+
+  .consent-card {
+    padding: 20px 16px 24px;
+    border-radius: 8px;
+  }
+
+  .empresa-nombre {
+    font-size: 1.1rem;
+  }
+
+  .canvas-wrap {
+    height: 200px;
+  }
+
+  .submit-row {
+    justify-content: stretch;
+
+    button {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+}

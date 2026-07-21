@@ -2,73 +2,103 @@ import rateLimit from 'express-rate-limit';
 import slowDown from 'express-slow-down';
 
 /**
- * Rate Limiting Avanzado por Endpoint y Rol
- * Sistema production-ready con límites diferenciados
+ * Rate Limiting — activo en producción, deshabilitado en desarrollo/test.
+ * Para deshabilitar en desarrollo local, asegúrate de que NODE_ENV=development en .env
  */
+const isProd = process.env.NODE_ENV === 'production';
 
-// Rate limiting deshabilitado para desarrollo
-export const generalRateLimit = (req, res, next) => {
-    // Pasar sin rate limiting en desarrollo
-    next();
-};
+// Helper: crea el limiter real solo en producción
+const createLimiter = (options) => isProd
+  ? rateLimit({
+      standardHeaders: true,
+      legacyHeaders: false,
+      ...options
+    })
+  : (req, res, next) => next();
 
-// Rate limiting deshabilitado para desarrollo
-export const authRateLimit = (req, res, next) => {
-    next();
-};
+// Helper: crea el slow-down real solo en producción
+const createSlowDown = (options) => isProd
+  ? slowDown(options)
+  : (req, res, next) => next();
 
-// Rate limiting deshabilitado para desarrollo
-export const adminRateLimit = (req, res, next) => {
-    next();
-};
+// ─── Límites ─────────────────────────────────────────────────────────────────
 
-// Rate limiting deshabilitado para desarrollo
-export const reportsRateLimit = (req, res, next) => {
-    next();
-};
+/** Login, refresh, registro — 10 intentos / 15 min por IP */
+export const authRateLimit = createLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { message: 'Demasiados intentos de autenticación. Intente en 15 minutos.' }
+});
 
-// Rate limiting deshabilitado para desarrollo
-export const publicRateLimit = (req, res, next) => {
-    next();
-};
+/** Admin y reportes — 60 req / min */
+export const adminRateLimit = createLimiter({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: { message: 'Límite de solicitudes de administración alcanzado.' }
+});
 
-// Rate limiting deshabilitado para desarrollo
-export const writeSlowDown = (req, res, next) => {
-    next();
-};
+/** Reportes pesados — 30 req / min */
+export const reportsRateLimit = createLimiter({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: { message: 'Límite de solicitudes de reportes alcanzado.' }
+});
 
-// Rate limiting deshabilitado para desarrollo
+/** Rutas públicas (firma de consentimiento) — 20 req / min por IP */
+export const publicRateLimit = createLimiter({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: { message: 'Demasiadas solicitudes. Intente en un momento.' }
+});
+
+/** General API — 200 req / min por IP */
+export const generalRateLimit = createLimiter({
+  windowMs: 60 * 1000,
+  max: 200,
+  message: { message: 'Límite de solicitudes alcanzado.' }
+});
+
+/** Búsquedas — 60 req / min */
+export const searchRateLimit = createLimiter({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: { message: 'Demasiadas búsquedas. Intente en un momento.' }
+});
+
+/** Writes (POST/PUT/PATCH/DELETE) — slow down progresivo en prod */
+export const writeSlowDown = createSlowDown({
+  windowMs: 60 * 1000,
+  delayAfter: 30,
+  delayMs: 500
+});
+
+/** Rate limit por rol configurable */
 export const roleBasedRateLimit = (limits = {}) => {
-    return (req, res, next) => {
-        next();
-    };
+  const defaultMax = limits.default || 100;
+  const limiter = createLimiter({
+    windowMs: 60 * 1000,
+    max: (req) => {
+      const rol = req.user?.rol;
+      return limits[rol] || defaultMax;
+    },
+    message: { message: 'Límite de solicitudes por rol alcanzado.' }
+  });
+  return limiter;
 };
 
-// Rate limiting deshabilitado para desarrollo
-export const financialRateLimit = (req, res, next) => {
-    next();
-};
+/** Rate limit por endpoint específico */
+export const endpointRateLimit = (endpoint) => createLimiter({
+  windowMs: 60 * 1000,
+  max: 30,
+  keyGenerator: (req) => `${req.ip}-${endpoint}`,
+  message: { message: `Límite de solicitudes para ${endpoint} alcanzado.` }
+});
 
-// Rate limiting deshabilitado para desarrollo
-export const searchRateLimit = (req, res, next) => {
-    next();
-};
-
-// Rate limiting deshabilitado para desarrollo
-export const endpointRateLimit = (endpoint) => {
-    return (req, res, next) => {
-        next();
-    };
-};
-
-// Rate limiting deshabilitado para desarrollo
+/** Headers informativos de rate limit (no bloquea) */
 export const rateLimitStats = (req, res, next) => {
-    // Headers informativos (sin rate limiting real)
-    res.set({
-        'X-RateLimit-Info': 'VetPlus API Rate Limiting DISABLED for Development',
-        'X-RateLimit-Policy': 'Development mode - no limits',
-        'X-RateLimit-Contact': 'admin@vetplus.com'
-    });
-    
-    next();
+  res.set({
+    'X-RateLimit-Policy': isProd ? 'active' : 'disabled-development',
+    'X-RateLimit-Contact': 'admin@vetplus.com'
+  });
+  next();
 };
