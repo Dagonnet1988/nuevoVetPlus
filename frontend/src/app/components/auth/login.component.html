@@ -2,10 +2,10 @@
   <div class="login-shell">
     <mat-card class="login-card">
       <header class="login-card-header">
-        <img src="logo.svg" alt="VetPlus" class="card-logo">
+        <img src="brand/logo-isotipo.svg" alt="Ramelo" class="card-logo">
         <div>
-          <h2>VETPLUS</h2>
-          <p>Control clínico, agenda y trazabilidad en una experiencia rápida y confiable.</p>
+          <h2>RAMELO</h2>
+          <p>Impulsa la gestión veterinaria con orden, claridad y resultados reales.</p>
         </div>
       </header>
 
@@ -61,6 +61,18 @@
             </mat-error>
           }
         </mat-form-field>
+
+        <button mat-button
+                type="button"
+                class="forgot-password-button"
+                (click)="onForgotPassword()"
+                [disabled]="authService.loading() || recoveryLoading()">
+          @if (recoveryLoading()) {
+            Enviando enlace...
+          } @else {
+            ¿Olvidaste tu contraseña?
+          }
+        </button>
 
         <button mat-raised-button
                 color="primary"

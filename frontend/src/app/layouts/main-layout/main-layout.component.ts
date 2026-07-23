@@ -60,7 +60,7 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
             @if (empresaLogoUrl()) {
               <img [src]="empresaLogoUrl()" alt="Logo" class="logo-img" />
             } @else {
-              <img src="logo.svg" alt="Logo VetPlus" class="logo-img logo-img-fallback" />
+              <img src="brand/logo-isotipo.svg" alt="Logo Ramelo" class="logo-img logo-img-fallback" />
             }
             @if (!collapsed() || isMobile()) {
               <div class="brand-text">
@@ -712,7 +712,7 @@ export class MainLayoutComponent implements OnDestroy {
   collapsed = signal<boolean>(localStorage.getItem(SIDEBAR_KEY) === 'true');
 
   // Empresa signals (computed from ConfiguracionService)
-  empresaNombre = signal<string>('VetPlus');
+  empresaNombre = signal<string>('Ramelo');
   empresaEslogan = signal<string>('');
   empresaLogoUrl = signal<string>('');
   readonly environment = environment;
@@ -844,16 +844,18 @@ export class MainLayoutComponent implements OnDestroy {
 
   private applyEmpresaConfig(cfg: any): void {
     if (!cfg) {
-      this.empresaNombre.set('VetPlus');
+      this.empresaNombre.set('Ramelo');
       this.empresaEslogan.set('');
       this.empresaLogoUrl.set('');
       return;
     }
 
-    this.empresaNombre.set(cfg.nombre_empresa || 'VetPlus');
+    this.empresaNombre.set(cfg.nombre_empresa || 'Ramelo');
     this.empresaEslogan.set(cfg.eslogan || '');
-    const logo = cfg.logo_url
-      ? this.configuracionService.getAbsoluteAssetUrl(cfg.logo_url)
+    const rawLogoUrl = typeof cfg.logo_url === 'string' ? cfg.logo_url.trim() : '';
+    const hasTenantLogo = rawLogoUrl.length > 0 && rawLogoUrl !== 'null' && rawLogoUrl !== 'undefined';
+    const logo = hasTenantLogo
+      ? this.configuracionService.getAbsoluteAssetUrl(rawLogoUrl)
       : '';
     this.empresaLogoUrl.set(logo);
   }
@@ -878,7 +880,7 @@ export class MainLayoutComponent implements OnDestroy {
     const menuItem = this.menuItems.find(item =>
       currentRoute.startsWith(item.route)
     );
-    return menuItem?.label || 'VetPlus';
+    return menuItem?.label || 'Ramelo';
   }
 
   goToProfile(): void {

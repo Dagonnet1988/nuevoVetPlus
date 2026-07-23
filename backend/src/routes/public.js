@@ -4,8 +4,15 @@ import {
   obtenerFormularioPublico,
   firmarConsentimiento
 } from '../controllers/consentimientoController.js';
+import { listPublicTenants } from '../controllers/publicController.js';
 
 const router = express.Router();
+
+/**
+ * GET /api/public/tenants
+ * Directorio público de clínicas activas para acceso por subdominio.
+ */
+router.get('/tenants', publicRateLimit, listPublicTenants);
 
 /**
  * GET /api/public/consentimiento/:token

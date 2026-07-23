@@ -97,14 +97,6 @@
               <mat-icon>lock_reset</mat-icon>
               Resetear Contraseña
             </button>
-            @if (usuario()!.password_temporal || usuario()!.debe_cambiar_password) {
-              <button mat-menu-item
-                      disabled
-                      matTooltip="Próximamente disponible">
-                <mat-icon>email</mat-icon>
-                Enviar Credenciales
-              </button>
-            }
             <button mat-menu-item (click)="forzarCambioPassword()">
               <mat-icon>lock_reset</mat-icon>
               Forzar Cambio de Contraseña

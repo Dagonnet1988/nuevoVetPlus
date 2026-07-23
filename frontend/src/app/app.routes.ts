@@ -5,10 +5,10 @@ import { RoleGuard } from './utils/guards/role.guard';
 import { SuperadminGuard } from './utils/guards/superadmin.guard';
 
 export const routes: Routes = [
-  // Ruta raíz - redirigir al login temporalmente
+  // Ruta raíz - Home pública (ramelo.app). En subdominios tenant redirige a /login.
   {
     path: '',
-    redirectTo: '/login',
+    loadComponent: () => import('./components/tenant-home/tenant-home.component').then(m => m.TenantHomeComponent),
     pathMatch: 'full'
   },
 
@@ -20,6 +20,10 @@ export const routes: Routes = [
       {
         path: 'login',
         loadComponent: () => import('./components/auth/login.component').then(m => m.LoginComponent)
+      },
+      {
+        path: 'reset-password',
+        loadComponent: () => import('./components/auth/reset-password.component').then(m => m.ResetPasswordComponent)
       }
     ]
   },

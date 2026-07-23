@@ -12,7 +12,7 @@ import { ConfiguracionService } from './services/configuracion.service';
   styleUrl: './app.scss'
 })
 export class App {
-  protected title = 'VetPlus';
+  protected title = 'Ramelo';
   private authService = inject(AuthService);
   private configuracionService = inject(ConfiguracionService);
 
@@ -42,7 +42,7 @@ export class App {
 
     const empresa = this.configuracionService.empresaConfig();
     const nombreEmpresa = empresa?.nombre_empresa?.trim();
-    document.title = nombreEmpresa || 'VetPlus';
+    document.title = nombreEmpresa || 'Ramelo';
   }
 
   public goToLogin() {

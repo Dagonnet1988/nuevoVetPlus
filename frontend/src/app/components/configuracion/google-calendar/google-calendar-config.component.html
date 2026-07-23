@@ -5,13 +5,13 @@
       <button mat-icon-button (click)="onBack()" class="back-button">
         <mat-icon>arrow_back</mat-icon>
       </button>
-      
+
       <div class="title-section">
         <h1 class="page-title">
           <mat-icon class="page-icon">event</mat-icon>
           Configuración de Google Calendar
         </h1>
-        <p class="page-subtitle">Integra VetPlus con Google Calendar para sincronizar citas automáticamente</p>
+        <p class="page-subtitle">Integra Ramelo con Google Calendar para sincronizar citas automáticamente</p>
       </div>
     </div>
   </div>
@@ -30,7 +30,7 @@
           Estado de Conexión
         </mat-card-title>
       </mat-card-header>
-      
+
       <mat-card-content>
         <div class="status-info">
           <div class="status-indicator">
@@ -48,10 +48,10 @@
               }
             </div>
           </div>
-          
+
           <div class="status-actions">
-            <button mat-raised-button 
-                    color="primary" 
+            <button mat-raised-button
+                    color="primary"
                     (click)="onTestConnection()"
                     [disabled]="testing() || !configForm.get('client_id')?.value">
               @if (testing()) {
@@ -59,16 +59,16 @@
               }
               Probar Conexión
             </button>
-            
+
             @if (status()?.connected) {
-              <button mat-stroked-button 
+              <button mat-stroked-button
                       (click)="onForceSync()"
                       [disabled]="testing()">
                 <mat-icon>sync</mat-icon>
                 Sincronizar Ahora
               </button>
             } @else {
-              <button mat-raised-button 
+              <button mat-raised-button
                       color="accent"
                       (click)="onAuthorize()"
                       [disabled]="!configForm.get('client_id')?.value">
@@ -91,20 +91,20 @@
             Configuración General
           </mat-card-title>
         </mat-card-header>
-        
+
         <mat-card-content>
           <div class="form-row">
             <mat-slide-toggle formControlName="enabled">
               Habilitar integración con Google Calendar
             </mat-slide-toggle>
           </div>
-          
+
           <mat-divider class="section-divider"></mat-divider>
-          
+
           <div class="form-grid">
             <mat-form-field appearance="outline" class="full-width">
               <mat-label>Client ID</mat-label>
-              <input matInput formControlName="client_id" 
+              <input matInput formControlName="client_id"
                      placeholder="Tu Client ID de Google Cloud Console">
               <mat-icon matSuffix matTooltip="ID del cliente OAuth2 de Google">help</mat-icon>
               <mat-error>
@@ -116,7 +116,7 @@
 
             <mat-form-field appearance="outline" class="full-width">
               <mat-label>Client Secret</mat-label>
-              <input matInput type="password" formControlName="client_secret" 
+              <input matInput type="password" formControlName="client_secret"
                      placeholder="Tu Client Secret de Google Cloud Console">
               <mat-icon matSuffix matTooltip="Secreto del cliente OAuth2 de Google">help</mat-icon>
               <mat-error>
@@ -128,7 +128,7 @@
 
             <mat-form-field appearance="outline" class="full-width">
               <mat-label>ID del Calendario</mat-label>
-              <input matInput formControlName="calendar_id" 
+              <input matInput formControlName="calendar_id"
                      placeholder="primary">
               <mat-hint>Usa 'primary' para el calendario principal</mat-hint>
             </mat-form-field>
@@ -144,7 +144,7 @@
             Opciones de Sincronización
           </mat-card-title>
         </mat-card-header>
-        
+
         <mat-card-content>
           <div class="form-grid">
             <div class="form-row">
@@ -155,7 +155,7 @@
 
             <mat-form-field appearance="outline">
               <mat-label>Intervalo de sincronización (minutos)</mat-label>
-              <input matInput type="number" 
+              <input matInput type="number"
                      formControlName="sync_interval_minutes"
                      min="5" max="1440">
               <mat-hint>Entre 5 y 1440 minutos (24 horas)</mat-hint>
@@ -171,7 +171,7 @@
 
             <mat-form-field appearance="outline">
               <mat-label>Duración predeterminada (minutos)</mat-label>
-              <input matInput type="number" 
+              <input matInput type="number"
                      formControlName="default_event_duration"
                      min="15" max="480">
               <mat-hint>Duración por defecto para nuevos eventos</mat-hint>
@@ -202,7 +202,7 @@
             Cómo obtener las credenciales de Google
           </mat-card-title>
         </mat-card-header>
-        
+
         <mat-card-content>
           <div class="instructions-content">
             <ol class="instructions-list">
@@ -234,10 +234,10 @@
       <button mat-button (click)="onReset()" [disabled]="saving()">
         Restablecer
       </button>
-      
+
       <div class="main-actions">
-        <button mat-raised-button 
-                color="primary" 
+        <button mat-raised-button
+                color="primary"
                 (click)="onSave()"
                 [disabled]="configForm.invalid || saving()">
           @if (saving()) {

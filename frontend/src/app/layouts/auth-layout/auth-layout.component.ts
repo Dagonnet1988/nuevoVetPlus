@@ -26,7 +26,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
       <footer class="auth-footer">
         <div class="footer-content">
           <div class="footer-da footer-da-left">
-            <img src="DA logo.png" alt="DA Developments" class="footer-da-logo" />
+            <img src="brand/da-logo.png" alt="DA Developments" class="footer-da-logo" />
             <p class="footer-da-line">
               <span>D.A. developments</span>
               <span>Desarrollo web</span>
@@ -36,7 +36,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
           </div>
 
           <div class="company-info">
-            <p class="company-name">VetPlus - Sistema de Gestión Veterinaria</p>
+            <p class="company-name">Ramelo - Sistema de Gestión Veterinaria</p>
             <p class="company-description">
               Solución integral para la administración de clínicas veterinarias
             </p>
@@ -55,7 +55,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
         </div>
 
         <div class="footer-bottom">
-          <p class="copyright">© {{ currentYear }} VetPlus. Todos los derechos reservados.</p>
+          <p class="copyright">© {{ currentYear }} Ramelo. Todos los derechos reservados.</p>
           <p class="version">Versión 1.0.0</p>
         </div>
       </footer>

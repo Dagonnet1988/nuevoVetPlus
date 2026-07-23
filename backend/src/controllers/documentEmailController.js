@@ -112,9 +112,9 @@ async function getClinicName(tenantId) {
       [tenantId]
     );
 
-    return result.rows[0]?.nombre_empresa || process.env.CLINIC_NAME || 'VetPlus Clínica';
+    return result.rows[0]?.nombre_empresa || process.env.CLINIC_NAME || 'Ramelo Clínica';
   } catch {
-    return process.env.CLINIC_NAME || 'VetPlus Clínica';
+    return process.env.CLINIC_NAME || 'Ramelo Clínica';
   }
 }
 

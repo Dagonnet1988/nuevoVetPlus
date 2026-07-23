@@ -52,9 +52,9 @@ class SyncScheduler {
                  LIMIT 1`,
                 [tenantId]
             );
-            return result.rows[0]?.nombre_empresa || 'VetPlus Clínica';
+            return result.rows[0]?.nombre_empresa || 'Ramelo Clínica';
         } catch {
-            return 'VetPlus Clínica';
+            return 'Ramelo Clínica';
         }
     }
 

@@ -410,9 +410,9 @@ export async function testEmailConfig(req, res) {
     await sendEmail({
       tenantId,
       to: destination,
-      subject: 'Prueba de configuración de correo - VetPlus',
-      text: 'Este correo confirma que la configuración SMTP quedó activa en VetPlus.',
-      html: '<p>Este correo confirma que la configuración SMTP quedó activa en <strong>VetPlus</strong>.</p>'
+      subject: 'Prueba de configuración de correo - Ramelo',
+      text: 'Este correo confirma que la configuración SMTP quedó activa en Ramelo.',
+      html: '<p>Este correo confirma que la configuración SMTP quedó activa en <strong>Ramelo</strong>.</p>'
     });
 
     return res.json({

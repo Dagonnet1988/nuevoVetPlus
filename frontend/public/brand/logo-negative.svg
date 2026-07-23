@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1360 300" role="img" aria-labelledby="title desc">
+  <title id="title">Ramelo logo negativo</title>
+  <desc id="desc">Logo completo de Ramelo para fondo oscuro.</desc>
+  <defs>
+    <linearGradient id="rameloGradientNeg" x1="14%" y1="10%" x2="88%" y2="90%">
+      <stop offset="0%" stop-color="#7B5CFF"/>
+      <stop offset="55%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#00C2CB"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1360" height="300" rx="18" fill="#0D132A"/>
+
+  <g transform="translate(34 30)">
+    <g fill="url(#rameloGradientNeg)">
+      <path d="M1470 4009 c-117 -23 -251 -123 -303 -225 -89 -175 -78 -403 23 -505 85 -85 24 -81 1083 -82 l932 -2 80 -27 c521 -178 602 -897 133 -1181 -135 -81 -128 -81 -718 -87 -631 -7 -648 -11 -797 -174 -153 -168 -168 -244 -168 -886 l0 -515 28 -56 c109 -224 433 -275 611 -97 91 92 96 115 96 459 0 188 4 306 12 337 13 52 84 132 117 132 12 0 195 -178 498 -484 423 -429 485 -488 538 -513 l60 -28 489 -3 489 -3 -94 102 c-133 144 -460 481 -751 774 -245 247 -261 265 -235 265 7 0 56 21 108 46 789 383 1051 1407 552 2158 -193 291 -491 494 -858 583 -79 19 -1834 30 -1925 12z M2060 2821 c-361 -118 -291 -636 85 -635 349 0 449 454 135 614 -48 25 -172 37 -220 21z" transform="translate(0 256) scale(0.0457142857 -0.0457142857)"/>
+    </g>
+  </g>
+
+  <text x="248" y="178" fill="#F8FAFC" font-family="'Plus Jakarta Sans', 'Poppins', 'Segoe UI', sans-serif" font-size="128" font-weight="700" letter-spacing="1.2">ramelo</text>
+  <text x="250" y="214" fill="#A5B4FC" font-family="'Plus Jakarta Sans', 'Poppins', 'Segoe UI', sans-serif" font-size="27" font-weight="600" letter-spacing="4">GESTION INTELIGENTE,</text>
+  <text x="250" y="246" fill="#A5B4FC" font-family="'Plus Jakarta Sans', 'Poppins', 'Segoe UI', sans-serif" font-size="27" font-weight="600" letter-spacing="4">RESULTADOS REALES</text>
+</svg>

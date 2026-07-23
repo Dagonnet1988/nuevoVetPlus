@@ -221,7 +221,7 @@ import { SyncDialogComponent } from '../../citas/sync-dialog.component';
 
                       <mat-form-field appearance="outline" class="form-field">
                         <mat-label>Prefijo de eventos</mat-label>
-                        <input matInput formControlName="prefijo_eventos" placeholder="VetPlus">
+                        <input matInput formControlName="prefijo_eventos" placeholder="Ramelo">
                         <mat-hint>Texto que se agregará al inicio de cada evento</mat-hint>
                       </mat-form-field>
                     </div>

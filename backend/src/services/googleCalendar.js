@@ -540,7 +540,7 @@ class GoogleCalendarService {
             const event = {
                 summary,
                 description,
-                location: location || process.env.CLINIC_ADDRESS || 'VetPlus Clínica',
+                location: location || process.env.CLINIC_ADDRESS || 'Ramelo Clínica',
                 start: {
                     dateTime: startDateTime,
                     timeZone: timeZone
@@ -628,7 +628,7 @@ class GoogleCalendarService {
             const event = {
                 summary,
                 description,
-                location: location || process.env.CLINIC_ADDRESS || 'VetPlus Clínica',
+                location: location || process.env.CLINIC_ADDRESS || 'Ramelo Clínica',
                 start: {
                     dateTime: startDateTime,
                     timeZone: 'America/Bogota'

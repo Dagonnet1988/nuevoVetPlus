@@ -269,18 +269,6 @@ export class UsuariosComponent implements OnInit {
     }
   }
 
-  enviarCredenciales(usuario: Usuario): void {
-    this.usuariosService.enviarPasswordTemporal(usuario.id_usuario).subscribe({
-      next: () => {
-        this.snackBar.open('Credenciales enviadas por email', 'Cerrar', { duration: 3000 });
-      },
-      error: (error) => {
-        console.error('Error enviando credenciales:', error);
-        this.snackBar.open('Error enviando credenciales', 'Cerrar', { duration: 3000 });
-      }
-    });
-  }
-
   gestionarSesiones(usuario: Usuario): void {
     this.router.navigate(['/usuarios', usuario.id_usuario, 'sesiones']);
   }

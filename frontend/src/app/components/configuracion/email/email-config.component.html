@@ -30,7 +30,7 @@
         <form [formGroup]="form" class="form-grid">
           <mat-form-field appearance="outline">
             <mat-label>Nombre remitente</mat-label>
-            <input matInput formControlName="nombre_remitente" placeholder="VetPlus Clínica">
+              <input matInput formControlName="nombre_remitente" placeholder="Ramelo Clínica">
           </mat-form-field>
 
           <mat-form-field appearance="outline">
@@ -97,7 +97,7 @@
               } @else {
                 <span class="oauth-bad">No conectado</span>
               }
-              <p class="oauth-help">Al conectar, VetPlus guarda la configuración actual y luego abre Google para autorizar.</p>
+              <p class="oauth-help">Al conectar, Ramelo guarda la configuración actual y luego abre Google para autorizar.</p>
             </div>
 
             <div class="oauth-actions">
@@ -209,7 +209,7 @@
             <mat-form-field appearance="outline" class="full-width">
               <mat-label>Mensaje del correo</mat-label>
               <textarea matInput formControlName="mensaje" rows="8" placeholder="Escribe el mensaje que recibirá el propietario"></textarea>
-              <mat-hint>Usa las variables de abajo para personalizar el mensaje. VetPlus aplica el diseño del correo automáticamente.</mat-hint>
+              <mat-hint>Usa las variables de abajo para personalizar el mensaje. Ramelo aplica el diseño del correo automáticamente.</mat-hint>
             </mat-form-field>
 
             <div class="toggle-wrap">
@@ -235,7 +235,7 @@
               <strong>Vista previa</strong>
               <div class="preview-shell">
                 <div class="preview-box" [innerHTML]="getTemplatePreview()"></div>
-                <p class="preview-footer">Este mensaje fue enviado desde VetPlus.</p>
+                <p class="preview-footer">Este mensaje fue enviado desde Ramelo.</p>
               </div>
             </div>
           </div>

@@ -114,7 +114,7 @@ function buildCorporateFooterHtml(branding, fallbackName, logoSrc = null) {
     logoHtml,
     `<p style="margin: 0; font-size: 12px; color: #374151;"><strong>${escapeHtml(companyName)}</strong></p>`,
     detailsHtml,
-    '<p style="margin: 8px 0 0; font-size: 11px; color: #9ca3af;">Este mensaje fue enviado desde VetPlus.</p>',
+    '<p style="margin: 8px 0 0; font-size: 11px; color: #9ca3af;">Este mensaje fue enviado desde Ramelo.</p>',
     '</div>'
   ].join('');
 }
@@ -130,7 +130,7 @@ function appendCorporateFooterHtml(baseHtml, footerHtml) {
 function appendCorporateFooterText(baseText, branding, fallbackName) {
   const text = String(baseText || '').trim();
   if (!text) return text;
-  if (/este\s+mensaje\s+fue\s+enviado\s+desde\s+vetplus/i.test(text)) return text;
+  if (/este\s+mensaje\s+fue\s+enviado\s+desde\s+(vetplus|ramelo)/i.test(text)) return text;
 
   const companyName = String(branding?.nombre_empresa || fallbackName || 'Qi Animal').trim();
   const lines = [
@@ -141,7 +141,7 @@ function appendCorporateFooterText(baseText, branding, fallbackName) {
   ].map((value) => String(value || '').trim()).filter(Boolean);
 
   const footerParts = [`${companyName}`].concat(lines);
-  return `${text}\n\n---\n${footerParts.join(' | ')}\nEste mensaje fue enviado desde VetPlus.`;
+  return `${text}\n\n---\n${footerParts.join(' | ')}\nEste mensaje fue enviado desde Ramelo.`;
 }
 
 function buildTransport(config) {

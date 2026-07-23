@@ -373,13 +373,13 @@ const getClinicBranding = async (tenantId = null) => {
 
         const row = result.rows[0] || null;
         return {
-            clinicName: row?.nombre_empresa || process.env.CLINIC_NAME || 'VetPlus Clínica',
-            clinicAddress: row?.direccion || process.env.CLINIC_ADDRESS || 'VetPlus Clínica'
+            clinicName: row?.nombre_empresa || process.env.CLINIC_NAME || 'Ramelo Clínica',
+            clinicAddress: row?.direccion || process.env.CLINIC_ADDRESS || 'Ramelo Clínica'
         };
     } catch {
         return {
-            clinicName: process.env.CLINIC_NAME || 'VetPlus Clínica',
-            clinicAddress: process.env.CLINIC_ADDRESS || 'VetPlus Clínica'
+            clinicName: process.env.CLINIC_NAME || 'Ramelo Clínica',
+            clinicAddress: process.env.CLINIC_ADDRESS || 'Ramelo Clínica'
         };
     }
 };
@@ -474,7 +474,7 @@ const syncAppointmentWithGoogle = async (appointmentData, action = 'create') => 
                     UPDATE clinical.calendario_citas
                     SET
                         google_sync_status = 'disabled',
-                        google_sync_error = 'Sincronizacion saliente deshabilitada (solo Google -> VetPlus)',
+                        google_sync_error = 'Sincronizacion saliente deshabilitada (solo Google -> Ramelo)',
                         last_google_sync = CURRENT_TIMESTAMP
                     WHERE id_cita = $1
                 `, [appointmentData.id_cita]);
@@ -483,7 +483,7 @@ const syncAppointmentWithGoogle = async (appointmentData, action = 'create') => 
             return {
                 success: true,
                 skipped: true,
-                message: 'Sincronizacion saliente deshabilitada (solo Google -> VetPlus)'
+                message: 'Sincronizacion saliente deshabilitada (solo Google -> Ramelo)'
             };
         }
 
@@ -2114,7 +2114,7 @@ export const forceSyncWithGoogle = async (req, res) => {
         if (!isOutboundGoogleSyncEnabled()) {
             return res.status(200).json({
                 success: true,
-                message: 'Sincronizacion saliente deshabilitada (solo Google -> VetPlus)',
+                message: 'Sincronizacion saliente deshabilitada (solo Google -> Ramelo)',
                 data: {
                     appointment_id: id,
                     sync_status: 'disabled'
@@ -2181,7 +2181,7 @@ export const syncAllPendingAppointments = async (req, res) => {
         if (!isOutboundGoogleSyncEnabled()) {
             return res.status(200).json({
                 success: true,
-                message: 'Sincronizacion saliente deshabilitada (solo Google -> VetPlus)',
+                message: 'Sincronizacion saliente deshabilitada (solo Google -> Ramelo)',
                 data: {
                     total: 0,
                     synced: 0,

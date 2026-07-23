@@ -321,7 +321,7 @@ class GoogleCalendarSimpleController {
           <!DOCTYPE html>
           <html>
           <head>
-            <title>Error - VetPlus</title>
+            <title>Error - Ramelo</title>
             <style>
               body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
               .error { color: #d32f2f; font-size: 18px; }
@@ -384,7 +384,7 @@ class GoogleCalendarSimpleController {
           <!DOCTYPE html>
           <html>
           <head>
-            <title>Error - VetPlus</title>
+            <title>Error - Ramelo</title>
             <style>
               body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
               .error { color: #d32f2f; font-size: 18px; }
@@ -510,7 +510,7 @@ class GoogleCalendarSimpleController {
         <!DOCTYPE html>
         <html>
         <head>
-          <title>Autorización Exitosa - VetPlus</title>
+          <title>Autorización Exitosa - Ramelo</title>
           <meta http-equiv="refresh" content="5;url=${process.env.FRONTEND_URL || 'http://localhost:4200'}/configuracion/google-calendar">
           <style>
             body {
@@ -585,12 +585,12 @@ class GoogleCalendarSimpleController {
           <div class="container">
             <div class="success-icon">✅</div>
             <h2 class="success">¡Autorización Exitosa!</h2>
-            <p class="message">Google Calendar se ha conectado correctamente a VetPlus.</p>
+            <p class="message">Google Calendar se ha conectado correctamente a Ramelo.</p>
             <p class="countdown">Redirigiendo automáticamente en 5 segundos...</p>
 
             <div class="manual-actions">
               <a href="javascript:window.close()" class="action-link">Cerrar Ventana</a>
-              <a href="${process.env.FRONTEND_URL || 'http://localhost:4200'}/configuracion/google-calendar" class="action-link secondary-link">Ir a VetPlus</a>
+              <a href="${process.env.FRONTEND_URL || 'http://localhost:4200'}/configuracion/google-calendar" class="action-link secondary-link">Ir a Ramelo</a>
             </div>
 
             <div class="status">Configuración completada exitosamente</div>
@@ -612,7 +612,7 @@ class GoogleCalendarSimpleController {
         <!DOCTYPE html>
         <html>
         <head>
-          <title>Error - VetPlus</title>
+          <title>Error - Ramelo</title>
           <style>
             body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
             .error { color: #d32f2f; font-size: 18px; }

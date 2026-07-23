@@ -68,6 +68,10 @@ export class AuthInterceptor implements HttpInterceptor {
 
         // Manejar errores de autenticación
         if (error.status === 401 && !this.isLoggingOut) {
+          if (this.isPublicAuthEndpoint(req)) {
+            return throwError(() => error);
+          }
+
           // Verificar si es un error de token expirado (no de credenciales inválidas)
           if (this.isTokenExpiredError(error)) {
             return this.handleTokenExpired(req, next);
@@ -133,6 +137,12 @@ export class AuthInterceptor implements HttpInterceptor {
     return errorCode === 'INVALID_TOKEN' ||
            errorMessage.includes('expirado') ||
            errorMessage.includes('expired');
+  }
+
+  private isPublicAuthEndpoint(req: HttpRequest<any>): boolean {
+    return req.url.includes('/auth/login')
+      || req.url.includes('/auth/forgot-password')
+      || req.url.includes('/auth/reset-password');
   }
 
   // Detecta errores de OAuth de Google Calendar sin afectar la sesión de VetPlus

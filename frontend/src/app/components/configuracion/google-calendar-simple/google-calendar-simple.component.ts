@@ -47,7 +47,7 @@ interface GoogleCalendarConfig {
             Configuración de Google Calendar
           </mat-card-title>
           <mat-card-subtitle>
-            Conecta VetPlus con Google Calendar para sincronizar citas
+            Conecta Ramelo con Google Calendar para sincronizar citas
           </mat-card-subtitle>
         </mat-card-header>
 
@@ -103,7 +103,7 @@ interface GoogleCalendarConfig {
 
               <mat-form-field appearance="outline" class="full-width">
                 <mat-label>Prefijo para eventos</mat-label>
-                <input matInput formControlName="prefijo_eventos" placeholder="[VetPlus]">
+                <input matInput formControlName="prefijo_eventos" placeholder="[Ramelo]">
                 <mat-hint>Texto que aparecerá al inicio de cada evento</mat-hint>
               </mat-form-field>
 
@@ -284,7 +284,7 @@ export class GoogleCalendarSimpleComponent implements OnInit {
       cliente_secret: ['', [Validators.required]],
       calendar_id: [''],
       sync_automatico: [false],
-      prefijo_eventos: ['[VetPlus]', [Validators.required]]
+      prefijo_eventos: ['[Ramelo]', [Validators.required]]
     });
   }
 

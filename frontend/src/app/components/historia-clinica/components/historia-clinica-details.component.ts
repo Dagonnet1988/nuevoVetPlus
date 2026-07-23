@@ -239,7 +239,7 @@ export class HistoriaClinicaDetailsComponent implements OnInit {
     const mensaje =
       `Hola ${h.cliente_nombre || 'propietario'}, te compartimos el resumen de ${tipo} (${h.codigo_historia})` +
       ` de ${h.mascota_nombre || 'tu mascota'} con fecha ${fecha}.` +
-      ` Si necesitas el PDF, te lo reenviamos por correo desde VetPlus.`;
+      ` Si necesitas el PDF, te lo reenviamos por correo desde Ramelo.`;
 
     const numero = this.normalizarTelefonoWhatsApp((h as any).cliente_telefono || null);
     const waUrl = numero

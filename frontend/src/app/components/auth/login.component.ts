@@ -34,6 +34,7 @@ import { LoginRequest } from '../../models/auth.interface';
 export class LoginComponent {
   loginForm: FormGroup;
   hidePassword = signal(true);
+  recoveryLoading = signal(false);
 
   constructor(
     private fb: FormBuilder,
@@ -59,7 +60,7 @@ export class LoginComponent {
       this.authService.login(credentials).subscribe({
         next: (response) => {
           if (response.success) {
-            this.snackBar.open('¡Bienvenido a VetPlus!', 'Cerrar', {
+            this.snackBar.open('¡Bienvenido a Ramelo!', 'Cerrar', {
               duration: 3000,
               panelClass: ['success-snackbar']
             });
@@ -106,6 +107,63 @@ export class LoginComponent {
     }
 
     this.snackBar.open(`${themeName} activado`, '', { duration: 1500 });
+  }
+
+  onForgotPassword(): void {
+    const documento = (this.loginForm.get('documento')?.value || '').toString().trim();
+
+    const requestPayload = documento
+      ? { documento }
+      : this.getForgotPasswordPayloadFromPrompt();
+
+    if (!requestPayload) {
+      this.loginForm.get('documento')?.markAsTouched();
+      this.snackBar.open('Ingresa tu documento o correo para recuperar la contraseña.', 'Cerrar', {
+        duration: 4500
+      });
+      return;
+    }
+
+    this.recoveryLoading.set(true);
+    this.authService.forgotPassword(requestPayload).subscribe({
+      next: () => {
+        this.recoveryLoading.set(false);
+        this.snackBar.open('Si el usuario existe, enviaremos un enlace de recuperación al correo registrado. Si no puedes recuperar el acceso, comunícate con un administrador.', 'Cerrar', {
+          duration: 7000,
+          panelClass: ['success-snackbar']
+        });
+      },
+      error: (error) => {
+        this.recoveryLoading.set(false);
+
+        const apiMessage = error?.error?.message;
+        const errorMessage = apiMessage || 'No fue posible solicitar la recuperación en este momento. Si persiste, comunícate con un administrador.';
+        this.snackBar.open(errorMessage, 'Cerrar', {
+          duration: 5000,
+          panelClass: ['error-snackbar']
+        });
+      }
+    });
+  }
+
+  private getForgotPasswordPayloadFromPrompt(): { email: string } | null {
+    const email = window.prompt('Ingresa el correo registrado para recuperar tu contraseña:');
+    const normalizedEmail = (email || '').trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      return null;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+      this.snackBar.open('El correo ingresado no es válido.', 'Cerrar', {
+        duration: 4000,
+        panelClass: ['error-snackbar']
+      });
+      return null;
+    }
+
+    return { email: normalizedEmail };
   }
 
   private markFormGroupTouched() {

@@ -84,6 +84,21 @@
   gap: 8px;
 }
 
+.forgot-password-button {
+  align-self: flex-end;
+  min-height: 32px;
+  margin-top: -4px;
+  margin-bottom: 4px;
+  padding: 0 8px;
+  color: #1a5fb4;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.forgot-password-button[disabled] {
+  color: #7e95b3;
+}
+
 .login-button mat-icon {
   margin: 0;
   width: 18px;

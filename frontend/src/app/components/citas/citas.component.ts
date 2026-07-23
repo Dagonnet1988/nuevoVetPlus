@@ -188,7 +188,7 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
     // Configuraciones específicas para timeGrid
     dayHeaderFormat: { weekday: 'short' },
     slotEventOverlap: true, // Permitir visualizar eventos solapados
-    eventMaxStack: 4,
+    eventMaxStack: 5,
     eventMinHeight: 20,
     eventShortHeight: 16
   };
@@ -224,7 +224,7 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
       meridiem: 'short'
     },
     slotEventOverlap: true,
-    eventMaxStack: 4,
+    eventMaxStack: 5,
     eventMinHeight: 20,
     eventShortHeight: 16,
     events: [],

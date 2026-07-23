@@ -49,11 +49,11 @@ const DEFAULT_TEMPLATES = [
     clave_template: 'usuario_credenciales',
     nombre_template: 'Credenciales de usuario nuevo',
     descripcion: 'Correo con credenciales iniciales al crear usuario',
-    asunto: 'Acceso a VetPlus - {{usuario_nombre}}',
+    asunto: 'Acceso a Ramelo - {{usuario_nombre}}',
     cuerpo_html:
-      '<p>Hola {{usuario_nombre}},</p><p>Se creó tu acceso a VetPlus.</p><p>Usuario: <strong>{{usuario_email}}</strong><br>Contraseña temporal: <strong>{{password_temporal}}</strong></p><p>Debes cambiarla al iniciar sesión.</p>',
+      '<p>Hola {{usuario_nombre}},</p><p>Se creó tu acceso a Ramelo.</p><p>Usuario: <strong>{{usuario_email}}</strong><br>Contraseña temporal: <strong>{{password_temporal}}</strong></p><p>Debes cambiarla al iniciar sesión.</p>',
     cuerpo_text:
-      'Hola {{usuario_nombre}}, se creó tu acceso a VetPlus. Usuario: {{usuario_email}}. Contraseña temporal: {{password_temporal}}. Debes cambiarla al iniciar sesión.',
+      'Hola {{usuario_nombre}}, se creó tu acceso a Ramelo. Usuario: {{usuario_email}}. Contraseña temporal: {{password_temporal}}. Debes cambiarla al iniciar sesión.',
     variables_permitidas: ['usuario_nombre', 'usuario_email', 'password_temporal']
   },
   {
@@ -71,12 +71,12 @@ const DEFAULT_TEMPLATES = [
     clave_template: 'auth_reset_link',
     nombre_template: 'Recuperación de contraseña',
     descripcion: 'Correo de recuperación con enlace temporal',
-    asunto: 'Recuperar acceso a VetPlus',
+    asunto: 'Recuperar acceso a Ramelo',
     cuerpo_html:
-      '<p>Hola {{usuario_nombre}},</p><p>Recibimos una solicitud para restablecer tu contraseña.</p><p><a href="{{reset_url}}">Restablecer contraseña</a></p><p>Este enlace vence en {{expiracion_minutos}} minutos.</p>',
+      '<p>Hola {{usuario_nombre}},</p><p>Recibimos una solicitud para restablecer tu contraseña.</p><p><a href="{{reset_url}}">Restablecer contraseña</a></p><p>Este enlace vence en {{expiracion_minutos}} minutos.</p><p>Luego puedes ingresar desde: <a href="{{login_url}}">{{login_url}}</a></p>',
     cuerpo_text:
-      'Hola {{usuario_nombre}}, restablece tu contraseña usando este enlace: {{reset_url}}. Este enlace vence en {{expiracion_minutos}} minutos.',
-    variables_permitidas: ['usuario_nombre', 'reset_url', 'expiracion_minutos']
+      'Hola {{usuario_nombre}}, restablece tu contraseña usando este enlace: {{reset_url}}. Este enlace vence en {{expiracion_minutos}} minutos. Luego puedes ingresar desde: {{login_url}}.',
+    variables_permitidas: ['usuario_nombre', 'reset_url', 'login_url', 'expiracion_minutos']
   }
 ];
 
@@ -108,7 +108,7 @@ function wrapMessageHtml(messageHtml = '') {
     '<div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; background: #ffffff;">',
     messageHtml,
     '</div>',
-    '<p style="font-size: 12px; color: #6b7280; margin-top: 16px;">Este mensaje fue enviado desde VetPlus.</p>',
+    '<p style="font-size: 12px; color: #6b7280; margin-top: 16px;">Este mensaje fue enviado desde Ramelo.</p>',
     '</div>'
   ].join('');
 }

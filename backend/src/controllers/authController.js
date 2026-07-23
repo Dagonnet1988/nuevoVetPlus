@@ -11,9 +11,74 @@ import { renderEmailTemplate } from '../services/emailTemplateService.js';
  */
 class AuthController {
 
-  buildResetPasswordUrl(token) {
-    const frontendBase = process.env.FRONTEND_URL || 'http://localhost:4200';
+  constructor() {
+    this.forgotPassword = this.forgotPassword.bind(this);
+    this.resetPasswordWithToken = this.resetPasswordWithToken.bind(this);
+    this.login = this.login.bind(this);
+    this.logout = this.logout.bind(this);
+    this.refreshToken = this.refreshToken.bind(this);
+    this.me = this.me.bind(this);
+    this.changePassword = this.changePassword.bind(this);
+  }
+
+  isLocalHostname(hostname) {
+    const normalized = String(hostname || '').toLowerCase();
+    return normalized === 'localhost'
+      || normalized === '127.0.0.1'
+      || /^192\.168\./.test(normalized)
+      || /^10\./.test(normalized)
+      || /^172\.(1[6-9]|2\d|3[01])\./.test(normalized);
+  }
+
+  buildTenantFrontendBaseUrl(tenantSlug = '') {
+    const frontendBase = String(process.env.FRONTEND_URL || 'http://localhost:4200').replace(/\/$/, '');
+    if (!tenantSlug) return frontendBase;
+
+    try {
+      const parsed = new URL(frontendBase);
+      if (this.isLocalHostname(parsed.hostname)) {
+        return frontendBase;
+      }
+
+      const cleanSlug = String(tenantSlug).trim().toLowerCase();
+      if (!cleanSlug) return frontendBase;
+
+      const hostNoWww = parsed.hostname.replace(/^www\./i, '');
+      if (hostNoWww.startsWith(`${cleanSlug}.`)) {
+        return `${parsed.protocol}//${hostNoWww}${parsed.port ? `:${parsed.port}` : ''}`;
+      }
+
+      return `${parsed.protocol}//${cleanSlug}.${hostNoWww}${parsed.port ? `:${parsed.port}` : ''}`;
+    } catch {
+      return frontendBase;
+    }
+  }
+
+  buildResetPasswordUrl(token, tenantSlug = '') {
+    const frontendBase = this.buildTenantFrontendBaseUrl(tenantSlug);
     return `${frontendBase}/reset-password?token=${encodeURIComponent(token)}`;
+  }
+
+  buildTenantLoginUrl(tenantSlug = '') {
+    const frontendBase = this.buildTenantFrontendBaseUrl(tenantSlug);
+    return `${frontendBase}/login`;
+  }
+
+  appendTenantLoginHint(rendered, loginUrl) {
+    if (!rendered || !loginUrl) return rendered;
+
+    const hasLoginUrlInHtml = String(rendered.cuerpo_html_render || '').includes(loginUrl);
+    const hasLoginUrlInText = String(rendered.cuerpo_text_render || '').includes(loginUrl);
+
+    return {
+      ...rendered,
+      cuerpo_html_render: hasLoginUrlInHtml
+        ? rendered.cuerpo_html_render
+        : `${rendered.cuerpo_html_render}<p style="margin-top:12px; font-size:13px; color:#334155;">Al terminar, puedes ingresar desde tu clínica aquí: <a href="${loginUrl}">${loginUrl}</a></p>`,
+      cuerpo_text_render: hasLoginUrlInText
+        ? (rendered.cuerpo_text_render || '')
+        : `${rendered.cuerpo_text_render || ''}\n\nAl terminar, puedes ingresar desde tu clínica aquí: ${loginUrl}`
+    };
   }
 
   async forgotPassword(req, res) {
@@ -60,8 +125,9 @@ class AuthController {
       params.push(email || documento);
 
       const userResult = await query(
-        `SELECT u.id_usuario, u.id_tenant, u.nombre, u.email
+        `SELECT u.id_usuario, u.id_tenant, u.nombre, u.email, t.slug AS tenant_slug
          FROM vetplus_auth.usuarios u
+         LEFT JOIN system.tenants t ON t.id_tenant = u.id_tenant
          WHERE ${identifierClause}
            AND u.activo = true
            ${tenantFilter}
@@ -98,16 +164,22 @@ class AuthController {
         [user.id_usuario, tokenHash, expiresAt, req.ip || null]
       );
 
-      const resetUrl = this.buildResetPasswordUrl(plainToken);
-      const rendered = await renderEmailTemplate({
+      const effectiveTenantSlug = String(user.tenant_slug || tenantSlug || '').trim().toLowerCase();
+      const resetUrl = this.buildResetPasswordUrl(plainToken, effectiveTenantSlug);
+      const loginUrl = this.buildTenantLoginUrl(effectiveTenantSlug);
+
+      const renderedRaw = await renderEmailTemplate({
         tenantId: user.id_tenant,
         key: 'auth_reset_link',
         variables: {
           usuario_nombre: user.nombre || 'usuario',
           reset_url: resetUrl,
+          login_url: loginUrl,
           expiracion_minutos: String(expirationMinutes)
         }
       });
+
+      const rendered = this.appendTenantLoginHint(renderedRaw, loginUrl);
 
       if (rendered) {
         try {

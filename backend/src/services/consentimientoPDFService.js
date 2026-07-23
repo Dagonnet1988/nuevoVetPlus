@@ -80,7 +80,7 @@ async function getEmpresaData(tenantId) {
       , [tenantId]
     );
     return result.rows[0] || {
-      nombre_empresa: 'VetPlus - Clínica Veterinaria',
+      nombre_empresa: 'Ramelo - Clínica Veterinaria',
       nit: '-',
       direccion: '-',
       telefono: '-',
@@ -90,7 +90,7 @@ async function getEmpresaData(tenantId) {
     };
   } catch {
     return {
-      nombre_empresa: 'VetPlus - Clínica Veterinaria',
+      nombre_empresa: 'Ramelo - Clínica Veterinaria',
       nit: '-',
       direccion: '-',
       telefono: '-',

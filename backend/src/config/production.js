@@ -149,7 +149,7 @@ export const productionConfig = {
             user: process.env.EMAIL_USER,
             pass: process.env.EMAIL_PASSWORD
         },
-        from: process.env.EMAIL_FROM || 'VetPlus <noreply@vetplus.com>'
+        from: process.env.EMAIL_FROM || 'Ramelo <noreply@ramelo.app>'
     },
 
     // Google Calendar
