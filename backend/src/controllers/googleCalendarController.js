@@ -176,7 +176,10 @@ class GoogleCalendarSimpleController {
       const tenantId = req.tenantId ?? req.user?.tenant_id;
 
       const previousConfigResult = await query(
-        `SELECT client_id, client_secret, sync_preferences
+        `SELECT client_id, client_secret, sync_preferences,
+                access_token, refresh_token, token_expiry,
+                webhook_channel_id, webhook_url, webhook_expiration, webhook_resource_id,
+                is_active
          FROM vetplus_auth.google_calendar_config
          WHERE is_active = true
            AND configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)
@@ -192,6 +195,13 @@ class GoogleCalendarSimpleController {
       const resolvedClientSecret = (typeof cliente_secret === 'string' && cliente_secret.trim().length > 0)
         ? cliente_secret.trim()
         : previousConfig?.client_secret;
+      const resolvedIsActive = typeof activo === 'boolean'
+        ? activo
+        : (previousConfig?.is_active ?? true);
+      const credentialsChanged = Boolean(previousConfig) && (
+        previousConfig.client_id !== resolvedClientId ||
+        previousConfig.client_secret !== resolvedClientSecret
+      );
 
       const mergedSyncPreferences = this.normalizeSyncPreferences({
         ...(previousConfig?.sync_preferences || {}),
@@ -220,8 +230,10 @@ class GoogleCalendarSimpleController {
       const result = await query(`
         INSERT INTO vetplus_auth.google_calendar_config (
           client_id, client_secret, calendar_id,
-          timezone, notification_email, default_reminder_minutes, redirect_uri, is_active, configured_by, sync_preferences
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          timezone, notification_email, default_reminder_minutes, redirect_uri, is_active, configured_by, sync_preferences,
+          access_token, refresh_token, token_expiry,
+          webhook_channel_id, webhook_url, webhook_expiration, webhook_resource_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         RETURNING *
       `, [
         resolvedClientId,
@@ -231,9 +243,16 @@ class GoogleCalendarSimpleController {
         sync_automatico ?? false,
         Number.isFinite(Number(intervalo_sync)) ? Math.max(5, Number(intervalo_sync)) : 30,
         redirect_uri,
-        activo ?? false,
+        resolvedIsActive,
         req.user?.id_usuario || null,
-        JSON.stringify(mergedSyncPreferences)
+        JSON.stringify(mergedSyncPreferences),
+        credentialsChanged ? null : (previousConfig?.access_token || null),
+        credentialsChanged ? null : (previousConfig?.refresh_token || null),
+        credentialsChanged ? null : (previousConfig?.token_expiry || null),
+        previousConfig?.webhook_channel_id || null,
+        previousConfig?.webhook_url || null,
+        previousConfig?.webhook_expiration || null,
+        previousConfig?.webhook_resource_id || null
       ]);
 
       await googleCalendarService.reinitializeWithConfig(result.rows[0]);

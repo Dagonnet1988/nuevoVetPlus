@@ -24,6 +24,31 @@ class BidirectionalSyncService {
         return this.getBogotaDateString(date);
     }
 
+    toBogotaDateTime(value, fallbackTime = '00:00:00') {
+        if (!value) return null;
+
+        if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+            return `${value.trim()} ${fallbackTime}`;
+        }
+
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return null;
+
+        const parts = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/Bogota',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hourCycle: 'h23'
+        }).formatToParts(date);
+
+        const get = (type) => parts.find((p) => p.type === type)?.value || '00';
+        return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`;
+    }
+
     isWithinDateRange(fechaInicio, startDate, endDate) {
         const eventDate = this.toBogotaDateOnly(fechaInicio);
         if (!eventDate) return false;
@@ -895,6 +920,15 @@ class BidirectionalSyncService {
 
             const id_cita = uuidv4();
             const codigo_cita = `GCL-${Date.now().toString().slice(-8)}`;
+            const fechaInicioBogota = this.toBogotaDateTime(eventData.fecha_inicio, '08:00:00');
+            const fechaFinBogota = this.toBogotaDateTime(eventData.fecha_fin, '09:00:00');
+
+            if (!fechaInicioBogota || !fechaFinBogota) {
+                return {
+                    success: false,
+                    error: 'No se pudo normalizar la fecha/hora del evento de Google'
+                };
+            }
 
             const insertQuery = `
                 INSERT INTO clinical.calendario_citas (
@@ -910,8 +944,8 @@ class BidirectionalSyncService {
                 codigo_cita,
                 matchedData.mascota_id,
                 matchedData.veterinario_id,
-                eventData.fecha_inicio,
-                eventData.fecha_fin,
+                fechaInicioBogota,
+                fechaFinBogota,
                 safeTipo,
                 safeEstado,
                 safeMotivo,
@@ -1272,6 +1306,12 @@ class BidirectionalSyncService {
     async updateAppointmentFromGoogle(id_cita, eventData) {
         const safeTipo = this.normalizeAppointmentType(eventData?.tipo);
         const safeMotivo = this.sanitizeRichTextToPlain(eventData?.motivo || 'Importado desde Google Calendar');
+        const fechaInicioBogota = this.toBogotaDateTime(eventData?.fecha_inicio, '08:00:00');
+        const fechaFinBogota = this.toBogotaDateTime(eventData?.fecha_fin, '09:00:00');
+
+        if (!fechaInicioBogota || !fechaFinBogota) {
+            throw new Error('No se pudo normalizar fecha/hora para actualizar cita desde Google');
+        }
         const updateQuery = `
             UPDATE clinical.calendario_citas 
             SET 
@@ -1287,8 +1327,8 @@ class BidirectionalSyncService {
         `;
 
         const result = await query(updateQuery, [
-            eventData.fecha_inicio,
-            eventData.fecha_fin,
+            fechaInicioBogota,
+            fechaFinBogota,
             safeTipo,
             safeMotivo,
             id_cita
@@ -1310,12 +1350,16 @@ class BidirectionalSyncService {
         if (currentResult.rows.length === 0) return false;
 
         const current = currentResult.rows[0];
+        const fechaInicioBogota = this.toBogotaDateTime(eventData?.fecha_inicio, '08:00:00');
+        const fechaFinBogota = this.toBogotaDateTime(eventData?.fecha_fin, '09:00:00');
+        const safeTipo = this.normalizeAppointmentType(eventData?.tipo);
+        const safeMotivo = this.sanitizeRichTextToPlain(eventData?.motivo || 'Importado desde Google Calendar');
         
         return (
-            new Date(current.fecha_inicio).getTime() !== new Date(eventData.fecha_inicio).getTime() ||
-            new Date(current.fecha_fin).getTime() !== new Date(eventData.fecha_fin).getTime() ||
-            current.tipo !== eventData.tipo ||
-            current.motivo !== eventData.motivo
+            new Date(current.fecha_inicio).getTime() !== new Date(fechaInicioBogota).getTime() ||
+            new Date(current.fecha_fin).getTime() !== new Date(fechaFinBogota).getTime() ||
+            current.tipo !== safeTipo ||
+            current.motivo !== safeMotivo
         );
     }
 

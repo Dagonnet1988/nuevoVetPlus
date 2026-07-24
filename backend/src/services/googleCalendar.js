@@ -1385,6 +1385,8 @@ class GoogleCalendarService {
 
             console.log(`📅 Procesando ${response.data.items.length} eventos actualizados`);
             const changes = [];
+            let loggedChanges = 0;
+            const maxDetailedLogs = 20;
             
             for (const event of response.data.items) {
                 const changeType = this.determineChangeType(event);
@@ -1426,9 +1428,15 @@ class GoogleCalendarService {
                     updated_at: event.updated
                 });
 
-                console.log(`📝 Cambio detectado: ${changeType} - ${event.summary}`);
-                if (attendeeChanges.length > 0) {
-                    console.log(`👥 Respuestas de asistentes:`, attendeeChanges);
+                if (loggedChanges < maxDetailedLogs) {
+                    console.log(`📝 Cambio detectado: ${changeType} - ${event.summary}`);
+                    if (attendeeChanges.length > 0) {
+                        console.log(`👥 Respuestas de asistentes:`, attendeeChanges);
+                    }
+                    loggedChanges++;
+                } else if (loggedChanges === maxDetailedLogs) {
+                    console.log(`ℹ️ Se omiten logs detallados de cambios adicionales para evitar ruido (total eventos: ${response.data.items.length}).`);
+                    loggedChanges++;
                 }
             }
 

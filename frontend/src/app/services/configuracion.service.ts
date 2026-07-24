@@ -522,7 +522,7 @@ export class ConfiguracionService {
   }
 
   saveGoogleCalendarConfig(config: any): Observable<any> {
-    return this.http.post<any>(`${this.API_URL}/google-calendar/configure`, config);
+    return this.http.post<any>(`${this.API_URL}/google-calendar/simple/configure`, config);
   }
 
   testGoogleCalendarConnection(): Observable<any> {

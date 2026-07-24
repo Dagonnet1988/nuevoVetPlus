@@ -8,7 +8,9 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
-        PORT: 3000
+        PORT: 3000,
+        TZ: 'America/Bogota',
+        TIMEZONE: 'America/Bogota'
       },
       env_file: '/var/www/vetplus/backend/.env.production',
       max_memory_restart: '800M',
