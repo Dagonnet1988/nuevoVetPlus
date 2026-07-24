@@ -16,6 +16,11 @@ import auditRoutes from './src/routes/audit.js';
 import superadminRoutes from './src/routes/superadmin.js';
 import publicRoutes from './src/routes/public.js';
 import googleCalendarRoutes from './src/routes/googleCalendar.js';
+import empresaConfigRoutes from './src/routes/empresaConfigRoutes.js';
+import appointmentExportRoutes from './src/routes/appointmentExport.js';
+import configConsentimientoRoutes from './src/routes/configConsentimientoRoutes.js';
+import googleCalendarWebhookRoutes from './src/routes/googleCalendarWebhook.js';
+import systemStatusRoutes from './src/routes/systemStatus.js';
 import emailConfigRoutes from './src/routes/emailConfigRoutes.js';
 import documentEmailRoutes from './src/routes/documentEmailRoutes.js';
 
@@ -261,6 +266,30 @@ app.use('/api/audit',
 app.use('/api/google-calendar', 
     adminRateLimit,
     googleCalendarRoutes
+);
+
+app.use('/api/admin/empresa',
+    adminRateLimit,
+    empresaConfigRoutes
+);
+
+app.use('/api/appointments/export',
+    adminRateLimit,
+    appointmentExportRoutes
+);
+
+app.use('/api/config/consentimiento',
+    adminRateLimit,
+    configConsentimientoRoutes
+);
+
+app.use('/api/google-calendar-webhook',
+    googleCalendarWebhookRoutes
+);
+
+app.use('/api/system',
+    adminRateLimit,
+    systemStatusRoutes
 );
 
 app.use('/api/admin/email',
