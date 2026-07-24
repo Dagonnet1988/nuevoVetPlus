@@ -264,14 +264,18 @@ app.get('/', intelligentCaching({ ttl: 3600 }), (req, res) => {
 });
 
 // Rutas con rate limiting específico
+// Importante: authRoutes ya aplica authRateLimit en endpoints sensibles
+// (login/refresh/forgot/reset). No aplicar aquí a todo /api/auth para
+// evitar bloquear rutas internas como /api/auth/users con 429.
 app.use('/api/auth', 
-    authRateLimit, 
     auditAuthActivity, 
     authRoutes
 );
 
+// Login de superadmin protegido con rate limit estricto.
+app.use('/api/superadmin/auth', authRateLimit);
+
 app.use('/api/superadmin',
-    authRateLimit,
     auditAuthActivity,
     superadminRoutes
 );

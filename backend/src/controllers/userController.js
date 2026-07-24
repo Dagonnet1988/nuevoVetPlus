@@ -113,6 +113,8 @@ export const createUser = async (req, res) => {
 
         const newUser = result.rows[0];
 
+        let warningMessage = null;
+
         if (enviar_credenciales && newUser.email) {
             try {
                 const rendered = await renderEmailTemplate({
@@ -145,6 +147,7 @@ export const createUser = async (req, res) => {
                 }
             } catch (emailError) {
                 console.error('No se pudo enviar correo de credenciales al usuario nuevo:', emailError.message);
+                warningMessage = 'Usuario creado, pero no se pudieron enviar credenciales por correo. Configura Correo en Configuracion.';
             }
         }
 
@@ -156,7 +159,8 @@ export const createUser = async (req, res) => {
             data: {
                 ...newUser,
                 password_temporal: enviar_credenciales ? finalPassword : undefined
-            }
+            },
+            warning: warningMessage
         });
 
     } catch (error) {
