@@ -76,6 +76,7 @@ export const productionConfig = {
                     frameSrc: ["'none'"]
                 }
             },
+            crossOriginResourcePolicy: false,
             crossOriginEmbedderPolicy: false
         }
     },
