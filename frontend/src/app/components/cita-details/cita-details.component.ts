@@ -2,6 +2,7 @@ import { Component, OnInit, signal, inject, Inject } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
+import { firstValueFrom } from 'rxjs';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -424,13 +425,13 @@ export class CitaDetailsComponent implements OnInit {
     }
 
     if (result.action === 'send-whatsapp-all') {
-      this.enviarDocumentosPorWhatsApp(this.documentosCita());
+      void this.enviarDocumentosPorWhatsApp(this.documentosCita());
       return;
     }
 
     if (result.action === 'send-both-all') {
       await this.onEnviarTodosDocumentos();
-      this.enviarDocumentosPorWhatsApp(this.documentosCita());
+      await this.enviarDocumentosPorWhatsApp(this.documentosCita());
     }
   }
 
@@ -867,17 +868,17 @@ export class CitaDetailsComponent implements OnInit {
           await this.onEnviarTodosDocumentos(true);
         },
         onWhatsapp: () => {
-          this.enviarDocumentosPorWhatsApp(this.documentosCita());
+          void this.enviarDocumentosPorWhatsApp(this.documentosCita());
         },
         onBoth: async () => {
           await this.onEnviarTodosDocumentos(true);
-          this.enviarDocumentosPorWhatsApp(this.documentosCita());
+          await this.enviarDocumentosPorWhatsApp(this.documentosCita());
         }
       }
     });
   }
 
-  private enviarDocumentosPorWhatsApp(docs: HistoriaClinica[]): void {
+  private async enviarDocumentosPorWhatsApp(docs: HistoriaClinica[]): Promise<void> {
     if (!docs.length) {
       this.snackBar.open('No hay documentos para compartir por WhatsApp', 'Cerrar', { duration: 3000 });
       return;
@@ -895,7 +896,23 @@ export class CitaDetailsComponent implements OnInit {
     const mensaje =
       `Hola ${propietario}, te compartimos los documentos clínicos de la cita de ${mascota}` +
       `${fechaCita ? ` del ${fechaCita}` : ''}: ${lineasDocs}.\n` +
-      `Si requieres ayuda con algo responde este mensaje y te apoyamos.`;
+      `Comunícate con nosotros si necesitas ayuda con algo.`;
+
+    const archivosAdjuntos = await this.prepararAdjuntosWhatsApp(docs);
+    if (archivosAdjuntos.length > 0 && this.canShareFiles(archivosAdjuntos)) {
+      try {
+        await navigator.share({
+          title: `Documentos clínicos - ${mascota}`,
+          text: mensaje,
+          files: archivosAdjuntos
+        });
+        this.snackBar.open('Compartiendo PDFs por WhatsApp...', 'Cerrar', { duration: 2200 });
+        return;
+      } catch (error: any) {
+        if (error?.name === 'AbortError') return;
+        console.warn('No se pudo compartir los PDFs por Web Share API:', error);
+      }
+    }
 
     const telefono = cita?.mascota?.cliente?.telefono || null;
     const numero = this.normalizarTelefonoWhatsApp(telefono);
@@ -909,6 +926,34 @@ export class CitaDetailsComponent implements OnInit {
     }
 
     this.snackBar.open('Abriendo WhatsApp Web/App...', 'Cerrar', { duration: 2200 });
+  }
+
+  private async prepararAdjuntosWhatsApp(docs: HistoriaClinica[]): Promise<File[]> {
+    const files: File[] = [];
+
+    for (const doc of docs.slice(0, 8)) {
+      try {
+        const response = await firstValueFrom(this.historiaClinicaService.getPDFBlob(doc.id_historia));
+        const blob = response.body;
+        if (!blob) continue;
+
+        const pdfBlob = blob.type ? blob : new Blob([blob], { type: 'application/pdf' });
+        const filename = `${this.historiaClinicaService.getTipoLabel(doc.tipo_documento)}-${doc.codigo_historia}.pdf`
+          .replace(/\s+/g, '-')
+          .replace(/[^a-zA-Z0-9._-]/g, '');
+
+        files.push(new File([pdfBlob], filename, { type: 'application/pdf' }));
+      } catch (error) {
+        console.warn(`No se pudo preparar el PDF ${doc.codigo_historia} para WhatsApp:`, error);
+      }
+    }
+
+    return files;
+  }
+
+  private canShareFiles(files: File[]): boolean {
+    const nav = navigator as Navigator & { canShare?: (data: { files?: File[] }) => boolean };
+    return typeof nav.share === 'function' && typeof nav.canShare === 'function' && nav.canShare({ files });
   }
 
   private normalizarTelefonoWhatsApp(raw: string | null | undefined): string | null {

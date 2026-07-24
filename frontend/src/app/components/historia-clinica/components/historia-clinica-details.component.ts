@@ -1,6 +1,7 @@
 import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -227,6 +228,10 @@ export class HistoriaClinicaDetailsComponent implements OnInit {
   }
 
   enviarResumenPorWhatsApp(): void {
+    void this.enviarResumenPorWhatsAppConAdjunto();
+  }
+
+  private async enviarResumenPorWhatsAppConAdjunto(): Promise<void> {
     const h = this.historia();
     if (!h) return;
     if (h.estado === 'Cancelado') {
@@ -239,7 +244,23 @@ export class HistoriaClinicaDetailsComponent implements OnInit {
     const mensaje =
       `Hola ${h.cliente_nombre || 'propietario'}, te compartimos el resumen de ${tipo} (${h.codigo_historia})` +
       ` de ${h.mascota_nombre || 'tu mascota'} con fecha ${fecha}.` +
-      ` Si necesitas el PDF, te lo reenviamos por correo desde Ramelo.`;
+      ` Comunícate con nosotros si necesitas el PDF por otro medio.`;
+
+    const pdfFile = await this.buildHistoriaPdfFile(h.id_historia, h.codigo_historia);
+    if (pdfFile && this.canShareFiles([pdfFile])) {
+      try {
+        await navigator.share({
+          title: `${tipo} - ${h.codigo_historia}`,
+          text: mensaje,
+          files: [pdfFile]
+        });
+        this.snackBar.open('Compartiendo PDF por WhatsApp...', 'Cerrar', { duration: 2200 });
+        return;
+      } catch (error: any) {
+        if (error?.name === 'AbortError') return;
+        console.warn('No se pudo compartir el PDF por Web Share API:', error);
+      }
+    }
 
     const numero = this.normalizarTelefonoWhatsApp((h as any).cliente_telefono || null);
     const waUrl = numero
@@ -252,6 +273,26 @@ export class HistoriaClinicaDetailsComponent implements OnInit {
     }
 
     this.snackBar.open('Abriendo WhatsApp Web/App…', 'Cerrar', { duration: 2200 });
+  }
+
+  private async buildHistoriaPdfFile(idHistoria: string, codigoHistoria: string): Promise<File | null> {
+    try {
+      const response = await firstValueFrom(this.historiaService.getPDFBlob(idHistoria));
+      const blob = response.body;
+      if (!blob) return null;
+
+      const pdfBlob = blob.type ? blob : new Blob([blob], { type: 'application/pdf' });
+      const filename = `historia-${codigoHistoria || idHistoria}.pdf`;
+      return new File([pdfBlob], filename, { type: 'application/pdf' });
+    } catch (error) {
+      console.warn('No se pudo preparar el PDF para WhatsApp:', error);
+      return null;
+    }
+  }
+
+  private canShareFiles(files: File[]): boolean {
+    const nav = navigator as Navigator & { canShare?: (data: { files?: File[] }) => boolean };
+    return typeof nav.share === 'function' && typeof nav.canShare === 'function' && nav.canShare({ files });
   }
 
   private normalizarTelefonoWhatsApp(raw: string | null | undefined): string | null {

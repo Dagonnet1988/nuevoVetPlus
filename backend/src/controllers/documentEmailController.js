@@ -584,13 +584,13 @@ export async function sendAppointmentDocumentsEmail(req, res) {
       `Te compartimos los documentos clínicos de la cita de ${mascotaNombre}` +
       `${fechaCita ? ` del ${fechaCita}` : ''}:\n` +
       `${docsListText}\n\n` +
-      'Si requieres ayuda con algo responde este mensaje y te apoyamos.';
+      'Comunícate con nosotros si necesitas ayuda con algo.';
 
     const htmlBody =
       `<p>Hola ${clienteNombre},</p>` +
       `<p>Te compartimos los documentos clínicos de la cita de <strong>${mascotaNombre}</strong>${fechaCita ? ` del <strong>${fechaCita}</strong>` : ''}:</p>` +
       `<ol>${docsListHtml}</ol>` +
-      `<p>Si requieres ayuda con algo responde este mensaje y te apoyamos.</p>`;
+      `<p>Comunícate con nosotros si necesitas ayuda con algo.</p>`;
 
     retryPayload = {
       to: targetEmail,
