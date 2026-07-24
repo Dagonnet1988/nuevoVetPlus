@@ -194,6 +194,15 @@ async function resolveConsentForEmail(idCliente, tenantId, userId) {
     [idCliente, versionResult.rows[0].id_version, token, expiresAt, userId, tenantId]
   );
 
+  // Al generar un nuevo enlace de firma, el cliente queda nuevamente pendiente.
+  await query(
+    `UPDATE clinical.clientes
+     SET consentimiento_firmado = false,
+         id_consentimiento_vigente = NULL
+     WHERE id_cliente = $1 AND id_tenant = $2`,
+    [idCliente, tenantId]
+  );
+
   const generated = {
     ...insert.rows[0],
     cliente_nombre: consent.cliente_nombre,

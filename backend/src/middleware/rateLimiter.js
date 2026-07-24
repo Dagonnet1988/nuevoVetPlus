@@ -1,4 +1,4 @@
-import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import rateLimit from 'express-rate-limit';
 import slowDown from 'express-slow-down';
 
 /**
@@ -85,14 +85,6 @@ export const roleBasedRateLimit = (limits = {}) => {
   });
   return limiter;
 };
-
-/** Rate limit por endpoint específico */
-export const endpointRateLimit = (endpoint) => createLimiter({
-  windowMs: 60 * 1000,
-  max: 30,
-  keyGenerator: (req) => `${ipKeyGenerator(req.ip)}-${endpoint}`,
-  message: { message: `Límite de solicitudes para ${endpoint} alcanzado.` }
-});
 
 /** Headers informativos de rate limit (no bloquea) */
 export const rateLimitStats = (req, res, next) => {

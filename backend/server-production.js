@@ -35,7 +35,6 @@ import {
     generalRateLimit,
     authRateLimit,
     adminRateLimit,
-    endpointRateLimit,
     rateLimitStats
 } from './src/middleware/rateLimiter.js';
 
@@ -300,7 +299,6 @@ app.use('/api/superadmin',
 app.use('/api/public', publicRoutes);
 
 app.use('/api/clinical', 
-    endpointRateLimit('clinical.*'),
     paginatedCache,
     clinicalRoutes
 );
@@ -345,7 +343,6 @@ app.use('/api/admin/email',
 );
 
 app.use('/api/clinical/notificaciones',
-    endpointRateLimit('clinical.*'),
     documentEmailRoutes
 );
 

@@ -138,7 +138,7 @@ export class QRModalComponent implements OnInit, OnDestroy {
       switchMap(() => this.consentimientosService.obtenerEstado(this.data.idCliente).pipe(
         catchError(() => of(null))
       )),
-      takeWhile(resp => !resp || resp.estado === 'pendiente', true)
+      takeWhile(resp => !resp || resp.estado !== 'firmado', true)
     ).subscribe({
       next: (resp) => {
         if (!resp) {
@@ -149,13 +149,7 @@ export class QRModalComponent implements OnInit, OnDestroy {
           this.polling.set(false);
           this.firmado.set(true);
           setTimeout(() => this.cerrar(), 1200);
-          return;
         }
-
-        // Si dejó de estar pendiente (expirado/revocado/desactualizado/sin_consentimiento),
-        // cerramos para evitar un modal congelado con QR obsoleto.
-        this.polling.set(false);
-        setTimeout(() => this.cerrar(), 300);
       },
       error: () => { this.polling.set(false); }
     });
