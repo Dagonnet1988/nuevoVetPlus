@@ -75,7 +75,7 @@ const getBogotaDateOnlyFromDate = (value) => {
 
 const getTenantDiasEspeciales = async (tenantId) => {
     const result = await query(
-        `SELECT fecha, descripcion, tipo, hora_inicio, hora_fin
+        `SELECT to_char(fecha, 'YYYY-MM-DD') as fecha, descripcion, tipo, hora_inicio, hora_fin
          FROM system.dias_especiales
          WHERE activo = true
            AND (id_tenant IS NULL OR id_tenant = $1)`,

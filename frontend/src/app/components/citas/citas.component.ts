@@ -413,7 +413,10 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     if (value instanceof Date && !Number.isNaN(value.getTime())) {
-      return this.getDateYmd(value);
+      const yyyy = value.getUTCFullYear();
+      const mm = String(value.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(value.getUTCDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
     }
 
     return null;

@@ -356,7 +356,7 @@ export const getDiasEspeciales = async (req, res) => {
             SELECT
                 id_dia_especial,
                 id_tenant,
-                fecha,
+                to_char(fecha, 'YYYY-MM-DD') as fecha,
                 descripcion,
                 tipo,
                 hora_inicio,

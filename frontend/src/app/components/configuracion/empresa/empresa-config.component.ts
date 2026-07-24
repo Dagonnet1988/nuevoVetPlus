@@ -414,9 +414,9 @@ export class EmpresaConfigComponent implements OnInit {
     }
 
     if (value instanceof Date && !Number.isNaN(value.getTime())) {
-      const yyyy = value.getFullYear();
-      const mm = String(value.getMonth() + 1).padStart(2, '0');
-      const dd = String(value.getDate()).padStart(2, '0');
+      const yyyy = value.getUTCFullYear();
+      const mm = String(value.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(value.getUTCDate()).padStart(2, '0');
       return `${yyyy}-${mm}-${dd}`;
     }
 
