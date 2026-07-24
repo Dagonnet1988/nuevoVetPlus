@@ -122,7 +122,9 @@ export const createUser = async (req, res) => {
                     key: 'usuario_credenciales',
                     variables: {
                         usuario_nombre: `${newUser.nombre} ${newUser.apellido || ''}`.trim(),
-                        usuario_email: newUser.email,
+                        usuario_documento: newUser.documento,
+                        usuario_correo: newUser.documento,
+                        usuario_email: newUser.documento,
                         password_temporal: finalPassword
                     },
                     userId: req.user?.id_usuario || req.user?.id || null

@@ -58,7 +58,6 @@ import {
     intelligentCompression,
     intelligentCaching,
     configCache,
-    paginatedCache,
     performanceHeaders,
     getCacheStats,
     clearCache
@@ -299,7 +298,6 @@ app.use('/api/superadmin',
 app.use('/api/public', publicRoutes);
 
 app.use('/api/clinical', 
-    paginatedCache,
     clinicalRoutes
 );
 

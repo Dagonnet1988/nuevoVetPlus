@@ -294,7 +294,7 @@ export class ConsentimientoStatusComponent implements OnInit {
   solicitarRevocacion(): void {
     const motivo = window.prompt(
       `¿Por qué se revoca el consentimiento de ${this.clienteNombre || 'este propietario'}?\n` +
-      '(Indique el motivo, ej: "Solicitud del propietario el 04/04/2026")'
+      '(Indique el motivo, ej: "Solicitud del propietario")'
     );
     if (!motivo || motivo.trim().length < 5) return;
 

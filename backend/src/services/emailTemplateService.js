@@ -51,10 +51,10 @@ const DEFAULT_TEMPLATES = [
     descripcion: 'Correo con credenciales iniciales al crear usuario',
     asunto: 'Acceso a Ramelo - {{usuario_nombre}}',
     cuerpo_html:
-      '<p>Hola {{usuario_nombre}},</p><p>Se creó tu acceso a Ramelo.</p><p>Usuario: <strong>{{usuario_email}}</strong><br>Contraseña temporal: <strong>{{password_temporal}}</strong></p><p>Debes cambiarla al iniciar sesión.</p>',
+      '<p>Hola {{usuario_nombre}},</p><p>Se creó tu acceso a Ramelo.</p><p>Usuario (documento): <strong>{{usuario_documento}}</strong><br>Contraseña temporal: <strong>{{password_temporal}}</strong></p><p>Debes cambiarla al iniciar sesión.</p>',
     cuerpo_text:
-      'Hola {{usuario_nombre}}, se creó tu acceso a Ramelo. Usuario: {{usuario_email}}. Contraseña temporal: {{password_temporal}}. Debes cambiarla al iniciar sesión.',
-    variables_permitidas: ['usuario_nombre', 'usuario_email', 'password_temporal']
+      'Hola {{usuario_nombre}}, se creó tu acceso a Ramelo. Usuario (documento): {{usuario_documento}}. Contraseña temporal: {{password_temporal}}. Debes cambiarla al iniciar sesión.',
+    variables_permitidas: ['usuario_nombre', 'usuario_documento', 'password_temporal']
   },
   {
     clave_template: 'usuario_reset_temporal',

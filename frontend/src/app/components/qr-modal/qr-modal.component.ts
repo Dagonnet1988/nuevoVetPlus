@@ -10,7 +10,7 @@ import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/materia
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { interval, of, Subscription } from 'rxjs';
+import { of, Subscription, timer } from 'rxjs';
 import { catchError, switchMap, takeWhile } from 'rxjs/operators';
 import { ConsentimientosService } from '../../services/consentimientos.service';
 
@@ -134,7 +134,7 @@ export class QRModalComponent implements OnInit, OnDestroy {
 
   private iniciarPolling(): void {
     this.polling.set(true);
-    this.pollSub = interval(5000).pipe(
+    this.pollSub = timer(0, 3000).pipe(
       switchMap(() => this.consentimientosService.obtenerEstado(this.data.idCliente).pipe(
         catchError(() => of(null))
       )),

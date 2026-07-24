@@ -6,6 +6,7 @@ import path from 'path';
 import { query } from '../config/database.js';
 import { generarPDFConsentimiento, generarNumeroPDF } from '../services/consentimientoPDFService.js';
 import { sendEmail } from '../services/emailService.js';
+import { cache } from '../middleware/performance.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,6 +16,11 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:4200';
 
 // Duración del token de firma en horas (configurable aquí o por variable de entorno)
 const TOKEN_DURATION_HOURS = parseInt(process.env.CONSENT_TOKEN_HOURS ?? '48', 10);
+
+function invalidateConsentRelatedCache() {
+  const patterns = ['.*consentimiento.*', '.*pacientes.*', '.*clientes.*', '.*clients.*'];
+  patterns.forEach((pattern) => cache.deletePattern(pattern));
+}
 
 function field(value, fallback = 'No registrado') {
   if (value === null || value === undefined) return fallback;
@@ -825,6 +831,10 @@ export async function firmarConsentimiento(req, res) {
        WHERE id_cliente = $2`,
       [row.id_consentimiento, row.id_cliente]
     );
+
+    // El flujo de firma se ejecuta por ruta pública; invalidamos caché clínica para
+    // que estado/listados reflejen "firmado" inmediatamente sin reiniciar PM2.
+    invalidateConsentRelatedCache();
 
     if (row.email) {
       const absolutePath = path.join(__dirname, '../../', pdfPath);

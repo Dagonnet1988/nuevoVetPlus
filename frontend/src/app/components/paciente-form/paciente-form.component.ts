@@ -1350,7 +1350,6 @@ export class PacienteFormComponent implements OnInit {
 
       this.pacientesService.uploadFotoPaciente(mascotaId, file).subscribe({
         next: (response) => {
-          console.log('Foto subida exitosamente:', response);
           this.currentPhotoUrl.set(response.data?.foto_url);
           this.selectedPhoto.set(null);
           this.selectedFile.set(null);
