@@ -60,7 +60,28 @@ class SyncScheduler {
 
     formatDateTimeForEmail(value) {
         if (!value) return '';
-        const d = new Date(value);
+        const raw = String(value).trim();
+        const localMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
+
+        if (localMatch && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)) {
+            const year = Number(localMatch[1]);
+            const monthIndex = Number(localMatch[2]) - 1;
+            const day = Number(localMatch[3]);
+            const hour24 = Number(localMatch[4]);
+            const minute = Number(localMatch[5]);
+
+            const monthNames = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+            const weekdayNames = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+            const weekdayIndex = new Date(Date.UTC(year, monthIndex, day)).getUTCDay();
+            const displayHour = hour24 % 12 || 12;
+            const ampm = hour24 < 12 ? 'a. m.' : 'p. m.';
+
+            return `${weekdayNames[weekdayIndex].charAt(0).toUpperCase() + weekdayNames[weekdayIndex].slice(1)} ${String(day).padStart(2, '0')} de ${monthNames[monthIndex]} de ${year} a las ${displayHour}:${String(minute).padStart(2, '0')} ${ampm}`;
+        }
+
+        const d = new Date(raw);
+        if (Number.isNaN(d.getTime())) return raw;
+
         return d.toLocaleString('es-CO', {
             timeZone: 'America/Bogota',
             year: 'numeric',

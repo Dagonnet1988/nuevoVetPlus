@@ -73,6 +73,24 @@ const getBogotaDateOnlyFromDate = (value) => {
     return value.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
 };
 
+const getRecurringSkipReason = (value, diasEspeciales = []) => {
+    if (!(value instanceof Date) || Number.isNaN(value.getTime())) return null;
+
+    if (value.getDay() === 0) {
+        return 'domingo';
+    }
+
+    const fechaYmd = getBogotaDateOnlyFromDate(value);
+    if (!fechaYmd) return null;
+
+    const specialDay = diasEspeciales.find((dia) => {
+        const tipo = String(dia?.tipo || '').trim();
+        return dia?.fecha === fechaYmd && (tipo === 'festivo' || tipo === 'no_laborable');
+    });
+
+    return specialDay?.tipo || null;
+};
+
 const getTenantDiasEspeciales = async (tenantId) => {
     const result = await query(
         `SELECT to_char(fecha, 'YYYY-MM-DD') as fecha, descripcion, tipo, hora_inicio, hora_fin
@@ -232,7 +250,28 @@ const capitalizeFirst = (value) => {
 
 const formatDateTimeForEmail = (value) => {
     if (!value) return '';
-    const d = new Date(value);
+    const raw = String(value).trim();
+    const localMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
+
+    if (localMatch && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)) {
+        const year = Number(localMatch[1]);
+        const monthIndex = Number(localMatch[2]) - 1;
+        const day = Number(localMatch[3]);
+        const hour24 = Number(localMatch[4]);
+        const minute = Number(localMatch[5]);
+
+        const weekdayNames = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+        const monthNames = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+        const weekdayIndex = new Date(Date.UTC(year, monthIndex, day)).getUTCDay();
+        const displayHour = hour24 % 12 || 12;
+        const ampm = hour24 < 12 ? 'a. m.' : 'p. m.';
+
+        return `${capitalizeFirst(weekdayNames[weekdayIndex])} ${String(day).padStart(2, '0')} de ${monthNames[monthIndex]} de ${year} a las ${displayHour}:${String(minute).padStart(2, '0')} ${ampm}`;
+    }
+
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return raw;
+
     const locale = 'es-CO';
     const timeZone = 'America/Bogota';
 
@@ -297,7 +336,8 @@ const buildRecurringOccurrences = ({
     intervalo,
     diasSemana,
     totalOcurrencias,
-    fechaHasta
+    fechaHasta,
+    diasEspeciales = []
 }) => {
     const inicioBase = toLocalDate(fechaInicio);
     const finBase = toLocalDate(fechaFin);
@@ -317,9 +357,12 @@ const buildRecurringOccurrences = ({
         while (occurrences.length < limit) {
             if (until && cursor > until) break;
 
-            const start = new Date(cursor);
-            const end = new Date(start.getTime() + durationMinutes * 60000);
-            occurrences.push({ start, end });
+            const skipReason = getRecurringSkipReason(cursor, diasEspeciales);
+            if (!skipReason) {
+                const start = new Date(cursor);
+                const end = new Date(start.getTime() + durationMinutes * 60000);
+                occurrences.push({ start, end });
+            }
 
             cursor.setDate(cursor.getDate() + interval);
         }
@@ -340,6 +383,12 @@ const buildRecurringOccurrences = ({
         const weekIndex = Math.floor(diffDays / 7);
 
         if (weekIndex % interval === 0 && validDays.includes(dayCursor.getDay())) {
+            const skipReason = getRecurringSkipReason(dayCursor, diasEspeciales);
+            if (skipReason) {
+                dayCursor.setDate(dayCursor.getDate() + 1);
+                continue;
+            }
+
             const start = new Date(dayCursor);
             start.setHours(inicioBase.getHours(), inicioBase.getMinutes(), inicioBase.getSeconds(), 0);
             const end = new Date(start.getTime() + durationMinutes * 60000);
@@ -860,6 +909,7 @@ export const previewRecurringAppointments = async (req, res) => {
         const diasSemana = recurrencia?.dias_semana || [];
         const totalOcurrencias = Number(recurrencia?.total_ocurrencias || 12);
         const fechaHasta = recurrencia?.fecha_hasta || null;
+        const diasEspeciales = await getTenantDiasEspeciales(req.tenantId ?? req.user?.tenant_id);
 
         const ocurrencias = buildRecurringOccurrences({
             fechaInicio: fecha_inicio,
@@ -868,7 +918,8 @@ export const previewRecurringAppointments = async (req, res) => {
             intervalo,
             diasSemana,
             totalOcurrencias,
-            fechaHasta
+            fechaHasta,
+            diasEspeciales
         });
 
         return res.json({
@@ -918,6 +969,7 @@ export const createRecurringAppointments = async (req, res) => {
         const diasSemana = recurrencia?.dias_semana || [];
         const totalOcurrencias = Number(recurrencia?.total_ocurrencias || 12);
         const fechaHasta = recurrencia?.fecha_hasta || null;
+        const diasEspeciales = await getTenantDiasEspeciales(tenantId);
 
         const ocurrenciasRegla = buildRecurringOccurrences({
             fechaInicio: fecha_inicio,
@@ -926,7 +978,8 @@ export const createRecurringAppointments = async (req, res) => {
             intervalo,
             diasSemana,
             totalOcurrencias,
-            fechaHasta
+            fechaHasta,
+            diasEspeciales
         });
 
         const ocurrencias = Array.isArray(ocurrencias_editadas) && ocurrencias_editadas.length > 0
@@ -953,7 +1006,6 @@ export const createRecurringAppointments = async (req, res) => {
         }
 
         // Regla de negocio: no laborable bloquea el día completo; horario especial bloquea fuera de franja.
-        const diasEspeciales = await getTenantDiasEspeciales(tenantId);
         const ocurrenciasBloqueadas = [];
 
         for (const occ of ocurrencias) {
