@@ -83,8 +83,7 @@ export class UsuarioFormComponent implements OnInit {
 
   roles = [
     { value: 'admin', label: 'Administrador', icon: 'admin_panel_settings', color: '#f44336' },
-    { value: 'vet', label: 'Veterinario', icon: 'medical_services', color: '#2196f3' },
-    { value: 'aux', label: 'Auxiliar', icon: 'support_agent', color: '#4caf50' }
+    { value: 'vet', label: 'Veterinario', icon: 'medical_services', color: '#2196f3' }
   ];
 
   constructor() {

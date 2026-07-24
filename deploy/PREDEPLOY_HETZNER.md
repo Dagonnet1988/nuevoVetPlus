@@ -380,3 +380,9 @@ Objetivo: desplegar en una jornada y cerrar smoke test en dominio real.
 1. Activar backups diarios (BD + uploads) con retencion.
 2. Verificar logs y monitoreo basico.
 3. Documentar resultado de smoke test y decision final go/no-go.
+
+## 13) Artefactos listos para usar (sin VPS)
+- `deploy/env.production.backend.template`: base de variables para completar con secretos reales.
+- `deploy/nginx-vetplus.conf`: configuracion Nginx para `ramelo.app`, `*.ramelo.app` y `api.ramelo.app`.
+- `deploy/ecosystem.config.cjs`: configuracion estandar PM2 para backend.
+- `deploy/DIA0_HETZNER_COMMANDS.md`: comandos secuenciales del dia de despliegue.

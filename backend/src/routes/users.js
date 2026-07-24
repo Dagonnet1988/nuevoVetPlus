@@ -138,12 +138,12 @@ router.put('/:id/role',
     (req, res, next) => {
         // Validación específica para cambio de rol
         const { rol } = req.body;
-        const validRoles = ['admin', 'vet', 'aux'];
+        const validRoles = ['admin', 'vet'];
         
         if (!rol || !validRoles.includes(rol)) {
             return res.status(400).json({
                 success: false,
-                message: 'Rol inválido. Debe ser admin, vet o aux'
+                message: 'Rol no disponible temporalmente. Usa admin o vet.'
             });
         }
         

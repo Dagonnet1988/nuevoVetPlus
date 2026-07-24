@@ -174,7 +174,24 @@ app.use(preventSQLInjection);
 // Logging avanzado
 if (config.logging.requests) {
     morgan.token('reqId', (req) => req.id || 'unknown');
-    app.use(morgan(config.app.env === 'production' ? 'combined' : 'dev'));
+    const isProduction = config.app.env === 'production';
+    const logAllRequests = process.env.LOG_ALL_REQUESTS === 'true';
+    const noisyPaths = ['/health', '/metrics', '/favicon.ico', '/robots.txt', '/sitemap.xml'];
+
+    app.use(morgan(isProduction ? 'combined' : 'dev', {
+        skip: (req, res) => {
+            if (noisyPaths.some((path) => req.originalUrl.startsWith(path))) {
+                return true;
+            }
+
+            // En producción, por defecto registrar solo errores HTTP.
+            if (isProduction && !logAllRequests) {
+                return res.statusCode < 400;
+            }
+
+            return false;
+        }
+    }));
 }
 
 // Parsing JSON con límites

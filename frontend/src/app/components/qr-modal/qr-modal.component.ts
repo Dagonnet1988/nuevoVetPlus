@@ -10,8 +10,8 @@ import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/materia
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { interval, Subscription } from 'rxjs';
-import { switchMap, takeWhile } from 'rxjs/operators';
+import { interval, of, Subscription } from 'rxjs';
+import { catchError, switchMap, takeWhile } from 'rxjs/operators';
 import { ConsentimientosService } from '../../services/consentimientos.service';
 
 export interface QRModalData {
@@ -20,6 +20,7 @@ export interface QRModalData {
   expiresAt: string;
   idCliente: string;
   clienteNombre: string;
+  clienteTelefono?: string | null;
 }
 
 @Component({
@@ -63,6 +64,10 @@ export interface QRModalData {
         </mat-dialog-content>
 
         <mat-dialog-actions align="end">
+          <button mat-stroked-button color="primary" (click)="abrirWhatsApp()">
+            <mat-icon>chat</mat-icon>
+            Enviar por WhatsApp
+          </button>
           <button mat-button (click)="cerrar()">Cerrar</button>
         </mat-dialog-actions>
       }
@@ -130,15 +135,27 @@ export class QRModalComponent implements OnInit, OnDestroy {
   private iniciarPolling(): void {
     this.polling.set(true);
     this.pollSub = interval(5000).pipe(
-      switchMap(() => this.consentimientosService.obtenerEstado(this.data.idCliente)),
-      takeWhile(resp => resp.estado !== 'firmado', true)
+      switchMap(() => this.consentimientosService.obtenerEstado(this.data.idCliente).pipe(
+        catchError(() => of(null))
+      )),
+      takeWhile(resp => !resp || resp.estado === 'pendiente', true)
     ).subscribe({
       next: (resp) => {
+        if (!resp) {
+          return;
+        }
+
         if (resp.estado === 'firmado') {
           this.polling.set(false);
           this.firmado.set(true);
-          setTimeout(() => this.cerrar(), 3000);
+          setTimeout(() => this.cerrar(), 1200);
+          return;
         }
+
+        // Si dejó de estar pendiente (expirado/revocado/desactualizado/sin_consentimiento),
+        // cerramos para evitar un modal congelado con QR obsoleto.
+        this.polling.set(false);
+        setTimeout(() => this.cerrar(), 300);
       },
       error: () => { this.polling.set(false); }
     });
@@ -146,5 +163,37 @@ export class QRModalComponent implements OnInit, OnDestroy {
 
   cerrar(): void {
     this.dialogRef.close(this.firmado());
+  }
+
+  abrirWhatsApp(): void {
+    const mensaje = this.buildWhatsAppMessage();
+    const numero = this.normalizarTelefonoWhatsApp(this.data.clienteTelefono);
+    const waUrl = numero
+      ? `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`
+      : `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
+
+    window.open(waUrl, '_blank', 'noopener');
+  }
+
+  private buildWhatsAppMessage(): string {
+    const nombre = this.data.clienteNombre || 'propietario';
+    const vence = new Date(this.data.expiresAt).toLocaleString('es-CO');
+    return `Hola ${nombre}, este es tu link para firmar el consentimiento: ${this.data.firmaUrl}\nVigente hasta: ${vence}`;
+  }
+
+  private normalizarTelefonoWhatsApp(raw: string | null | undefined): string | null {
+    const digits = String(raw || '').replace(/\D+/g, '');
+    if (!digits) return null;
+
+    const withoutZeros = digits.startsWith('00') ? digits.slice(2) : digits;
+    if (withoutZeros.length === 10) {
+      return `57${withoutZeros}`;
+    }
+
+    if (withoutZeros.length >= 11 && withoutZeros.length <= 15) {
+      return withoutZeros;
+    }
+
+    return null;
   }
 }

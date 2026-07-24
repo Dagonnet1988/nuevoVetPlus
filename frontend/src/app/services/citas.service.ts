@@ -93,12 +93,9 @@ export class CitasService {
       .set('vista', vista.vista)
       .set('fecha', vista.fecha);
 
-    console.log('🔍 [CALENDAR SERVICE] Vista:', vista, 'Filtros:', filters);
-
     // Agregar filtros si se proporcionan
     if (filters) {
       if (filters.id_veterinario) {
-        console.log('🔍 [CALENDAR SERVICE] Agregando filtro veterinario:', filters.id_veterinario);
         params = params.set('id_veterinario', filters.id_veterinario);
       }
       if (filters.estado) params = params.set('estado', filters.estado);
@@ -107,8 +104,6 @@ export class CitasService {
       if (filters.fecha_fin) params = params.set('fecha_fin', filters.fecha_fin);
       if (filters.search) params = params.set('search', filters.search);
     }
-
-    console.log('🔍 [CALENDAR SERVICE] URL final:', `${this.API_URL}/appointments/calendar?${params.toString()}`);
 
     return this.http.get<any>(`${this.API_URL}/appointments/calendar`, { params });
   }

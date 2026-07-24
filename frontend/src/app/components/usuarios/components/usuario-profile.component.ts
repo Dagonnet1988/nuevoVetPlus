@@ -575,11 +575,8 @@ export class TempPasswordDialogComponent {
 
   copyToClipboard(): void {
     navigator.clipboard.writeText(this.data.password).then(() => {
-      // Podríamos mostrar un snackbar aquí, pero como es un diálogo modal,
-      // es mejor un feedback visual simple
-      console.log('Contraseña copiada al portapapeles');
+      // Copiado exitoso (sin logs ruidosos en consola).
     }).catch(err => {
-      console.error('Error al copiar al portapapeles:', err);
       // Fallback para navegadores que no soportan clipboard API
       const textArea = document.createElement('textarea');
       textArea.value = this.data.password;

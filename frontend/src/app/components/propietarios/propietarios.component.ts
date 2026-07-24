@@ -409,9 +409,13 @@ export class PropietariosComponent implements OnInit {
   }
 
   gestionarConsentimiento(propietario: Cliente): void {
-    this.dialog.open(ConsentimientoPropietarioDialogComponent, {
+    const ref = this.dialog.open(ConsentimientoPropietarioDialogComponent, {
       data: propietario,
       width: '460px'
+    });
+
+    ref.afterClosed().subscribe(() => {
+      this.cargarPropietarios();
     });
   }
 

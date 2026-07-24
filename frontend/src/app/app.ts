@@ -50,7 +50,6 @@ export class App {
   }
 
   public testClick() {
-    console.log('🚨 TEST CLICK FUNCIONANDO!');
     alert('Angular está funcionando correctamente!');
   }
 

@@ -6,11 +6,17 @@ import { validationResult } from 'express-validator/lib/index.js';
  */
 export const validateRequest = (req, res, next) => {
     const errors = validationResult(req);
+    const isProduction = process.env.NODE_ENV === 'production';
     
     if (!errors.isEmpty()) {
-        console.log('❌ Errores de validación detectados:');
-        console.log('📝 Datos recibidos:', JSON.stringify(req.body, null, 2));
-        console.log('🚫 Errores:', errors.array());
+        // Evitar ruido y exposición de PII en producción.
+        if (!isProduction) {
+            console.warn('Errores de validación detectados:', {
+                endpoint: req.originalUrl,
+                method: req.method,
+                errors: errors.array()
+            });
+        }
         
         return res.status(400).json({
             success: false,

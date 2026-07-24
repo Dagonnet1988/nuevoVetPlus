@@ -1202,6 +1202,7 @@ export class PacienteFormComponent implements OnInit {
               // Abrir QR de consentimiento automáticamente
               const idCliente = response.data?.cliente?.id_cliente;
               const nombreCliente = response.data?.cliente?.nombre;
+              const telefonoCliente = response.data?.cliente?.telefono ?? formData.telefono ?? null;
               if (idCliente) {
                 this.consentimientosService.crear(idCliente).subscribe({
                   next: (resp) => {
@@ -1210,7 +1211,8 @@ export class PacienteFormComponent implements OnInit {
                       firmaUrl: resp.firmaUrl,
                       expiresAt: resp.expiresAt,
                       idCliente,
-                      clienteNombre: nombreCliente ?? ''
+                      clienteNombre: nombreCliente ?? '',
+                      clienteTelefono: telefonoCliente
                     };
                     this.dialog.open(QRModalComponent, { data, width: '420px' });
                   },

@@ -1730,6 +1730,5 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
     // Cleanup si es necesario
     this.resizeObserver?.disconnect();
     window.removeEventListener('resize', this.boundWindowResize);
-    console.log('🚪 Saliendo de la vista de citas');
   }
 }

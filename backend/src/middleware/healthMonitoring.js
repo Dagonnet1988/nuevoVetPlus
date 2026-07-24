@@ -158,6 +158,8 @@ class SystemMetrics {
 // Instancia global de métricas
 export const systemMetrics = new SystemMetrics();
 
+let lastAlertLogAt = 0;
+
 // Middleware para capturar métricas de requests
 export const requestMetrics = (req, res, next) => {
     const startTime = performance.now();
@@ -365,6 +367,10 @@ export const resetSystemMetrics = (req, res) => {
 
 // Middleware para alertas automáticas
 export const alerting = (req, res, next) => {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const shouldLogAlerts = process.env.ENABLE_ALERT_LOGS === 'true' || !isProduction;
+    const alertCooldownMs = Number(process.env.ALERT_LOG_COOLDOWN_MS || 60000);
+
     const metrics = systemMetrics.getMetrics();
     
     // Verificar condiciones críticas
@@ -388,7 +394,13 @@ export const alerting = (req, res, next) => {
     
     const activeAlerts = criticalConditions.filter(c => c.condition);
     
-    if (activeAlerts.length > 0) {
+    if (activeAlerts.length > 0 && shouldLogAlerts) {
+        const now = Date.now();
+        if (now - lastAlertLogAt < alertCooldownMs) {
+            return next();
+        }
+        lastAlertLogAt = now;
+
         console.warn('System alerts triggered:', {
             timestamp: new Date().toISOString(),
             alerts: activeAlerts,

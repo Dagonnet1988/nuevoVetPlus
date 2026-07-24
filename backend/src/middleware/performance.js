@@ -10,6 +10,9 @@ import { query } from '../config/database.js';
 // Cache en memoria con TTL personalizado
 class AdvancedCache {
     constructor() {
+        this.isProduction = process.env.NODE_ENV === 'production';
+        this.shouldLogCacheStats = process.env.LOG_CACHE_STATS === 'true';
+
         // Cache principal con TTL de 5 minutos
         this.mainCache = new NodeCache({ 
             stdTTL: 300, // 5 minutos
@@ -42,7 +45,7 @@ class AdvancedCache {
             deletes: 0
         };
         
-        // Log de estadísticas cada 10 minutos
+        // Log de estadísticas cada 10 minutos (opt-in en producción)
         setInterval(() => this.logStats(), 600000);
     }
     
@@ -149,6 +152,10 @@ class AdvancedCache {
     
     // Log de estadísticas
     logStats() {
+        if (this.isProduction && !this.shouldLogCacheStats) {
+            return;
+        }
+
         const stats = this.getStats();
         console.log('Cache Statistics:', {
             timestamp: new Date().toISOString(),
@@ -360,6 +367,9 @@ export const cacheInvalidation = (patterns = []) => {
 // Middleware para headers de performance
 export const performanceHeaders = (req, res, next) => {
     const startTime = Date.now();
+    const isProduction = process.env.NODE_ENV === 'production';
+    const logAllRequests = process.env.LOG_ALL_REQUEST_PERF === 'true';
+    const slowRequestMs = Number(process.env.SLOW_REQUEST_MS || 2000);
     
     // Headers de seguridad y performance
     res.set({
@@ -377,7 +387,15 @@ export const performanceHeaders = (req, res, next) => {
     res.on('finish', () => {
         const endTime = Date.now();
         const responseTime = endTime - startTime;
-        
+
+        // En producción evitar ruido: loguear solo errores/requests lentas salvo opt-in.
+        if (!logAllRequests) {
+            const shouldLog = !isProduction || res.statusCode >= 500 || responseTime >= slowRequestMs;
+            if (!shouldLog) {
+                return;
+            }
+        }
+
         console.log('Request Performance:', {
             method: req.method,
             url: req.originalUrl,

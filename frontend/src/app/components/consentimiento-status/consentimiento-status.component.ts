@@ -67,7 +67,8 @@ export class ConsentimientoStatusComponent implements OnInit {
             firmaUrl: data.firmaUrl,
             expiresAt: data.expiresAt,
             idCliente: this.idCliente,
-            clienteNombre: this.clienteNombre || data?.clienteNombre || ''
+            clienteNombre: this.clienteNombre || data?.clienteNombre || '',
+            clienteTelefono: this.clienteTelefono
           });
         }
 
@@ -103,7 +104,8 @@ export class ConsentimientoStatusComponent implements OnInit {
           firmaUrl: resp.firmaUrl,
           expiresAt: resp.expiresAt,
           idCliente: this.idCliente,
-          clienteNombre: this.clienteNombre || resp?.cliente?.nombre || ''
+          clienteNombre: this.clienteNombre || resp?.cliente?.nombre || '',
+          clienteTelefono: this.clienteTelefono
         });
         this.abrirWhatsAppConLink(resp.firmaUrl, resp.expiresAt);
       },
@@ -311,7 +313,8 @@ export class ConsentimientoStatusComponent implements OnInit {
   }
 
   private abrirModalQR(data: QRModalData): void {
-    this.dialog.open(QRModalComponent, { data, width: '420px' });
+    const ref = this.dialog.open(QRModalComponent, { data, width: '420px' });
+    ref.afterClosed().subscribe(() => this.cargarEstado());
   }
 
   private abrirWhatsAppConLink(firmaUrl: string, expiresAt: string): void {
