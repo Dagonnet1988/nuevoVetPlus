@@ -149,7 +149,6 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
           historias: 0,
           citas: 0,
           adjuntos: 0,
-          ultimaVisita: 'No hay registros',
           proximaCita: 'Sin citas programadas'
         });
 
@@ -205,8 +204,7 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
           this.statsResumen.update(stats => ({
             ...stats,
             consultas: historiaData.length,
-            historias: historiaData.length,
-            ultimaVisita: historiaData.length > 0 ? this.formatDate(historiaData[0].fecha) : 'No hay registros'
+            historias: historiaData.length
           }));
           this.loadDocumentosFromHistorias(historiasRaw);
         } else {
@@ -243,10 +241,6 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
             this.parseDateSafe(citaDate(c)).getTime() > now.getTime()
           ).sort((a: any, b: any) => this.parseDateSafe(citaDate(a)).getTime() - this.parseDateSafe(citaDate(b)).getTime());
 
-          const citasPasadas = citas
-            .filter((c: any) => ['completada', 'en_curso'].includes(String(c.estado || '').toLowerCase()) && this.parseDateSafe(citaDate(c)).getTime() <= now.getTime())
-            .sort((a: any, b: any) => this.parseDateSafe(citaDate(b)).getTime() - this.parseDateSafe(citaDate(a)).getTime());
-
           const citasEventos = citas.map((c: any) => ({
             id: c.id_cita,
             source: 'cita',
@@ -267,9 +261,6 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
           this.statsResumen.update(stats => ({
             ...stats,
             citas: citas.length,
-            ultimaVisita: stats.ultimaVisita !== 'No hay registros'
-              ? stats.ultimaVisita
-              : (citasPasadas.length > 0 ? this.formatDate(citaDate(citasPasadas[0])) : 'No hay registros'),
             proximaCita: proximasCitas.length > 0 ? this.formatDate(citaDate(proximasCitas[0])) : 'Sin citas programadas'
           }));
         }
