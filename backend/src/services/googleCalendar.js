@@ -54,11 +54,30 @@ class GoogleCalendarService {
         };
     }
 
+    async ensureCalendarClient() {
+        if (!this.config) {
+            await this.loadConfig();
+        }
+
+        if ((!this.calendar || !this.auth) && this.config?.client_id && this.config?.client_secret && this.config?.redirect_uri) {
+            await this.initializeAuth();
+        }
+
+        return Boolean(this.calendar && this.auth && this.config);
+    }
+
     async getActiveCalendarId() {
         const configuredCalendarId = this.getConfiguredCalendarId();
 
         if (configuredCalendarId.toLowerCase() === 'primary') {
             return 'primary';
+        }
+
+        if (!await this.ensureCalendarClient()) {
+            const notReadyError = new Error('Google Calendar no está inicializado');
+            notReadyError.code = 'GOOGLE_CALENDAR_NOT_READY';
+            notReadyError.status = 503;
+            throw notReadyError;
         }
 
         try {
@@ -472,7 +491,11 @@ class GoogleCalendarService {
      * Verificar si tiene tokens válidos
      */
     async hasValidTokens() {
-        return await this.isConfigured() && this.config.refresh_token;
+        if (!await this.ensureCalendarClient()) {
+            return false;
+        }
+
+        return await this.isConfigured() && this.config.refresh_token && !!this.calendar;
     }
 
     /**
