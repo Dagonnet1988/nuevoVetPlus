@@ -165,7 +165,6 @@ export class CitaFormComponent implements OnInit {
   private async loadPacientes(): Promise<void> {
     try {
       const response: any = await firstValueFrom(this.pacientesService.getMascotas(1, 1000));
-      console.log('Respuesta pacientes en form:', response);
 
       // La respuesta puede tener diferentes estructuras
       let data: any[] = [];
@@ -212,7 +211,6 @@ export class CitaFormComponent implements OnInit {
   private async loadVeterinarios(): Promise<void> {
     try {
       const response = await firstValueFrom(this.citasService.getVeterinarios());
-      console.log('Respuesta veterinarios en form:', response);
       const data = response?.data;
       if (Array.isArray(data)) {
         const normalizados = data

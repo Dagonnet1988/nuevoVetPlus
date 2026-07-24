@@ -1352,12 +1352,14 @@ class BidirectionalSyncService {
         const current = currentResult.rows[0];
         const fechaInicioBogota = this.toBogotaDateTime(eventData?.fecha_inicio, '08:00:00');
         const fechaFinBogota = this.toBogotaDateTime(eventData?.fecha_fin, '09:00:00');
+        const currentInicioBogota = this.toBogotaDateTime(current?.fecha_inicio, '08:00:00');
+        const currentFinBogota = this.toBogotaDateTime(current?.fecha_fin, '09:00:00');
         const safeTipo = this.normalizeAppointmentType(eventData?.tipo);
         const safeMotivo = this.sanitizeRichTextToPlain(eventData?.motivo || 'Importado desde Google Calendar');
         
         return (
-            new Date(current.fecha_inicio).getTime() !== new Date(fechaInicioBogota).getTime() ||
-            new Date(current.fecha_fin).getTime() !== new Date(fechaFinBogota).getTime() ||
+            currentInicioBogota !== fechaInicioBogota ||
+            currentFinBogota !== fechaFinBogota ||
             current.tipo !== safeTipo ||
             current.motivo !== safeMotivo
         );

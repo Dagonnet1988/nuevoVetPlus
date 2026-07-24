@@ -1167,6 +1167,8 @@ export const getAppointments = async (req, res) => {
         const mainQuery = `
             SELECT 
                 c.*,
+                to_char(c.fecha_inicio, 'YYYY-MM-DD HH24:MI:SS') as fecha_inicio,
+                to_char(c.fecha_fin, 'YYYY-MM-DD HH24:MI:SS') as fecha_fin,
                 m.nombre as mascota_nombre,
                 m.especie,
                 m.raza,

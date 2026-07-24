@@ -800,10 +800,8 @@ export class GoogleCalendarConfigComponent implements OnInit {
   }
 
   private loadStatus(): void {
-    console.log('Cargando estado de Google Calendar...');
     this.configuracionService.getGoogleCalendarStatus().subscribe({
       next: (status) => {
-        console.log('Estado cargado:', status);
         this.status.set(status);
       },
       error: (error) => {
@@ -1342,12 +1340,10 @@ export class GoogleCalendarConfigComponent implements OnInit {
   // ===============================
 
   private setupStorageListeners(): void {
-    console.log('🔧 Configurando listener de storage para Google Calendar');
     window.addEventListener('storage', this.storageListener);
   }
 
   private setupMessageListeners(): void {
-    console.log('🔧 Configurando listener de mensajes para Google Calendar');
     window.addEventListener('message', this.messageListener);
   }
 
