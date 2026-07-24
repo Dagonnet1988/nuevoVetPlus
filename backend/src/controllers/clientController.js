@@ -172,7 +172,8 @@ export async function getClients(req, res) {
         cedula,
         fecha_nacimiento,
         activo,
-        consentimiento_firmado,
+        CASE WHEN ultimo_consent.estado = 'firmado' THEN true ELSE false END AS consentimiento_firmado,
+        ultimo_consent.estado AS consentimiento_estado_actual,
         created_at,
         (SELECT COUNT(*) FROM clinical.mascotas WHERE id_cliente = c.id_cliente AND activo = true) as total_mascotas,
         (
@@ -186,6 +187,14 @@ export async function getClients(req, res) {
           LIMIT 1
         ) as foto_primer_mascota
       FROM clinical.clientes c
+      LEFT JOIN LATERAL (
+        SELECT cs.estado
+        FROM clinical.consentimientos cs
+        WHERE cs.id_cliente = c.id_cliente
+          AND cs.id_tenant = c.id_tenant
+        ORDER BY cs.created_at DESC
+        LIMIT 1
+      ) ultimo_consent ON true
       WHERE c.id_tenant = $1
     `;
     

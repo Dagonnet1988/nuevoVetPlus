@@ -161,6 +161,15 @@ export async function crearConsentimiento(req, res) {
     );
     const consentimiento = insertResult.rows[0];
 
+    // Al generar un nuevo enlace, el estado vigente vuelve a pendiente.
+    await query(
+      `UPDATE clinical.clientes
+       SET consentimiento_firmado = false,
+           id_consentimiento_vigente = NULL
+       WHERE id_cliente = $1 AND id_tenant = $2`,
+      [id, tenantId]
+    );
+
     // Construir URL pública de firma
     const firmaUrl = `${FRONTEND_URL}/consentimiento/${token}`;
 
@@ -295,6 +304,15 @@ export async function reenviarEnlaceConsentimiento(req, res) {
        VALUES ($1, $2, 'pendiente', $3, $4, $5, $6)
        RETURNING id_consentimiento, token`,
       [id, versionResult.rows[0].id_version, token, expiresAt, userId, tenantId]
+    );
+
+    // El reenvío crea una nueva solicitud pendiente: reflejar estado en cliente.
+    await query(
+      `UPDATE clinical.clientes
+       SET consentimiento_firmado = false,
+           id_consentimiento_vigente = NULL
+       WHERE id_cliente = $1 AND id_tenant = $2`,
+      [id, tenantId]
     );
 
     const firmaUrl = `${FRONTEND_URL}/consentimiento/${token}`;
