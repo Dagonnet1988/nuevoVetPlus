@@ -6,6 +6,7 @@ import {
   signal
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { firstValueFrom } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
@@ -117,10 +118,30 @@ export class ConsentimientoStatusComponent implements OnInit {
   }
 
   enviarConfirmacionPdfPorWhatsApp(): void {
+    void this.enviarConfirmacionPdfPorWhatsAppConAdjunto();
+  }
+
+  private async enviarConfirmacionPdfPorWhatsAppConAdjunto(): Promise<void> {
     const nombre = this.clienteNombre || 'propietario';
     const mensaje =
       `Hola ${nombre}, te compartimos por este medio la confirmación de tu consentimiento firmado. ` +
       `Si no recibiste el PDF por correo, por favor responde este mensaje para reenviarlo.`;
+
+    const pdfFile = await this.prepararPdfConsentimiento();
+    if (pdfFile && this.canShareFiles([pdfFile])) {
+      try {
+        await navigator.share({
+          title: `Consentimiento firmado - ${nombre}`,
+          text: mensaje,
+          files: [pdfFile]
+        });
+        this.snackBar.open('Compartiendo PDF por WhatsApp...', 'Cerrar', { duration: 2200 });
+        return;
+      } catch (error: any) {
+        if (error?.name === 'AbortError') return;
+        console.warn('No se pudo compartir el PDF del consentimiento:', error);
+      }
+    }
 
     this.abrirWhatsApp(mensaje, this.clienteTelefono, 'No se pudo abrir WhatsApp en el navegador');
   }
@@ -340,6 +361,26 @@ export class ConsentimientoStatusComponent implements OnInit {
     }
 
     this.snackBar.open('Abriendo WhatsApp Web/App…', 'Cerrar', { duration: 2200 });
+  }
+
+  private async prepararPdfConsentimiento(): Promise<File | null> {
+    try {
+      const resp = await firstValueFrom(this.service.descargarPDF(this.idCliente));
+      const blob = resp.body;
+      if (!blob) return null;
+
+      const pdfBlob = blob.type ? blob : new Blob([blob], { type: 'application/pdf' });
+      const fileName = this.buildFriendlyPdfName();
+      return new File([pdfBlob], fileName, { type: 'application/pdf' });
+    } catch (error) {
+      console.warn('No se pudo preparar el PDF del consentimiento para WhatsApp:', error);
+      return null;
+    }
+  }
+
+  private canShareFiles(files: File[]): boolean {
+    const nav = navigator as Navigator & { canShare?: (data: { files?: File[] }) => boolean };
+    return typeof nav.share === 'function' && typeof nav.canShare === 'function' && nav.canShare({ files });
   }
 
   private normalizarTelefonoWhatsApp(raw: string | null | undefined): string | null {
