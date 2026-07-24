@@ -1095,28 +1095,21 @@ export class CitaFormComponent implements OnInit {
   }
 
   private parseLocalDateForForm(fechaStr: string): Date {
-    // SOLUCIÓN SIMPLE: El navegador YA hace la conversión correctamente
-    // UTC 14:00Z -> 9:00 AM Colombia (automático del navegador)
-    // Solo necesitamos usar new Date() sin modificaciones adicionales
+    const raw = String(fechaStr || '').trim();
 
-    // console.log('📥 parseLocalDateForForm INPUT:', {
-    //   fechaStr,
-    //   includes_Z: fechaStr.includes('Z')
-    // });
+    // Trata YYYY-MM-DDTHH:mm:ss (sin zona) como hora local explícita.
+    const localDateTime = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if (localDateTime && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)) {
+      const year = Number(localDateTime[1]);
+      const month = Number(localDateTime[2]) - 1;
+      const day = Number(localDateTime[3]);
+      const hours = Number(localDateTime[4]);
+      const minutes = Number(localDateTime[5]);
+      const seconds = Number(localDateTime[6] || '0');
+      return new Date(year, month, day, hours, minutes, seconds, 0);
+    }
 
-    // Simplemente usar la conversión automática del navegador
-    const fecha = new Date(fechaStr);
-
-    // console.log('📤 parseLocalDateForForm OUTPUT:', {
-    //   original: fechaStr,
-    //   converted: fecha,
-    //   hours: fecha.getHours(),
-    //   minutes: fecha.getMinutes(),
-    //   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    //   conversion: `${fechaStr} -> ${fecha.getHours()}:${fecha.getMinutes().toString().padStart(2, '0')}`
-    // });
-
-    return fecha;
+    return new Date(raw);
   }
 
   private formatDateOnly(value: Date | string): string {

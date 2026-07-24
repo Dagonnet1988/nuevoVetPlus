@@ -528,6 +528,11 @@
   align-items: flex-start;
 }
 
+.document-details {
+  min-width: 0;
+  flex: 1;
+}
+
 .document-icon {
   color: #666;
   font-size: 24px;
@@ -586,12 +591,18 @@
 .document-details h4 {
   margin: 0 0 4px 0;
   color: #333;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .document-details p {
   margin: 0 0 8px 0;
   color: #666;
   font-size: 14px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .document-date {

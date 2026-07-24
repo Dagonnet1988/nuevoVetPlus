@@ -242,6 +242,19 @@ const diffMinutes = (start, end) => {
     return Math.round((end.getTime() - start.getTime()) / (1000 * 60));
 };
 
+const formatLocalDateTime = (value) => {
+    if (!(value instanceof Date) || Number.isNaN(value.getTime())) return null;
+
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    const hours = String(value.getHours()).padStart(2, '0');
+    const minutes = String(value.getMinutes()).padStart(2, '0');
+    const seconds = String(value.getSeconds()).padStart(2, '0');
+
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+};
+
 const capitalizeFirst = (value) => {
     const raw = String(value || '').trim();
     if (!raw) return raw;
@@ -928,8 +941,8 @@ export const previewRecurringAppointments = async (req, res) => {
                 total: ocurrencias.length,
                 ocurrencias: ocurrencias.map((o, index) => ({
                     indice: index + 1,
-                    fecha_inicio: o.start.toISOString(),
-                    fecha_fin: o.end.toISOString()
+                    fecha_inicio: formatLocalDateTime(o.start),
+                    fecha_fin: formatLocalDateTime(o.end)
                 }))
             }
         });

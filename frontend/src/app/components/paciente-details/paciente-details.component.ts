@@ -235,16 +235,17 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
         if (response.success && response.data) {
           const citas = response.data;
           const citaDate = (c: any) => c.fecha_cita || c.fecha_inicio || c.fecha;
+          const now = new Date();
 
           // Buscar la próxima cita pendiente o confirmada
           const proximasCitas = citas.filter((c: any) =>
             ['pendiente', 'confirmada'].includes(c.estado) &&
-            new Date(citaDate(c)) > new Date()
-          ).sort((a: any, b: any) => new Date(citaDate(a)).getTime() - new Date(citaDate(b)).getTime());
+            this.parseDateSafe(citaDate(c)).getTime() > now.getTime()
+          ).sort((a: any, b: any) => this.parseDateSafe(citaDate(a)).getTime() - this.parseDateSafe(citaDate(b)).getTime());
 
           const citasPasadas = citas
-            .filter((c: any) => ['completada', 'en_curso'].includes(String(c.estado || '').toLowerCase()) && new Date(citaDate(c)) <= new Date())
-            .sort((a: any, b: any) => new Date(citaDate(b)).getTime() - new Date(citaDate(a)).getTime());
+            .filter((c: any) => ['completada', 'en_curso'].includes(String(c.estado || '').toLowerCase()) && this.parseDateSafe(citaDate(c)).getTime() <= now.getTime())
+            .sort((a: any, b: any) => this.parseDateSafe(citaDate(b)).getTime() - this.parseDateSafe(citaDate(a)).getTime());
 
           const citasEventos = citas.map((c: any) => ({
             id: c.id_cita,
@@ -300,11 +301,39 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
 
   formatDate(date?: string): string {
     if (!date) return '';
-    return new Date(date).toLocaleDateString('es-ES', {
+    const parsed = this.parseDateSafe(date);
+    return parsed.toLocaleDateString('es-ES', {
       year: 'numeric',
       month: 'long',
       day: 'numeric'
     });
+  }
+
+  private parseDateSafe(value: unknown): Date {
+    const raw = String(value || '').trim();
+    if (!raw) return new Date(NaN);
+
+    // Evita corrimiento por UTC cuando llega solo fecha (YYYY-MM-DD).
+    const dateOnly = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (dateOnly) {
+      const year = Number(dateOnly[1]);
+      const month = Number(dateOnly[2]) - 1;
+      const day = Number(dateOnly[3]);
+      return new Date(year, month, day, 0, 0, 0, 0);
+    }
+
+    const localDateTime = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if (localDateTime && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)) {
+      const year = Number(localDateTime[1]);
+      const month = Number(localDateTime[2]) - 1;
+      const day = Number(localDateTime[3]);
+      const hours = Number(localDateTime[4]);
+      const minutes = Number(localDateTime[5]);
+      const seconds = Number(localDateTime[6] || '0');
+      return new Date(year, month, day, hours, minutes, seconds, 0);
+    }
+
+    return new Date(raw);
   }
 
   getEventIcon(tipo: string): string {
