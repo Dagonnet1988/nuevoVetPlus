@@ -305,6 +305,9 @@ function sectionTitle(doc, title) {
 
 /** Fila etiqueta + valor en dos columnas */
 function row(doc, label, value, opts = {}) {
+  const rawValue = value == null ? '' : String(value).trim();
+  if (!rawValue || rawValue === '—') return;
+
   ensureSpace(doc, 26);
   const col  = opts.col ?? 0;           // 0 = izq, 1 = der
   const cols = opts.cols ?? 1;          // 1 = full, 2 = mitad
