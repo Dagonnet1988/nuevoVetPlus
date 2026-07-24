@@ -14,6 +14,7 @@ import authRoutes from './src/routes/auth.js';
 import clinicalRoutes from './src/routes/clinical.js';
 import auditRoutes from './src/routes/audit.js';
 import superadminRoutes from './src/routes/superadmin.js';
+import publicRoutes from './src/routes/public.js';
 import googleCalendarRoutes from './src/routes/googleCalendar.js';
 import emailConfigRoutes from './src/routes/emailConfigRoutes.js';
 import documentEmailRoutes from './src/routes/documentEmailRoutes.js';
@@ -243,6 +244,8 @@ app.use('/api/superadmin',
     auditAuthActivity,
     superadminRoutes
 );
+
+app.use('/api/public', publicRoutes);
 
 app.use('/api/clinical', 
     endpointRateLimit('clinical.*'),
