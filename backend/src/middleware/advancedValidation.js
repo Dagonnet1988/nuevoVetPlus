@@ -269,13 +269,19 @@ export const preventSQLInjection = (req, res, next) => {
     };
     
     const checkObject = (obj) => {
+        if (!obj || typeof obj !== 'object') {
+            return false;
+        }
+
         for (const key in obj) {
-            if (obj.hasOwnProperty(key)) {
-                if (typeof obj[key] === 'object' && obj[key] !== null) {
-                    if (checkObject(obj[key])) return true;
-                } else if (checkValue(obj[key]) || checkValue(key)) {
-                    return true;
-                }
+            if (!Object.prototype.hasOwnProperty.call(obj, key)) {
+                continue;
+            }
+
+            if (typeof obj[key] === 'object' && obj[key] !== null) {
+                if (checkObject(obj[key])) return true;
+            } else if (checkValue(obj[key]) || checkValue(key)) {
+                return true;
             }
         }
         return false;
