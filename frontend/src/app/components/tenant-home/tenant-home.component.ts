@@ -109,7 +109,7 @@ interface TenantDirectoryResponse {
               <span>D.A. developments</span>
               <span>Desarrollo web</span>
               <span>Soporte y mantenimiento</span>
-              <a class="footer-da-link" href="mailto:contacto@dadev.co">contacto@dadev.co</a>
+              <a class="footer-da-link" href="mailto:contacto@dadev.com">contacto@dadev.com</a>
             </p>
           </div>
         </div>
