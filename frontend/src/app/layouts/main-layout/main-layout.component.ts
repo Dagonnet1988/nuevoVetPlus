@@ -1,7 +1,7 @@
 import { Component, signal, ViewChild, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
-import { MatSidenavModule, MatSidenavContainer } from '@angular/material/sidenav';
+import { MatSidenavModule, MatSidenavContainer, MatSidenav } from '@angular/material/sidenav';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatListModule } from '@angular/material/list';
 import { MatIconModule } from '@angular/material/icon';
@@ -79,6 +79,14 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
               <mat-icon>{{ collapsed() ? 'chevron_right' : 'chevron_left' }}</mat-icon>
             </button>
           }
+          @if (isMobile()) {
+            <button mat-icon-button
+                    class="mobile-close-btn"
+                    (click)="drawer.close()"
+                    aria-label="Ocultar menú">
+              <mat-icon>close</mat-icon>
+            </button>
+          }
         </div>
 
         <!-- Menú de navegación -->
@@ -87,6 +95,7 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
             <a mat-list-item
                [routerLink]="item.route"
                routerLinkActive="active-link"
+              (click)="onNavItemClick(drawer)"
                class="nav-item"
                [class.nav-item-collapsed]="collapsed() && !isMobile()"
                [matTooltip]="collapsed() && !isMobile() ? item.label : ''"
@@ -315,6 +324,11 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
       flex-shrink: 0;
       color: #666;
       z-index: 1;
+    }
+
+    .mobile-close-btn {
+      flex-shrink: 0;
+      color: #666;
     }
 
     .sidenav.collapsed .collapse-btn {
@@ -867,6 +881,12 @@ export class MainLayoutComponent implements OnDestroy {
     // Notificar a mat-sidenav-container para que recalcule el margen del contenido
     // Esperar a que termine la transición CSS (250ms) y luego recalcular márgenes
     setTimeout(() => this.sidenavContainer?.updateContentMargins(), 260);
+  }
+
+  onNavItemClick(drawer: MatSidenav): void {
+    if (this.isMobile()) {
+      void drawer.close();
+    }
   }
 
   filteredMenuItems() {

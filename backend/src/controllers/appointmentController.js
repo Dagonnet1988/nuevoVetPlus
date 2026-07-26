@@ -11,25 +11,40 @@ import { renderEmailTemplate } from '../services/emailTemplateService.js';
  * Salida: "2025-08-19 08:00:00" (hora local Colombia)
  */
 const convertirFechaAColombia = (fechaStr) => {
-    // Si viene con zona horaria (-05:00 o Z), convertir a hora Colombia
-    if (fechaStr.includes('Z') || fechaStr.includes('+') || fechaStr.includes('-05:00')) {
-        const fecha = new Date(fechaStr);
-        // Convertir a zona horaria de Colombia
-        const fechaColombia = new Date(fecha.getTime() - (5 * 60 * 60 * 1000)); // UTC-5
-        return fechaColombia.toISOString().slice(0, 19).replace('T', ' ');
+    const raw = String(fechaStr || '').trim();
+    if (!raw) return raw;
+
+    // Fecha-only: conservar día local sin forzar UTC.
+    const ymdOnly = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (ymdOnly) {
+        return `${ymdOnly[1]}-${ymdOnly[2]}-${ymdOnly[3]} 00:00:00`;
     }
-    
-    // Si ya viene en formato local, solo cambiar T por espacio
-    if (fechaStr.includes('T')) {
-        return fechaStr.slice(0, 19).replace('T', ' ');
+
+    // Fecha/hora sin zona: tratarla como local Bogotá y enviarla tal cual.
+    const localDateTime = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+    if (localDateTime && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)) {
+        return `${localDateTime[1]}-${localDateTime[2]}-${localDateTime[3]} ${localDateTime[4]}:${localDateTime[5]}:${localDateTime[6] || '00'}`;
     }
-    
-    // Si solo viene fecha, agregar hora
-    if (fechaStr.length === 10) {
-        return fechaStr + ' 00:00:00';
+
+    // Con zona (Z / +hh:mm / -hh:mm): convertir explícitamente a hora Bogotá.
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) {
+        return raw.replace('T', ' ').slice(0, 19);
     }
-    
-    return fechaStr;
+
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Bogota',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    }).formatToParts(parsed);
+
+    const get = (type) => parts.find((p) => p.type === type)?.value || '00';
+    return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`;
 };
 
 /**
@@ -1112,8 +1127,8 @@ export const createRecurringAppointments = async (req, res) => {
                     codigo_cita,
                     id_mascota,
                     id_veterinario,
-                    convertirFechaAColombia(occ.start.toISOString()),
-                    convertirFechaAColombia(occ.end.toISOString()),
+                    convertirFechaAColombia(formatLocalDateTime(occ.start)),
+                    convertirFechaAColombia(formatLocalDateTime(occ.end)),
                     tipoOcurrencia,
                     motivo || null,
                     notasFinales,
@@ -1464,7 +1479,7 @@ export const updateAppointment = async (req, res) => {
         }
         
         // Sincronizar con Google Calendar si hay cambios significativos
-        let syncResult = { success: true, message: 'No requiere sincronización' };
+        let syncResult = { success: true, skipped: true, message: 'No requiere sincronización' };
         
         const significantFields = ['fecha_inicio', 'fecha_fin', 'tipo', 'motivo', 'id_veterinario', 'id_mascota'];
         const hasSignificantChanges = significantFields.some(field => updateData[field] !== undefined);
@@ -1617,15 +1632,15 @@ export const updateAppointmentStatus = async (req, res) => {
             // Al iniciar consulta, fijar hora real de inicio y un fin tentativo (+1h)
             // para no bloquear toda la jornada hasta que se marque como completada.
             if (estadoDb === 'en_curso' && citaExistente.rows[0].estado !== 'en_curso') {
-                updateFields.push("fecha_inicio = date_trunc('second', CURRENT_TIMESTAMP)");
-                updateFields.push("fecha_fin = (date_trunc('second', CURRENT_TIMESTAMP) + INTERVAL '1 hour')");
+                updateFields.push("fecha_inicio = date_trunc('second', CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')");
+                updateFields.push("fecha_fin = (date_trunc('second', CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota') + INTERVAL '1 hour')");
             }
 
             // Al completar, fijar hora real de fin. Si la cita tenía inicio futuro,
             // normalizamos también el inicio para conservar coherencia temporal.
             if (estadoDb === 'completada') {
-                updateFields.push("fecha_fin = date_trunc('second', CURRENT_TIMESTAMP)");
-                updateFields.push("fecha_inicio = CASE WHEN fecha_inicio > date_trunc('second', CURRENT_TIMESTAMP) THEN date_trunc('second', CURRENT_TIMESTAMP) ELSE fecha_inicio END");
+                updateFields.push("fecha_fin = date_trunc('second', CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')");
+                updateFields.push("fecha_inicio = CASE WHEN fecha_inicio > date_trunc('second', CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota') THEN date_trunc('second', CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota') ELSE fecha_inicio END");
             }
 
             const result = await txClient.query(`
@@ -1796,7 +1811,7 @@ export const updateAppointmentStatus = async (req, res) => {
             });
 
             // 🔥 SINCRONIZAR CON GOOGLE CALENDAR SI HAY CAMBIO DE ESTADO
-            let syncResult = { success: true, message: 'No requiere sincronización' };
+            let syncResult = { success: true, skipped: true, message: 'No requiere sincronización' };
 
             if (citaActualizada && citaActualizada.google_event_id) {
                 try {
@@ -1907,7 +1922,7 @@ export const cancelAppointment = async (req, res) => {
         const citaCancelada = await getAppointmentWithDetails(id);
         
         // Eliminar de Google Calendar si existe
-        let syncResult = { success: true, message: 'Sin evento en Google Calendar' };
+        let syncResult = { success: true, skipped: true, message: 'Sin evento en Google Calendar' };
         if (citaCancelada && citaCancelada.google_event_id) {
             syncResult = await syncAppointmentWithGoogle(citaCancelada, 'delete');
         }

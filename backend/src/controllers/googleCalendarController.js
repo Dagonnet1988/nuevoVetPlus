@@ -1591,12 +1591,30 @@ export const syncChangesFromGoogle = async (req, res) => {
             });
         }
 
+        const created = Number(syncResult?.results?.created || 0);
+        const updated = Number(syncResult?.results?.updated || 0);
+        const deleted = Number(syncResult?.results?.deleted || 0);
+        const totalApplied = created + updated + deleted;
+
+        const message = totalApplied > 0
+          ? (effectiveOnlyToday
+            ? `Sincronización de hoy completada (${totalApplied} cambios aplicados)`
+            : `Sincronización por rango completada (${totalApplied} cambios aplicados)`)
+          : (effectiveOnlyToday
+            ? 'Sincronización de hoy completada sin cambios aplicados'
+            : 'Sincronización por rango completada sin cambios aplicados');
+
         res.json({
-            success: true,
-          message: effectiveOnlyToday
-            ? 'Sincronización de cambios de hoy completada'
-            : 'Sincronización de cambios por rango completada',
-            data: syncResult.results
+          success: true,
+          message,
+          data: syncResult.results,
+          sync_summary: {
+            applied_changes: totalApplied,
+            created,
+            updated,
+            deleted,
+            errors: Array.isArray(syncResult?.results?.errors) ? syncResult.results.errors.length : 0
+          }
         });
 
     } catch (error) {

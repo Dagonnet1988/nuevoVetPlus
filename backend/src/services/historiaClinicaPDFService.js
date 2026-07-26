@@ -30,7 +30,14 @@ function toCamelCase(str = '') {
 function fmtDate(val) {
   if (!val) return '—';
   const d = new Date(val);
-  return isNaN(d) ? String(val) : d.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return isNaN(d)
+    ? String(val)
+    : d.toLocaleDateString('es-CO', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        timeZone: 'America/Bogota'
+      });
 }
 
 function fmtDateTime(val) {
@@ -44,6 +51,7 @@ function fmtDateTime(val) {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
+    timeZone: 'America/Bogota'
   });
 }
 
