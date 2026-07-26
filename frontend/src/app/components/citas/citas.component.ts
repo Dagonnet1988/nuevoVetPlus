@@ -845,26 +845,24 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
     return fecha;
   }
 
-  /** Calcula slotMinTime/slotMaxTime: fijo 07:00-18:00, se amplía si hay citas fuera */
+  /** Calcula slotMinTime/slotMaxTime: fijo 07:00-18:00, se amplía solo hacia el final si hay citas fuera */
   private calcularRangoHorario(citas: Cita[]): { slotMinTime: string; slotMaxTime: string } {
     const BASE_MIN = 7;   // 7:00 AM
     const BASE_MAX = 18;  // 6:00 PM
 
-    let minHour = BASE_MIN;
     let maxHour = BASE_MAX;
 
     for (const cita of citas) {
-      const inicio = new Date(cita.fecha_inicio);
       const fin = new Date(cita.fecha_fin);
-      const hInicio = inicio.getHours();
       const hFin = fin.getHours() + (fin.getMinutes() > 0 ? 1 : 0); // redondear hacia arriba
 
-      if (hInicio < minHour) minHour = Math.max(0, hInicio);
       if (hFin > maxHour) maxHour = Math.min(24, hFin);
     }
 
+    // No se amplía hacia atrás de las 7 AM: una cita con hora mal guardada
+    // (dato viejo con desfase de zona horaria) no debe correr el inicio de la vista.
     const pad = (h: number) => `${String(h).padStart(2, '0')}:00:00`;
-    return { slotMinTime: pad(minHour), slotMaxTime: pad(maxHour) };
+    return { slotMinTime: pad(BASE_MIN), slotMaxTime: pad(maxHour) };
   }
 
   private formatLocalDateForBackend(date: Date): string {
@@ -1419,7 +1417,8 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
       ? Math.min(...horasInicioVisibles)
       : inicioSugerido;
 
-    const slotMinHour = Math.max(0, Math.min(inicioSugerido, horaMasTempranaVisible));
+    // Nunca por debajo de las 7 AM (una cita con hora mal guardada no debe adelantar el inicio).
+    const slotMinHour = Math.max(7, Math.min(inicioSugerido, horaMasTempranaVisible));
 
     return {
       slotMinTime: `${String(slotMinHour).padStart(2, '0')}:00:00`,

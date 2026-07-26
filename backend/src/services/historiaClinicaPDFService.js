@@ -681,35 +681,37 @@ function seccionValoracion(doc, d) {
 
 function seccionPerimetria(doc, d) {
   const rows = [
-    ['Miembro Torácico Derecho (MTD)', d.perimetria_mtd_1, d.perimetria_mtd_2],
-    ['Miembro Torácico Izquierdo (MTI)', d.perimetria_mti_1, d.perimetria_mti_2],
-    ['Miembro Pélvico Derecho (MPD)', d.perimetria_mpd_1, d.perimetria_mpd_2],
-    ['Miembro Pélvico Izquierdo (MPI)', d.perimetria_mpi_1, d.perimetria_mpi_2],
-  ].filter(([, m1, m2]) => hasAnyValue(m1) || hasAnyValue(m2));
+    ['Miembro Torácico Derecho (MTD)', d.perimetria_mtd_1, d.perimetria_mtd_2, null],
+    ['Miembro Torácico Izquierdo (MTI)', d.perimetria_mti_1, d.perimetria_mti_2, null],
+    ['Miembro Pélvico Derecho (MPD)', d.perimetria_mpd_1, d.perimetria_mpd_2, d.perimetria_mpd_3],
+    ['Miembro Pélvico Izquierdo (MPI)', d.perimetria_mpi_1, d.perimetria_mpi_2, d.perimetria_mpi_3],
+  ].filter(([, m1, m2, m3]) => hasAnyValue(m1) || hasAnyValue(m2) || hasAnyValue(m3));
 
   if (!rows.length) return;
 
   sectionTitle(doc, 'Perímetría (cm)');
 
-  const COL = [MARGIN, MARGIN + 280, MARGIN + 380];
+  const COL = [MARGIN, MARGIN + 230, MARGIN + 300, MARGIN + 370];
   const ROW_H = 14;
   ensureSpace(doc, ROW_H * 2);
   const hy = doc.y;
   doc.rect(MARGIN, hy, CONTENT * 0.9, ROW_H).fill(COLORS.light);
   doc.font('Helvetica-Bold').fontSize(7).fillColor(COLORS.mid)
-    .text('Miembro', COL[0] + 2, hy + 4, { width: 270 })
-    .text('Medida 1', COL[1] + 2, hy + 4, { width: 90 })
-    .text('Medida 2', COL[2] + 2, hy + 4, { width: 90 });
+    .text('Miembro', COL[0] + 2, hy + 4, { width: 220 })
+    .text('Medida 1', COL[1] + 2, hy + 4, { width: 70 })
+    .text('Medida 2', COL[2] + 2, hy + 4, { width: 70 })
+    .text('Medida 3', COL[3] + 2, hy + 4, { width: 70 });
   doc.y = hy + ROW_H;
 
-  rows.forEach(([lbl, m1, m2], idx) => {
+  rows.forEach(([lbl, m1, m2, m3], idx) => {
     ensureSpace(doc, ROW_H + 4);
     const y = doc.y;
     if (idx % 2 === 0) doc.rect(MARGIN, y, CONTENT * 0.9, ROW_H).fill('#F9FAFB');
     doc.font('Helvetica').fontSize(8).fillColor(COLORS.dark)
-      .text(field(lbl), COL[0] + 2, y + 4, { width: 270 })
-      .text(field(m1), COL[1] + 2, y + 4, { width: 90 })
-      .text(field(m2), COL[2] + 2, y + 4, { width: 90 });
+      .text(field(lbl), COL[0] + 2, y + 4, { width: 220 })
+      .text(field(m1), COL[1] + 2, y + 4, { width: 70 })
+      .text(field(m2), COL[2] + 2, y + 4, { width: 70 })
+      .text(field(m3), COL[3] + 2, y + 4, { width: 70 });
     doc.y = y + ROW_H;
   });
   doc.moveDown(0.6);

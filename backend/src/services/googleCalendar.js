@@ -950,17 +950,29 @@ class GoogleCalendarService {
                 calendarId
             });
 
-            const response = await this.calendar.events.list({
-                calendarId,
-                timeMin: formattedStartDate,
-                timeMax: formattedEndDate,
-                singleEvents: true,
-                orderBy: 'startTime'
-            });
+            // Google Calendar limita cada página a 250 eventos (por defecto) o hasta
+            // 2500 con maxResults explícito; para rangos amplios hay que seguir
+            // nextPageToken o se pierden eventos en silencio.
+            const events = [];
+            let pageToken;
+            do {
+                const response = await this.calendar.events.list({
+                    calendarId,
+                    timeMin: formattedStartDate,
+                    timeMax: formattedEndDate,
+                    singleEvents: true,
+                    orderBy: 'startTime',
+                    maxResults: 2500,
+                    pageToken
+                });
+
+                events.push(...(response.data.items || []));
+                pageToken = response.data.nextPageToken;
+            } while (pageToken);
 
             return {
                 success: true,
-                events: response.data.items || []
+                events
             };
 
         } catch (error) {
@@ -994,18 +1006,27 @@ class GoogleCalendarService {
                     await this.refreshAccessToken();
                     console.log('✅ Token refrescado, reintentando...');
                     
-                    // Reintentar la operación
-                    const response = await this.calendar.events.list({
-                        calendarId,
-                        timeMin: startDateTime,
-                        timeMax: endDateTime,
-                        singleEvents: true,
-                        orderBy: 'startTime'
-                    });
-                    
+                    // Reintentar la operación (con paginación, igual que el intento inicial)
+                    const retryEvents = [];
+                    let retryPageToken;
+                    do {
+                        const response = await this.calendar.events.list({
+                            calendarId,
+                            timeMin: formattedStartDate,
+                            timeMax: formattedEndDate,
+                            singleEvents: true,
+                            orderBy: 'startTime',
+                            maxResults: 2500,
+                            pageToken: retryPageToken
+                        });
+
+                        retryEvents.push(...(response.data.items || []));
+                        retryPageToken = response.data.nextPageToken;
+                    } while (retryPageToken);
+
                     return {
                         success: true,
-                        events: response.data.items || []
+                        events: retryEvents
                     };
                 } catch (refreshError) {
                     console.error('❌ Error al refrescar token:', refreshError);

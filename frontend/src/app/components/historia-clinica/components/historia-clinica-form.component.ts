@@ -687,8 +687,10 @@ export class HistoriaClinicaFormComponent implements OnInit, OnDestroy, CanCompo
         perimetria_mti_2: [null],
         perimetria_mpd_1: [null],
         perimetria_mpd_2: [null],
+        perimetria_mpd_3: [null],
         perimetria_mpi_1: [null],
         perimetria_mpi_2: [null],
+        perimetria_mpi_3: [null],
       }),
 
       exploracion: this.fb.group({

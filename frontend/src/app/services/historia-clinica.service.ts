@@ -71,8 +71,10 @@ export interface DatosValoracionInicial {
   perimetria_mti_2?:           number;
   perimetria_mpd_1?:           number;
   perimetria_mpd_2?:           number;
+  perimetria_mpd_3?:           number;
   perimetria_mpi_1?:           number;
   perimetria_mpi_2?:           number;
+  perimetria_mpi_3?:           number;
   hallazgos_osteoarticulares?: string;
   goniometria?:                Record<string, any>;
   prueba_cajon?:               string;

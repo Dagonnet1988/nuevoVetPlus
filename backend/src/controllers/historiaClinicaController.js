@@ -139,8 +139,10 @@ function extraerDatosHijo(tipo, body) {
         perimetria_mti_2:           body.perimetria_mti_2           ?? null,
         perimetria_mpd_1:           body.perimetria_mpd_1           ?? null,
         perimetria_mpd_2:           body.perimetria_mpd_2           ?? null,
+        perimetria_mpd_3:           body.perimetria_mpd_3           ?? null,
         perimetria_mpi_1:           body.perimetria_mpi_1           ?? null,
         perimetria_mpi_2:           body.perimetria_mpi_2           ?? null,
+        perimetria_mpi_3:           body.perimetria_mpi_3           ?? null,
         hallazgos_osteoarticulares: body.hallazgos_osteoarticulares ?? null,
         goniometria:                {
           hombro_flexion_d:    body.gonio_hombro_flexion_d    ?? null,

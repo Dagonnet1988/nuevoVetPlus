@@ -383,23 +383,24 @@ export class HistoriaClinicaDetailsComponent implements OnInit {
     return h?.tipo_documento === 'remision' ? (h.datos as DatosRemision) : null;
   }
 
-  get perimetriaRows(): Array<{ miembro: string; medicion1: string; medicion2: string }> {
+  get perimetriaRows(): Array<{ miembro: string; medicion1: string; medicion2: string; medicion3: string }> {
     const d = this.datosVI;
     if (!d) return [];
 
     const rows = [
-      { miembro: 'Miembro torácico derecho (MTD)', m1: d.perimetria_mtd_1, m2: d.perimetria_mtd_2 },
-      { miembro: 'Miembro torácico izquierdo (MTI)', m1: d.perimetria_mti_1, m2: d.perimetria_mti_2 },
-      { miembro: 'Miembro pélvico derecho (MPD)', m1: d.perimetria_mpd_1, m2: d.perimetria_mpd_2 },
-      { miembro: 'Miembro pélvico izquierdo (MPI)', m1: d.perimetria_mpi_1, m2: d.perimetria_mpi_2 }
+      { miembro: 'Miembro torácico derecho (MTD)', m1: d.perimetria_mtd_1, m2: d.perimetria_mtd_2, m3: undefined },
+      { miembro: 'Miembro torácico izquierdo (MTI)', m1: d.perimetria_mti_1, m2: d.perimetria_mti_2, m3: undefined },
+      { miembro: 'Miembro pélvico derecho (MPD)', m1: d.perimetria_mpd_1, m2: d.perimetria_mpd_2, m3: d.perimetria_mpd_3 },
+      { miembro: 'Miembro pélvico izquierdo (MPI)', m1: d.perimetria_mpi_1, m2: d.perimetria_mpi_2, m3: d.perimetria_mpi_3 }
     ];
 
     return rows
-      .filter((r) => this.hasDisplayValue(r.m1) || this.hasDisplayValue(r.m2))
+      .filter((r) => this.hasDisplayValue(r.m1) || this.hasDisplayValue(r.m2) || this.hasDisplayValue(r.m3))
       .map((r) => ({
         miembro: r.miembro,
         medicion1: this.formatMeasurement(r.m1),
-        medicion2: this.formatMeasurement(r.m2)
+        medicion2: this.formatMeasurement(r.m2),
+        medicion3: this.formatMeasurement(r.m3)
       }));
   }
 
