@@ -397,6 +397,11 @@ export const performanceHeaders = (req, res, next) => {
         }
 
         console.log('Request Performance:', {
+            timestamp_utc: new Date().toISOString(),
+            timestamp_bogota: new Date().toLocaleString('sv-SE', {
+                timeZone: 'America/Bogota',
+                hour12: false
+            }).replace(' ', 'T'),
             method: req.method,
             url: req.originalUrl,
             statusCode: res.statusCode,

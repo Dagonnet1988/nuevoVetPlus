@@ -1530,11 +1530,54 @@ export const importFromGoogleCalendar = async (req, res) => {
             });
         }
 
+        const created = Number(importResult?.results?.created || 0);
+        const updated = Number(importResult?.results?.updated || 0);
+        const skipped = Number(importResult?.results?.skipped || 0);
+        const errors = Array.isArray(importResult?.results?.errors) ? importResult.results.errors.length : 0;
+        const processed = Number(importResult?.results?.processed || 0);
+        const vetEvents = Number(importResult?.results?.vet_events_found || 0);
+        const totalEvents = Number(importResult?.results?.total_google_events || 0);
+        const applied = created + updated;
+
+        const topReasons = Object.entries(importResult?.results?.event_reason_counts || {})
+          .sort((a, b) => Number(b[1]) - Number(a[1]))
+          .slice(0, 5)
+          .map(([reason, count]) => ({ reason, count }));
+
+        console.log('📊 Import Google resumen:', {
+            dry_run: importResult.dry_run,
+            total_google_events: totalEvents,
+            vet_events_found: vetEvents,
+            processed,
+            created,
+            updated,
+            skipped,
+            errors,
+            top_reasons: topReasons
+        });
+
+        const message = dry_run
+          ? `Simulación completada (${applied} crear/actualizar potenciales, ${skipped} omitidos)`
+          : (applied > 0
+              ? `Importación completada (${applied} cambios aplicados)`
+              : `Importación completada sin cambios aplicados (procesados ${processed}, omitidos ${skipped})`);
+
         res.json({
             success: true,
-            message: dry_run ? 'Simulación de importación completada' : 'Importación completada exitosamente',
+            message,
             data: importResult.results,
-            dry_run: importResult.dry_run
+            dry_run: importResult.dry_run,
+            import_summary: {
+                total_google_events: totalEvents,
+                vet_events_found: vetEvents,
+                processed,
+                created,
+                updated,
+                skipped,
+                errors,
+                applied_changes: applied,
+                top_reasons: topReasons
+            }
         });
 
     } catch (error) {

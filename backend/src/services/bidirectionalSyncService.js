@@ -106,7 +106,8 @@ class BidirectionalSyncService {
 
     async createMissingClientAndPet(eventData, matchedData = {}) {
         const tenantId = matchedData?.tenant_id || await this.resolveActiveTenantId();
-        const veterinarioId = matchedData?.veterinario_id || null;
+        const veterinarioId = matchedData?.veterinario_id
+            || await this.resolveFallbackVeterinarioId(tenantId, eventData?.veterinario_nombre);
 
         let clienteId = matchedData?.cliente_id || null;
         let mascotaId = matchedData?.mascota_id || null;
@@ -166,7 +167,8 @@ class BidirectionalSyncService {
             ...matchedData,
             tenant_id: tenantId,
             cliente_id: clienteId,
-            mascota_id: mascotaId
+            mascota_id: mascotaId,
+            veterinario_id: matchedData?.veterinario_id || veterinarioId || null
         };
     }
 
@@ -198,6 +200,47 @@ class BidirectionalSyncService {
         );
 
         return fallback.rows[0]?.id_tenant || null;
+    }
+
+    async resolveFallbackVeterinarioId(tenantId, veterinarioNombre = null) {
+        if (!tenantId) return null;
+
+        const usuariosResult = await query(
+            `SELECT id_usuario, nombre, apellido, rol
+             FROM vetplus_auth.usuarios
+             WHERE id_tenant = $1
+               AND activo = true
+             ORDER BY
+               CASE
+                 WHEN rol = 'vet' THEN 1
+                 WHEN rol = 'admin' THEN 2
+                 WHEN rol = 'aux' THEN 3
+                 ELSE 4
+               END,
+               nombre,
+               apellido`,
+            [tenantId]
+        );
+
+        if (usuariosResult.rows.length === 0) return null;
+
+        if (veterinarioNombre) {
+            const targetVet = this.normalizeText(veterinarioNombre);
+            const targetTokens = targetVet.split(/\s+/).filter(token => token.length >= 3);
+
+            const matchedUser = usuariosResult.rows.find((user) => {
+                const fullName = this.normalizeText(`${user.nombre || ''} ${user.apellido || ''}`);
+                if (fullName === targetVet) return true;
+                if (targetTokens.length === 0) return fullName.includes(targetVet) || targetVet.includes(fullName);
+                return targetTokens.every(token => fullName.includes(token));
+            });
+
+            if (matchedUser) {
+                return matchedUser.id_usuario;
+            }
+        }
+
+        return usuariosResult.rows[0].id_usuario;
     }
 
     normalizeAppointmentType(rawType) {
@@ -273,6 +316,7 @@ class BidirectionalSyncService {
             const results = {
                 total_google_events: importResult.total_events,
                 vet_events_found: importResult.vet_events_found,
+                not_appointment_events: Math.max(0, Number(importResult.total_events || 0) - Number(importResult.vet_events_found || 0)),
                 processed: 0,
                 created: 0,
                 updated: 0,
@@ -280,7 +324,11 @@ class BidirectionalSyncService {
                 errors: [],
                 created_appointments: [],
                 matched_data: [],
-                event_logs: []
+                event_logs: [],
+                event_reason_counts: {},
+                classification_stats: importResult.classification_stats || {},
+                expected_color_ids: importResult.expected_color_ids || [],
+                no_color_match_sample: importResult.no_color_match_sample || []
             };
 
             // Procesar cada evento importado
@@ -423,6 +471,12 @@ class BidirectionalSyncService {
                         details: { error: error.message }
                     });
                 }
+            }
+
+            // Resumen de razones para diagnóstico rápido (sin leer todo event_logs)
+            for (const log of results.event_logs) {
+                const reason = String(log?.reason || 'unknown');
+                results.event_reason_counts[reason] = (results.event_reason_counts[reason] || 0) + 1;
             }
 
             // Actualizar última sincronización
@@ -825,36 +879,9 @@ class BidirectionalSyncService {
                 }
             }
 
-            const veterinariosResult = await query(`
-                SELECT id_usuario, nombre, apellido
-                FROM vetplus_auth.usuarios 
-                WHERE rol IN ('vet', 'admin') 
-                AND id_tenant = $1
-                AND activo = true 
-                ORDER BY rol DESC, nombre, apellido
-            `, [tenantId]);
-
-            if (veterinariosResult.rows.length > 0) {
-                if (veterinario_nombre) {
-                    const targetVet = this.normalizeText(veterinario_nombre);
-                    const targetTokens = targetVet.split(/\s+/).filter(token => token.length >= 3);
-
-                    const matchedVet = veterinariosResult.rows.find(vet => {
-                        const fullName = this.normalizeText(`${vet.nombre || ''} ${vet.apellido || ''}`);
-                        if (fullName === targetVet) return true;
-                        if (targetTokens.length === 0) return fullName.includes(targetVet) || targetVet.includes(fullName);
-                        return targetTokens.every(token => fullName.includes(token));
-                    });
-
-                    if (matchedVet) {
-                        veterinario_id = matchedVet.id_usuario;
-                    }
-                }
-
-                // Fallback: primer veterinario/admin disponible
-                if (!veterinario_id) {
-                    veterinario_id = veterinariosResult.rows[0].id_usuario;
-                }
+            if (!veterinario_id) {
+                // Fallback tolerante: prioriza vet/admin, pero permite aux para no perder citas sin veterinario explícito.
+                veterinario_id = await this.resolveFallbackVeterinarioId(tenantId, veterinario_nombre);
             }
 
             return {
@@ -896,10 +923,14 @@ class BidirectionalSyncService {
      */
     async createAppointmentFromGoogle(eventData, matchedData) {
         try {
-            if (!matchedData?.veterinario_id) {
+            const tenantId = matchedData?.tenant_id || await this.resolveActiveTenantId();
+            const resolvedVeterinarioId = matchedData?.veterinario_id
+                || await this.resolveFallbackVeterinarioId(tenantId, eventData?.veterinario_nombre);
+
+            if (!resolvedVeterinarioId) {
                 return {
                     success: false,
-                    error: 'No se pudo asignar veterinario'
+                    error: 'No se pudo asignar veterinario (no hay usuarios activos en el tenant)'
                 };
             }
 
@@ -943,7 +974,7 @@ class BidirectionalSyncService {
                 id_cita,
                 codigo_cita,
                 matchedData.mascota_id,
-                matchedData.veterinario_id,
+                resolvedVeterinarioId,
                 fechaInicioBogota,
                 fechaFinBogota,
                 safeTipo,
@@ -951,8 +982,8 @@ class BidirectionalSyncService {
                 safeMotivo,
                 safeNotas,
                 eventData.google_event_id,
-                matchedData.veterinario_id,
-                matchedData.tenant_id
+                resolvedVeterinarioId,
+                tenantId
             ]);
 
             return {
@@ -998,12 +1029,7 @@ class BidirectionalSyncService {
                 matchedData = await this.createMissingClientAndPet(change.parsed_data, matchedData);
             }
             
-            if (!matchedData.veterinario_id) {
-                return {
-                    success: false,
-                    error: 'No se pudo asignar veterinario para evento creado'
-                };
-            }
+            // El fallback de veterinario se resuelve dentro de createAppointmentFromGoogle.
 
             const result = await this.createAppointmentFromGoogle(change.parsed_data, matchedData);
             return result;
