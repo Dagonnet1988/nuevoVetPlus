@@ -2455,9 +2455,9 @@ export const getAppointmentStats = async (req, res) => {
         const summaryResult = await query(
             `WITH bounds AS (
                 SELECT
-                    CURRENT_DATE::date AS today,
-                    date_trunc('week', CURRENT_DATE)::date AS week_start,
-                    (date_trunc('week', CURRENT_DATE)::date + INTERVAL '6 day')::date AS week_end
+                    (CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')::date AS today,
+                    date_trunc('week', (CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')::date)::date AS week_start,
+                    (date_trunc('week', (CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')::date)::date + INTERVAL '6 day')::date AS week_end
             )
             SELECT
                 COUNT(*) FILTER (
@@ -2500,10 +2500,10 @@ export const getAppointmentStats = async (req, res) => {
         const estadosQuery = `
             WITH bounds AS (
                 SELECT
-                    date_trunc('week', CURRENT_DATE)::date AS week_start,
-                    (date_trunc('week', CURRENT_DATE)::date + INTERVAL '6 day')::date AS week_end
+                    date_trunc('week', (CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')::date)::date AS week_start,
+                    (date_trunc('week', (CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')::date)::date + INTERVAL '6 day')::date AS week_end
             )
-            SELECT estado, COUNT(*) as cantidad 
+            SELECT estado, COUNT(*) as cantidad
             FROM clinical.calendario_citas 
             CROSS JOIN bounds b
             WHERE id_tenant = $1

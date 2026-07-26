@@ -30,7 +30,14 @@ const pool = new Pool({
 });
 
 // Evento de conexión exitosa
-pool.on('connect', () => {
+pool.on('connect', (client) => {
+  // Fuerza la zona horaria de la sesión, independientemente de la config del
+  // servidor de Postgres (ej. quedó en Europe/Berlin por defecto del hosting).
+  // Sin esto, CURRENT_DATE/NOW() en cualquier query no coinciden con "hoy" en Bogotá.
+  client.query("SET TIME ZONE 'America/Bogota'").catch((err) => {
+    console.error('❌ No se pudo fijar timezone de sesión en Postgres:', err.message);
+  });
+
   if (LOG_DB_CONNECTIONS) {
     console.log('✅ Conectado a PostgreSQL');
   }
