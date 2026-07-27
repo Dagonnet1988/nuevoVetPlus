@@ -68,6 +68,17 @@ public/uploads/
 backend/uploads/
 backend/public/uploads/
 
+# Excepción quirúrgica: íconos por defecto de especie (asset estático de la
+# app, no contenido subido por usuarios) — ver backend/.gitignore para el
+# mismo detalle. Todo lo demás bajo backend/uploads/ sigue ignorado.
+!backend/uploads/
+backend/uploads/*
+!backend/uploads/pacientes/
+backend/uploads/pacientes/*
+!backend/uploads/pacientes/default/
+backend/uploads/pacientes/default/*
+!backend/uploads/pacientes/default/*.svg
+
 # Development and debugging
 debug.log
 error.log

@@ -2308,11 +2308,14 @@ export const syncAllPendingAppointments = async (req, res) => {
             });
         }
 
-        // Obtener citas con sincronización pendiente o fallida
+        // Obtener citas con sincronización pendiente, fallida, o deshabilitada.
+        // 'disabled' queda grabado en las citas creadas/editadas mientras
+        // GOOGLE_SYNC_OUTBOUND_ENABLED estaba en false — una vez activado, ese
+        // estado es obsoleto y debe reintentarse igual que pending/failed.
         const pendingResult = await query(`
             SELECT c.id_cita
             FROM clinical.calendario_citas c
-            WHERE c.google_sync_status IN ('pending', 'failed')
+            WHERE c.google_sync_status IN ('pending', 'failed', 'disabled')
             AND c.estado NOT IN ('cancelada', 'no_asistio')
             AND c.fecha_inicio >= CURRENT_DATE - INTERVAL '1 day'
             ORDER BY c.fecha_inicio ASC

@@ -292,7 +292,6 @@ export class AuthService {
             const { token, refreshToken: newRefreshToken } = response.data;
             this.storageSet(this.TOKEN_KEY, token);
             this.storageSet(this.REFRESH_TOKEN_KEY, newRefreshToken);
-            console.log('Token refrescado automáticamente');
           }
         }),
         catchError(error => {

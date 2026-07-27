@@ -1411,7 +1411,7 @@ class GoogleCalendarService {
                         updatedMin: effectiveUpdatedMin,
                         singleEvents: true,
                         orderBy: 'updated',
-                        maxResults: 100,
+                        maxResults: 250,
                         // Sin esto Google excluye los eventos cancelados de la respuesta
                         // (default showDeleted=false) y una eliminación en Google Calendar
                         // nunca llega a determineChangeType()/handleGoogleEventDeleted.
@@ -1464,12 +1464,32 @@ class GoogleCalendarService {
                 };
             }
 
-            console.log(`📅 Procesando ${response.data.items.length} eventos actualizados`);
+            // Editar una propiedad de una serie recurrente puede tocar el `updated`
+            // de decenas/cientos de instancias a la vez — con más de 250 cambios
+            // desde la última sync (maxResults por página), sin paginar se
+            // descartaban en silencio los que no entraban en la primera página.
+            const allItems = [...response.data.items];
+            let nextPageToken = response.data.nextPageToken;
+            while (nextPageToken) {
+                const pageResponse = await this.calendar.events.list({
+                    calendarId,
+                    updatedMin: effectiveUpdatedMin,
+                    singleEvents: true,
+                    orderBy: 'updated',
+                    maxResults: 250,
+                    showDeleted: true,
+                    pageToken: nextPageToken
+                });
+                allItems.push(...(pageResponse.data.items || []));
+                nextPageToken = pageResponse.data.nextPageToken;
+            }
+
+            console.log(`📅 Procesando ${allItems.length} eventos actualizados`);
             const changes = [];
             let loggedChanges = 0;
             const maxDetailedLogs = 20;
-            
-            for (const event of response.data.items) {
+
+            for (const event of allItems) {
                 const changeType = this.determineChangeType(event);
                 const classification = this.classifyEventForImport(event);
 
@@ -1516,7 +1536,7 @@ class GoogleCalendarService {
                     }
                     loggedChanges++;
                 } else if (loggedChanges === maxDetailedLogs) {
-                    console.log(`ℹ️ Se omiten logs detallados de cambios adicionales para evitar ruido (total eventos: ${response.data.items.length}).`);
+                    console.log(`ℹ️ Se omiten logs detallados de cambios adicionales para evitar ruido (total eventos: ${allItems.length}).`);
                     loggedChanges++;
                 }
             }

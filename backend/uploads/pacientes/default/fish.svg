@@ -1,0 +1,28 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .fish-body { fill: #4169E1; }
+      .fish-fin { fill: #1E90FF; }
+      .fish-eye { fill: #FFF; }
+      .fish-pupil { fill: #000; }
+      .fish-scale { fill: #87CEEB; }
+    </style>
+  </defs>
+  <!-- Cuerpo principal -->
+  <ellipse cx="50" cy="50" rx="25" ry="15" class="fish-body"/>
+  <!-- Cola -->
+  <polygon points="75,50 90,40 90,60" class="fish-fin"/>
+  <!-- Aletas -->
+  <ellipse cx="45" cy="35" rx="8" ry="5" class="fish-fin"/>
+  <ellipse cx="45" cy="65" rx="8" ry="5" class="fish-fin"/>
+  <ellipse cx="35" cy="50" rx="3" ry="8" class="fish-fin"/>
+  <!-- Ojo -->
+  <circle cx="40" cy="45" r="5" class="fish-eye"/>
+  <circle cx="42" cy="43" r="3" class="fish-pupil"/>
+  <!-- Escamas decorativas -->
+  <circle cx="50" cy="45" r="3" class="fish-scale"/>
+  <circle cx="55" cy="50" r="3" class="fish-scale"/>
+  <circle cx="50" cy="55" r="3" class="fish-scale"/>
+  <!-- Boca -->
+  <ellipse cx="28" cy="48" rx="3" ry="2" class="fish-eye"/>
+</svg>

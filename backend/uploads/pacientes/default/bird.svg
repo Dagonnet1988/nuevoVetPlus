@@ -1,0 +1,29 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .bird-body { fill: #FFD700; }
+      .bird-wing { fill: #FFA500; }
+      .bird-beak { fill: #FF8C00; }
+      .bird-eye { fill: #000; }
+      .bird-leg { fill: #FF8C00; }
+    </style>
+  </defs>
+  <!-- Cuerpo -->
+  <ellipse cx="50" cy="60" rx="20" ry="25" class="bird-body"/>
+  <!-- Cabeza -->
+  <circle cx="50" cy="35" r="15" class="bird-body"/>
+  <!-- Ala -->
+  <ellipse cx="60" cy="55" rx="12" ry="18" class="bird-wing"/>
+  <!-- Pico -->
+  <polygon points="40,35 30,38 40,41" class="bird-beak"/>
+  <!-- Ojo -->
+  <circle cx="48" cy="30" r="2" class="bird-eye"/>
+  <!-- Patas -->
+  <line x1="45" y1="85" x2="45" y2="95" stroke="#FF8C00" stroke-width="3"/>
+  <line x1="55" y1="85" x2="55" y2="95" stroke="#FF8C00" stroke-width="3"/>
+  <!-- Dedos -->
+  <line x1="45" y1="95" x2="40" y2="98" stroke="#FF8C00" stroke-width="2"/>
+  <line x1="45" y1="95" x2="50" y2="98" stroke="#FF8C00" stroke-width="2"/>
+  <line x1="55" y1="95" x2="50" y2="98" stroke="#FF8C00" stroke-width="2"/>
+  <line x1="55" y1="95" x2="60" y2="98" stroke="#FF8C00" stroke-width="2"/>
+</svg>

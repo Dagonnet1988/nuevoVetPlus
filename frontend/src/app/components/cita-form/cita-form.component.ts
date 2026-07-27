@@ -272,15 +272,6 @@ export class CitaFormComponent implements OnInit {
   private populateFormWithCita(cita: Cita): void {
     // Parsear fechas usando la lógica correcta de timezone para mostrar en hora local de Colombia
     const fechaInicio = this.parseLocalDateForForm(cita.fecha_inicio);
-    const fechaFin = this.parseLocalDateForForm(cita.fecha_fin);
-    console.log('🔧 populateFormWithCita:', {
-      fecha_inicio_raw: cita.fecha_inicio,
-      fecha_fin_raw: cita.fecha_fin,
-      fechaInicio_parsed: fechaInicio,
-      fechaFin_parsed: fechaFin,
-      duracion: APPOINTMENT_DURATION_MINUTES,
-      hora_inicio_formatted: this.formatTimeFromDateTime(fechaInicio)
-    });
 
     this.citaForm.patchValue({
       mascota_search: '',
@@ -781,19 +772,6 @@ export class CitaFormComponent implements OnInit {
     } catch (error: any) {
       console.error('Error guardando cita:', error);
 
-      // Mostrar errores de validación detallados si están disponibles
-      if (error.error && error.error.errors && Array.isArray(error.error.errors)) {
-        console.log('🔴 Errores de validación detectados:');
-        error.error.errors.forEach((validationError: any, index: number) => {
-          console.log(`❌ Error ${index + 1}:`, {
-            campo: validationError.field,
-            mensaje: validationError.message,
-            valor: validationError.value,
-            ubicacion: validationError.location
-          });
-        });
-      }
-
       let message = 'Error guardando cita';
       if (error.status === 400 && error.error?.errors?.length > 0) {
         // Mostrar el primer error de validación
@@ -813,7 +791,6 @@ export class CitaFormComponent implements OnInit {
 
   private buildFormData(): CitaFormData {
     const formValue = this.citaForm.value;
-    // console.log('🔍 Valores del formulario RAW:', formValue);
 
     const fecha = formValue.fecha;
     const [hours, minutes] = formValue.hora_inicio.split(':').map(Number);
@@ -822,15 +799,6 @@ export class CitaFormComponent implements OnInit {
     const fechaInicio = new Date(fecha);
     // Establecer la hora en zona local (no UTC)
     fechaInicio.setHours(hours, minutes, 0, 0);
-
-    console.log('🕐 Fecha/hora local construida:', {
-      fechaOriginal: fecha,
-      horaSeleccionada: formValue.hora_inicio,
-      fechaInicioLocal: fechaInicio,
-      fechaInicioISO: fechaInicio.toISOString(),
-      zonaHoraria: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      fechaParaBackend: this.citasService.formatearFechaParaBackend(fechaInicio)
-    });
 
     const fechaFin = new Date(fechaInicio.getTime() + (APPOINTMENT_DURATION_MINUTES * 60 * 1000));
 
@@ -845,7 +813,6 @@ export class CitaFormComponent implements OnInit {
       observaciones: formValue.observaciones || undefined
     };
 
-    // console.log('📤 Datos procesados para enviar:', data);
     return data;
   }
 

@@ -922,8 +922,6 @@ export class GoogleCalendarConfigComponent implements OnInit {
       // Después de guardar exitosamente, proceder con OAuth
       this.configuracionService.getGoogleOAuthUrl().subscribe({
         next: (oauthUrl) => {
-          console.log('🔗 URL de OAuth obtenida:', oauthUrl);
-
           // Intentar abrir popup con mejores parámetros para evitar bloqueos
           const left = (screen.width / 2) - (500 / 2);
           const top = (screen.height / 2) - (600 / 2);
@@ -959,7 +957,6 @@ export class GoogleCalendarConfigComponent implements OnInit {
             return;
           }
 
-          console.log('✅ Popup abierto correctamente');
           this.oauthLoading.set(false);
 
           // Escuchar mensajes de la ventana popup
@@ -984,8 +981,6 @@ export class GoogleCalendarConfigComponent implements OnInit {
               return;
             }
 
-            console.log('📩 Mensaje de Google Calendar recibido:', event.data, 'desde:', event.origin);
-
             // Verificar origen por seguridad
             if (event.origin !== window.location.origin) {
               console.warn('⚠️ Origen no válido:', event.origin, 'esperado:', window.location.origin);
@@ -1006,7 +1001,6 @@ export class GoogleCalendarConfigComponent implements OnInit {
                   panelClass: event.data.testResult?.success ? ['success-snackbar'] : ['warning-snackbar']
                 });
 
-                console.log('OAuth exitoso:', event.data);
                 if (popup && !popup.closed) {
                   popup.close();
                 }
@@ -1037,7 +1031,6 @@ export class GoogleCalendarConfigComponent implements OnInit {
             if (popup?.closed) {
               clearInterval(checkClosed);
               window.removeEventListener('message', messageListener);
-              console.log('🔒 Popup cerrado manualmente, verificando estado...');
               // Dar un pequeño delay para permitir procesamiento
               setTimeout(() => {
                 this.loadStatus();
@@ -1048,7 +1041,6 @@ export class GoogleCalendarConfigComponent implements OnInit {
           // Timeout de seguridad (5 minutos)
           setTimeout(() => {
             if (popup && !popup.closed) {
-              console.log('⏰ Timeout de autorización alcanzado');
               popup.close();
               clearInterval(checkClosed);
               window.removeEventListener('message', messageListener);
@@ -1071,7 +1063,6 @@ export class GoogleCalendarConfigComponent implements OnInit {
   private setupTabReturnListener(): void {
     // Configurar listener para detectar cuando el usuario regresa de la autorización
     const focusListener = () => {
-      console.log('🔄 Usuario regresó a la pestaña, verificando estado...');
       setTimeout(() => {
         this.loadStatus();
         this.loadConfiguration();
@@ -1350,8 +1341,6 @@ export class GoogleCalendarConfigComponent implements OnInit {
   private handleStorageEvent(event: StorageEvent): void {
     // Solo procesar cambios en las claves específicas de Google Calendar
     if (event.key === 'vetplus-google-auth-success' && event.newValue) {
-      console.log('📦 Recibido evento de storage:', event.key, event.newValue);
-
       try {
         const data = JSON.parse(event.newValue);
         if (data.success) {
@@ -1388,8 +1377,6 @@ export class GoogleCalendarConfigComponent implements OnInit {
       return;
     }
 
-    console.log('📩 Mensaje de Google Calendar recibido:', event.data, 'desde:', event.origin);
-
     // Verificar origen por seguridad
     if (event.origin !== window.location.origin) {
       console.warn('⚠️ Origen no válido:', event.origin, 'esperado:', window.location.origin);
@@ -1404,8 +1391,6 @@ export class GoogleCalendarConfigComponent implements OnInit {
   }
 
   private handleAuthSuccess(data: any): void {
-    console.log('✅ Autorización exitosa procesada:', data);
-
     // Mostrar información detallada del éxito
     const message = data.testResult?.success
       ? '✅ Google Calendar configurado y conexión verificada exitosamente'

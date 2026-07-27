@@ -1,0 +1,30 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .rabbit-body { fill: #F0F0F0; }
+      .rabbit-ear { fill: #E0E0E0; }
+      .rabbit-inner-ear { fill: #FFB6C1; }
+      .rabbit-eye { fill: #000; }
+      .rabbit-nose { fill: #FF69B4; }
+    </style>
+  </defs>
+  <!-- Cuerpo -->
+  <ellipse cx="50" cy="70" rx="22" ry="18" class="rabbit-body"/>
+  <!-- Cabeza -->
+  <ellipse cx="50" cy="45" rx="15" ry="18" class="rabbit-body"/>
+  <!-- Orejas largas -->
+  <ellipse cx="42" cy="20" rx="4" ry="15" class="rabbit-ear"/>
+  <ellipse cx="58" cy="20" rx="4" ry="15" class="rabbit-ear"/>
+  <ellipse cx="42" cy="20" rx="2" ry="10" class="rabbit-inner-ear"/>
+  <ellipse cx="58" cy="20" rx="2" ry="10" class="rabbit-inner-ear"/>
+  <!-- Ojos -->
+  <circle cx="46" cy="40" r="2" class="rabbit-eye"/>
+  <circle cx="54" cy="40" r="2" class="rabbit-eye"/>
+  <!-- Nariz -->
+  <ellipse cx="50" cy="48" rx="1.5" ry="2" class="rabbit-nose"/>
+  <!-- Cola -->
+  <circle cx="72" cy="75" r="5" class="rabbit-body"/>
+  <!-- Patas traseras -->
+  <ellipse cx="40" cy="85" rx="6" ry="8" class="rabbit-body"/>
+  <ellipse cx="60" cy="85" rx="6" ry="8" class="rabbit-body"/>
+</svg>

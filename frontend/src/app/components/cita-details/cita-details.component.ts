@@ -83,23 +83,14 @@ export class CitaDetailsComponent implements OnInit {
   private async loadCita(citaId: string): Promise<void> {
     try {
       this.loading.set(true);
-      console.log('🔍 Cargando cita con ID:', citaId);
       const response = await this.citasService.getCitaById(citaId).toPromise();
-
-      console.log('📝 Respuesta del backend:', response);
 
       if (response?.success && response.data) {
         // Transformar datos planos a estructura anidada para compatibilidad con el template
         const citaTransformada = this.transformarCitaParaTemplate(response.data);
-        console.log('🔄 Cita transformada:', citaTransformada);
         this.cita.set(citaTransformada);
         await this.refreshHistoriaClinicaStatus(citaTransformada.id_cita);
         await this.loadDocumentosCita(citaTransformada.id_cita);
-
-        // Debug: verificar transiciones disponibles
-        console.log('🎯 Verificando transiciones después de cargar cita...');
-        const transiciones = this.getAvailableStatusTransitions();
-        console.log('🔄 Transiciones encontradas:', transiciones);
       } else {
         throw new Error('Cita no encontrada');
       }
@@ -309,18 +300,12 @@ export class CitaDetailsComponent implements OnInit {
     }
 
     try {
-      console.log('🔍 Buscando historia clínica para cita:', cita.id_cita);
-
       const response = await this.historiaClinicaService.getHistoriaByCitaId(cita.id_cita).toPromise();
 
       if (response?.success && response.data) {
-        console.log('✅ Historia clínica encontrada:', response.data);
-
         // Si está completada u otro estado, ir a VER la historia clínica (solo lectura)
         this.router.navigate(['/historia-clinica', response.data.id_historia]);
       } else {
-        console.log('⚠️ No se encontró historia clínica para esta cita');
-
         if (cita.estado === 'completada') {
           this.snackBar.open('No se encontró historia clínica para esta cita', 'Cerrar', {
             duration: 4000
@@ -628,13 +613,6 @@ export class CitaDetailsComponent implements OnInit {
   }
 
   private parseLocalDate(fechaStr: string): Date {
-    // console.log('🔍 Details parseLocalDate:', {
-    //   input: fechaStr,
-    //   output: date,
-    //   hours: date.getHours(),
-    //   conversion: `${fechaStr} -> ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`
-    // });
-
     const date = new Date(fechaStr);
     return date;
   }
@@ -678,12 +656,10 @@ export class CitaDetailsComponent implements OnInit {
   getAvailableStatusTransitions(): Array<{value: string, label: string, color: string}> {
     const cita = this.cita();
     if (!cita) {
-      // console.log('🚫 No hay cita disponible para transiciones');
       return [];
     }
 
     const currentStatus = cita.estado;
-    // console.log('🔄 Estado actual de la cita:', currentStatus);
 
     // Definir transiciones permitidas
     const transitions: {[key: string]: string[]} = {
@@ -697,13 +673,11 @@ export class CitaDetailsComponent implements OnInit {
     };
 
     const allowedTransitions = transitions[currentStatus] || [];
-    // console.log('✅ Transiciones permitidas:', allowedTransitions);
 
     const availableStates = this.estadosCita.filter(estado =>
       allowedTransitions.includes(estado.value) && estado.value !== currentStatus
     );
 
-    // console.log('🎯 Estados disponibles para transición:', availableStates);
     return availableStates;
   }
 
@@ -1059,9 +1033,6 @@ export class CitaDetailsComponent implements OnInit {
   }
 
   private transformarCitaParaTemplate(citaData: any): Cita {
-    console.log('🔄 Transformando cita para template:', citaData);
-    console.log('🔄 cliente_documento en citaData:', citaData.cliente_documento);
-
     // Crear estructura anidada a partir de campos planos
     const citaTransformada: Cita = {
       ...citaData,
@@ -1087,13 +1058,6 @@ export class CitaDetailsComponent implements OnInit {
         avatar_url: citaData.veterinario_avatar_url
       }
     };
-
-    console.log('✅ Cita transformada:', {
-      mascota_nombre: citaTransformada.mascota?.nombre,
-      cliente_nombre: citaTransformada.mascota?.cliente?.nombre,
-      cliente_documento: citaTransformada.mascota?.cliente?.documento,
-      cliente_documento_plano: citaTransformada.cliente_documento
-    });
 
     return citaTransformada;
   }

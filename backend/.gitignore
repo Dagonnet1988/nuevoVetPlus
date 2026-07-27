@@ -52,7 +52,18 @@ jspm_packages/
 # Backup y reportes
 backups/
 reports/
-uploads/
+
+# uploads/ sigue ignorado (contenido subido por usuarios: fotos, documentos).
+# Excepción quirúrgica: íconos por defecto de especie, que son un asset
+# estático de la app, no contenido de usuario — sin esto nunca llegan al
+# deploy y las mascotas sin foto quedan con un 404 en vez del ícono.
+# Todo lo demás bajo uploads/ (incluido uploads/pacientes/<id>/) sigue ignorado.
+uploads/*
+!uploads/pacientes/
+uploads/pacientes/*
+!uploads/pacientes/default/
+uploads/pacientes/default/*
+!uploads/pacientes/default/*.svg
 
 # WhatsApp session
 whatsapp_session/
