@@ -2774,6 +2774,13 @@
 
 :host ::ng-deep .fc-timegrid-event-harness {
   margin: 1px !important;
+  /* FullCalendar posiciona y dimensiona este contenedor por duración real
+     (inline style), no por .fc-timegrid-event de adentro. Una cita de pocos
+     minutos quedaba con una franja de unos pocos píxeles y el nombre del
+     paciente se recortaba (overflow) aunque el contenido interno pidiera
+     más alto — el min-height debe ir también acá, no solo en el hijo. */
+  min-height: 32px !important;
+  overflow: visible !important;
 }
 
 :host ::ng-deep .fc-timegrid-event {

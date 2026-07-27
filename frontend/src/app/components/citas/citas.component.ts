@@ -1068,7 +1068,8 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
           <div class="event-simple event-type-general event-state-confirmada">
             <div class="event-header-simple">
               <span class="event-time">${dot}&nbsp;${fallbackHour}</span>
-            <div class="event-patient">${eventInfo.event.title || ''}</div>
+              <div class="event-patient">${eventInfo.event.title || ''}</div>
+            </div>
           </div>
         `
       };
@@ -1084,7 +1085,8 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
         <div class="event-simple event-type-${tipoToken} event-state-${estadoNormalizado}">
           <div class="event-header-simple">
             <span class="event-time">${dot}&nbsp;${horaInicio}</span>
-          <div class="event-patient">${nombreMascota}</div>
+            <div class="event-patient">${nombreMascota}</div>
+          </div>
         </div>
       `
     };

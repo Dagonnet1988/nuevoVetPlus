@@ -4,10 +4,12 @@ import googleCalendarService from './googleCalendar.js';
 import { query } from '../config/database.js';
 import { sendEmail } from './emailService.js';
 import { renderEmailTemplate } from './emailTemplateService.js';
+import { syncPendingOutboundAppointments } from '../controllers/appointmentController.js';
 
 class SyncScheduler {
     constructor() {
         this.jobs = new Map();
+        this.lastOutboundSyncAt = null;
         this.isRunning = false;
         this.lastAutoSyncAt = null;
     }
@@ -185,7 +187,12 @@ class SyncScheduler {
 
             // Programar sincronización automática con intervalo dinámico (runtime)
             this.scheduleSync();
-            
+
+            // Programar sincronización saliente automática (VetPlus -> Google),
+            // para que el reintento de pending/failed/disabled no dependa de
+            // que alguien note el problema y apriete el botón manual.
+            this.scheduleOutboundSync();
+
             // Programar limpieza de logs cada día a las 2 AM
             this.scheduleLogCleanup();
             
@@ -339,12 +346,64 @@ class SyncScheduler {
 
         this.jobs.set('sync', syncJob);
         syncJob.start();
-        
+
         const syncWindow = this.getSyncWindow();
         console.log(
             `📅 Sincronización automática programada con intervalo dinámico ` +
             `(ventana ${syncWindow.lookbackDays}d atrás / ${syncWindow.lookaheadDays}d adelante)`
         );
+    }
+
+    /**
+     * Programar sincronización saliente automática (VetPlus -> Google).
+     * Reutiliza el mismo toggle/intervalo que la entrante (sync_automatico /
+     * sync_interval_minutes) para que "sincronización automática" signifique
+     * ambos sentidos, no solo el de lectura. Si GOOGLE_SYNC_OUTBOUND_ENABLED
+     * está en false, syncPendingOutboundAppointments() no hace nada (skipped).
+     */
+    scheduleOutboundSync() {
+        const outboundJob = cron.schedule('* * * * *', async () => {
+            try {
+                const { syncAutomatico, intervalMinutes } = await this.getRuntimeSyncConfig();
+
+                if (!syncAutomatico) {
+                    return;
+                }
+
+                if (this.lastOutboundSyncAt) {
+                    const elapsedMs = Date.now() - this.lastOutboundSyncAt.getTime();
+                    if (elapsedMs < intervalMinutes * 60 * 1000) {
+                        return;
+                    }
+                }
+
+                const result = await syncPendingOutboundAppointments();
+                this.lastOutboundSyncAt = new Date();
+
+                if (result.skipped) {
+                    return;
+                }
+
+                if (result.total > 0) {
+                    console.log(
+                        `✅ Sincronización saliente automática: ${result.synced}/${result.total} ` +
+                        `citas enviadas a Google (${result.failed} fallidas)`
+                    );
+                    await this.logSyncActivity('auto_sync_outbound', result);
+                }
+
+            } catch (error) {
+                console.error('❌ Error en sincronización saliente automática:', error);
+                await this.logSyncActivity('auto_sync_outbound_error', { error: error.message });
+            }
+        }, {
+            scheduled: false
+        });
+
+        this.jobs.set('syncOutbound', outboundJob);
+        outboundJob.start();
+
+        console.log('📤 Sincronización saliente automática programada con el mismo intervalo dinámico');
     }
 
     /**

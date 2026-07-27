@@ -2283,23 +2283,73 @@ export const forceSyncWithGoogle = async (req, res) => {
 };
 
 /**
- * Sincronizar todas las citas pendientes con Google Calendar
+ * Reintentar el envío hacia Google de citas pendientes/fallidas/deshabilitadas.
+ * Compartida entre el endpoint manual (syncAllPendingAppointments) y el
+ * scheduler automático, para que el sentido saliente también se autocorrija
+ * solo, igual que ya hace el entrante.
+ */
+export const syncPendingOutboundAppointments = async () => {
+    if (!isOutboundGoogleSyncEnabled()) {
+        return { skipped: true, total: 0, synced: 0, failed: 0, errors: [] };
+    }
+
+    // 'disabled' queda grabado en las citas creadas/editadas mientras
+    // GOOGLE_SYNC_OUTBOUND_ENABLED estaba en false — una vez activado, ese
+    // estado es obsoleto y debe reintentarse igual que pending/failed.
+    const pendingResult = await query(`
+        SELECT c.id_cita
+        FROM clinical.calendario_citas c
+        WHERE c.google_sync_status IN ('pending', 'failed', 'disabled')
+        AND c.estado NOT IN ('cancelada', 'no_asistio')
+        AND c.fecha_inicio >= CURRENT_DATE - INTERVAL '1 day'
+        ORDER BY c.fecha_inicio ASC
+        LIMIT 50
+    `);
+
+    const results = {
+        skipped: false,
+        total: pendingResult.rows.length,
+        synced: 0,
+        failed: 0,
+        errors: []
+    };
+
+    for (const row of pendingResult.rows) {
+        try {
+            const cita = await getAppointmentWithDetails(row.id_cita);
+            if (cita) {
+                // Si ya tiene un evento vinculado en Google hay que actualizarlo,
+                // no crear uno nuevo — 'create' siempre acá duplicaba el evento
+                // en cada reintento de una cita que ya se había sincronizado antes.
+                const action = cita.google_event_id ? 'update' : 'create';
+                const syncResult = await syncAppointmentWithGoogle(cita, action);
+                if (syncResult.success) {
+                    results.synced++;
+                } else {
+                    results.failed++;
+                    results.errors.push({
+                        id_cita: row.id_cita,
+                        error: syncResult.error
+                    });
+                }
+            }
+        } catch (error) {
+            results.failed++;
+            results.errors.push({
+                id_cita: row.id_cita,
+                error: error.message
+            });
+        }
+    }
+
+    return results;
+};
+
+/**
+ * Sincronizar todas las citas pendientes con Google Calendar (manual, botón "Sincronizar")
  */
 export const syncAllPendingAppointments = async (req, res) => {
     try {
-        if (!isOutboundGoogleSyncEnabled()) {
-            return res.status(200).json({
-                success: true,
-                message: 'Sincronizacion saliente deshabilitada (solo Google -> Ramelo)',
-                data: {
-                    total: 0,
-                    synced: 0,
-                    failed: 0,
-                    errors: []
-                }
-            });
-        }
-
         // Admin, veterinario y auxiliar pueden sincronizar masivamente
         if (!['admin', 'vet', 'aux'].includes(req.user.rol)) {
             return res.status(403).json({
@@ -2308,50 +2358,14 @@ export const syncAllPendingAppointments = async (req, res) => {
             });
         }
 
-        // Obtener citas con sincronización pendiente, fallida, o deshabilitada.
-        // 'disabled' queda grabado en las citas creadas/editadas mientras
-        // GOOGLE_SYNC_OUTBOUND_ENABLED estaba en false — una vez activado, ese
-        // estado es obsoleto y debe reintentarse igual que pending/failed.
-        const pendingResult = await query(`
-            SELECT c.id_cita
-            FROM clinical.calendario_citas c
-            WHERE c.google_sync_status IN ('pending', 'failed', 'disabled')
-            AND c.estado NOT IN ('cancelada', 'no_asistio')
-            AND c.fecha_inicio >= CURRENT_DATE - INTERVAL '1 day'
-            ORDER BY c.fecha_inicio ASC
-            LIMIT 50
-        `);
+        const results = await syncPendingOutboundAppointments();
 
-        const results = {
-            total: pendingResult.rows.length,
-            synced: 0,
-            failed: 0,
-            errors: []
-        };
-
-        // Sincronizar cada cita
-        for (const row of pendingResult.rows) {
-            try {
-                const cita = await getAppointmentWithDetails(row.id_cita);
-                if (cita) {
-                    const syncResult = await syncAppointmentWithGoogle(cita, 'create');
-                    if (syncResult.success) {
-                        results.synced++;
-                    } else {
-                        results.failed++;
-                        results.errors.push({
-                            id_cita: row.id_cita,
-                            error: syncResult.error
-                        });
-                    }
-                }
-            } catch (error) {
-                results.failed++;
-                results.errors.push({
-                    id_cita: row.id_cita,
-                    error: error.message
-                });
-            }
+        if (results.skipped) {
+            return res.status(200).json({
+                success: true,
+                message: 'Sincronizacion saliente deshabilitada (solo Google -> Ramelo)',
+                data: { total: 0, synced: 0, failed: 0, errors: [] }
+            });
         }
 
         res.json({
