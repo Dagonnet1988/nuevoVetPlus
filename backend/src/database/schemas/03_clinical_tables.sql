@@ -6,7 +6,7 @@
 CREATE TABLE clinical.clientes (
     id_cliente UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     nombre VARCHAR(100) NOT NULL,
-    cedula VARCHAR(20) UNIQUE,
+    cedula VARCHAR(20),
     direccion TEXT,
     telefono VARCHAR(20),
     email VARCHAR(150),
@@ -22,9 +22,15 @@ CREATE TABLE clinical.clientes (
     updated_by UUID REFERENCES vetplus_auth.usuarios(id_usuario)
 );
 
+-- La cédula debe ser única por tenant, no global — la misma persona puede ser
+-- cliente en dos clínicas distintas de la plataforma.
+CREATE UNIQUE INDEX idx_clientes_tenant_cedula
+    ON clinical.clientes (id_tenant, cedula)
+    WHERE cedula IS NOT NULL;
+
 -- Trigger para updated_at
-CREATE TRIGGER update_clientes_updated_at 
-    BEFORE UPDATE ON clinical.clientes 
+CREATE TRIGGER update_clientes_updated_at
+    BEFORE UPDATE ON clinical.clientes
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Tabla de mascotas

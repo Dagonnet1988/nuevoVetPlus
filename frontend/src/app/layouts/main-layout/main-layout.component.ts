@@ -199,7 +199,7 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
           </div>
 
           <div class="app-footer-mini-right">
-            <a class="footer-link-inline" href="mailto:contacto@dadev.com">Soporte</a>
+            <a class="footer-link-inline" href="mailto:contacto@ramelo.app">Soporte</a>
           </div>
         </footer>
       </mat-sidenav-content>

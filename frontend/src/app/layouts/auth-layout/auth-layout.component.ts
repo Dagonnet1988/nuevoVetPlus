@@ -31,7 +31,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
               <span>D.A. developments</span>
               <span>Desarrollo web</span>
               <span>Soporte y mantenimiento</span>
-              <a class="footer-da-link" href="mailto:contacto@dadev.com">contacto@dadev.com</a>
+              <a class="footer-da-link" href="mailto:contacto@ramelo.app">contacto@ramelo.app</a>
             </p>
           </div>
 
