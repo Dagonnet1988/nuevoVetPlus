@@ -69,7 +69,12 @@ export const searchRateLimit = createLimiter({
 export const writeSlowDown = createSlowDown({
   windowMs: 60 * 1000,
   delayAfter: 30,
-  delayMs: 500
+  // Forma explícita requerida desde express-slow-down v2 para conservar el
+  // comportamiento anterior (delay creciente: 500ms por cada request sobre el límite).
+  delayMs: (used, req) => {
+    const delayAfter = req.slowDown.limit;
+    return (used - delayAfter) * 500;
+  }
 });
 
 /** Rate limit por rol configurable */

@@ -102,6 +102,10 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
   private dashboardStartDate: string | null = null;
   private dashboardEndDate: string | null = null;
   private dashboardFocus: 'dia' | 'semana' | null = null;
+  // Ventana de fechas ya traída del backend; si el usuario navega el calendario
+  // fuera de este rango (ej. a enero), se vuelve a cargar centrada en la nueva fecha.
+  private fetchedRangeStart: Date | null = null;
+  private fetchedRangeEnd: Date | null = null;
 
   filterForm: FormGroup;
 
@@ -308,8 +312,14 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
 
     // Listen for browser navigation events to refresh calendar
     window.addEventListener('focus', () => {
-      // Refresh calendar when window regains focus (user comes back from details)
-      this.refreshCalendar();
+      // Refresh calendar when window regains focus (user comes back from details).
+      // Se ignora si acabamos de cargar hace poco: en móvil el evento 'focus' se
+      // dispara muy seguido (cambiar de app, notificaciones, bloqueo de pantalla),
+      // y recargar cada vez reiniciaba la vista (spinner + pérdida de navegación).
+      const elapsedMs = Date.now() - this.viewLoadTime;
+      if (elapsedMs > 30000) {
+        this.refreshCalendar(true);
+      }
     });
   }
 
@@ -377,6 +387,30 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     this.updateToolbarSpecialBadge();
+    this.reloadIfOutsideFetchedRange(arg);
+  }
+
+  /**
+   * La ventana de datos cargada es fija (ver getCalendarFetchRange). Si el
+   * usuario navega el calendario (prev/next) a un mes fuera de esa ventana,
+   * recarga centrada en la nueva fecha en vez de mostrar el mes vacío.
+   */
+  private reloadIfOutsideFetchedRange(arg: any): void {
+    const visibleStart: Date | undefined = arg?.view?.activeStart instanceof Date
+      ? arg.view.activeStart
+      : arg?.view?.currentStart;
+    const visibleEnd: Date | undefined = arg?.view?.activeEnd instanceof Date
+      ? arg.view.activeEnd
+      : arg?.view?.currentEnd;
+
+    if (!(visibleStart instanceof Date) || !(visibleEnd instanceof Date)) return;
+    if (!this.fetchedRangeStart || !this.fetchedRangeEnd) return;
+    if (this.loading()) return;
+
+    const outOfRange = visibleStart < this.fetchedRangeStart || visibleEnd > this.fetchedRangeEnd;
+    if (outOfRange) {
+      this.loadCalendarEvents();
+    }
   }
 
   private updateToolbarSpecialBadge(): void {
@@ -690,9 +724,19 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
-  private loadCalendarEvents(): void {
-    this.loading.set(true);
+  /**
+   * @param silent Si es true, no muestra el spinner de carga completa (usado en
+   * refrescos de fondo, ej. al recuperar el foco de la pestaña) para no reiniciar
+   * visualmente la vista que el usuario ya está viendo.
+   */
+  private loadCalendarEvents(silent = false): void {
+    if (!silent) {
+      this.loading.set(true);
+    }
+    this.viewLoadTime = Date.now();
     const { startDate, endDate } = this.getCalendarFetchRange();
+    this.fetchedRangeStart = startDate;
+    this.fetchedRangeEnd = endDate;
 
     const filters: CitaFilter = {
       id_veterinario: this.filterForm.value.id_veterinario || undefined,
@@ -706,7 +750,9 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
       next: (citasArray) => {
         this.citas.set(citasArray);
         this.applyCalendarEventLayers();
-        this.loading.set(false);
+        if (!silent) {
+          this.loading.set(false);
+        }
       },
       error: (error) => {
         console.error('Error cargando eventos del calendario:', error);
@@ -718,13 +764,19 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
           }).onAction().subscribe(() => {
             this.router.navigate(['/login']);
           });
-        } else {
+          this.citas.set([]);
+          this.applyCalendarEventLayers();
+        } else if (!silent) {
+          // En un refresco silencioso, un error transitorio de red no debe
+          // borrar lo que el usuario ya está viendo.
           this.snackBar.open('Error cargando calendario', 'Cerrar', { duration: 3000 });
+          this.citas.set([]);
+          this.applyCalendarEventLayers();
         }
 
-        this.citas.set([]);
-        this.applyCalendarEventLayers();
-        this.loading.set(false);
+        if (!silent) {
+          this.loading.set(false);
+        }
       }
     });
   }
@@ -748,13 +800,16 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private getCalendarFetchRange(): { startDate: Date; endDate: Date } {
-    const now = new Date();
+    // Ancla la ventana a la fecha que el calendario está mostrando (actualizada
+    // en onCalendarDatesSet al navegar), no siempre a "hoy" — si no, navegar a
+    // meses fuera de -2/+4 desde hoy (ej. enero cuando ya vamos por julio) no trae datos.
+    const anchor = this.currentCalendarDate() || new Date();
     const startDate = this.dashboardStartDate
       ? new Date(`${this.dashboardStartDate}T00:00:00`)
-      : new Date(now.getFullYear(), now.getMonth() - 2, 1);
+      : new Date(anchor.getFullYear(), anchor.getMonth() - 2, 1);
     const endDate = this.dashboardEndDate
       ? new Date(`${this.dashboardEndDate}T23:59:59`)
-      : new Date(now.getFullYear(), now.getMonth() + 4, 0);
+      : new Date(anchor.getFullYear(), anchor.getMonth() + 4, 0);
 
     return { startDate, endDate };
   }
@@ -1073,8 +1128,8 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   // Método público para refrescar el calendario (llamado desde otros componentes)
-  refreshCalendar(): void {
-    this.loadCalendarEvents();
+  refreshCalendar(silent = false): void {
+    this.loadCalendarEvents(silent);
     this.loadStats();
   }
 
