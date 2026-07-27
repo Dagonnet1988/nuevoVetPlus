@@ -2184,6 +2184,21 @@
     font-size: 1.2em;
   }
 
+  /* FullCalendar no envuelve su propio toolbar por defecto: en pantallas
+     angostas "prev/next/hoy", el título y "mes/semana/día" se salen del
+     contenedor. Se apilan en filas centradas en vez de una sola fila. */
+  :host ::ng-deep .fc-header-toolbar {
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 8px;
+  }
+
+  :host ::ng-deep .fc-toolbar-chunk {
+    display: flex;
+    justify-content: center;
+    flex: 1 1 auto;
+  }
+
   :host ::ng-deep .fc-timegrid-slot {
     height: 30px;
   }
@@ -2282,6 +2297,15 @@
 
   .stat-label {
     font-size: 10px;
+  }
+
+  :host ::ng-deep .fc-toolbar-title {
+    font-size: 1em;
+  }
+
+  :host ::ng-deep .fc-button {
+    padding: 0.3em 0.5em !important;
+    font-size: 0.85em !important;
   }
 
   .filter-field {
@@ -2667,9 +2691,12 @@
 }
 
 /* Vista lista más densa y con codificación de color equivalente al calendario */
-.agenda-layout {
-  grid-template-columns: 260px 1fr !important;
-  gap: 12px !important;
+/* Solo en desktop: en móvil (<=768px) el bloque de la línea ~2196 colapsa a 1 columna */
+@media (min-width: 769px) {
+  .agenda-layout {
+    grid-template-columns: 260px 1fr !important;
+    gap: 12px !important;
+  }
 }
 
 .citas-del-dia .cita-card {

@@ -1631,16 +1631,36 @@ export const updateAppointmentStatus = async (req, res) => {
 
             // Al iniciar consulta, fijar hora real de inicio y un fin tentativo (+1h)
             // para no bloquear toda la jornada hasta que se marque como completada.
+            // Solo se preserva la hora original si la cita es de una fecha PASADA
+            // (antes de hoy). Si es de hoy o de una fecha futura, se ajusta al momento actual.
             if (estadoDb === 'en_curso' && citaExistente.rows[0].estado !== 'en_curso') {
-                updateFields.push("fecha_inicio = date_trunc('second', CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')");
-                updateFields.push("fecha_fin = (date_trunc('second', CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota') + INTERVAL '1 hour')");
+                updateFields.push(`fecha_inicio = CASE
+                    WHEN DATE(fecha_inicio) >= DATE(CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')
+                    THEN date_trunc('second', CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')
+                    ELSE fecha_inicio
+                END`);
+                updateFields.push(`fecha_fin = CASE
+                    WHEN DATE(fecha_inicio) >= DATE(CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')
+                    THEN (date_trunc('second', CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota') + INTERVAL '1 hour')
+                    ELSE fecha_fin
+                END`);
             }
 
-            // Al completar, fijar hora real de fin. Si la cita tenía inicio futuro,
-            // normalizamos también el inicio para conservar coherencia temporal.
+            // Al completar, fijar hora real de fin (y normalizar un inicio futuro)
+            // salvo que la cita sea de una fecha PASADA, en cuyo caso se conservan
+            // las horas que ya tenía.
             if (estadoDb === 'completada') {
-                updateFields.push("fecha_fin = date_trunc('second', CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')");
-                updateFields.push("fecha_inicio = CASE WHEN fecha_inicio > date_trunc('second', CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota') THEN date_trunc('second', CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota') ELSE fecha_inicio END");
+                updateFields.push(`fecha_fin = CASE
+                    WHEN DATE(fecha_inicio) >= DATE(CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')
+                    THEN date_trunc('second', CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')
+                    ELSE fecha_fin
+                END`);
+                updateFields.push(`fecha_inicio = CASE
+                    WHEN DATE(fecha_inicio) >= DATE(CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')
+                         AND fecha_inicio > date_trunc('second', CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')
+                    THEN date_trunc('second', CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')
+                    ELSE fecha_inicio
+                END`);
             }
 
             const result = await txClient.query(`

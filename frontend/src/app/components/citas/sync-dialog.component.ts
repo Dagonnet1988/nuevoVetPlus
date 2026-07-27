@@ -130,7 +130,7 @@ import { MatStepperModule } from '@angular/material/stepper';
   `,
   styles: [`
     .sync-dialog {
-      min-width: 500px;
+      min-width: min(500px, 90vw);
     }
 
     .sync-form {
@@ -179,11 +179,24 @@ import { MatStepperModule } from '@angular/material/stepper';
 
     .date-range {
       display: flex;
+      flex-wrap: wrap;
       gap: 16px;
     }
 
     .date-range mat-form-field {
-      flex: 1;
+      flex: 1 1 180px;
+    }
+
+    @media (max-width: 480px) {
+      .sync-dialog {
+        min-width: 0;
+        width: 100%;
+      }
+
+      .date-range {
+        flex-direction: column;
+        gap: 0;
+      }
     }
 
     .advanced-options {

@@ -1,5 +1,7 @@
 import { Component, OnInit, OnDestroy, AfterViewInit, ElementRef, signal, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Observable, of } from 'rxjs';
+import { switchMap } from 'rxjs/operators';
 import { FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -700,10 +702,8 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
       fecha_fin: endDate.toISOString().split('T')[0]
     };
 
-    this.citasService.getCitas(1, 500, filters).subscribe({
-      next: (response) => {
-        const data = response?.data;
-        const citasArray = Array.isArray(data) ? data : [];
+    this.fetchAllCitas(filters).subscribe({
+      next: (citasArray) => {
         this.citas.set(citasArray);
         this.applyCalendarEventLayers();
         this.loading.set(false);
@@ -727,6 +727,24 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
         this.loading.set(false);
       }
     });
+  }
+
+  /**
+   * getCitas pagina en el backend (LIMIT/OFFSET). Con muchas citas importadas,
+   * una sola página de 500 puede quedarse corta y dejar fuera meses completos
+   * (los de fecha_inicio más reciente, por el ORDER BY ASC). Se acumulan todas
+   * las páginas siguiendo pagination.hasMore.
+   */
+  private fetchAllCitas(filters: CitaFilter, page = 1, acumulado: Cita[] = []): Observable<Cita[]> {
+    const PAGE_SIZE = 500;
+    return this.citasService.getCitas(page, PAGE_SIZE, filters).pipe(
+      switchMap((response) => {
+        const data = Array.isArray(response?.data) ? response.data : [];
+        const combinado = [...acumulado, ...data];
+        const hasMore = response?.pagination?.hasMore === true && data.length > 0;
+        return hasMore ? this.fetchAllCitas(filters, page + 1, combinado) : of(combinado);
+      })
+    );
   }
 
   private getCalendarFetchRange(): { startDate: Date; endDate: Date } {
