@@ -409,7 +409,10 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
 
     const outOfRange = visibleStart < this.fetchedRangeStart || visibleEnd > this.fetchedRangeEnd;
     if (outOfRange) {
-      this.loadCalendarEvents();
+      // Silencioso: si no, loading=true desmonta <full-calendar> del DOM (ver
+      // template) y al remontarse vuelve a initialView/initialDate, perdiendo
+      // la navegación del usuario (ej. lo regresa a "hoy" en vista semana).
+      this.loadCalendarEvents(true);
     }
   }
 
