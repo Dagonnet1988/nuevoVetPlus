@@ -104,8 +104,8 @@ class GoogleCalendarSimpleController {
           (client_secret IS NOT NULL AND LENGTH(TRIM(client_secret)) > 0) as has_client_secret,
           calendar_id,
           timezone,
-          notification_email as sync_automatico,
-          default_reminder_minutes as intervalo_sync,
+          sync_automatico,
+          sync_interval_minutes as intervalo_sync,
           sync_preferences,
           redirect_uri,
           created_at,
@@ -179,7 +179,8 @@ class GoogleCalendarSimpleController {
         `SELECT client_id, client_secret, sync_preferences,
                 access_token, refresh_token, token_expiry,
                 webhook_channel_id, webhook_url, webhook_expiration, webhook_resource_id,
-                is_active
+                is_active, notification_email, notification_popup,
+                default_reminder_minutes, email_reminder_hours
          FROM vetplus_auth.google_calendar_config
          WHERE is_active = true
            AND configured_by IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)
@@ -227,13 +228,17 @@ class GoogleCalendarSimpleController {
       );
 
       // Insertar nueva configuración (adaptando a las columnas existentes)
+      // notification_email/default_reminder_minutes son los recordatorios reales
+      // de los eventos de Google (sin UI propia todavía) — se conservan tal
+      // como estaban, independientes de sync_automatico/sync_interval_minutes.
       const result = await query(`
         INSERT INTO vetplus_auth.google_calendar_config (
           client_id, client_secret, calendar_id,
-          timezone, notification_email, default_reminder_minutes, redirect_uri, is_active, configured_by, sync_preferences,
+          timezone, sync_automatico, sync_interval_minutes, redirect_uri, is_active, configured_by, sync_preferences,
           access_token, refresh_token, token_expiry,
-          webhook_channel_id, webhook_url, webhook_expiration, webhook_resource_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+          webhook_channel_id, webhook_url, webhook_expiration, webhook_resource_id,
+          notification_email, notification_popup, default_reminder_minutes, email_reminder_hours
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
         RETURNING *
       `, [
         resolvedClientId,
@@ -252,7 +257,11 @@ class GoogleCalendarSimpleController {
         previousConfig?.webhook_channel_id || null,
         previousConfig?.webhook_url || null,
         previousConfig?.webhook_expiration || null,
-        previousConfig?.webhook_resource_id || null
+        previousConfig?.webhook_resource_id || null,
+        previousConfig?.notification_email ?? true,
+        previousConfig?.notification_popup ?? true,
+        previousConfig?.default_reminder_minutes ?? 30,
+        previousConfig?.email_reminder_hours ?? 24
       ]);
 
       await googleCalendarService.reinitializeWithConfig(result.rows[0]);
@@ -265,8 +274,8 @@ class GoogleCalendarSimpleController {
         cliente_id: result.rows[0].client_id,
         has_client_secret: Boolean(result.rows[0].client_secret),
         calendar_id: result.rows[0].calendar_id,
-        sync_automatico: result.rows[0].notification_email,
-        intervalo_sync: result.rows[0].default_reminder_minutes,
+        sync_automatico: result.rows[0].sync_automatico,
+        intervalo_sync: result.rows[0].sync_interval_minutes,
         prefijo_eventos: mergedSyncPreferences.prefijo_eventos,
         mapeo_colores: mergedSyncPreferences.mapeo_colores,
         configuracion_eventos: mergedSyncPreferences.configuracion_eventos,

@@ -355,6 +355,30 @@ class GoogleCalendarService {
         };
     }
 
+    /**
+     * Inverso de colorTypeMap: dado un tipo de cita, devuelve el colorId de
+     * Google Calendar que le corresponde. Necesario al crear/actualizar eventos
+     * desde VetPlus (sync saliente) para que la clasificación por color siga
+     * siendo consistente si ese evento se vuelve a leer desde Google — si no,
+     * un evento sin color se reclasifica como "terapia" por defecto y pisa el
+     * tipo real en el siguiente ciclo de sincronización entrante.
+     */
+    getColorIdForTipo(tipo) {
+        const rules = this.getTenantImportRules();
+        if (!rules) return null;
+
+        const normalizedTipo = String(tipo || '').trim().toLowerCase();
+        if (!normalizedTipo) return null;
+
+        for (const [colorId, rule] of Object.entries(rules.colorTypeMap)) {
+            if (String(rule?.tipo || '').toLowerCase() === normalizedTipo) {
+                return colorId;
+            }
+        }
+
+        return null;
+    }
+
     inferTipoFromText(summary, description) {
         const text = this.normalizeEventText(`${summary || ''} ${description || ''}`);
         if (text.includes('hidroterapia')) return 'hidroterapia';
@@ -545,17 +569,21 @@ class GoogleCalendarService {
                 startDateTime,
                 endDateTime,
                 attendeeEmail,
-                location
+                location,
+                tipo
             } = eventData;
 
             // Determinar zona horaria (usar siempre Colombia como predeterminado)
             const timeZone = this.config?.timezone || 'America/Bogota';
+            const colorId = this.getColorIdForTipo(tipo);
 
             console.log('📅 Creando evento en Google Calendar:', {
                 summary,
                 startDateTime,
                 endDateTime,
                 timeZone,
+                tipo,
+                colorId,
                 config_timezone: this.config?.timezone,
                 env_timezone: process.env.TZ
             });
@@ -564,6 +592,7 @@ class GoogleCalendarService {
                 summary,
                 description,
                 location: location || process.env.CLINIC_ADDRESS || 'Ramelo Clínica',
+                ...(colorId ? { colorId } : {}),
                 start: {
                     dateTime: startDateTime,
                     timeZone: timeZone
@@ -645,13 +674,17 @@ class GoogleCalendarService {
                 endDateTime,
                 attendeeEmail,
                 location,
-                status // Agregar parámetro de estado
+                status, // Agregar parámetro de estado
+                tipo
             } = eventData;
+
+            const colorId = this.getColorIdForTipo(tipo);
 
             const event = {
                 summary,
                 description,
                 location: location || process.env.CLINIC_ADDRESS || 'Ramelo Clínica',
+                ...(colorId ? { colorId } : {}),
                 start: {
                     dateTime: startDateTime,
                     timeZone: 'America/Bogota'
@@ -1378,7 +1411,11 @@ class GoogleCalendarService {
                         updatedMin: effectiveUpdatedMin,
                         singleEvents: true,
                         orderBy: 'updated',
-                        maxResults: 100
+                        maxResults: 100,
+                        // Sin esto Google excluye los eventos cancelados de la respuesta
+                        // (default showDeleted=false) y una eliminación en Google Calendar
+                        // nunca llega a determineChangeType()/handleGoogleEventDeleted.
+                        showDeleted: true
                     });
                     lastTooOldError = null;
                     break;

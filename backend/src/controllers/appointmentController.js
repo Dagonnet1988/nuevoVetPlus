@@ -578,6 +578,7 @@ const syncAppointmentWithGoogle = async (appointmentData, action = 'create') => 
             fecha_inicio,
             fecha_fin,
             tipo,
+            estado,
             motivo,
             mascota_nombre,
             cliente_nombre,
@@ -639,7 +640,13 @@ Código de cita: ${appointmentData.codigo_cita}
             startDateTime: formattedStartDateTime,
             endDateTime: formattedEndDateTime,
             attendeeEmail: inviteOwnerToCalendar ? cliente_email : null,
-            location: clinicAddress
+            location: clinicAddress,
+            // Necesarios para que Google refleje el mismo tipo/color que usa la
+            // clasificación de importación (evita que un evento sin color se
+            // reclasifique como "terapia" por defecto en el próximo sync) y para
+            // que no se agreguen recordatorios a citas ya completadas/canceladas.
+            tipo,
+            status: estado
         };
 
         let result;

@@ -449,6 +449,15 @@
   color: #ff9800;
 }
 
+.sync-status.error {
+  color: #dc3545;
+  font-weight: 700;
+}
+
+.sync-status.neutral {
+  color: #6b7280;
+}
+
 /* Details card */
 .details-card {
   border-radius: 12px;

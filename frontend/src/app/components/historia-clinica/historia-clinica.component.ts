@@ -17,7 +17,8 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
-import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
+import { Observable, of } from 'rxjs';
+import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
 
 import {
   HistoriaClinicaService, HistoriaClinica, HistoriaFilter,
@@ -142,20 +143,37 @@ export class HistoriaClinicaComponent implements OnInit {
     this.loadHistorias();
   }
 
+  /**
+   * getHistorias pagina en el backend (LIMIT/OFFSET). Con más de 500 historias
+   * en total, pedir solo la página 1 dejaba fuera pacientes cuya última visita
+   * quedó más allá del top 500 por fecha — desaparecían de la lista completa.
+   * Se acumulan todas las páginas siguiendo pagination.pages/total.
+   */
+  private fetchAllHistorias(filters: HistoriaFilter, page = 1, acumulado: HistoriaClinica[] = []): Observable<HistoriaClinica[]> {
+    const PAGE_SIZE = 500;
+    return this.historiaService.getHistorias({ ...filters, page, limit: PAGE_SIZE }).pipe(
+      switchMap((res) => {
+        const data = Array.isArray(res?.data) ? res.data : [];
+        const combinado = [...acumulado, ...data];
+        const totalPages = Number(res?.pagination?.pages || 0);
+        const hasMore = data.length > 0 && page < totalPages;
+        return hasMore ? this.fetchAllHistorias(filters, page + 1, combinado) : of(combinado);
+      })
+    );
+  }
+
   loadHistorias(): void {
     this.loading.set(true);
     const v = this.filterForm.value;
     const filters: HistoriaFilter = {
-      page:        1,
-      limit:       500,
       search:      v.search      || undefined,
       fecha_desde: v.fecha_desde ? this.toDateStr(v.fecha_desde) : undefined,
       fecha_hasta: v.fecha_hasta ? this.toDateStr(v.fecha_hasta) : undefined,
       estado:      this.mostrarAnulados ? 'Cancelado' : 'Completado',
     };
-    this.historiaService.getHistorias(filters).subscribe({
-      next: (res) => {
-        this.historias.set(res.data ?? []);
+    this.fetchAllHistorias(filters).subscribe({
+      next: (data) => {
+        this.historias.set(data ?? []);
         this.loading.set(false);
 
         // Si llegamos con contexto de retorno desde detalle, reabrir vista del paciente.

@@ -365,10 +365,16 @@ class BidirectionalSyncService {
                         };
                         
                         if (needsUpdate && !dryRun) {
-                            await this.updateAppointmentFromGoogle(existing.id_cita, eventData);
-                            results.updated++;
-                            eventLog.action = 'updated';
-                            eventLog.reason = 'existing_needs_update';
+                            const updateOutcome = await this.updateAppointmentFromGoogle(existing.id_cita, eventData);
+                            if (updateOutcome.success) {
+                                results.updated++;
+                                eventLog.action = 'updated';
+                                eventLog.reason = 'existing_needs_update';
+                            } else {
+                                results.skipped++;
+                                eventLog.action = 'skipped';
+                                eventLog.reason = updateOutcome.reason || 'update_skipped';
+                            }
                         } else {
                             results.skipped++;
                             eventLog.action = 'skipped';
@@ -599,6 +605,7 @@ class BidirectionalSyncService {
                 updated: 0,
                 deleted: 0,
                 created: 0,
+                conflicts: 0,
                 errors: [],
                 change_logs: [],
                 fallback_import: fallbackImport ? {
@@ -633,14 +640,19 @@ class BidirectionalSyncService {
 
                         case 'updated':
                             const updateResult = await this.handleGoogleEventUpdated(change);
-                            if (updateResult.success) results.updated++;
-                            else results.errors.push(updateResult.error);
+                            if (updateResult.success) {
+                                results.updated++;
+                            } else if (updateResult.skipped) {
+                                results.conflicts++;
+                            } else {
+                                results.errors.push(updateResult.error);
+                            }
                             results.change_logs.push({
                                 google_event_id: change?.parsed_data?.google_event_id,
                                 titulo: change?.parsed_data?.titulo || '(sin titulo)',
                                 change_type: change.change_type,
-                                action: updateResult.success ? 'updated' : 'error',
-                                reason: updateResult.success ? 'updated_from_incremental' : 'update_failed',
+                                action: updateResult.success ? 'updated' : (updateResult.skipped ? 'conflict' : 'error'),
+                                reason: updateResult.success ? 'updated_from_incremental' : (updateResult.skipped ? 'local_changes_pending' : 'update_failed'),
                                 details: updateResult.success ? updateResult.data : updateResult.error
                             });
                             break;
@@ -709,8 +721,16 @@ class BidirectionalSyncService {
             console.log(
                 `📊 Sync resumen tenant=${tenantIdResolved}: incremental_detected=${results.total_changes_detected}, ` +
                 `incremental_in_range=${results.total_changes}, processed=${results.processed}, ` +
-                `created=${results.created}, updated=${results.updated}, deleted=${results.deleted}, errors=${results.errors.length}`
+                `created=${results.created}, updated=${results.updated}, deleted=${results.deleted}, ` +
+                `conflicts=${results.conflicts}, errors=${results.errors.length}`
             );
+
+            if (results.conflicts > 0) {
+                console.warn(
+                    `⚠️ ${results.conflicts} cita(s) con cambios locales sin sincronizar: se dejaron intactas ` +
+                    `(google_sync_status='conflict') en vez de sobreescribirlas con la versión de Google.`
+                );
+            }
 
             return {
                 success: true,
@@ -1013,12 +1033,14 @@ class BidirectionalSyncService {
             );
 
             if (existing.rows.length > 0) {
-                await this.updateAppointmentFromGoogle(existing.rows[0].id_cita, change.parsed_data);
+                const updateOutcome = await this.updateAppointmentFromGoogle(existing.rows[0].id_cita, change.parsed_data);
                 return {
-                    success: true,
+                    success: updateOutcome.success,
+                    skipped: updateOutcome.skipped === true,
+                    error: updateOutcome.success ? undefined : `Sin aplicar: ${updateOutcome.reason || 'update_skipped'}`,
                     data: {
                         id_cita: existing.rows[0].id_cita,
-                        mode: 'updated_existing'
+                        mode: updateOutcome.success ? 'updated_existing' : 'skipped_existing'
                     }
                 };
             }
@@ -1073,14 +1095,16 @@ class BidirectionalSyncService {
             }
 
             // Actualizar cita existente con datos del evento
-            const result = await this.updateAppointmentFromGoogle(
-                appointment.id_cita, 
+            const updateOutcome = await this.updateAppointmentFromGoogle(
+                appointment.id_cita,
                 change.parsed_data
             );
 
-            return { 
-                success: true, 
-                data: result,
+            return {
+                success: updateOutcome.success,
+                skipped: updateOutcome.skipped === true,
+                error: updateOutcome.success ? undefined : `Sin aplicar: ${updateOutcome.reason || 'update_skipped'}`,
+                data: updateOutcome.data,
                 change_type: change.change_type,
                 attendee_changes_processed: change.attendee_changes?.length || 0
             };
@@ -1327,7 +1351,13 @@ class BidirectionalSyncService {
     }
 
     /**
-     * Actualizar cita desde Google
+     * Actualizar cita desde Google.
+     *
+     * Protección de conflicto: si la cita se editó localmente después de la
+     * última sincronización (updated_at > last_google_sync), significa que hay
+     * un cambio local que todavía no llegó a Google. En ese caso NO se pisa —
+     * se marca google_sync_status='conflict' para revisión manual y se
+     * preservan fecha_inicio/fecha_fin/tipo/motivo tal como están.
      */
     async updateAppointmentFromGoogle(id_cita, eventData) {
         const safeTipo = this.normalizeAppointmentType(eventData?.tipo);
@@ -1338,9 +1368,39 @@ class BidirectionalSyncService {
         if (!fechaInicioBogota || !fechaFinBogota) {
             throw new Error('No se pudo normalizar fecha/hora para actualizar cita desde Google');
         }
+
+        const currentResult = await query(
+            `SELECT updated_at, last_google_sync
+             FROM clinical.calendario_citas
+             WHERE id_cita = $1`,
+            [id_cita]
+        );
+        const current = currentResult.rows[0];
+        const hasPendingLocalChanges = Boolean(
+            current?.updated_at && current?.last_google_sync &&
+            new Date(current.updated_at).getTime() > new Date(current.last_google_sync).getTime()
+        );
+
+        if (hasPendingLocalChanges) {
+            const conflictResult = await query(
+                `UPDATE clinical.calendario_citas
+                 SET google_sync_status = 'conflict'
+                 WHERE id_cita = $1
+                 RETURNING *`,
+                [id_cita]
+            );
+
+            return {
+                success: false,
+                skipped: true,
+                reason: 'local_changes_pending',
+                data: conflictResult.rows[0]
+            };
+        }
+
         const updateQuery = `
-            UPDATE clinical.calendario_citas 
-            SET 
+            UPDATE clinical.calendario_citas
+            SET
                 fecha_inicio = $1,
                 fecha_fin = $2,
                 tipo = $3,
@@ -1360,7 +1420,7 @@ class BidirectionalSyncService {
             id_cita
         ]);
 
-        return result.rows[0];
+        return { success: true, data: result.rows[0] };
     }
 
     /**

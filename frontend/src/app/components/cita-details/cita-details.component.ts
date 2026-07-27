@@ -755,20 +755,34 @@ export class CitaDetailsComponent implements OnInit {
     const cita = this.cita();
     if (!cita) return null;
 
-    if (cita.google_event_id) {
-      return {
-        synced: true,
-        message: 'Sincronizada con Google Calendar',
-        icon: 'cloud_done',
-        color: 'success'
-      };
-    } else {
-      return {
-        synced: false,
-        message: 'No sincronizada',
-        icon: 'cloud_off',
-        color: 'warn'
-      };
+    // google_event_id solo dice si alguna vez se vinculó a un evento de Google;
+    // no dice si la ÚLTIMA sincronización funcionó. google_sync_status sí.
+    switch (cita.google_sync_status) {
+      case 'synced':
+        return { synced: true, message: 'Sincronizada con Google Calendar', icon: 'cloud_done', color: 'success' };
+      case 'conflict':
+        return {
+          synced: false,
+          message: 'Conflicto: hay un cambio local sin sincronizar, revisar antes de que se pise',
+          icon: 'report_problem',
+          color: 'error'
+        };
+      case 'failed':
+        return {
+          synced: false,
+          message: cita.google_sync_error ? `Falló la sincronización: ${cita.google_sync_error}` : 'Falló la sincronización con Google',
+          icon: 'cloud_off',
+          color: 'error'
+        };
+      case 'disabled':
+        return { synced: false, message: 'Sincronización saliente deshabilitada', icon: 'cloud_off', color: 'neutral' };
+      case 'pending':
+        return { synced: false, message: 'Pendiente de sincronizar', icon: 'cloud_sync', color: 'warn' };
+      default:
+        // Citas antiguas sin google_sync_status: usar el criterio anterior como respaldo.
+        return cita.google_event_id
+          ? { synced: true, message: 'Sincronizada con Google Calendar', icon: 'cloud_done', color: 'success' }
+          : { synced: false, message: 'No sincronizada', icon: 'cloud_off', color: 'warn' };
     }
   }
 

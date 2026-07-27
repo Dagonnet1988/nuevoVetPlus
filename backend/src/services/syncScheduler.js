@@ -97,8 +97,8 @@ class SyncScheduler {
         try {
             const result = await query(`
                 SELECT
-                    notification_email AS sync_automatico,
-                    default_reminder_minutes AS intervalo_sync
+                    sync_automatico,
+                    sync_interval_minutes AS intervalo_sync
                 FROM vetplus_auth.google_calendar_config
                 WHERE is_active = true
                 ORDER BY created_at DESC

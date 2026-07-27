@@ -190,7 +190,7 @@ CREATE TABLE clinical.calendario_citas (
     ultima_reagendacion_at TIMESTAMPTZ,
     ultima_reagendacion_por UUID REFERENCES vetplus_auth.usuarios(id_usuario) ON DELETE SET NULL,
     google_event_id VARCHAR(255),
-    google_sync_status VARCHAR(20) DEFAULT 'pending' CHECK (google_sync_status IN ('pending', 'synced', 'failed', 'disabled')),
+    google_sync_status VARCHAR(20) DEFAULT 'pending' CHECK (google_sync_status IN ('pending', 'synced', 'failed', 'disabled', 'conflict')),
     google_sync_error TEXT,
     last_google_sync TIMESTAMPTZ,
     fecha_recordatorio TIMESTAMP WITH TIME ZONE,

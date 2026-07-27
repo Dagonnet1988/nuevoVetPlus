@@ -127,6 +127,11 @@ CREATE TABLE IF NOT EXISTS vetplus_auth.google_calendar_config (
     notification_popup BOOLEAN DEFAULT true,
     default_reminder_minutes INTEGER DEFAULT 30,
     email_reminder_hours INTEGER DEFAULT 24,
+    -- Columnas propias del scheduler de sincronización (antes reusaban
+    -- notification_email/default_reminder_minutes, que son en realidad los
+    -- recordatorios de los eventos de Google — quedaban acoplados sin relación).
+    sync_automatico BOOLEAN DEFAULT true,
+    sync_interval_minutes INTEGER DEFAULT 30,
     sync_preferences JSONB DEFAULT '{}'::jsonb,
     is_active BOOLEAN DEFAULT false,
     configured_by UUID REFERENCES vetplus_auth.usuarios(id_usuario),
