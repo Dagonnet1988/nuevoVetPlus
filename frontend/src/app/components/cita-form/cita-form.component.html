@@ -113,12 +113,14 @@
               <mat-form-field appearance="outline" class="date-field">
                 <mat-label>Fecha</mat-label>
                 <input matInput [matDatepicker]="picker" formControlName="fecha" required
-                       (dateChange)="onFechaChange()" [min]="minDate">
+                       (dateChange)="onFechaChange()" [min]="isEditing() ? null : minDate">
                 <mat-datepicker-toggle matIconSuffix [for]="picker"></mat-datepicker-toggle>
                 <mat-datepicker #picker></mat-datepicker>
                 <mat-error>
                   @if (citaForm.get('fecha')?.hasError('required')) {
                     La fecha es obligatoria
+                  } @else if (citaForm.get('fecha')?.hasError('matDatepickerMin')) {
+                    La fecha no puede ser anterior a hoy
                   }
                 </mat-error>
               </mat-form-field>
