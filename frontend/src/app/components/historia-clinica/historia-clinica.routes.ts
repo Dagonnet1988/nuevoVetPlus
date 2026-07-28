@@ -9,7 +9,7 @@ export const historiaClinicaRoutes: Routes = [
     loadComponent: () => import('./historia-clinica.component').then(c => c.HistoriaClinicaComponent),
     canActivate: [AuthGuard, RoleGuard],
     data: {
-      roles: ['admin', 'vet'],
+      roles: ['admin', 'vet', 'aux'],
       title: 'Historia Clínica'
     }
   },
@@ -19,7 +19,7 @@ export const historiaClinicaRoutes: Routes = [
     canActivate: [AuthGuard, RoleGuard],
     canDeactivate: [unsavedChangesGuard],
     data: {
-      roles: ['admin', 'vet'],
+      roles: ['admin', 'vet', 'aux'],
       title: 'Nueva Historia Clínica'
     }
   },
@@ -38,7 +38,7 @@ export const historiaClinicaRoutes: Routes = [
     canActivate: [AuthGuard, RoleGuard],
     canDeactivate: [unsavedChangesGuard],
     data: {
-      roles: ['admin', 'vet'],
+      roles: ['admin', 'vet', 'aux'],
       title: 'Editar Historia Clínica'
     }
   }
