@@ -173,10 +173,6 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
             <mat-icon>person</mat-icon>
             <span>Mi perfil</span>
           </button>
-          <button mat-menu-item (click)="goToSettings()">
-            <mat-icon>settings</mat-icon>
-            <span>Configuración</span>
-          </button>
           <mat-divider></mat-divider>
           <button mat-menu-item (click)="logout()" class="logout-item">
             <mat-icon>logout</mat-icon>
@@ -920,7 +916,6 @@ export class MainLayoutComponent implements OnDestroy {
     this.router.navigate(['/dashboard']);
   }
 
-  goToSettings(): void { this.router.navigate(['/configuracion']); }
   logout(): void { this.authService.logout(); }
 
   openUserMenu(): void {
