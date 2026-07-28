@@ -211,7 +211,7 @@ class SyncScheduler {
                     `SELECT c.id_cita,
                             c.id_tenant,
                             c.codigo_cita,
-                            c.fecha_inicio,
+                            TO_CHAR(c.fecha_inicio, 'YYYY-MM-DD"T"HH24:MI:SS') AS fecha_inicio,
                             c.id_mascota,
                             cl.nombre AS cliente_nombre,
                             cl.email AS cliente_email,

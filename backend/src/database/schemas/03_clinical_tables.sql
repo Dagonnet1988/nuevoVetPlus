@@ -78,6 +78,10 @@ CREATE TABLE clinical.historias_clinicas (
                       CHECK (estado IN ('Borrador','Completado','Cancelado')),
     motivo_modificacion TEXT,
     motivo_anulacion TEXT,
+    -- Quién diligenció el documento en la app (puede ser distinto de
+    -- id_veterinario cuando lo llena un auxiliar bajo un veterinario
+    -- responsable) — trazabilidad, no reemplaza la firma del veterinario.
+    created_by      UUID REFERENCES vetplus_auth.usuarios(id_usuario),
     id_tenant       UUID NOT NULL DEFAULT system.get_default_tenant()
                       REFERENCES system.tenants(id_tenant) ON DELETE RESTRICT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),

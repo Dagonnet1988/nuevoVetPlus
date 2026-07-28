@@ -21,6 +21,7 @@ import {
   TIPO_LABELS, TIPO_COLORS, TIPO_ICONS
 } from '../../../services/historia-clinica.service';
 import { AnularHistoriaDialogComponent } from './anular-historia-dialog.component';
+import { AuthService } from '../../../services/auth.service';
 
 @Component({
   selector: 'app-historia-clinica-details',
@@ -47,7 +48,8 @@ export class HistoriaClinicaDetailsComponent implements OnInit {
     private route: ActivatedRoute,
     private location: Location,
     private dialog: MatDialog,
-    private sanitizer: DomSanitizer
+    private sanitizer: DomSanitizer,
+    private authService: AuthService
   ) {}
 
   ngOnInit(): void {
@@ -79,6 +81,12 @@ export class HistoriaClinicaDetailsComponent implements OnInit {
         queryParams: this.returnMascotaId ? { id_mascota: this.returnMascotaId } : undefined
       });
     }
+  }
+
+  /** El rol auxiliar solo puede editar documentos de Terapia/Hidroterapia (seguimiento). */
+  puedeEditar(): boolean {
+    if (!this.authService.isAux()) return true;
+    return this.historia()?.tipo_documento === 'seguimiento';
   }
 
   irACita(): void {

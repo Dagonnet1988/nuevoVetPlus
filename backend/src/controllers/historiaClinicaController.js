@@ -16,10 +16,14 @@ function toSafeFilenamePart(value = '') {
 function formatDateForFilename(dateValue) {
   const d = new Date(dateValue);
   const safeDate = Number.isNaN(d.getTime()) ? new Date() : d;
-  const day = String(safeDate.getUTCDate()).padStart(2, '0');
-  const month = String(safeDate.getUTCMonth() + 1).padStart(2, '0');
-  const year = String(safeDate.getUTCFullYear());
-  return `${day}${month}${year}`;
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Bogota',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(safeDate);
+  const get = (type) => parts.find((p) => p.type === type)?.value || '00';
+  return `${get('day')}${get('month')}${get('year')}`;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -281,6 +285,41 @@ export const createHistoria = async (req, res) => {
       });
     }
 
+    // El rol auxiliar solo puede crear/editar documentos de seguimiento
+    // (Terapia/Hidroterapia); valoración, fórmula y remisión quedan de solo
+    // lectura para ese rol (ver GET routes, siguen abiertas para 'aux').
+    if (req.user.rol === 'aux') {
+      if (tipo_documento !== 'seguimiento') {
+        return res.status(403).json({
+          success: false,
+          message: 'El rol auxiliar solo puede crear documentos de tipo Terapia/Hidroterapia',
+        });
+      }
+
+      if (!id_cita) {
+        return res.status(400).json({
+          success: false,
+          message: 'Se requiere id_cita para crear un documento de Terapia/Hidroterapia',
+        });
+      }
+
+      const citaResult = await query(
+        `SELECT tipo FROM clinical.calendario_citas WHERE id_cita = $1 AND id_tenant = $2`,
+        [id_cita, tenantId]
+      );
+
+      if (citaResult.rows.length === 0) {
+        return res.status(404).json({ success: false, message: 'Cita no encontrada' });
+      }
+
+      if (!['terapia', 'hidroterapia'].includes(citaResult.rows[0].tipo)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Solo se puede crear un documento de Terapia/Hidroterapia para citas de tipo Terapia o Hidroterapia',
+        });
+      }
+    }
+
     // Regla de consistencia: una cita no debe tener dos documentos activos del mismo tipo.
     if (id_cita) {
       const duplicateResult = await query(
@@ -312,17 +351,20 @@ export const createHistoria = async (req, res) => {
     const codigo_historia = generarCodigo(tipo_documento);
 
     // ── Insertar madre ────────────────────────────────────────────────────────
+    // created_by: quién diligenció el documento realmente (puede ser un aux),
+    // separado de id_veterinario que sigue siendo el responsable clínico.
     await query(
       `INSERT INTO clinical.historias_clinicas
          (id_historia, codigo_historia, tipo_documento, id_mascota, id_veterinario,
-          id_cita, fecha, estado, id_tenant, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,CURRENT_DATE,$7,$8, NOW())`,
+          id_cita, fecha, estado, id_tenant, created_by, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,CURRENT_DATE,$7,$8,$9, NOW())`,
       [
         id_historia, codigo_historia, tipo_documento,
         id_mascota, id_veterinario,
         id_cita || null,
         estado,
         tenantId,
+        req.user.id_usuario,
       ]
     );
 
@@ -569,12 +611,15 @@ export const getHistoriaById = async (req, res) => {
               cc.id_cita AS id_cita_relacionada,
               m.nombre AS mascota_nombre, m.especie, m.raza, m.sexo, m.peso,
               c.id_cliente, c.nombre AS cliente_nombre, c.telefono AS cliente_telefono,
-              u.nombre AS veterinario_nombre, u.email AS veterinario_email
+              u.nombre AS veterinario_nombre, u.email AS veterinario_email,
+              creador.nombre AS creado_por_nombre, creador.apellido AS creado_por_apellido,
+              creador.rol AS creado_por_rol
        FROM clinical.historias_clinicas h
        LEFT JOIN clinical.calendario_citas cc ON cc.id_historia = h.id_historia AND cc.id_tenant = h.id_tenant
        JOIN clinical.mascotas m ON m.id_mascota = h.id_mascota
        JOIN clinical.clientes c ON c.id_cliente = m.id_cliente
        JOIN vetplus_auth.usuarios u ON u.id_usuario = h.id_veterinario
+       LEFT JOIN vetplus_auth.usuarios creador ON creador.id_usuario = h.created_by
        WHERE h.id_historia = $1 AND h.id_tenant = $2`,
       [id, tenantId]
     );
@@ -642,6 +687,34 @@ export const updateHistoria = async (req, res) => {
         success: false,
         message: 'Se requiere un motivo de modificación (mínimo 10 caracteres)',
       });
+    }
+
+    // El rol auxiliar solo puede editar documentos de seguimiento (Terapia/Hidroterapia).
+    if (req.user.rol === 'aux') {
+      if (tipo !== 'seguimiento') {
+        return res.status(403).json({
+          success: false,
+          message: 'El rol auxiliar solo puede editar documentos de tipo Terapia/Hidroterapia',
+        });
+      }
+
+      if (id_cita) {
+        const citaResult = await query(
+          `SELECT tipo FROM clinical.calendario_citas WHERE id_cita = $1 AND id_tenant = $2`,
+          [id_cita, tenantId]
+        );
+
+        if (citaResult.rows.length === 0) {
+          return res.status(404).json({ success: false, message: 'Cita no encontrada' });
+        }
+
+        if (!['terapia', 'hidroterapia'].includes(citaResult.rows[0].tipo)) {
+          return res.status(403).json({
+            success: false,
+            message: 'Solo se puede vincular a citas de tipo Terapia o Hidroterapia',
+          });
+        }
+      }
     }
 
     // ── Actualizar madre ──────────────────────────────────────────────────────

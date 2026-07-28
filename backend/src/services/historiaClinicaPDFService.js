@@ -191,11 +191,15 @@ async function getHistoriaFull(idHistoria, tenantId) {
             c.nombre       AS propietario_nombre,
                  c.telefono     AS propietario_telefono,
                  c.cedula       AS propietario_cedula,
-                 c.email        AS propietario_email
+                 c.email        AS propietario_email,
+            creador.nombre   AS creado_por_nombre,
+            creador.apellido AS creado_por_apellido,
+            creador.rol      AS creado_por_rol
      FROM   clinical.historias_clinicas h
      JOIN   vetplus_auth.usuarios u ON u.id_usuario = h.id_veterinario
      JOIN   clinical.mascotas m     ON m.id_mascota = h.id_mascota
      JOIN   clinical.clientes c     ON c.id_cliente = m.id_cliente
+     LEFT JOIN vetplus_auth.usuarios creador ON creador.id_usuario = h.created_by
      WHERE  h.id_historia = $1 AND h.id_tenant = $2`,
     [idHistoria, tenantId]
   );
@@ -606,6 +610,15 @@ function drawFirma(doc, vet) {
   if (vet.vet_licencia) {
     doc.font('Helvetica').fontSize(7).fillColor(COLORS.mid)
        .text(`Lic. ${vet.vet_licencia}`, FIRMA_X, doc.y, { width: 160, align: 'center' });
+  }
+
+  // Trazabilidad: si quien diligenció el documento fue un auxiliar (no el
+  // veterinario responsable que firma), dejar constancia — no reemplaza la
+  // firma/responsabilidad del veterinario, solo registra quién lo llenó.
+  if (vet.creado_por_rol === 'aux') {
+    const creadorNombre = `${vet.creado_por_nombre ?? ''} ${vet.creado_por_apellido ?? ''}`.trim();
+    doc.font('Helvetica-Oblique').fontSize(7).fillColor(COLORS.mid)
+       .text(`Diligenciado por: ${creadorNombre || 'Auxiliar'} (Auxiliar)`, MARGIN, LINE_Y + 3, { width: FIRMA_X - MARGIN - 20 });
   }
 }
 

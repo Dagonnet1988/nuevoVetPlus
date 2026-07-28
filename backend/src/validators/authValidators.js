@@ -116,8 +116,8 @@ export const validateCreateUser = [
     .withMessage('Contraseña temporal debe tener al menos 8 caracteres'),
     
   body('rol')
-    .isIn(['admin', 'vet'])
-    .withMessage('Rol no disponible temporalmente. Usa admin o vet.'),
+    .isIn(['admin', 'vet', 'aux'])
+    .withMessage('Rol debe ser admin, vet o aux.'),
 
   body('telefono')
     .optional({ values: 'falsy' })
@@ -184,9 +184,9 @@ export const validateUpdateUser = [
     
   body('rol')
     .optional()
-    .isIn(['admin', 'vet'])
-    .withMessage('Rol no disponible temporalmente. Usa admin o vet.'),
-    
+    .isIn(['admin', 'vet', 'aux'])
+    .withMessage('Rol debe ser admin, vet o aux.'),
+
   body('activo')
     .optional()
     .isBoolean()

@@ -119,6 +119,14 @@ export async function createClient(req, res) {
 
     const result = await query(queryText, values);
 
+    await logClientActivity({
+      req,
+      type: 'CLIENT_MANAGEMENT',
+      description: `Propietario creado: ${result.rows[0].nombre}`,
+      entityId: id_cliente,
+      payload: { action: 'create' }
+    });
+
     res.status(201).json({
       success: true,
       message: 'Cliente creado exitosamente',
@@ -470,6 +478,14 @@ export async function updateClient(req, res) {
         message: 'Cliente no encontrado'
       });
     }
+
+    await logClientActivity({
+      req,
+      type: 'CLIENT_MANAGEMENT',
+      description: `Propietario actualizado: ${result.rows[0].nombre}`,
+      entityId: id,
+      payload: { action: 'update', nombre, telefono, email, direccion, cedula, fecha_nacimiento, activo }
+    });
 
     res.json({
       success: true,

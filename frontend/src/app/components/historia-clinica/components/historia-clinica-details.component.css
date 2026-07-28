@@ -173,6 +173,14 @@
   text-overflow: ellipsis;
 }
 
+.info-subvalue {
+  display: block;
+  font-size: 11px;
+  font-style: italic;
+  color: #888;
+  margin-top: 1px;
+}
+
 .info-sub {
   font-size: 12px;
   color: #888;

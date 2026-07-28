@@ -764,12 +764,18 @@ export class MainLayoutComponent implements OnDestroy {
       label: 'Historia Clínica',
       icon: 'assignment',
       route: '/historia-clinica',
-      roles: ['admin', 'vet']
+      roles: ['admin', 'vet', 'aux']
     },
     {
       label: 'Configuración',
       icon: 'settings',
       route: '/configuracion',
+      roles: ['admin']
+    },
+    {
+      label: 'Auditoría',
+      icon: 'fact_check',
+      route: '/auditoria',
       roles: ['admin']
     }
   ];

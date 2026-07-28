@@ -3,6 +3,7 @@ import { validationResult } from 'express-validator/lib/index.js';
 import { v4 as uuidv4 } from 'uuid';
 import { calculatePetAge } from '../utils/ageCalculator.js';
 import { eliminarFotoAnterior, getFotoDefaultPorEspecie } from '../middleware/uploadMiddleware.js';
+import { logActivity } from '../utils/activityLog.js';
 import path from 'path';
 
 /**
@@ -159,6 +160,21 @@ export async function createPacienteCompleto(req, res) {
 
       // Confirmar transacción
       await txClient.query('COMMIT');
+
+      await logActivity({
+        req,
+        type: 'PET_MANAGEMENT',
+        description: `Paciente creado: ${mascota.nombre} (propietario: ${cliente.nombre})`,
+        entityId: id_mascota,
+        payload: {
+          action: 'create',
+          id_cliente,
+          cliente_nuevo: !id_cliente_existente,
+          nombre_mascota: mascota.nombre,
+          especie,
+          raza
+        }
+      });
 
       // Convertir sexo de vuelta al formato frontend
       const mascotaFrontend = {
@@ -410,6 +426,14 @@ export async function updateMascota(req, res) {
       });
     }
 
+    await logActivity({
+      req,
+      type: 'PET_MANAGEMENT',
+      description: `Mascota actualizada: ${result.rows[0].nombre}`,
+      entityId: id,
+      payload: { action: 'update', campos: Object.keys(updates).filter(k => allowedFields.includes(k)) }
+    });
+
     res.json({
       success: true,
       message: 'Mascota actualizada exitosamente',
@@ -574,6 +598,19 @@ export async function updatePacienteCompleto(req, res) {
 
       // Confirmar transacción
       await txClient.query('COMMIT');
+
+      await logActivity({
+        req,
+        type: 'PET_MANAGEMENT',
+        description: `Paciente actualizado: ${mascotaActualizada.nombre}`,
+        entityId: id,
+        payload: {
+          action: 'update',
+          id_cliente,
+          cambio_propietario: id_cliente !== id_cliente_actual,
+          nombre_mascota: mascotaActualizada.nombre
+        }
+      });
 
       // Convertir sexo de vuelta al formato frontend
       const mascotaFrontend = {
@@ -1213,6 +1250,15 @@ export async function createMascotaParaCliente(req, res) {
     );
 
     const mascota = result.rows[0];
+
+    await logActivity({
+      req,
+      type: 'PET_MANAGEMENT',
+      description: `Mascota creada para propietario existente: ${mascota.nombre}`,
+      entityId: mascota.id_mascota,
+      payload: { action: 'create', id_cliente, especie, raza }
+    });
+
     res.status(201).json({
       success: true,
       message: 'Mascota creada exitosamente',
@@ -1297,6 +1343,14 @@ export async function inactivarMascota(req, res) {
         message: 'Mascota no encontrada o ya estaba inactiva'
       });
     }
+
+    await logActivity({
+      req,
+      type: 'PET_MANAGEMENT',
+      description: `Mascota inactivada: ${result.rows[0].nombre} (motivo: ${motivo})`,
+      entityId: id,
+      payload: { action: 'deactivate', motivo }
+    });
 
     res.json({
       success: true,

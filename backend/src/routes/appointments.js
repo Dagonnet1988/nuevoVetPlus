@@ -172,11 +172,11 @@ router.get(
 /**
  * @route   PUT /api/clinical/appointments/:id
  * @desc    Actualizar cita completa
- * @access  Veterinario, Admin
+ * @access  Veterinario, Admin, Auxiliar
  */
 router.put(
     '/:id',
-    authorize(['admin', 'vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateUpdateAppointment,
     validateRequest,
     updateAppointment
@@ -198,11 +198,11 @@ router.patch(
 /**
  * @route   DELETE /api/clinical/appointments/:id
  * @desc    Cancelar cita
- * @access  Veterinario, Admin
+ * @access  Veterinario, Admin, Auxiliar
  */
 router.delete(
     '/:id',
-    authorize(['admin', 'vet']),
+    authorize(['admin', 'vet', 'aux']),
     validateUUIDParam,
     validateRequest,
     cancelAppointment

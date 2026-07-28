@@ -142,11 +142,11 @@ router.put('/mascota/:id',
 /**
  * @route   PATCH /api/clinical/pacientes/mascota/:id/inactivar
  * @desc    Inactivar mascota (requiere motivo: Fallecida | Transferida | Error de registro | Otro)
- * @access  Private (admin, vet)
+ * @access  Private (admin, vet, aux)
  */
 router.patch('/mascota/:id/inactivar',
   authenticateToken,
-  authorize(['admin', 'vet']),
+  authorize(['admin', 'vet', 'aux']),
   inactivarMascota
 );
 

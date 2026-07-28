@@ -84,12 +84,12 @@ export const routes: Routes = [
         data: { roles: ['admin', 'vet', 'aux'] }
       },
 
-      // Historia Clínica - Accesible para admin, vet
+      // Historia Clínica - Accesible para admin, vet (aux tiene acceso restringido en las subrutas)
       {
         path: 'historia-clinica',
         loadChildren: () => import('./components/historia-clinica/historia-clinica.routes').then(m => m.historiaClinicaRoutes),
         canActivate: [RoleGuard],
-        data: { roles: ['admin', 'vet'] }
+        data: { roles: ['admin', 'vet', 'aux'] }
       },
 
 
@@ -105,6 +105,14 @@ export const routes: Routes = [
       {
         path: 'configuracion',
         loadChildren: () => import('./components/configuracion/configuracion.routes').then(m => m.CONFIGURACION_ROUTES),
+        canActivate: [RoleGuard],
+        data: { roles: ['admin'] }
+      },
+
+      // Auditoría - Solo admin (registro de quién hizo qué)
+      {
+        path: 'auditoria',
+        loadComponent: () => import('./components/auditoria/auditoria.component').then(m => m.AuditoriaComponent),
         canActivate: [RoleGuard],
         data: { roles: ['admin'] }
       },

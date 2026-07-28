@@ -50,6 +50,10 @@ export interface HistoriaClinica {
   raza?:               string;
   sexo?:               string;
   peso?:               number;
+  // Quién diligenció el documento realmente (puede ser distinto del vet responsable)
+  creado_por_nombre?:   string;
+  creado_por_apellido?: string;
+  creado_por_rol?:      'admin' | 'vet' | 'aux';
   // Datos del tipo hijo (solo en getById)
   datos?: DatosValoracionInicial | DatosSeguimiento | DatosFormula | DatosRemision;
   archivos?: ArchivoHistoria[];

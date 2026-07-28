@@ -51,11 +51,11 @@ router.get('/:id',
 /**
  * @route   PUT /api/clinical/clients/:id
  * @desc    Actualizar datos de cliente
- * @access  Private (admin, vet)
+ * @access  Private (admin, vet, aux)
  */
 router.put('/:id',
   authenticateToken,
-  authorize(['admin', 'vet']),
+  authorize(['admin', 'vet', 'aux']),
   clientValidators.validateUpdateClient,
   clientController.updateClient
 );
@@ -63,11 +63,11 @@ router.put('/:id',
 /**
  * @route   DELETE /api/clinical/clients/:id
  * @desc    Eliminar condicional: desactiva si tiene mascotas, elimina físico si no tiene
- * @access  Private (admin, vet)
+ * @access  Private (admin, vet, aux)
  */
 router.delete('/:id',
   authenticateToken,
-  authorize(['admin', 'vet']),
+  authorize(['admin', 'vet', 'aux']),
   clientValidators.validateClientId,
   clientController.deleteClient
 );
@@ -75,11 +75,11 @@ router.delete('/:id',
 /**
  * @route   PATCH /api/clinical/clients/:id/restore
  * @desc    Reactivar cliente deshabilitado
- * @access  Private (admin, vet)
+ * @access  Private (admin, vet, aux)
  */
 router.patch('/:id/restore',
   authenticateToken,
-  authorize(['admin', 'vet']),
+  authorize(['admin', 'vet', 'aux']),
   clientValidators.validateClientId,
   clientController.restoreClient
 );

@@ -24,7 +24,9 @@ router.get('/',    authorize(['admin', 'vet', 'aux']), getHistorias);
 router.get('/medicamentos/sugerencias', authorize(['admin', 'vet', 'aux']), getMedicamentosSugeridos);
 
 // POST /api/clinical/historias          → crear nueva historia
-router.post('/',   authorize(['admin', 'vet']),        createHistoria);
+// 'aux' puede llegar acá, pero createHistoria valida que solo cree tipo 'seguimiento'
+// (Terapia/Hidroterapia) y que la cita vinculada sea de ese mismo tipo.
+router.post('/',   authorize(['admin', 'vet', 'aux']), createHistoria);
 
 // GET  /api/clinical/historias/:id/pdf  → descargar PDF
 router.get('/:id/pdf', authorize(['admin', 'vet', 'aux']), downloadHistoriaPDF);
@@ -39,7 +41,9 @@ router.get('/by-appointment/:id_cita/all', authorize(['admin', 'vet', 'aux']), g
 router.get('/:id', authorize(['admin', 'vet', 'aux']), getHistoriaById);
 
 // PUT  /api/clinical/historias/:id      → actualizar madre + hijo
-router.put('/:id', authorize(['admin', 'vet']),        updateHistoria);
+// 'aux' puede llegar acá, pero updateHistoria valida que el documento sea de
+// tipo 'seguimiento' (Terapia/Hidroterapia) antes de permitir la edición.
+router.put('/:id', authorize(['admin', 'vet', 'aux']), updateHistoria);
 
 // POST /api/clinical/historias/:id/upload-files → subir adjuntos diagnósticos
 router.post('/:id/upload-files',

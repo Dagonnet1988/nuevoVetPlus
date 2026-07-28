@@ -29,9 +29,9 @@ const DEFAULT_TEMPLATES = [
     descripcion: 'Correo recordatorio previo a la cita',
     asunto: 'Recordatorio de cita - {{mascota_nombre}}',
     cuerpo_html:
-      '<p>Hola {{cliente_nombre}},</p><p>Te recordamos que la cita de <strong>{{mascota_nombre}}</strong> es el día <strong>{{fecha_hora}}</strong>.</p><p>Te esperamos.</p><p>{{clinica_nombre}}</p>',
+      '<p>Hola {{cliente_nombre}},</p><p>Te recordamos tu cita para <strong>{{mascota_nombre}}</strong>.</p><p>Día y hora: <strong>{{fecha_hora}}</strong></p><p>Te esperamos.</p><p>{{clinica_nombre}}</p>',
     cuerpo_text:
-      'Hola {{cliente_nombre}}, te recordamos que la cita de {{mascota_nombre}} es el día {{fecha_hora}}. Te esperamos. {{clinica_nombre}}',
+      'Hola {{cliente_nombre}}, te recordamos tu cita para {{mascota_nombre}}. Día y hora: {{fecha_hora}}. Te esperamos. {{clinica_nombre}}',
     variables_permitidas: ['cliente_nombre', 'mascota_nombre', 'fecha_hora', 'clinica_nombre']
   },
   {

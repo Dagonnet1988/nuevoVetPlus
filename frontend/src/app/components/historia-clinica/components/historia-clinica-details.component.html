@@ -51,7 +51,8 @@
           <mat-icon>more_vert</mat-icon>
         </button>
         <mat-menu #accMenu="matMenu">
-          <button mat-menu-item (click)="editar()" [disabled]="historia()!.estado === 'Cancelado'">
+          <button mat-menu-item (click)="editar()" [disabled]="historia()!.estado === 'Cancelado' || !puedeEditar()"
+                  [matTooltip]="puedeEditar() ? '' : 'Tu rol solo puede editar documentos de Terapia/Hidroterapia'">
             <mat-icon>edit</mat-icon> Modificar documento
           </button>
           <mat-divider></mat-divider>
@@ -101,6 +102,11 @@
             <div>
               <span class="info-label">Veterinario</span>
               <span class="info-value">{{ historia()!.veterinario_nombre }}</span>
+              @if (historia()!.creado_por_rol === 'aux') {
+                <span class="info-subvalue">
+                  Diligenciado por {{ historia()!.creado_por_nombre }} {{ historia()!.creado_por_apellido }} (Auxiliar)
+                </span>
+              }
             </div>
           </div>
           <div class="info-item">

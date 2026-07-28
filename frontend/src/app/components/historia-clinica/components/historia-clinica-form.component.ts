@@ -25,6 +25,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { HistoriaClinicaService, TipoDocumento, TIPO_LABELS, TIPO_ICONS } from '../../../services/historia-clinica.service';
 import { PacientesService } from '../../../services/pacientes.service';
 import { CitasService } from '../../../services/citas.service';
+import { AuthService } from '../../../services/auth.service';
 
 type EjercicioCategoriaKey = 'calentamiento' | 'fortalecimiento' | 'hidroterapia' | 'pasivos' | 'agentes';
 
@@ -421,7 +422,8 @@ export class HistoriaClinicaFormComponent implements OnInit, OnDestroy, CanCompo
     private snackBar: MatSnackBar,
     private router: Router,
     private route: ActivatedRoute,
-    private location: Location
+    private location: Location,
+    private authService: AuthService
   ) {}
 
   /** Advertencia nativa del navegador al cerrar pestaña / F5 con formulario sucio */
@@ -458,6 +460,13 @@ export class HistoriaClinicaFormComponent implements OnInit, OnDestroy, CanCompo
       ctrl.updateValueAndValidity();
       this.loadHistoria(id);
     } else {
+      // El rol auxiliar solo puede crear documentos de Terapia/Hidroterapia
+      // (el backend ya lo exige; esto solo evita que intente elegir otro tipo
+      // al crear uno nuevo — no afecta ver historias existentes de otro tipo).
+      if (this.authService.isAux()) {
+        this.tiposDocumento = this.tiposDocumento.filter(t => t.value === 'seguimiento');
+      }
+
       this.prefillFromQueryParams();
       this.lockPacienteVeterinarioIfFromCita();
       // Si el tipo llega por query params (p.ej. seguimiento desde una cita),

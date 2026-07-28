@@ -4,6 +4,7 @@ import googleCalendarService from '../services/googleCalendar.js';
 import appointmentConflictService from '../services/appointmentConflictService.js';
 import { sendEmail } from '../services/emailService.js';
 import { renderEmailTemplate } from '../services/emailTemplateService.js';
+import { logActivity } from '../utils/activityLog.js';
 
 /**
  * Convertir fecha a formato Colombia (sin zona horaria)
@@ -904,10 +905,18 @@ export const createAppointment = async (req, res) => {
         
         // Sincronizar con Google Calendar (de forma asíncrona)
         const syncResult = await syncAppointmentWithGoogle(citaCompleta, 'create');
-        
+
+        await logActivity({
+            req,
+            type: 'CITAS',
+            description: `Cita creada: ${citaCompleta.codigo_cita} (${citaCompleta.mascota_nombre || 'mascota'})`,
+            entityId: id_cita,
+            payload: { action: 'create', tipo, fecha_inicio: citaCompleta.fecha_inicio, id_mascota, id_veterinario }
+        });
+
         // Transformar para el frontend
         const citaTransformada = transformAppointmentForFrontend(citaCompleta);
-        
+
         res.status(201).json({
             success: true,
             message: 'Cita creada exitosamente',
@@ -1495,9 +1504,17 @@ export const updateAppointment = async (req, res) => {
             syncResult = await syncAppointmentWithGoogle(citaActualizada, 'update');
         }
         
+        await logActivity({
+            req,
+            type: 'CITAS',
+            description: `Cita actualizada: ${citaActualizada.codigo_cita}${hasRescheduleChange ? ' (reagendada)' : ''}`,
+            entityId: id,
+            payload: { action: 'update', campos: allowedFields.filter(f => updateData[f] !== undefined), reagendada: hasRescheduleChange }
+        });
+
         // Transformar para el frontend
         const citaTransformada = transformAppointmentForFrontend(citaActualizada);
-        
+
         res.json({
             success: true,
             message: 'Cita actualizada exitosamente',
@@ -1505,7 +1522,7 @@ export const updateAppointment = async (req, res) => {
             google_sync: syncResult.skipped ? 'disabled' : (syncResult.success ? 'synced' : 'failed'),
             google_sync_message: syncResult.message || syncResult.error
         });
-        
+
     } catch (error) {
         console.error('Error actualizando cita:', error);
         res.status(500).json({
@@ -1636,21 +1653,12 @@ export const updateAppointmentStatus = async (req, res) => {
             const updateFields = ['estado = $1', 'notas = COALESCE($2, notas)', 'updated_at = CURRENT_TIMESTAMP'];
             const updateParams = [estadoDb, notas, id, tenantId];
 
-            // Al iniciar consulta, fijar hora real de inicio y un fin tentativo (+1h)
-            // para no bloquear toda la jornada hasta que se marque como completada.
-            // Solo se preserva la hora original si la cita es de una fecha PASADA
-            // (antes de hoy). Si es de hoy o de una fecha futura, se ajusta al momento actual.
+            // Al iniciar consulta, fecha_inicio queda tal como se programó la cita
+            // (no se reemplaza por la hora real en que se marcó "en curso").
+            // Solo se fija un fin tentativo (inicio + 1h) para no bloquear toda la
+            // jornada hasta que se marque como completada.
             if (estadoDb === 'en_curso' && citaExistente.rows[0].estado !== 'en_curso') {
-                updateFields.push(`fecha_inicio = CASE
-                    WHEN DATE(fecha_inicio) >= DATE(CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')
-                    THEN date_trunc('second', CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')
-                    ELSE fecha_inicio
-                END`);
-                updateFields.push(`fecha_fin = CASE
-                    WHEN DATE(fecha_inicio) >= DATE(CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')
-                    THEN (date_trunc('second', CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota') + INTERVAL '1 hour')
-                    ELSE fecha_fin
-                END`);
+                updateFields.push(`fecha_fin = fecha_inicio + INTERVAL '1 hour'`);
             }
 
             // Al completar ya NO se toca fecha_fin/fecha_inicio: quedan tal como
@@ -1853,6 +1861,14 @@ export const updateAppointmentStatus = async (req, res) => {
                 console.log('ℹ️ Cita no sincronizada con Google Calendar o cita no encontrada');
             }
 
+            await logActivity({
+                req,
+                type: 'CITAS',
+                description: `Cita ${citaActualizada.codigo_cita}: estado ${result.rows[0].estado} → ${estadoDb}`,
+                entityId: id,
+                payload: { action: 'status_change', estado_anterior: result.rows[0].estado, estado_nuevo: estadoDb }
+            });
+
             // Transformar para el frontend
             const citaTransformada = transformAppointmentForFrontend(citaActualizada);
 
@@ -1941,7 +1957,15 @@ export const cancelAppointment = async (req, res) => {
         if (citaCancelada && citaCancelada.google_event_id) {
             syncResult = await syncAppointmentWithGoogle(citaCancelada, 'delete');
         }
-        
+
+        await logActivity({
+            req,
+            type: 'CITAS',
+            description: `Cita cancelada: ${result.rows[0].codigo_cita} (motivo: ${motivo_cancelacion || 'Sin motivo especificado'})`,
+            entityId: id,
+            payload: { action: 'cancel', motivo_cancelacion: motivo_cancelacion || 'Sin motivo especificado' }
+        });
+
         res.json({
             success: true,
             message: 'Cita marcada como no asistió',

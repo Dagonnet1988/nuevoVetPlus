@@ -105,8 +105,8 @@ class AppointmentExportController {
                 c.codigo_cita,
                 c.fecha_inicio,
                 c.fecha_fin,
-                DATE(c.fecha_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Bogota') as fecha_local,
-                c.fecha_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Bogota' as fecha_inicio_colombia,
+                DATE(c.fecha_inicio) as fecha_local,
+                c.fecha_inicio as fecha_inicio_colombia,
                 c.tipo,
                 c.motivo,
                 c.estado,
@@ -123,8 +123,8 @@ class AppointmentExportController {
             LEFT JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
             LEFT JOIN vetplus_auth.usuarios u ON c.id_veterinario = u.id_usuario
             WHERE c.id_veterinario = $1
-            AND DATE(c.fecha_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Bogota') >= $2::date
-            AND DATE(c.fecha_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Bogota') <= $3::date
+            AND DATE(c.fecha_inicio) >= $2::date
+            AND DATE(c.fecha_inicio) <= $3::date
             AND LOWER(c.estado) NOT IN ('cancelada', 'no_asistio')
             ORDER BY c.fecha_inicio ASC
         `;
@@ -179,8 +179,8 @@ class AppointmentExportController {
                 c.codigo_cita,
                 c.fecha_inicio,
                 c.fecha_fin,
-                DATE(c.fecha_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Bogota') as fecha_local,
-                c.fecha_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Bogota' as fecha_inicio_colombia,
+                DATE(c.fecha_inicio) as fecha_local,
+                c.fecha_inicio as fecha_inicio_colombia,
                 c.tipo,
                 c.motivo,
                 c.estado,
@@ -197,8 +197,8 @@ class AppointmentExportController {
             LEFT JOIN clinical.mascotas m ON c.id_mascota = m.id_mascota
             LEFT JOIN clinical.clientes cl ON m.id_cliente = cl.id_cliente
             LEFT JOIN vetplus_auth.usuarios u ON c.id_veterinario = u.id_usuario
-            WHERE DATE(c.fecha_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Bogota') >= $1::date
-            AND DATE(c.fecha_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Bogota') <= $2::date
+            WHERE DATE(c.fecha_inicio) >= $1::date
+            AND DATE(c.fecha_inicio) <= $2::date
             AND LOWER(c.estado) NOT IN ('cancelada', 'no_asistio')
             ORDER BY c.fecha_inicio ASC, u.nombre ASC
         `;
