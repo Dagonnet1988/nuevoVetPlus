@@ -1653,22 +1653,10 @@ export const updateAppointmentStatus = async (req, res) => {
                 END`);
             }
 
-            // Al completar, fijar hora real de fin (y normalizar un inicio futuro)
-            // salvo que la cita sea de una fecha PASADA, en cuyo caso se conservan
-            // las horas que ya tenía.
-            if (estadoDb === 'completada') {
-                updateFields.push(`fecha_fin = CASE
-                    WHEN DATE(fecha_inicio) >= DATE(CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')
-                    THEN date_trunc('second', CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')
-                    ELSE fecha_fin
-                END`);
-                updateFields.push(`fecha_inicio = CASE
-                    WHEN DATE(fecha_inicio) >= DATE(CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')
-                         AND fecha_inicio > date_trunc('second', CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')
-                    THEN date_trunc('second', CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')
-                    ELSE fecha_inicio
-                END`);
-            }
+            // Al completar ya NO se toca fecha_fin/fecha_inicio: quedan tal como
+            // se fijaron al pasar a "en curso" (inicio real + 1h) o al crear la
+            // cita (inicio + 1h por defecto) — la hora de fin es predeterminada,
+            // no el momento real en que alguien apretó "Completar".
 
             const result = await txClient.query(`
                 UPDATE clinical.calendario_citas
