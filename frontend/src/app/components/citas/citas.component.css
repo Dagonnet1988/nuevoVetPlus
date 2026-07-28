@@ -644,7 +644,7 @@
 }
 
 ::ng-deep .fc-event {
-  border: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.55) !important;
   border-radius: 10px !important;
   font-size: 11px !important;
   min-height: 35px !important;
@@ -652,6 +652,7 @@
   cursor: pointer !important;
   transition: all 0.3s ease !important;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  background-clip: padding-box !important;
   backdrop-filter: blur(10px);
 }
 
@@ -1417,7 +1418,8 @@
 /* Eventos */
 :host ::ng-deep .fc-event {
   border-radius: 8px;
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background-clip: padding-box;
   font-size: 13px; /* Texto un poco más grande */
   padding: 4px 8px; /* Más padding para mejor legibilidad */
   margin: 2px;
@@ -2773,7 +2775,7 @@
 }
 
 :host ::ng-deep .fc-timegrid-event-harness {
-  margin: 1px !important;
+  margin: 2px !important;
   /* FullCalendar posiciona y dimensiona este contenedor por duración real
      (inline style), no por .fc-timegrid-event de adentro. Una cita de pocos
      minutos quedaba con una franja de unos pocos píxeles y el nombre del
@@ -2795,6 +2797,11 @@
   border-width: 1px !important;
   border-style: solid !important;
   border-radius: 6px !important;
+  /* Anillo blanco suave alrededor de cada bloque: sin esto, dos citas del
+     mismo tipo que quedan lado a lado (misma hora, mismo color/borde) se
+     ven como un solo bloque continuo. El anillo marca el límite entre
+     ambas aunque compartan color. */
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9) !important;
   display: flex;
   flex-direction: column;
   justify-content: center;
