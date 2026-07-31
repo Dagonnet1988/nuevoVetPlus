@@ -17,6 +17,9 @@ import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angu
 import { FormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatNativeDateModule } from '@angular/material/core';
+import { MatMenuModule } from '@angular/material/menu';
 import { environment } from '../../../environments/environment';
 
 import { CitasService } from '../../services/citas.service';
@@ -38,7 +41,8 @@ import { Cita, TIPOS_CITA, ESTADOS_CITA } from '../../models/cita.interface';
     MatSnackBarModule,
     MatTooltipModule,
     MatBadgeModule,
-    MatDividerModule
+    MatDividerModule,
+    MatMenuModule
   ],
   templateUrl: './cita-details.component.html',
   styleUrl: './cita-details.component.css'
@@ -220,12 +224,77 @@ export class CitaDetailsComponent implements OnInit {
       } else {
         throw new Error(response?.message || 'Error cancelando cita');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error cancelando cita:', error);
-      this.snackBar.open('Error cancelando la cita', 'Cerrar', { duration: 3000 });
+      const message = error?.error?.message || error?.message || 'Error cancelando la cita';
+      this.snackBar.open(message, 'Cerrar', { duration: 5000 });
     } finally {
       this.updating.set(false);
     }
+  }
+
+  async onReagendar(): Promise<void> {
+    const cita = this.cita();
+    if (!cita || this.updating()) return;
+
+    const inicioActual = this.parseLocalDate(cita.fecha_inicio);
+    const finActual = this.parseLocalDate(cita.fecha_fin);
+    const duracionMs = finActual.getTime() - inicioActual.getTime();
+
+    const dialogRef = this.dialog.open(CitaReagendarDialogComponent, {
+      width: '380px',
+      data: {
+        fecha: inicioActual,
+        hora: this.formatHourMinute(inicioActual)
+      }
+    });
+
+    const result = await dialogRef.afterClosed().toPromise();
+    if (!result) return;
+
+    const { fecha, hora } = result as { fecha: Date; hora: string };
+    const [horas, minutos] = hora.split(':').map(Number);
+    const nuevaFechaInicio = new Date(fecha);
+    nuevaFechaInicio.setHours(horas, minutos, 0, 0);
+    const nuevaFechaFin = new Date(nuevaFechaInicio.getTime() + duracionMs);
+
+    try {
+      this.updating.set(true);
+
+      const response = await this.citasService.updateCita(cita.id_cita, {
+        fecha_inicio: this.formatLocalDateForBackend(nuevaFechaInicio),
+        fecha_fin: this.formatLocalDateForBackend(nuevaFechaFin)
+      }).toPromise();
+
+      if (response?.success) {
+        this.snackBar.open('Cita reagendada exitosamente', 'Cerrar', { duration: 3000 });
+        await this.loadCita(cita.id_cita);
+      } else {
+        throw new Error(response?.message || 'Error reagendando cita');
+      }
+    } catch (error: any) {
+      console.error('Error reagendando cita:', error);
+      const message = error?.error?.message || error?.message || 'Error reagendando la cita';
+      this.snackBar.open(message, 'Cerrar', { duration: 5000 });
+    } finally {
+      this.updating.set(false);
+    }
+  }
+
+  private formatHourMinute(date: Date): string {
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  }
+
+  private formatLocalDateForBackend(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
   }
 
   async onSyncWithGoogle(): Promise<void> {
@@ -634,16 +703,18 @@ export class CitaDetailsComponent implements OnInit {
       return false;
     }
 
-    // No se puede editar si está completada o no asistió
-    return !['completada', 'no_asistio'].includes(cita.estado);
+    // No se puede editar si está completada, no asistió o cancelada
+    return !['completada', 'no_asistio', 'cancelada'].includes(cita.estado);
   }
 
   canCancelCita(): boolean {
     const cita = this.cita();
     if (!cita) return false;
 
-    // Solo se puede cancelar si no está ya cancelada o completada
-    return !['cancelada', 'completada'].includes(cita.estado);
+    // Solo se puede cancelar si no está ya cancelada/completada y no tiene
+    // ningún documento clínico asociado (el backend vuelve a validar esto).
+    if (['cancelada', 'completada'].includes(cita.estado)) return false;
+    return !this.historiaClinicaAsociada();
   }
 
   canTransitionTo(estadoDestino: string): boolean {
@@ -673,7 +744,7 @@ export class CitaDetailsComponent implements OnInit {
     const transitions: {[key: string]: string[]} = {
       // Compatibilidad con estados legados
       'pendiente': ['confirmada'],
-      'cancelada': ['no_asistio'],
+      'cancelada': [], // Terminal: solo se llega/sale vía el flujo dedicado de cancelar
       'confirmada': ['en_curso', 'no_asistio'],
       'en_curso': ['completada', 'no_asistio'],
       'completada': [], // No se puede cambiar desde completada
@@ -1146,6 +1217,75 @@ export class CitaCancelReasonDialogComponent {
     public dialogRef: MatDialogRef<CitaCancelReasonDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: CitaCancelReasonDialogData
   ) {}
+}
+
+interface CitaReagendarDialogData {
+  fecha: Date;
+  hora: string;
+}
+
+@Component({
+  selector: 'app-cita-reagendar-dialog',
+  standalone: true,
+  imports: [
+    CommonModule,
+    FormsModule,
+    MatDialogModule,
+    MatButtonModule,
+    MatIconModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatDatepickerModule,
+    MatNativeDateModule
+  ],
+  template: `
+    <h2 mat-dialog-title>
+      <mat-icon>event_repeat</mat-icon>
+      Reagendar cita
+    </h2>
+    <mat-dialog-content>
+      <p class="subtitle">Solo se modifica la fecha y hora de inicio; la duración de la cita se mantiene igual.</p>
+      <div class="fields-row">
+        <mat-form-field appearance="outline" class="date-field">
+          <mat-label>Nueva fecha</mat-label>
+          <input matInput [matDatepicker]="picker" [(ngModel)]="fecha" required>
+          <mat-datepicker-toggle matIconSuffix [for]="picker"></mat-datepicker-toggle>
+          <mat-datepicker #picker></mat-datepicker>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="time-field">
+          <mat-label>Nueva hora</mat-label>
+          <input matInput type="time" [(ngModel)]="hora" required min="07:00" max="20:00">
+        </mat-form-field>
+      </div>
+    </mat-dialog-content>
+    <mat-dialog-actions align="end">
+      <button mat-button (click)="dialogRef.close(null)">Cancelar</button>
+      <button mat-raised-button color="primary" [disabled]="!fecha || !hora"
+              (click)="dialogRef.close({ fecha, hora })">
+        Reagendar
+      </button>
+    </mat-dialog-actions>
+  `,
+  styles: [`
+    h2[mat-dialog-title] { display:flex; align-items:center; gap:8px; }
+    .subtitle { margin: 0 0 16px 0; color: #607d8b; }
+    .fields-row { display: flex; gap: 12px; }
+    .date-field { flex: 1.4; }
+    .time-field { flex: 1; }
+  `]
+})
+export class CitaReagendarDialogComponent {
+  fecha: Date;
+  hora: string;
+
+  constructor(
+    public dialogRef: MatDialogRef<CitaReagendarDialogComponent>,
+    @Inject(MAT_DIALOG_DATA) public data: CitaReagendarDialogData
+  ) {
+    this.fecha = data.fecha;
+    this.hora = data.hora;
+  }
 }
 
 interface CitaDocumentoPdfDialogData {

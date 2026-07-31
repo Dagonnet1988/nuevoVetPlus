@@ -56,10 +56,10 @@ const ESTADO_MAPPING = {
     // Frontend -> Base de datos
     // Compatibilidad legada
     'pendiente': 'confirmada',
-    'confirmada': 'confirmada', 
+    'confirmada': 'confirmada',
     'en_curso': 'en_curso',
     'completada': 'completada',
-    'cancelada': 'no_asistio',
+    'cancelada': 'cancelada',
     'no_asistio': 'no_asistio'
 };
 
@@ -68,9 +68,9 @@ const ESTADO_REVERSE_MAPPING = {
     // Compatibilidad legada
     'pendiente': 'confirmada',
     'confirmada': 'confirmada',
-    'en_curso': 'en_curso', 
+    'en_curso': 'en_curso',
     'completada': 'completada',
-    'cancelada': 'no_asistio',
+    'cancelada': 'cancelada',
     'no_asistio': 'no_asistio'
 };
 
@@ -1235,8 +1235,11 @@ export const getAppointments = async (req, res) => {
             const estadoDb = mapFrontendToDb(estado);
             whereConditions.push(`c.estado = $${paramCount}`);
             queryParams.push(estadoDb);
+        } else {
+            // Por defecto las citas canceladas no se muestran en los listados generales.
+            whereConditions.push(`c.estado != 'cancelada'`);
         }
-        
+
         if (tipo) {
             paramCount++;
             whereConditions.push(`c.tipo = $${paramCount}`);
@@ -1924,34 +1927,65 @@ export const updateAppointmentStatus = async (req, res) => {
 
 /**
  * Cancelar cita (soft delete)
+ * Requisitos:
+ *  - No se puede cancelar si la cita ya tiene algún documento clínico asociado
+ *    (para no perder trazabilidad de una atención que ya se registró).
+ *  - Al cancelar, la cita deja de aparecer en el calendario por defecto
+ *    (ver getCalendarView/getAppointments) y se elimina de Google Calendar.
  */
 export const cancelAppointment = async (req, res) => {
     try {
         const { id } = req.params;
         const { motivo_cancelacion } = req.body;
-        
-        const result = await query(`
-            UPDATE clinical.calendario_citas 
-            SET estado = 'no_asistio', 
-                notas = CASE 
-                    WHEN notas IS NULL THEN $2
-                    ELSE notas || ' | NO ASISTIÓ: ' || $2
-                END,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id_cita = $1 AND estado != 'no_asistio'
-            RETURNING *
-        `, [id, motivo_cancelacion || 'Sin motivo especificado']);
-        
-        if (result.rows.length === 0) {
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+
+        const citaExistente = await query(
+            'SELECT id_cita, estado, codigo_cita FROM clinical.calendario_citas WHERE id_cita = $1 AND id_tenant = $2',
+            [id, tenantId]
+        );
+
+        if (citaExistente.rows.length === 0) {
             return res.status(404).json({
                 success: false,
-                message: 'Cita no encontrada o ya marcada como no asistió'
+                message: 'Cita no encontrada'
             });
         }
-        
+
+        if (citaExistente.rows[0].estado === 'cancelada') {
+            return res.status(409).json({
+                success: false,
+                message: 'La cita ya está cancelada'
+            });
+        }
+
+        const historiaAsociada = await query(
+            'SELECT id_historia FROM clinical.historias_clinicas WHERE id_cita = $1 AND id_tenant = $2 LIMIT 1',
+            [id, tenantId]
+        );
+
+        if (historiaAsociada.rows.length > 0) {
+            return res.status(409).json({
+                success: false,
+                message: 'No se puede cancelar: esta cita ya tiene un documento clínico asociado.',
+                code: 'HISTORIA_CLINICA_ASOCIADA'
+            });
+        }
+
+        const result = await query(`
+            UPDATE clinical.calendario_citas
+            SET estado = 'cancelada',
+                notas = CASE
+                    WHEN notas IS NULL THEN $3
+                    ELSE notas || ' | CANCELADA: ' || $3
+                END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id_cita = $1 AND id_tenant = $2
+            RETURNING *
+        `, [id, tenantId, motivo_cancelacion || 'Sin motivo especificado']);
+
         // Obtener información completa para sincronización
         const citaCancelada = await getAppointmentWithDetails(id);
-        
+
         // Eliminar de Google Calendar si existe
         let syncResult = { success: true, skipped: true, message: 'Sin evento en Google Calendar' };
         if (citaCancelada && citaCancelada.google_event_id) {
@@ -1968,14 +2002,14 @@ export const cancelAppointment = async (req, res) => {
 
         res.json({
             success: true,
-            message: 'Cita marcada como no asistió',
+            message: 'Cita cancelada exitosamente',
             data: result.rows[0],
             google_sync: syncResult.skipped ? 'disabled' : (syncResult.success ? 'deleted' : 'failed'),
             google_sync_message: syncResult.skipped
                 ? syncResult.message
                 : (syncResult.success ? 'Eliminada de Google Calendar' : syncResult.error)
         });
-        
+
     } catch (error) {
         console.error('Error cancelando cita:', error);
         res.status(500).json({
@@ -2162,8 +2196,12 @@ export const getCalendarView = async (req, res) => {
             whereConditions.push(`c.estado = $${paramIndex}`);
             queryParams.push(estadoDb);
             paramIndex++;
+        } else {
+            // Por defecto las citas canceladas no se muestran en el calendario
+            // (siguen existiendo en BD, solo se ocultan de la vista general).
+            whereConditions.push(`c.estado != 'cancelada'`);
         }
-        
+
         // Filtro por tipo
         if (tipo) {
             whereConditions.push(`c.tipo = $${paramIndex}`);
@@ -2537,7 +2575,7 @@ export const getAppointmentStats = async (req, res) => {
                                 ,COUNT(*) FILTER (
                                                                                 WHERE c.fecha_inicio >= b.week_start
                                                                                         AND c.fecha_inicio < (b.week_end + INTERVAL '1 day')
-                                            AND c.estado = 'no_asistio'
+                                            AND c.estado IN ('no_asistio', 'cancelada')
                                 )::int AS citas_canceladas_semana
             FROM clinical.calendario_citas c
             CROSS JOIN bounds b

@@ -31,11 +31,32 @@
         </div>
 
         <div class="header-actions">
-          @if (canEditCita()) {
-            <button mat-raised-button color="primary" (click)="onEdit()" [disabled]="updating()">
-              <mat-icon>edit</mat-icon>
-              Editar
+          @if (canEditCita() || canCancelCita()) {
+            <button mat-icon-button [matMenuTriggerFor]="citaActionsMenu" [disabled]="updating()"
+                    matTooltip="Más acciones">
+              <mat-icon>more_vert</mat-icon>
             </button>
+
+            <mat-menu #citaActionsMenu="matMenu">
+              @if (canEditCita()) {
+                <button mat-menu-item (click)="onEdit()">
+                  <mat-icon>edit</mat-icon>
+                  <span>Editar</span>
+                </button>
+
+                <button mat-menu-item (click)="onReagendar()">
+                  <mat-icon>event_repeat</mat-icon>
+                  <span>Reagendar</span>
+                </button>
+              }
+
+              @if (canCancelCita()) {
+                <button mat-menu-item (click)="onCancel()" class="menu-item-warn">
+                  <mat-icon>event_busy</mat-icon>
+                  <span>Cancelar cita</span>
+                </button>
+              }
+            </mat-menu>
           }
 
           @if (canViewHistoriaClinica()) {

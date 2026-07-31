@@ -140,6 +140,14 @@
   color: #1976d2;
 }
 
+::ng-deep .menu-item-warn {
+  color: #d32f2f;
+}
+
+::ng-deep .menu-item-warn mat-icon {
+  color: #d32f2f;
+}
+
 /* Quick actions card */
 .quick-actions-card {
   border-radius: 12px;

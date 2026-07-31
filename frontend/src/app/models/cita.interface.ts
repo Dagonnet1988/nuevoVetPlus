@@ -74,7 +74,8 @@ export type EstadoCita =
   | 'confirmada'
   | 'en_curso'
   | 'completada'
-  | 'no_asistio';
+  | 'no_asistio'
+  | 'cancelada';
 
 export interface CitaFormData {
   id_mascota: string;
@@ -193,5 +194,10 @@ export const ESTADOS_CITA: { value: EstadoCita; label: string; color: string }[]
   { value: 'confirmada', label: 'Confirmada', color: '#2196f3' },
   { value: 'en_curso', label: 'En Curso', color: '#9c27b0' },
   { value: 'completada', label: 'Completa', color: '#4caf50' },
-  { value: 'no_asistio', label: 'No Asistió', color: '#f44336' }
+  { value: 'no_asistio', label: 'No Asistió', color: '#f44336' },
+  // No es una transición manual disponible: solo se llega acá vía el flujo
+  // dedicado de "Cancelar cita" (valida que no tenga historia clínica y
+  // elimina el evento de Google). Se incluye aquí para que el badge/label
+  // se muestren bien donde se necesite consultar el estado.
+  { value: 'cancelada', label: 'Cancelada', color: '#9e9e9e' }
 ];

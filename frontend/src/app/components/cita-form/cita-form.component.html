@@ -325,12 +325,14 @@
                   <mat-label>Estado</mat-label>
                   <mat-select formControlName="estado">
                     @for (estado of estadosCita; track estado.value) {
-                      <mat-option [value]="estado.value">
-                        <div class="estado-option">
-                          <div class="estado-color" [style.background-color]="estado.color"></div>
-                          <span>{{ estado.label }}</span>
-                        </div>
-                      </mat-option>
+                      @if (estado.value !== 'cancelada') {
+                        <mat-option [value]="estado.value">
+                          <div class="estado-option">
+                            <div class="estado-color" [style.background-color]="estado.color"></div>
+                            <span>{{ estado.label }}</span>
+                          </div>
+                        </mat-option>
+                      }
                     }
                   </mat-select>
                 </mat-form-field>
