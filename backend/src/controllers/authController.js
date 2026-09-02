@@ -331,6 +331,9 @@ class AuthController {
         }
 
         resolvedTenant = tenantResult.rows[0];
+        // Disponible ya desde acá para auditAuthActivity, incluso si el
+        // documento no existe (para poder atribuir el intento fallido a la clínica).
+        req.tenantId = resolvedTenant.id_tenant;
       } else if (requireTenantContext) {
         return res.status(400).json({
           success: false,
@@ -373,6 +376,12 @@ class AuthController {
       }
 
       const user = userResult.rows[0];
+
+      // Exponer tenant/usuario intentado para que auditAuthActivity pueda
+      // registrar correctamente el intento (incluso si falla más adelante,
+      // p.ej. contraseña incorrecta) sin depender del cuerpo de la respuesta.
+      req.tenantId = user.id_tenant;
+      req.attemptedUserId = user.id_usuario;
 
       // Verificar si el usuario está activo
       if (!user.activo) {

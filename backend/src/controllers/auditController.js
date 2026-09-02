@@ -294,7 +294,9 @@ class AuditController {
       const tenantId = req.tenantId ?? req.user?.tenant_id;
 
       const buildConditions = () => {
-        const conditions = [`sa.id_usuario IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $1)`];
+        // sa.id_tenant (no un JOIN por id_usuario): los intentos de login
+        // fallidos no tienen id_usuario resuelto y quedaban excluidos.
+        const conditions = [`sa.id_tenant = $1`];
         const params = [tenantId];
         let n = 1;
         if (usuario_id)    { n++; conditions.push(`sa.id_usuario = $${n}`);      params.push(usuario_id); }
@@ -389,7 +391,7 @@ class AuditController {
             COUNT(*) FILTER (WHERE tipo_evento = 'LOGIN' AND exito = true) AS successful_logins
           FROM system.session_audit
           WHERE timestamp BETWEEN $1 AND $2
-            AND id_usuario IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $3)
+            AND id_tenant = $3
             AND ($4::uuid IS NULL OR id_usuario = $4)
         `, [start_date, end_date, tenantId, usuario_id])
       ]);
@@ -572,7 +574,7 @@ class AuditController {
         FROM system.session_audit s
         LEFT JOIN vetplus_auth.usuarios u ON s.id_usuario = u.id_usuario
         WHERE s.timestamp BETWEEN $1 AND $2
-          AND s.id_usuario IN (SELECT id_usuario FROM vetplus_auth.usuarios WHERE id_tenant = $3)
+          AND s.id_tenant = $3
         ORDER BY s.timestamp DESC
       `, [start_date, end_date, tenantId]);
 

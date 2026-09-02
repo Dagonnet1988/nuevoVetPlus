@@ -567,7 +567,7 @@ async function logAuthActivity(type, req, statusCode, responseData) {
     let userId = null;
     let sessionKey = req.authToken?.jti || null;
     let tokenExp = req.authToken?.exp || null;
-    
+
     // Para login exitoso, extraer user ID de la respuesta
     if (type === 'LOGIN' && success && responseData) {
       try {
@@ -585,16 +585,29 @@ async function logAuthActivity(type, req, statusCode, responseData) {
         // Ignorar errores de parsing
       }
     }
-    
+
+    // Login fallido (contraseña incorrecta, usuario bloqueado, etc.): el
+    // controller de login ya resolvió a qué usuario correspondía el intento
+    // y lo dejó en req.attemptedUserId — sin esto, todo intento fallido
+    // quedaba con id_usuario NULL y era invisible para los filtros por tenant.
+    if (type === 'LOGIN' && !success && req.attemptedUserId) {
+      userId = req.attemptedUserId;
+    }
+
     // Para logout, usar el usuario del request
     if (type === 'LOGOUT' && req.user) {
       userId = req.user.id;
     }
-    
+
+    // Tenant: lo deja el controller en req.tenantId (resuelto por subdominio
+    // o por el usuario encontrado), incluso en intentos fallidos.
+    const tenantId = req.tenantId || null;
+
     await query(`
       INSERT INTO system.session_audit (
         id_session,
         id_usuario,
+        id_tenant,
         tipo_evento,
         exito,
         ip_address,
@@ -602,10 +615,11 @@ async function logAuthActivity(type, req, statusCode, responseData) {
         detalles
       ) VALUES (
         uuid_generate_v4(),
-        $1, $2, $3, $4, $5, $6
+        $1, $2, $3, $4, $5, $6, $7
       )
     `, [
       userId,
+      tenantId,
       type,
       success,
       req.ip || req.connection.remoteAddress,
@@ -618,7 +632,7 @@ async function logAuthActivity(type, req, statusCode, responseData) {
         token_exp: tokenExp
       })
     ]);
-    
+
   } catch (error) {
     console.error('Error logging auth activity:', error.message);
   }

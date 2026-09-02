@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS system.activity_log (
 CREATE TABLE IF NOT EXISTS system.session_audit (
     id_session UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     id_usuario UUID REFERENCES vetplus_auth.usuarios(id_usuario) ON DELETE SET NULL,
+    id_tenant UUID,      -- Tenant del intento (aun en login fallido, cuando se puede resolver)
     tipo_evento VARCHAR(20) NOT NULL, -- LOGIN, LOGOUT, SESSION_EXPIRED, FORCE_LOGOUT
     exito BOOLEAN NOT NULL DEFAULT false,
     ip_address INET,
@@ -57,6 +58,7 @@ CREATE INDEX IF NOT EXISTS idx_activity_log_tenant ON system.activity_log(id_ten
 CREATE INDEX IF NOT EXISTS idx_activity_log_entidad ON system.activity_log(id_entidad_afectada, timestamp DESC);
 
 CREATE INDEX IF NOT EXISTS idx_session_audit_usuario ON system.session_audit(id_usuario, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_session_audit_tenant ON system.session_audit(id_tenant, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_session_audit_tipo ON system.session_audit(tipo_evento, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_session_audit_ip ON system.session_audit(ip_address, timestamp DESC);
 
