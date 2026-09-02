@@ -3,7 +3,6 @@ import { validationResult } from 'express-validator/lib/index.js';
 import { v4 as uuidv4 } from 'uuid';
 import { calculatePetAge } from '../utils/ageCalculator.js';
 import { eliminarFotoAnterior, getFotoDefaultPorEspecie } from '../middleware/uploadMiddleware.js';
-import { logActivity } from '../utils/activityLog.js';
 import path from 'path';
 
 /**
@@ -161,20 +160,9 @@ export async function createPacienteCompleto(req, res) {
       // Confirmar transacción
       await txClient.query('COMMIT');
 
-      await logActivity({
-        req,
-        type: 'PET_MANAGEMENT',
-        description: `Paciente creado: ${mascota.nombre} (propietario: ${cliente.nombre})`,
-        entityId: id_mascota,
-        payload: {
-          action: 'create',
-          id_cliente,
-          cliente_nuevo: !id_cliente_existente,
-          nombre_mascota: mascota.nombre,
-          especie,
-          raza
-        }
-      });
+      // Nota: no se llama a logActivity acá — el middleware global
+      // auditActivity (server.js) ya audita esta ruta con tipo
+      // PET_MANAGEMENT; llamarlo también acá duplicaba cada registro.
 
       // Convertir sexo de vuelta al formato frontend
       const mascotaFrontend = {
@@ -426,13 +414,7 @@ export async function updateMascota(req, res) {
       });
     }
 
-    await logActivity({
-      req,
-      type: 'PET_MANAGEMENT',
-      description: `Mascota actualizada: ${result.rows[0].nombre}`,
-      entityId: id,
-      payload: { action: 'update', campos: Object.keys(updates).filter(k => allowedFields.includes(k)) }
-    });
+    // Auditado por el middleware global (ver nota en createPacienteCompleto).
 
     res.json({
       success: true,
@@ -599,18 +581,7 @@ export async function updatePacienteCompleto(req, res) {
       // Confirmar transacción
       await txClient.query('COMMIT');
 
-      await logActivity({
-        req,
-        type: 'PET_MANAGEMENT',
-        description: `Paciente actualizado: ${mascotaActualizada.nombre}`,
-        entityId: id,
-        payload: {
-          action: 'update',
-          id_cliente,
-          cambio_propietario: id_cliente !== id_cliente_actual,
-          nombre_mascota: mascotaActualizada.nombre
-        }
-      });
+      // Auditado por el middleware global (ver nota en createPacienteCompleto).
 
       // Convertir sexo de vuelta al formato frontend
       const mascotaFrontend = {
@@ -1251,13 +1222,7 @@ export async function createMascotaParaCliente(req, res) {
 
     const mascota = result.rows[0];
 
-    await logActivity({
-      req,
-      type: 'PET_MANAGEMENT',
-      description: `Mascota creada para propietario existente: ${mascota.nombre}`,
-      entityId: mascota.id_mascota,
-      payload: { action: 'create', id_cliente, especie, raza }
-    });
+    // Auditado por el middleware global (ver nota en createPacienteCompleto).
 
     res.status(201).json({
       success: true,
@@ -1344,13 +1309,8 @@ export async function inactivarMascota(req, res) {
       });
     }
 
-    await logActivity({
-      req,
-      type: 'PET_MANAGEMENT',
-      description: `Mascota inactivada: ${result.rows[0].nombre} (motivo: ${motivo})`,
-      entityId: id,
-      payload: { action: 'deactivate', motivo }
-    });
+    // Auditado por el middleware global (ver nota en createPacienteCompleto);
+    // el motivo queda igual en request_data (el body de la request se guarda ahí).
 
     res.json({
       success: true,

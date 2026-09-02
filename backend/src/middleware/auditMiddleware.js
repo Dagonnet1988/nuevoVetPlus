@@ -1,5 +1,6 @@
 import { query } from '../config/database.js';
 import jwt from 'jsonwebtoken';
+import { isAuditExcluded } from '../utils/activityLog.js';
 
 /**
  * Middleware global de auditoría para interceptar todas las requests
@@ -89,8 +90,14 @@ export const auditActivity = async (req, res, next) => {
   res.send = function(data) {
     statusCode = res.statusCode;
 
-    // Capturar userId y tenantId aquí: authenticateToken ya los pobló en req
-    requestData.userId   = req.user ? req.user.id : null;
+    // Capturar userId y tenantId aquí: authenticateToken ya los pobló en req.
+    // /auth/login es la excepción: en esa ruta req.user nunca existe (todavía
+    // no hay sesión), así que sin esto todo login (éxito o falla) quedaba
+    // con id_usuario NULL en activity_log — visible en la lista de acciones
+    // pero sin usuario asociado. authController.login() deja resuelto
+    // req.attemptedUserId apenas encuentra el documento, incluso si falla
+    // después (contraseña incorrecta, usuario bloqueado, etc.).
+    requestData.userId   = req.user ? req.user.id : (req.attemptedUserId || null);
     requestData.tenantId = req.tenantId || null;
     
     // Capturar respuesta para rutas auditables. En rutas no críticas se guarda resumen compacto.
@@ -251,6 +258,8 @@ function summarizeResponseForAudit(data) {
  * Registrar actividad en la base de datos
  */
 async function logActivity(requestData, statusCode, responseData, duration) {
+  if (isAuditExcluded(requestData.userId)) return;
+
   try {
     const activityType = determineActivityType(requestData.url, requestData.method, statusCode);
     const description = generateActivityDescription(requestData, statusCode);
@@ -590,14 +599,26 @@ async function logAuthActivity(type, req, statusCode, responseData) {
     // controller de login ya resolvió a qué usuario correspondía el intento
     // y lo dejó en req.attemptedUserId — sin esto, todo intento fallido
     // quedaba con id_usuario NULL y era invisible para los filtros por tenant.
-    if (type === 'LOGIN' && !success && req.attemptedUserId) {
-      userId = req.attemptedUserId;
+    let failureReason = null;
+    let failureMessage = null;
+    if (type === 'LOGIN' && !success) {
+      if (req.attemptedUserId) userId = req.attemptedUserId;
+
+      try {
+        const parsed = typeof responseData === 'string' ? JSON.parse(responseData) : responseData;
+        failureReason = parsed?.error || null;
+        failureMessage = parsed?.message || null;
+      } catch (e) {
+        // Ignorar errores de parsing
+      }
     }
 
     // Para logout, usar el usuario del request
     if (type === 'LOGOUT' && req.user) {
       userId = req.user.id;
     }
+
+    if (isAuditExcluded(userId)) return;
 
     // Tenant: lo deja el controller en req.tenantId (resuelto por subdominio
     // o por el usuario encontrado), incluso en intentos fallidos.
@@ -629,7 +650,10 @@ async function logAuthActivity(type, req, statusCode, responseData) {
         timestamp: new Date(),
         url: req.originalUrl,
         session_key: sessionKey,
-        token_exp: tokenExp
+        token_exp: tokenExp,
+        documento_intentado: req.attemptedDocumento || undefined,
+        motivo: failureReason || undefined,
+        motivo_detalle: failureMessage || undefined
       })
     ]);
 

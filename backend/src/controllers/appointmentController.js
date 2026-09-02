@@ -4,7 +4,6 @@ import googleCalendarService from '../services/googleCalendar.js';
 import appointmentConflictService from '../services/appointmentConflictService.js';
 import { sendEmail } from '../services/emailService.js';
 import { renderEmailTemplate } from '../services/emailTemplateService.js';
-import { logActivity } from '../utils/activityLog.js';
 
 /**
  * Convertir fecha a formato Colombia (sin zona horaria)
@@ -906,13 +905,9 @@ export const createAppointment = async (req, res) => {
         // Sincronizar con Google Calendar (de forma asíncrona)
         const syncResult = await syncAppointmentWithGoogle(citaCompleta, 'create');
 
-        await logActivity({
-            req,
-            type: 'CITAS',
-            description: `Cita creada: ${citaCompleta.codigo_cita} (${citaCompleta.mascota_nombre || 'mascota'})`,
-            entityId: id_cita,
-            payload: { action: 'create', tipo, fecha_inicio: citaCompleta.fecha_inicio, id_mascota, id_veterinario }
-        });
+        // Nota: no se llama a logActivity acá — el middleware global
+        // auditActivity (server.js) ya audita esta ruta con tipo CITAS;
+        // llamarlo también acá duplicaba cada registro en activity_log.
 
         // Transformar para el frontend
         const citaTransformada = transformAppointmentForFrontend(citaCompleta);
@@ -1507,13 +1502,7 @@ export const updateAppointment = async (req, res) => {
             syncResult = await syncAppointmentWithGoogle(citaActualizada, 'update');
         }
         
-        await logActivity({
-            req,
-            type: 'CITAS',
-            description: `Cita actualizada: ${citaActualizada.codigo_cita}${hasRescheduleChange ? ' (reagendada)' : ''}`,
-            entityId: id,
-            payload: { action: 'update', campos: allowedFields.filter(f => updateData[f] !== undefined), reagendada: hasRescheduleChange }
-        });
+        // Auditado por el middleware global (ver nota en createAppointment).
 
         // Transformar para el frontend
         const citaTransformada = transformAppointmentForFrontend(citaActualizada);
@@ -1864,13 +1853,7 @@ export const updateAppointmentStatus = async (req, res) => {
                 console.log('ℹ️ Cita no sincronizada con Google Calendar o cita no encontrada');
             }
 
-            await logActivity({
-                req,
-                type: 'CITAS',
-                description: `Cita ${citaActualizada.codigo_cita}: estado ${result.rows[0].estado} → ${estadoDb}`,
-                entityId: id,
-                payload: { action: 'status_change', estado_anterior: result.rows[0].estado, estado_nuevo: estadoDb }
-            });
+            // Auditado por el middleware global (ver nota en createAppointment).
 
             // Transformar para el frontend
             const citaTransformada = transformAppointmentForFrontend(citaActualizada);
@@ -1992,13 +1975,8 @@ export const cancelAppointment = async (req, res) => {
             syncResult = await syncAppointmentWithGoogle(citaCancelada, 'delete');
         }
 
-        await logActivity({
-            req,
-            type: 'CITAS',
-            description: `Cita cancelada: ${result.rows[0].codigo_cita} (motivo: ${motivo_cancelacion || 'Sin motivo especificado'})`,
-            entityId: id,
-            payload: { action: 'cancel', motivo_cancelacion: motivo_cancelacion || 'Sin motivo especificado' }
-        });
+        // Auditado por el middleware global (ver nota en createAppointment);
+        // el motivo queda igual en request_data (el body de la request se guarda ahí).
 
         res.json({
             success: true,

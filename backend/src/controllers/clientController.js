@@ -26,47 +26,6 @@ const hasClientesUpdatedByColumn = async () => {
   }
 };
 
-const logClientActivity = async ({ req, type, description, entityId, payload }) => {
-  try {
-    await query(
-      `INSERT INTO system.activity_log (
-         id_log,
-         id_usuario,
-         tipo_actividad,
-         descripcion,
-         url,
-         metodo_http,
-         status_code,
-         duracion_ms,
-         ip_address,
-         user_agent,
-         request_data,
-         response_data,
-         id_tenant,
-         id_entidad_afectada
-       ) VALUES (
-         uuid_generate_v4(),
-         $1, $2, $3, $4, $5, 200, 0, $6, $7, $8, $9, $10, $11
-       )`,
-      [
-        req.user?.id || null,
-        type,
-        description,
-        req.originalUrl || req.url || '/api/clinical/clients',
-        req.method || 'SYSTEM',
-        req.ip || null,
-        req.get?.('user-agent') || null,
-        JSON.stringify(payload || {}),
-        null,
-        req.tenantId || null,
-        entityId || null
-      ]
-    );
-  } catch (error) {
-    console.warn('⚠️ No se pudo registrar activity_log de clientes:', error.message);
-  }
-};
-
 /**
  * Crear nuevo cliente
  */
@@ -119,13 +78,10 @@ export async function createClient(req, res) {
 
     const result = await query(queryText, values);
 
-    await logClientActivity({
-      req,
-      type: 'CLIENT_MANAGEMENT',
-      description: `Propietario creado: ${result.rows[0].nombre}`,
-      entityId: id_cliente,
-      payload: { action: 'create' }
-    });
+    // Nota: no se llama a logClientActivity acá — el middleware global
+    // auditActivity (montado en server.js para todo POST/PUT/PATCH/DELETE)
+    // ya audita esta ruta con tipo CLIENT_MANAGEMENT; llamarlo también acá
+    // duplicaba cada registro en activity_log.
 
     res.status(201).json({
       success: true,
@@ -479,13 +435,7 @@ export async function updateClient(req, res) {
       });
     }
 
-    await logClientActivity({
-      req,
-      type: 'CLIENT_MANAGEMENT',
-      description: `Propietario actualizado: ${result.rows[0].nombre}`,
-      entityId: id,
-      payload: { action: 'update', nombre, telefono, email, direccion, cedula, fecha_nacimiento, activo }
-    });
+    // Auditado por el middleware global (ver nota en createClient).
 
     res.json({
       success: true,
@@ -583,13 +533,7 @@ export async function deleteClient(req, res) {
         canUseUpdatedBy ? [id, tenantId, req.user?.id || null] : [id, tenantId]
       );
 
-      await logClientActivity({
-        req,
-        type: 'CLIENT_MANAGEMENT',
-        description: `Propietario desactivado: ${softDeleteResult.rows[0].nombre} (mascotas asociadas: ${totalPets})`,
-        entityId: id,
-        payload: { action: 'deactivate', reason: 'has_related_pets', totalPets }
-      });
+      // Auditado por el middleware global (ver nota en createClient).
 
       return res.json({
         success: true,
@@ -613,13 +557,7 @@ export async function deleteClient(req, res) {
       });
     }
 
-    await logClientActivity({
-      req,
-      type: 'CLIENT_MANAGEMENT',
-      description: `Propietario eliminado definitivamente: ${result.rows[0].nombre} (sin mascotas asociadas)`,
-      entityId: id,
-      payload: { action: 'hard_delete', reason: 'no_related_pets' }
-    });
+    // Auditado por el middleware global (ver nota en createClient).
 
     res.json({
       success: true,
@@ -667,13 +605,7 @@ export async function restoreClient(req, res) {
       });
     }
 
-    await logClientActivity({
-      req,
-      type: 'CLIENT_MANAGEMENT',
-      description: `Propietario reactivado: ${result.rows[0].nombre}`,
-      entityId: id,
-      payload: { action: 'restore' }
-    });
+    // Auditado por el middleware global (ver nota en createClient).
 
     res.json({
       success: true,

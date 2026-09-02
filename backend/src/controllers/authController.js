@@ -5,6 +5,7 @@ import { generateToken, generateRefreshToken, verifyRefreshToken, decodeToken } 
 import { validationResult } from 'express-validator/lib/index.js';
 import { sendEmail } from '../services/emailService.js';
 import { renderEmailTemplate } from '../services/emailTemplateService.js';
+import { isAuditExcluded } from '../utils/activityLog.js';
 
 /**
  * Controlador de autenticación
@@ -307,6 +308,10 @@ class AuthController {
       const { documento, password } = req.body;
       const ip = req.ip || req.connection.remoteAddress;
       const userAgent = req.get('User-Agent');
+      // Solo para auditoría interna (session_audit.detalles) — nunca se expone
+      // en la respuesta HTTP. Sirve para poder investigar después casos como
+      // "el primer login falla y el segundo funciona" sin adivinar la causa.
+      req.attemptedDocumento = typeof documento === 'string' ? documento.trim() : null;
       const rawTenantSlug = req.headers['x-tenant-slug'];
       const tenantSlug = typeof rawTenantSlug === 'string' ? rawTenantSlug.trim().toLowerCase() : '';
       const requireTenantContext = process.env.NODE_ENV === 'production' || process.env.REQUIRE_TENANT_ON_LOGIN === 'true';
@@ -439,7 +444,10 @@ class AuthController {
       // Verificar si debe cambiar contraseña
       const needsPasswordChange = user.debe_cambiar_password || user.password_temporal;
 
-      // Generar tokens JWT
+      // Generar tokens JWT — comparten el mismo jti (sessionKey) para poder
+      // identificar la sesión en session_audit incluso desde el refresh token.
+      const sessionKey = crypto.randomUUID();
+
       const token = generateToken({
         id_usuario: user.id_usuario,
         id_tenant: user.id_tenant,
@@ -448,12 +456,12 @@ class AuthController {
         nombre: user.nombre,
         apellido: user.apellido,
         rol: user.rol
-      });
+      }, sessionKey);
 
       const refreshToken = generateRefreshToken({
         id_usuario: user.id_usuario,
         email: user.email
-      });
+      }, sessionKey);
 
       // Log de login exitoso (simplificado)
       console.log(`✅ Login exitoso para ${user.documento} (${user.email}) desde IP ${ip}`);
@@ -597,7 +605,9 @@ class AuthController {
          });
        }
 
-       // Generar nuevo token de acceso
+       // Generar nuevo token de acceso, conservando el mismo jti (sessionKey)
+       // del refresh token para que toda la sesión quede bajo una sola
+       // identidad en session_audit, de principio a fin.
        const newToken = generateToken({
          id_usuario: user.id_usuario,
          id_tenant: user.id_tenant,
@@ -606,14 +616,14 @@ class AuthController {
          nombre: user.nombre,
          apellido: user.apellido,
          rol: user.rol
-       });
+       }, decoded?.jti || undefined);
 
-       // Opcional: generar nuevo refresh token
-       const newRefreshToken = generateRefreshToken({
-         id_usuario: user.id_usuario,
-         email: user.email
-       });
-
+       // Importante: NO se emite un refresh token nuevo. Si se rotara acá con
+       // vida completa cada vez, una sesión activa se renovaría a sí misma
+       // indefinidamente (se detectó una sesión de 840h+ por esto). Se
+       // reenvía el mismo refresh token recibido: su vencimiento original
+       // (JWT_REFRESH_EXPIRES_IN, tope real de la sesión) no cambia, así que
+       // en algún momento sí va a expirar y forzar un login nuevo.
        console.log(`🔄 Token refrescado para usuario ${user.email}`);
 
        res.json({
@@ -621,7 +631,7 @@ class AuthController {
          message: 'Token refrescado exitosamente',
          data: {
            token: newToken,
-           refreshToken: newRefreshToken
+           refreshToken
          }
        });
 
@@ -629,6 +639,35 @@ class AuthController {
        console.error('Error en refresh token:', error);
 
        if (error.message === 'Refresh token inválido o expirado') {
+         // Cerrar la sesión en session_audit para que el panel de Sesiones
+         // deje de mostrarla como "activa" una vez venció de verdad (antes
+         // nada marcaba el cierre natural por expiración, solo el logout
+         // manual o el FORCE_LOGOUT de un admin).
+         try {
+           const { refreshToken: rawRefreshToken } = req.body;
+           const unverified = rawRefreshToken ? decodeToken(rawRefreshToken) : null;
+           if (unverified?.id && !isAuditExcluded(unverified.id)) {
+             const tenantLookup = await query(
+               'SELECT id_tenant FROM vetplus_auth.usuarios WHERE id_usuario = $1',
+               [unverified.id]
+             );
+             await query(
+               `INSERT INTO system.session_audit (
+                  id_session, id_usuario, id_tenant, tipo_evento, exito, ip_address, user_agent, detalles
+                ) VALUES (uuid_generate_v4(), $1, $2, 'SESSION_EXPIRED', true, $3, $4, $5)`,
+               [
+                 unverified.id,
+                 tenantLookup.rows[0]?.id_tenant || null,
+                 req.ip || req.connection.remoteAddress,
+                 req.get('User-Agent'),
+                 JSON.stringify({ session_key: unverified.jti || null, motivo: 'refresh_token_expirado' })
+               ]
+             );
+           }
+         } catch (auditError) {
+           console.warn('No se pudo registrar cierre de sesión por expiración:', auditError.message);
+         }
+
          return res.status(401).json({
            success: false,
            message: error.message,

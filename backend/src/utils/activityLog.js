@@ -1,6 +1,24 @@
 import { query } from '../config/database.js';
 
 /**
+ * IDs de usuario que no se registran en activity_log/session_audit — cuentas
+ * de desarrollo/pruebas internas, para no ensuciar la auditoría real con
+ * actividad que no es de la clínica. Configurable sin tocar código:
+ *   AUDIT_EXCLUDED_USER_IDS=uuid1,uuid2
+ */
+const EXCLUDED_USER_IDS = new Set(
+  String(process.env.AUDIT_EXCLUDED_USER_IDS || '')
+    .split(',')
+    .map((id) => id.trim().toLowerCase())
+    .filter(Boolean)
+);
+
+export const isAuditExcluded = (userId) => {
+  if (!userId) return false;
+  return EXCLUDED_USER_IDS.has(String(userId).toLowerCase());
+};
+
+/**
  * Registro de auditoría genérico para acciones que cambian datos clínicos
  * (pacientes, propietarios, citas). Nunca debe romper la operación principal:
  * si falla el log, solo se advierte por consola.
@@ -13,6 +31,9 @@ import { query } from '../config/database.js';
  * @param {object} [params.payload] - detalle estructurado (antes/después, acción, etc.)
  */
 export const logActivity = async ({ req, type, description, entityId, payload }) => {
+  const userId = req.user?.id_usuario || req.user?.id || null;
+  if (isAuditExcluded(userId)) return;
+
   try {
     await query(
       `INSERT INTO system.activity_log (
@@ -35,7 +56,7 @@ export const logActivity = async ({ req, type, description, entityId, payload })
          $1, $2, $3, $4, $5, 200, 0, $6, $7, $8, $9, $10, $11
        )`,
       [
-        req.user?.id_usuario || req.user?.id || null,
+        userId,
         type,
         description,
         req.originalUrl || req.url || null,

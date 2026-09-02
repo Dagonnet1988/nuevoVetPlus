@@ -15,7 +15,10 @@ const _jwtSecret = (() => {
 const JWT_CONFIG = {
   secret: _jwtSecret,
   expiresIn: process.env.JWT_EXPIRES_IN || '1h',
-  refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '12h',
+  // Tope real de duración de una sesión: ya no se rota en cada refresh
+  // (ver authController.refreshToken), así que este valor es literal el
+  // máximo tiempo que alguien puede quedar logueado sin volver a autenticarse.
+  refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '13h',
   issuer: 'VetPlus',
   audience: 'vetplus-users'
 };
@@ -25,8 +28,7 @@ const JWT_CONFIG = {
  * @param {Object} user - Datos del usuario
  * @returns {String} Token JWT
  */
-const generateToken = (user) => {
-  const sessionKey = randomUUID();
+const generateToken = (user, sessionKey = randomUUID()) => {
   const payload = {
     id: user.id_usuario,
     email: user.email,
@@ -47,9 +49,11 @@ const generateToken = (user) => {
 /**
  * Genera un refresh token JWT para un usuario
  * @param {Object} user - Datos del usuario
+ * @param {String} [sessionKey] - Mismo jti del access token, para poder
+ *   vincular el refresh token a la misma sesión en session_audit.
  * @returns {String} Refresh token JWT
  */
-const generateRefreshToken = (user) => {
+const generateRefreshToken = (user, sessionKey = randomUUID()) => {
   const payload = {
     id: user.id_usuario,
     email: user.email,
@@ -58,6 +62,7 @@ const generateRefreshToken = (user) => {
   };
 
   return jwt.sign(payload, JWT_CONFIG.secret, {
+    jwtid: sessionKey,
     expiresIn: JWT_CONFIG.refreshExpiresIn,
     issuer: JWT_CONFIG.issuer,
     audience: JWT_CONFIG.audience
