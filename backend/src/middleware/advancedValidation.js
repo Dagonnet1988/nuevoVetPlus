@@ -261,11 +261,20 @@ export const preventSQLInjection = (req, res, next) => {
         /(\b(SCRIPT|JAVASCRIPT|VBSCRIPT)\b)/i
     ];
     
+    // Un valor que es EXACTAMENTE una palabra clave SQL sola (ej. "DELETE",
+    // "UPDATE") es casi siempre un filtro de enum legítimo del propio
+    // frontend (ej. ?tipo_actividad=DELETE en Auditoría) — una inyección
+    // real necesita más sintaxis alrededor para hacer algo. Sin esto, ese
+    // filtro quedaba bloqueado como "solicitud sospechosa" en todos lados.
+    const isBareSqlKeyword = /^\s*(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|UNION)\s*$/i;
+
     const checkValue = (value) => {
-        if (typeof value === 'string') {
-            return suspiciousPatterns.some(pattern => pattern.test(value));
+        if (typeof value !== 'string') return false;
+        if (isBareSqlKeyword.test(value)) {
+            // Sigue revisando los demás patrones (comentarios SQL, ' OR 1=1', <script>, etc.)
+            return suspiciousPatterns.slice(1).some(pattern => pattern.test(value));
         }
-        return false;
+        return suspiciousPatterns.some(pattern => pattern.test(value));
     };
     
     const checkObject = (obj) => {

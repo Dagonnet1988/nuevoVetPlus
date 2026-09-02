@@ -1,6 +1,6 @@
 import { extractError } from '../../utils/error.utils';
 import {
-  Component, OnInit, signal, computed, inject
+  Component, OnInit, signal, computed, inject, Inject
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -19,6 +19,8 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { MatExpansionModule } from '@angular/material/expansion';
 
 import {
   AuditoriaService,
@@ -50,6 +52,7 @@ import {
     MatProgressSpinnerModule,
     MatTooltipModule,
     MatSnackBarModule,
+    MatDialogModule,
   ],
   templateUrl: './auditoria.component.html',
   styleUrl: './auditoria.component.scss'
@@ -57,6 +60,7 @@ import {
 export class AuditoriaComponent implements OnInit {
   private auditoriaService = inject(AuditoriaService);
   private snackBar = inject(MatSnackBar);
+  private dialog = inject(MatDialog);
 
   // ── Estado de carga ──────────────────────────────────
   loadingActivities = signal(false);
@@ -97,7 +101,7 @@ export class AuditoriaComponent implements OnInit {
   private usuarioDebounce: ReturnType<typeof setTimeout> | null = null;
 
   // ── Columnas de tablas ────────────────────────────────
-  activityColumns = ['timestamp', 'usuario', 'tipo', 'descripcion', 'metodo', 'status', 'duracion'];
+  activityColumns = ['timestamp', 'usuario', 'tipo', 'descripcion', 'metodo', 'status', 'duracion', 'detalle'];
   sessionColumns  = ['timestamp', 'usuario', 'evento', 'resultado', 'ip', 'agente'];
 
   // ── Computed ──────────────────────────────────────────
@@ -133,11 +137,8 @@ export class AuditoriaComponent implements OnInit {
     { value: 'DELETE',            label: 'Eliminación' },
     { value: 'READ',              label: 'Consulta' },
     { value: 'MEDICAL_ACCESS',    label: 'Historia clínica' },
-    { value: 'HISTORIA_CLINICA',  label: 'Historia clínica' },
     { value: 'CLIENT_MANAGEMENT', label: 'Propietarios' },
-    { value: 'PROPIETARIOS',      label: 'Propietarios' },
     { value: 'PET_MANAGEMENT',    label: 'Mascotas' },
-    { value: 'MASCOTAS',          label: 'Mascotas' },
     { value: 'CITAS',             label: 'Citas' },
     { value: 'PASSWORD_RESET',    label: 'Reset contraseña' },
   ];
@@ -199,11 +200,22 @@ export class AuditoriaComponent implements OnInit {
     });
   }
 
+  // Mismo rango que usan las tarjetas de resumen (últimos 30 días), para que
+  // al hacer clic en una tarjeta la lista filtrada coincida con el número
+  // que se ve arriba — antes la lista no tenía límite de fecha y mostraba
+  // un total mayor (todo el histórico) que el de la tarjeta.
+  private statsRangeStart = '';
+  private statsRangeEnd = '';
+
   loadStats(): void {
     this.loadingStats.set(true);
     // Últimos 30 días por defecto
-    const end   = new Date().toISOString();
-    const start = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const endDate   = new Date();
+    const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const end   = endDate.toISOString();
+    const start = startDate.toISOString();
+    this.statsRangeStart = startDate.toISOString().slice(0, 10);
+    this.statsRangeEnd = endDate.toISOString().slice(0, 10);
     this.auditoriaService.getStats(start, end).subscribe({
       next: (res) => {
         // El backend devuelve { data: { resumen: {...}, top_usuarios: [], actividad_diaria: [] } }
@@ -270,28 +282,38 @@ export class AuditoriaComponent implements OnInit {
     switch (action) {
       case 'all':
         this.filtroResultado.set('');
+        this.filtroFechaIni.set(this.statsRangeStart);
+        this.filtroFechaFin.set(this.statsRangeEnd);
         this.selectedTab.set(0);
         this.onActivityFilterChange();
         break;
       case 'success':
         this.filtroResultado.set('SUCCESS');
+        this.filtroFechaIni.set(this.statsRangeStart);
+        this.filtroFechaFin.set(this.statsRangeEnd);
         this.selectedTab.set(0);
         this.onActivityFilterChange();
         break;
       case 'error':
         this.filtroResultado.set('ERROR');
+        this.filtroFechaIni.set(this.statsRangeStart);
+        this.filtroFechaFin.set(this.statsRangeEnd);
         this.selectedTab.set(0);
         this.onActivityFilterChange();
         break;
       case 'ips':
         this.filtroEvento.set('');
         this.filtroSesionExito.set('');
+        this.filtroSesionFechaIni.set(this.statsRangeStart);
+        this.filtroSesionFechaFin.set(this.statsRangeEnd);
         this.selectedTab.set(1);
         this.onSessionFilterChange();
         break;
       case 'logins':
         this.filtroEvento.set('LOGIN');
         this.filtroSesionExito.set('true');
+        this.filtroSesionFechaIni.set(this.statsRangeStart);
+        this.filtroSesionFechaFin.set(this.statsRangeEnd);
         this.selectedTab.set(1);
         this.onSessionFilterChange();
         break;
@@ -368,4 +390,150 @@ export class AuditoriaComponent implements OnInit {
     if (ua.includes('Edge'))    return 'Edge';
     return ua.substring(0, 30) + '…';
   }
+
+  // ── Detalle de una actividad (antes/después) ──────────
+
+  private readonly camposIgnorados = new Set([
+    'password', 'password_hash', 'motivo_modificacion', 'created_at', 'updated_at'
+  ]);
+
+  private readonly nombresCampo: Record<string, string> = {
+    nombre: 'Nombre', telefono: 'Teléfono', email: 'Correo', direccion: 'Dirección',
+    estado: 'Estado', motivo: 'Motivo', notas: 'Notas', tipo_documento: 'Tipo de documento',
+    diagnostico: 'Diagnóstico', tratamiento: 'Tratamiento', cedula: 'Cédula',
+    fecha_nacimiento: 'Fecha de nacimiento', activo: 'Activo', peso: 'Peso',
+    raza: 'Raza', especie: 'Especie', tipo: 'Tipo', fecha_inicio: 'Fecha/hora de inicio',
+    fecha_fin: 'Fecha/hora de fin', id_veterinario: 'Veterinario', id_mascota: 'Mascota'
+  };
+
+  private normalizarValor(value: any): string {
+    if (value === null || value === undefined || value === '') return '(vacío)';
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value);
+  }
+
+  calcularCambios(row: ActivityLog): Array<{ campo: string; antes: string; despues: string }> {
+    const before = row.request_data?.entity_context?.before;
+    const body = row.request_data?.body;
+    if (!before || !body) return [];
+
+    const cambios: Array<{ campo: string; antes: string; despues: string }> = [];
+    for (const key of Object.keys(body)) {
+      if (this.camposIgnorados.has(key)) continue;
+      if (!(key in before)) continue;
+
+      const antes = this.normalizarValor(before[key]);
+      const despues = this.normalizarValor(body[key]);
+      if (antes === despues) continue;
+
+      cambios.push({ campo: this.nombresCampo[key] ?? key, antes, despues });
+    }
+    return cambios;
+  }
+
+  onVerDetalle(row: ActivityLog): void {
+    this.dialog.open(AuditoriaDetalleDialogComponent, {
+      width: '640px',
+      maxWidth: '95vw',
+      data: {
+        row,
+        tipoLabel: this.getTipoLabel(row.tipo_actividad),
+        cambios: this.calcularCambios(row)
+      }
+    });
+  }
+}
+
+interface AuditoriaDetalleDialogData {
+  row: ActivityLog;
+  tipoLabel: string;
+  cambios: Array<{ campo: string; antes: string; despues: string }>;
+}
+
+@Component({
+  selector: 'app-auditoria-detalle-dialog',
+  standalone: true,
+  imports: [
+    CommonModule,
+    MatDialogModule,
+    MatButtonModule,
+    MatIconModule,
+    MatExpansionModule
+  ],
+  template: `
+    <h2 mat-dialog-title>
+      <mat-icon>fact_check</mat-icon>
+      Detalle de la actividad
+    </h2>
+    <mat-dialog-content>
+      <div class="resumen">
+        <p><strong>Fecha:</strong> {{ data.row.timestamp | date:'dd-MM-yyyy h:mm:ss a' }}</p>
+        <p><strong>Usuario:</strong> {{ data.row.usuario_nombre ?? '—' }} <span class="muted">({{ data.row.usuario_email ?? 'sin sesión' }})</span></p>
+        <p><strong>Tipo:</strong> {{ data.tipoLabel }}</p>
+        <p><strong>Descripción:</strong> {{ data.row.descripcion }}</p>
+        <p><strong>Ruta:</strong> {{ data.row.metodo_http }} {{ data.row.url }} — status {{ data.row.status_code }}</p>
+        <p><strong>IP:</strong> {{ data.row.ip_address ?? '—' }}</p>
+      </div>
+
+      @if (data.cambios.length > 0) {
+        <h3 class="section-title">Cambios realizados</h3>
+        <table class="cambios-table">
+          <thead>
+            <tr><th>Campo</th><th>Antes</th><th>Después</th></tr>
+          </thead>
+          <tbody>
+            @for (c of data.cambios; track c.campo) {
+              <tr>
+                <td>{{ c.campo }}</td>
+                <td class="valor-antes">{{ c.antes }}</td>
+                <td class="valor-despues">{{ c.despues }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      } @else if (data.row.request_data?.entity_context?.before) {
+        <p class="sin-cambios">No se detectaron cambios de campos entre el antes y el envío.</p>
+      } @else {
+        <p class="sin-cambios">Esta acción no guarda una comparación antes/después (solo aplica a edición de propietarios, mascotas, citas e historias clínicas).</p>
+      }
+
+      <mat-accordion class="raw-accordion">
+        @if (data.row.request_data?.body) {
+          <mat-expansion-panel>
+            <mat-expansion-panel-header>Datos enviados (crudo)</mat-expansion-panel-header>
+            <pre>{{ data.row.request_data?.body | json }}</pre>
+          </mat-expansion-panel>
+        }
+        @if (data.row.response_data) {
+          <mat-expansion-panel>
+            <mat-expansion-panel-header>Respuesta del servidor (crudo)</mat-expansion-panel-header>
+            <pre>{{ data.row.response_data | json }}</pre>
+          </mat-expansion-panel>
+        }
+      </mat-accordion>
+    </mat-dialog-content>
+    <mat-dialog-actions align="end">
+      <button mat-button mat-dialog-close>Cerrar</button>
+    </mat-dialog-actions>
+  `,
+  styles: [`
+    h2[mat-dialog-title] { display:flex; align-items:center; gap:8px; }
+    .resumen p { margin: 4px 0; font-size: 13px; }
+    .muted { color: #607d8b; }
+    .section-title { margin: 16px 0 8px; font-size: 14px; }
+    .cambios-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 12px; }
+    .cambios-table th, .cambios-table td { border: 1px solid #e0e0e0; padding: 6px 8px; text-align: left; vertical-align: top; }
+    .cambios-table th { background: #f5f5f5; }
+    .valor-antes { color: #d32f2f; text-decoration: line-through; }
+    .valor-despues { color: #2e7d32; }
+    .sin-cambios { color: #607d8b; font-size: 13px; margin: 8px 0 16px; }
+    .raw-accordion { margin-top: 8px; }
+    .raw-accordion pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 0; }
+  `]
+})
+export class AuditoriaDetalleDialogComponent {
+  constructor(
+    public dialogRef: MatDialogRef<AuditoriaDetalleDialogComponent>,
+    @Inject(MAT_DIALOG_DATA) public data: AuditoriaDetalleDialogData
+  ) {}
 }

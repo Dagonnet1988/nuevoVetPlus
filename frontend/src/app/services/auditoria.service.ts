@@ -22,6 +22,20 @@ export interface ActivityLog {
   usuario_nombre: string;
   resultado: 'SUCCESS' | 'ERROR' | 'REDIRECT' | 'UNKNOWN';
   id_entidad_afectada?: string;
+  // Guardados por el middleware de auditoría; forma libre según la ruta.
+  // request_data.entity_context.before es el snapshot previo al cambio
+  // (solo para PUT/PATCH/DELETE en clientes/mascotas/historias/citas).
+  request_data?: {
+    body?: Record<string, any>;
+    query?: Record<string, any>;
+    entity_context?: {
+      entity?: string;
+      name?: string;
+      before?: Record<string, any>;
+      meta?: Record<string, any>;
+    } | null;
+  } | null;
+  response_data?: Record<string, any> | null;
 }
 
 export interface SessionLog {
