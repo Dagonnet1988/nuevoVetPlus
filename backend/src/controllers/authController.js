@@ -503,6 +503,10 @@ class AuthController {
     */
    async logout(req, res) {
      try {
+       // Ruta sin tenantContext: el tenant sale del usuario autenticado para que
+       // auditAuthActivity guarde el LOGOUT con id_tenant (si no, no se ve en Auditoría).
+       req.tenantId = req.user?.tenant_id ?? null;
+
        const authHeader = req.headers['authorization'];
        const token = authHeader && authHeader.split(' ')[1];
 
