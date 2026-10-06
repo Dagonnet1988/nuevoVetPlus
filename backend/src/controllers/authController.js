@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { query } from '../config/database.js';
-import { generateToken, generateRefreshToken, verifyRefreshToken, decodeToken } from '../middleware/auth.js';
+import { generateToken, generateRefreshToken, verifyRefreshToken, decodeToken, lastDailyCutoffEpoch } from '../middleware/auth.js';
 import { validationResult } from 'express-validator/lib/index.js';
 import { sendEmail } from '../services/emailService.js';
 import { renderEmailTemplate } from '../services/emailTemplateService.js';
@@ -561,6 +561,16 @@ class AuthController {
 
        // Verificar refresh token
        const decoded = verifyRefreshToken(refreshToken);
+
+       // Corte diario (23:00 Bogotá): una sesión iniciada antes del último corte
+       // no se renueva; el usuario debe volver a iniciar sesión.
+       if (decoded?.iat && decoded.iat < lastDailyCutoffEpoch()) {
+         return res.status(401).json({
+           success: false,
+           message: 'Sesión cerrada por el corte diario. Debe iniciar sesión nuevamente.',
+           error: 'SESSION_CUTOFF'
+         });
+       }
 
        // Verificar que el usuario existe y está activo
        const userResult = await query(

@@ -274,7 +274,6 @@ export class CitaFormComponent implements OnInit {
     const fechaInicio = this.parseLocalDateForForm(cita.fecha_inicio);
 
     this.citaForm.patchValue({
-      mascota_search: '',
       id_mascota: cita.id_mascota,
       id_veterinario: cita.id_veterinario,
       fecha: fechaInicio,
@@ -286,6 +285,9 @@ export class CitaFormComponent implements OnInit {
       observaciones: cita.observaciones || ''
     });
 
+    // Sin emitEvent: el texto del paciente lo fija syncPacienteSelectionFromForm,
+    // y no debe disparar la invalidación de selección de arriba.
+    this.citaForm.patchValue({ mascota_search: '' }, { emitEvent: false });
     this.syncPacienteSelectionFromForm();
     this.calculateEndTime();
   }
@@ -296,6 +298,19 @@ export class CitaFormComponent implements OnInit {
 
     this.citaForm.get('mascota_search')?.valueChanges.subscribe((value) => {
       this.filterPacientes(String(value || ''));
+
+      // Si el texto ya no corresponde al paciente seleccionado, el ID guardado
+      // quedaba apuntando al paciente anterior: al guardar la cita se asignaba
+      // a otra mascota distinta de la que se veía en pantalla. Se invalida la
+      // selección hasta que el usuario elija de la lista otra vez.
+      // (Los objetos llegan cuando mat-autocomplete selecciona una opción; ese
+      // caso lo maneja onMascotaSelected, así que aquí no se toca nada.)
+      if (typeof value === 'object') return;
+      const selected = this.pacienteSeleccionado();
+      if (!selected || String(value || '') !== this.getPacienteDisplayText(selected)) {
+        this.pacienteSeleccionado.set(null);
+        this.citaForm.patchValue({ id_mascota: '' }, { emitEvent: false });
+      }
     });
 
     this.citaForm.get('fecha')?.valueChanges.subscribe((value) => {

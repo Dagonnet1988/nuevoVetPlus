@@ -72,6 +72,13 @@ export class AuthInterceptor implements HttpInterceptor {
             return throwError(() => error);
           }
 
+          // Corte diario (23:00 Bogotá): no se renueva, se cierra la sesión.
+          if (error.error?.error === 'SESSION_CUTOFF') {
+            this.showSessionExpiredMessage();
+            this.forceLogout();
+            return throwError(() => error);
+          }
+
           // Verificar si es un error de token expirado (no de credenciales inválidas)
           if (this.isTokenExpiredError(error)) {
             return this.handleTokenExpired(req, next);

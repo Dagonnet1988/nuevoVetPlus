@@ -117,6 +117,20 @@ const decodeToken = (token) => {
 };
 
 /**
+ * Corte diario de sesiones: a las 23:00 (hora Bogotá) todo token emitido antes
+ * de esa hora deja de ser válido. Bogotá no tiene horario de verano (UTC-5),
+ * así que 23:00 Bogotá = 04:00 UTC del día siguiente.
+ * @returns {number} epoch (segundos) del último corte ya ocurrido
+ */
+const CUTOFF_UTC_HOUR = 4;
+const lastDailyCutoffEpoch = (now = new Date()) => {
+  const cutoff = new Date(now);
+  cutoff.setUTCHours(CUTOFF_UTC_HOUR, 0, 0, 0);
+  if (cutoff > now) cutoff.setUTCDate(cutoff.getUTCDate() - 1);
+  return Math.floor(cutoff.getTime() / 1000);
+};
+
+/**
  * Middleware de autenticación
  * Verifica que el usuario esté autenticado
  */
@@ -136,6 +150,16 @@ const authenticateToken = async (req, res, next) => {
     }
 
     const decoded = verifyToken(token);
+
+    // Corte diario: tokens emitidos antes del último corte (23:00 Bogotá) no sirven.
+    if (decoded?.iat && decoded.iat < lastDailyCutoffEpoch()) {
+      return res.status(401).json({
+        success: false,
+        message: 'Sesión cerrada por el corte diario. Debe iniciar sesión nuevamente.',
+        error: 'SESSION_CUTOFF'
+      });
+    }
+
     const tokenJtiKey = decoded?.jti ? `jti:${decoded.jti}` : null;
 
     // Verificar revocación por token exacto o por jti de sesión
@@ -240,7 +264,9 @@ const authenticateToken = async (req, res, next) => {
     console.error('Error en autenticación:', error);
     
     if (error.message === 'Token inválido o expirado') {
-      return res.status(403).json({
+      // 401 (no 403): el interceptor del front solo renueva el token con 401.
+      // Con 403 las peticiones fallaban en silencio y las listas quedaban vacías.
+      return res.status(401).json({
         success: false,
         message: error.message,
         error: 'INVALID_TOKEN'
@@ -340,6 +366,7 @@ const optionalAuth = async (req, res, next) => {
 
 export {
   JWT_CONFIG,
+  lastDailyCutoffEpoch,
   generateToken,
   generateRefreshToken,
   verifyToken,
