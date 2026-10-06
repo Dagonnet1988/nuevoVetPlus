@@ -19,7 +19,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Router } from '@angular/router';
-import { Subscription } from 'rxjs';
+import { Subscription, debounceTime, distinctUntilChanged } from 'rxjs';
 
 import { PacientesService } from '../../services/pacientes.service';
 import { Mascota, PacienteFilter } from '../../models/paciente.interface';
@@ -75,6 +75,9 @@ export class PacientesComponent implements OnInit, OnDestroy {
 
   // Suscripciones
   private photoUpdateSubscription?: Subscription;
+  // Búsqueda: cada tecla espera 300 ms y cancela la petición anterior, así una
+  // respuesta vieja no pisa el resultado de la búsqueda actual.
+  private loadSubscription?: Subscription;
 
   @ViewChild(MatPaginator) paginator!: MatPaginator;
   @ViewChild(MatSort) sort!: MatSort;
@@ -105,13 +108,16 @@ export class PacientesComponent implements OnInit, OnDestroy {
 
   private setupFilters(): void {
     // Configurar filtros reactivos con debounce
-    this.filterForm.get('search')?.valueChanges.subscribe(() => {
-      this.onFilterChange();
-    });
+    this.filterForm.get('search')?.valueChanges
+      .pipe(debounceTime(300), distinctUntilChanged())
+      .subscribe(() => {
+        this.onFilterChange();
+      });
   }
 
   loadPacientes(): void {
     this.loading.set(true);
+    this.loadSubscription?.unsubscribe();
 
     const filters: PacienteFilter = {
       search: this.filterForm.value.search || undefined,
@@ -119,7 +125,7 @@ export class PacientesComponent implements OnInit, OnDestroy {
       activo: this.filterForm.value.activo
     };
 
-    this.pacientesService.getMascotas(
+    this.loadSubscription = this.pacientesService.getMascotas(
       this.currentPage() + 1,
       this.pageSize(),
       filters,
@@ -363,5 +369,6 @@ export class PacientesComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.photoUpdateSubscription?.unsubscribe();
+    this.loadSubscription?.unsubscribe();
   }
 }

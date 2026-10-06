@@ -675,8 +675,8 @@ export async function getMascotasConCliente(req, res) {
     if (search) {
       paramCount++;
       queryText += ` AND (
-        LOWER(m.nombre) LIKE LOWER($${paramCount}) OR 
-        LOWER(c.nombre) LIKE LOWER($${paramCount}) OR 
+        translate(LOWER(m.nombre), 'áéíóúüñàèìòùâêîôû', 'aeiouunaeiouaeiou') LIKE translate(LOWER($${paramCount}), 'áéíóúüñàèìòùâêîôû', 'aeiouunaeiouaeiou') OR 
+        translate(LOWER(c.nombre), 'áéíóúüñàèìòùâêîôû', 'aeiouunaeiouaeiou') LIKE translate(LOWER($${paramCount}), 'áéíóúüñàèìòùâêîôû', 'aeiouunaeiouaeiou') OR 
         c.telefono LIKE $${paramCount} OR
         c.cedula LIKE $${paramCount}
       )`;
@@ -741,8 +741,8 @@ export async function getMascotasConCliente(req, res) {
     if (search) {
       countParamCount++;
       countQuery += ` AND (
-        LOWER(m.nombre) LIKE LOWER($${countParamCount}) OR 
-        LOWER(c.nombre) LIKE LOWER($${countParamCount}) OR 
+        translate(LOWER(m.nombre), 'áéíóúüñàèìòùâêîôû', 'aeiouunaeiouaeiou') LIKE translate(LOWER($${countParamCount}), 'áéíóúüñàèìòùâêîôû', 'aeiouunaeiouaeiou') OR 
+        translate(LOWER(c.nombre), 'áéíóúüñàèìòùâêîôû', 'aeiouunaeiouaeiou') LIKE translate(LOWER($${countParamCount}), 'áéíóúüñàèìòùâêîôû', 'aeiouunaeiouaeiou') OR 
         c.telefono LIKE $${countParamCount} OR
         c.cedula LIKE $${countParamCount}
       )`;

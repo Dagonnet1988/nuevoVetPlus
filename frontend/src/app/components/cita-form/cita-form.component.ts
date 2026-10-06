@@ -242,6 +242,8 @@ export class CitaFormComponent implements OnInit {
       const queryParams = this.route.snapshot.queryParams;
       if (queryParams['fecha_inicio']) {
         const fecha = new Date(queryParams['fecha_inicio']);
+        // Viene de un clic en el calendario: se precarga fecha y hora de ese horario.
+        // El botón "Nueva Cita" navega sin parámetros, así que ahí la hora queda vacía.
         this.citaForm.patchValue({
           fecha: fecha,
           hora_inicio: this.formatTimeFromDateTime(fecha)
@@ -1047,11 +1049,12 @@ export class CitaFormComponent implements OnInit {
   }
 
   private formatTimeFromDateTime(date: Date): string {
-    return date.toLocaleTimeString('es-ES', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
+    // Valor para <input type="time">: exige "HH:mm" con ceros. toLocaleTimeString
+    // en es-ES puede devolver "9:00" (sin cero) según el navegador, y entonces el
+    // input queda vacío y el formulario marca "La hora es obligatoria".
+    const hh = String(date.getHours()).padStart(2, '0');
+    const mm = String(date.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
   }
 
   private formatTime(date: Date): string {
