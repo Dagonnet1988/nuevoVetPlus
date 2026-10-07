@@ -820,42 +820,44 @@ class BidirectionalSyncService {
                 }
             }
 
-            // Buscar mascota por nombre y cliente
+            // Buscar mascota por nombre y cliente. Coincidencia EXACTA (sin tildes ni
+            // mayúsculas): con LIKE '%Polo%' "Polo" se asociaba a "Apolo".
             if (mascota_nombre && cliente_id) {
                 const mascotaResult = await query(`
                     SELECT id_mascota, nombre, especie 
                     FROM clinical.mascotas 
                     WHERE id_cliente = $1 
                     AND id_tenant = $2
-                    AND LOWER(nombre) LIKE LOWER($3)
                     AND activo = true
-                    ORDER BY 
-                        CASE WHEN LOWER(nombre) = LOWER($4) THEN 1 ELSE 2 END,
-                        nombre
-                    LIMIT 1
-                `, [cliente_id, tenantId, `%${mascota_nombre}%`, mascota_nombre]);
+                `, [cliente_id, tenantId]);
 
-                if (mascotaResult.rows.length > 0) {
-                    mascota_id = mascotaResult.rows[0].id_mascota;
+                const targetPetExact = this.normalizeText(mascota_nombre);
+                const exactPet = mascotaResult.rows.find(row => this.normalizeText(row.nombre) === targetPetExact);
+                if (exactPet) {
+                    mascota_id = exactPet.id_mascota;
                 }
             }
 
             // Si no hay cliente pero sí nombre de mascota, intentar resolver mascota global por tenant
             // y derivar el cliente a partir de esa mascota.
+            // Solo si el nombre es EXACTO y único: si hay varias mascotas con ese nombre
+            // (de distintos propietarios) no se adivina cuál es.
             if (!cliente_id && !mascota_id && mascota_nombre) {
                 const mascotaGlobalResult = await query(`
-                    SELECT m.id_mascota, m.id_cliente
+                    SELECT m.id_mascota, m.id_cliente, m.nombre
                     FROM clinical.mascotas m
                     WHERE m.id_tenant = $1
                       AND m.activo = true
-                      AND LOWER(m.nombre) LIKE LOWER($2)
-                    ORDER BY CASE WHEN LOWER(m.nombre) = LOWER($3) THEN 1 ELSE 2 END, m.nombre
-                    LIMIT 1
-                `, [tenantId, `%${mascota_nombre}%`, mascota_nombre]);
+                `, [tenantId]);
 
-                if (mascotaGlobalResult.rows.length > 0) {
-                    mascota_id = mascotaGlobalResult.rows[0].id_mascota;
-                    cliente_id = mascotaGlobalResult.rows[0].id_cliente;
+                const targetGlobalPet = this.normalizeText(mascota_nombre);
+                const exactMatches = mascotaGlobalResult.rows.filter(
+                    row => this.normalizeText(row.nombre) === targetGlobalPet
+                );
+
+                if (exactMatches.length === 1) {
+                    mascota_id = exactMatches[0].id_mascota;
+                    cliente_id = exactMatches[0].id_cliente;
                 }
             }
 
@@ -873,7 +875,7 @@ class BidirectionalSyncService {
                 const targetPet = this.normalizeText(mascota_nombre);
                 const bestPet = candidatePets.rows.find(row => {
                     const candidatePet = this.normalizeText(row.nombre);
-                    return candidatePet === targetPet || candidatePet.includes(targetPet) || targetPet.includes(candidatePet);
+                    return candidatePet === targetPet;
                 });
 
                 if (bestPet) {
@@ -883,7 +885,9 @@ class BidirectionalSyncService {
 
             // Si el cliente ya está identificado y no vino nombre de mascota o no hubo match,
             // usar la única mascota activa del cliente como fallback seguro.
-            if (!mascota_id && cliente_id) {
+            // Solo si el evento NO trae nombre de mascota: si trae uno que no coincide
+            // (ej. "Polo" vs única mascota "Apolo") no se asigna a ciegas.
+            if (!mascota_id && cliente_id && !this.normalizeText(mascota_nombre)) {
                 const singlePetResult = await query(`
                     SELECT id_mascota
                     FROM clinical.mascotas
@@ -1328,13 +1332,20 @@ class BidirectionalSyncService {
             const result = await query(`
                 UPDATE clinical.calendario_citas 
                 SET 
-                    estado = 'no_asistio',
+                    -- Con documentos clínicos asociados no se oculta (mismo criterio que
+                    -- cancelar manualmente): queda como estaba y solo se anota.
+                    estado = CASE
+                        WHEN EXISTS (SELECT 1 FROM clinical.historias_clinicas h WHERE h.id_cita = clinical.calendario_citas.id_cita)
+                            THEN estado
+                        ELSE 'cancelada'
+                    END,
                     google_sync_status = 'synced',
-                    notas = COALESCE(notas, '') || ' | Cancelada desde Google Calendar',
+                    notas = COALESCE(notas, '') || ' | Eliminada en Google Calendar',
                     updated_at = CURRENT_TIMESTAMP
                 WHERE google_event_id = $1
                   AND id_tenant = $2
-                RETURNING id_cita, codigo_cita
+                  AND estado <> 'cancelada'
+                RETURNING id_cita, codigo_cita, estado
             `, [change.parsed_data.google_event_id, tenantId]);
 
             return {
@@ -1398,6 +1409,10 @@ class BidirectionalSyncService {
             };
         }
 
+        // Si el nombre de la mascota del evento no coincide con la de la cita
+        // (ej. se había asociado "Polo" a "Apolo"), se corrige a la exacta.
+        const correctedPetId = await this.resolvePetCorrection(id_cita, eventData);
+
         const updateQuery = `
             UPDATE clinical.calendario_citas
             SET
@@ -1405,6 +1420,7 @@ class BidirectionalSyncService {
                 fecha_fin = $2,
                 tipo = $3,
                 motivo = $4,
+                id_mascota = COALESCE($6::uuid, id_mascota),
                 google_sync_status = 'synced',
                 last_google_sync = CURRENT_TIMESTAMP,
                 updated_at = CURRENT_TIMESTAMP
@@ -1417,7 +1433,8 @@ class BidirectionalSyncService {
             fechaFinBogota,
             safeTipo,
             safeMotivo,
-            id_cita
+            id_cita,
+            correctedPetId
         ]);
 
         return { success: true, data: result.rows[0] };
@@ -1426,6 +1443,34 @@ class BidirectionalSyncService {
     /**
      * Verificar si una cita necesita actualización
      */
+    /**
+     * Corrección de mascota al reimportar: si el nombre de la mascota del evento de
+     * Google no coincide (exacto, sin tildes/mayúsculas) con la mascota actual de la
+     * cita, busca la correcta. Conservador: no toca citas con documentos clínicos y
+     * solo corrige si encuentra una coincidencia exacta (no crea mascotas nuevas).
+     * @returns {Promise<string|null>} id_mascota correcto, o null si no hay corrección
+     */
+    async resolvePetCorrection(id_cita, eventData) {
+        const eventPet = this.normalizeText(eventData?.mascota_nombre);
+        if (!eventPet) return null;
+
+        const currentResult = await query(`
+            SELECT c.id_mascota, m.nombre AS mascota_nombre,
+                   EXISTS (SELECT 1 FROM clinical.historias_clinicas h WHERE h.id_cita = c.id_cita) AS tiene_historia
+            FROM clinical.calendario_citas c
+            LEFT JOIN clinical.mascotas m ON m.id_mascota = c.id_mascota
+            WHERE c.id_cita = $1
+        `, [id_cita]);
+
+        const current = currentResult.rows[0];
+        if (!current || current.tiene_historia) return null;
+        if (this.normalizeText(current.mascota_nombre) === eventPet) return null;
+
+        const matched = await this.matchClientAndPet(eventData);
+        if (!matched?.mascota_id || matched.mascota_id === current.id_mascota) return null;
+        return matched.mascota_id;
+    }
+
     async needsUpdate(id_cita, eventData) {
         const currentResult = await query(`
             SELECT fecha_inicio, fecha_fin, tipo, motivo 
@@ -1443,12 +1488,16 @@ class BidirectionalSyncService {
         const safeTipo = this.normalizeAppointmentType(eventData?.tipo);
         const safeMotivo = this.sanitizeRichTextToPlain(eventData?.motivo || 'Importado desde Google Calendar');
         
-        return (
+        if (
             currentInicioBogota !== fechaInicioBogota ||
             currentFinBogota !== fechaFinBogota ||
             current.tipo !== safeTipo ||
             current.motivo !== safeMotivo
-        );
+        ) {
+            return true;
+        }
+
+        return Boolean(await this.resolvePetCorrection(id_cita, eventData));
     }
 
     /**
