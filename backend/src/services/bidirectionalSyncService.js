@@ -93,6 +93,9 @@ class BidirectionalSyncService {
     async persistSyncLogs(logs, { origen, tenantId }) {
         const entries = (logs || [])
             .filter(l => l && l.action && !(l.action === 'skipped' && l.reason === 'existing_no_changes'))
+            // Google devuelve una "lápida" por cada evento borrado en la ventana; si Ramelo
+            // no tiene cita ligada (details vacío) no hubo nada que cancelar: no es historial útil.
+            .filter(l => !(l.action === 'deleted' && l.reason === 'deleted_from_incremental' && !l.details))
             .map(l => {
                 const isError = l.action === 'error';
                 const details = (l.details && typeof l.details === 'object') ? l.details : {};
@@ -403,7 +406,11 @@ class BidirectionalSyncService {
                         
                         if (needsUpdate && !dryRun) {
                             const updateOutcome = await this.updateAppointmentFromGoogle(existing.id_cita, eventData);
-                            if (updateOutcome.success) {
+                            if (updateOutcome.success && updateOutcome.unchanged) {
+                                results.skipped++;
+                                eventLog.action = 'skipped';
+                                eventLog.reason = updateOutcome.reason || 'existing_no_changes';
+                            } else if (updateOutcome.success) {
                                 results.updated++;
                                 eventLog.action = 'updated';
                                 eventLog.reason = 'existing_needs_update';
@@ -683,7 +690,9 @@ class BidirectionalSyncService {
 
                         case 'updated':
                             const updateResult = await this.handleGoogleEventUpdated(change);
-                            if (updateResult.success) {
+                            if (updateResult.success && updateResult.unchanged) {
+                                // Sin diferencias reales (o cita ya cerrada en Ramelo): no cuenta ni se registra.
+                            } else if (updateResult.success) {
                                 results.updated++;
                             } else if (updateResult.skipped) {
                                 results.conflicts++;
@@ -694,9 +703,14 @@ class BidirectionalSyncService {
                                 google_event_id: change?.parsed_data?.google_event_id,
                                 titulo: change?.parsed_data?.titulo || '(sin titulo)',
                                 change_type: change.change_type,
-                                action: updateResult.success ? 'updated' : (updateResult.skipped ? 'conflict' : 'error'),
-                                reason: updateResult.success ? 'updated_from_incremental' : (updateResult.skipped ? 'local_changes_pending' : 'update_failed'),
-                                details: updateResult.success ? updateResult.data : updateResult.error
+                                action: updateResult.success
+                                    ? (updateResult.unchanged ? 'skipped' : 'updated')
+                                    : (updateResult.skipped ? 'conflict' : 'error'),
+                                reason: updateResult.success
+                                    ? (updateResult.unchanged ? 'existing_no_changes' : 'updated_from_incremental')
+                                    : (updateResult.skipped ? 'local_changes_pending' : 'update_failed'),
+                                // En conflicto (skipped) también viene la cita: así el historial muestra su código.
+                                details: (updateResult.success || updateResult.skipped) ? updateResult.data : updateResult.error
                             });
                             break;
 
@@ -1153,6 +1167,8 @@ class BidirectionalSyncService {
             return {
                 success: updateOutcome.success,
                 skipped: updateOutcome.skipped === true,
+                unchanged: updateOutcome.unchanged === true,
+                unchanged_reason: updateOutcome.reason,
                 error: updateOutcome.success ? undefined : `Sin aplicar: ${updateOutcome.reason || 'update_skipped'}`,
                 data: updateOutcome.data,
                 change_type: change.change_type,
@@ -1384,13 +1400,14 @@ class BidirectionalSyncService {
             const tenantIdResolved = await this.resolveActiveTenantId();
 
             const citas = await query(`
-                SELECT id_cita, codigo_cita, google_event_id
-                FROM clinical.calendario_citas
-                WHERE id_tenant = $1
-                  AND google_event_id IS NOT NULL
-                  AND estado = 'confirmada'
-                  AND fecha_inicio >= (NOW() AT TIME ZONE 'America/Bogota')::date
-                ORDER BY fecha_inicio ASC
+                SELECT c.id_cita, c.codigo_cita, c.google_event_id, c.fecha_inicio, m.nombre AS mascota_nombre
+                FROM clinical.calendario_citas c
+                LEFT JOIN clinical.mascotas m ON m.id_mascota = c.id_mascota
+                WHERE c.id_tenant = $1
+                  AND c.google_event_id IS NOT NULL
+                  AND c.estado = 'confirmada'
+                  AND c.fecha_inicio >= (NOW() AT TIME ZONE 'America/Bogota')::date
+                ORDER BY c.fecha_inicio ASC
                 LIMIT $2
             `, [tenantIdResolved, maxCitas]);
 
@@ -1427,6 +1444,8 @@ class BidirectionalSyncService {
                             idCita: cita.id_cita,
                             codigoCita: cita.codigo_cita,
                             googleEventId: cita.google_event_id,
+                            titulo: cita.mascota_nombre,
+                            detalle: { fecha_inicio: cita.fecha_inicio },
                             motivo: 'verificacion_evento_inexistente',
                             error: deleteResult.success ? null : deleteResult.error
                         });
@@ -1441,6 +1460,8 @@ class BidirectionalSyncService {
                             idCita: cita.id_cita,
                             codigoCita: cita.codigo_cita,
                             googleEventId: cita.google_event_id,
+                            titulo: cita.mascota_nombre,
+                            detalle: { fecha_inicio: cita.fecha_inicio },
                             motivo: 'verificacion_fallida',
                             error: eventResult.error
                         });
@@ -1520,12 +1541,44 @@ class BidirectionalSyncService {
         }
 
         const currentResult = await query(
-            `SELECT updated_at, last_google_sync
+            `SELECT updated_at, last_google_sync, estado, fecha_inicio, fecha_fin, tipo, motivo
              FROM clinical.calendario_citas
              WHERE id_cita = $1`,
             [id_cita]
         );
         const current = currentResult.rows[0];
+
+        // Si el nombre de la mascota del evento no coincide con la de la cita
+        // (ej. se había asociado "Polo" a "Apolo"), se corrige a la exacta.
+        const correctedPetId = await this.resolvePetCorrection(id_cita, eventData);
+
+        // Un conflicto solo existe si Ramelo y Google DIFIEREN. Antes bastaba con que la
+        // cita se hubiera tocado en Ramelo (p. ej. completarla) para marcarla "conflict"
+        // aunque ambos dijeran lo mismo; y las citas ya cerradas (completada, no asistió,
+        // cancelada) son la verdad final de Ramelo: lo que cambie en Google no las modifica.
+        const sameData = Boolean(current)
+            && this.toBogotaDateTime(current.fecha_inicio, '08:00:00') === fechaInicioBogota
+            && this.toBogotaDateTime(current.fecha_fin, '09:00:00') === fechaFinBogota
+            && current.tipo === safeTipo
+            && current.motivo === safeMotivo;
+        const isFinalState = ['completada', 'no_asistio', 'cancelada'].includes(current?.estado);
+
+        if (!correctedPetId && (sameData || isFinalState)) {
+            const settled = await query(
+                `UPDATE clinical.calendario_citas
+                 SET google_sync_status = 'synced', last_google_sync = CURRENT_TIMESTAMP
+                 WHERE id_cita = $1
+                 RETURNING *`,
+                [id_cita]
+            );
+            return {
+                success: true,
+                unchanged: true,
+                reason: sameData ? 'existing_no_changes' : 'estado_final_en_ramelo',
+                data: settled.rows[0]
+            };
+        }
+
         const hasPendingLocalChanges = Boolean(
             current?.updated_at && current?.last_google_sync &&
             new Date(current.updated_at).getTime() > new Date(current.last_google_sync).getTime()
@@ -1547,10 +1600,6 @@ class BidirectionalSyncService {
                 data: conflictResult.rows[0]
             };
         }
-
-        // Si el nombre de la mascota del evento no coincide con la de la cita
-        // (ej. se había asociado "Polo" a "Apolo"), se corrige a la exacta.
-        const correctedPetId = await this.resolvePetCorrection(id_cita, eventData);
 
         const updateQuery = `
             UPDATE clinical.calendario_citas

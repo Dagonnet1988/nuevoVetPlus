@@ -322,11 +322,13 @@ class SyncScheduler {
                             }
                         });
 
+                        // Sin tocar updated_at: marcar el recordatorio no es una edición de la cita.
+                        // Antes lo actualizaba, y eso hacía ver la cita como "editada en Ramelo sin
+                        // sincronizar" y marcaba conflicto cuando Google informaba un cambio.
                         await query(
                             `UPDATE clinical.calendario_citas
                              SET recordatorio_enviado = true,
-                                 fecha_recordatorio = NOW(),
-                                 updated_at = CURRENT_TIMESTAMP
+                                 fecha_recordatorio = NOW()
                              WHERE id_cita = $1`,
                             [row.id_cita]
                         );

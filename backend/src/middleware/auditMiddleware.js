@@ -1,6 +1,29 @@
 import { query } from '../config/database.js';
 import jwt from 'jsonwebtoken';
 import { isAuditExcluded } from '../utils/activityLog.js';
+import { verifyToken } from './auth.js';
+
+/**
+ * Este middleware corre ANTES de authenticateToken, así que al inicio de la petición
+ * req.user y req.tenantId todavía no existen. Se lee el JWT (verificado) para saber
+ * quién y de qué clínica es; sin esto el snapshot "antes" nunca se capturaba y el
+ * usuario aparecía como "Usuario".
+ */
+const getAuthContext = (req) => {
+  try {
+    const token = req.headers['authorization']?.split(' ')[1];
+    if (!token) return null;
+    const decoded = verifyToken(token);
+    return {
+      id: decoded?.id || null,
+      tenantId: decoded?.tenant_id || null,
+      nombre: decoded?.nombre || null,
+      email: decoded?.email || null
+    };
+  } catch {
+    return null;
+  }
+};
 
 /**
  * Middleware global de auditoría para interceptar todas las requests
@@ -66,13 +89,14 @@ export const auditActivity = async (req, res, next) => {
   
   // Datos básicos de la request (userId y tenantId se capturan al responder,
   // cuando authenticateToken ya los habrá poblado en req)
+  const authCtx = getAuthContext(req);
   const requestData = {
     url: originalUrl,
     method: method,
     userAgent: req.get('User-Agent'),
     ip: req.ip || req.connection.remoteAddress,
-    userName: req.user?.nombre || null,
-    userEmail: req.user?.email || null,
+    userName: req.user?.nombre || authCtx?.nombre || null,
+    userEmail: req.user?.email || authCtx?.email || null,
     entityId: extractEntityIdFromUrl(originalUrl),
     timestamp: new Date(),
     body: sanitizeRequestBody(req.body),
@@ -80,7 +104,7 @@ export const auditActivity = async (req, res, next) => {
   };
 
   // Capturar un snapshot previo cuando aplica para poder mostrar "antes y despues"
-  requestData.entityContext = await captureEntityContext(req, requestData);
+  requestData.entityContext = await captureEntityContext(req, requestData, authCtx?.tenantId || null);
   
   // Interceptar la respuesta para capturar el resultado
   const originalSend = res.send;
@@ -391,10 +415,10 @@ function generateActivityDescription(requestData, statusCode) {
     if (url.includes('/status') && method === 'PATCH') {
       const estadoAnterior = formatEstadoCita(entityContext?.before?.estado);
       const estadoNuevo = formatEstadoCita(body?.estado);
-      return `${estado}: ${actor} cambió estado de cita${code ? ` ${code}` : ''}${entityId ? ` (id: ${entityId})` : ''}${estadoAnterior || estadoNuevo ? ` de "${truncateAuditValue(estadoAnterior || 'vacio')}" a "${truncateAuditValue(estadoNuevo || 'vacio')}"` : ''} desde ${sourceIp}`;
+      return `${estado}: ${actor} cambió estado de cita${code ? ` ${code}` : (entityId ? ` (id: ${entityId})` : '')}${estadoAnterior || estadoNuevo ? ` de "${truncateAuditValue(estadoAnterior || 'sin dato')}" a "${truncateAuditValue(estadoNuevo || 'sin dato')}"` : ''} desde ${sourceIp}`;
     }
 
-    return `${estado}: ${actor} ${accion} cita${code ? ` ${code}` : ''}${entityId ? ` (id: ${entityId})` : ''}${buildChangesSuffix(entityContext, body)} desde ${sourceIp}`;
+    return `${estado}: ${actor} ${accion} cita${code ? ` ${code}` : (entityId ? ` (id: ${entityId})` : '')}${buildChangesSuffix(entityContext, body)} desde ${sourceIp}`;
   }
 
   if (url.includes('/clinical/consultas') || url.includes('/clinical/historias')) {
@@ -462,12 +486,12 @@ function translateFieldName(field) {
   return map[field] || field;
 }
 
-async function captureEntityContext(req, requestData) {
+async function captureEntityContext(req, requestData, ctxTenantId = null) {
   try {
     const { method } = requestData;
     if (!['PUT', 'PATCH', 'DELETE'].includes(method)) return null;
     if (!requestData.entityId) return null;
-    const tenantId = req.tenantId;
+    const tenantId = ctxTenantId || req.tenantId;
     if (!tenantId) return null;
 
     if (requestData.url.includes('/clinical/clientes')) {
