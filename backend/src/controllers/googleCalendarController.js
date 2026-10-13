@@ -1644,9 +1644,21 @@ export const syncChangesFromGoogle = async (req, res) => {
             });
         }
 
+        // Verificación de existencia de eventos de citas futuras (captura eliminaciones
+        // que la sincronización incremental no ve).
+        let reconciliation = null;
+        try {
+          reconciliation = await bidirectionalSyncService.reconcileExistingEvents({
+            tenantId: req.tenantId ?? req.user?.tenant_id ?? null,
+            origen: 'manual'
+          });
+        } catch (reconcileError) {
+          console.warn('⚠️ Verificación de eventos falló:', reconcileError.message);
+        }
+
         const created = Number(syncResult?.results?.created || 0);
         const updated = Number(syncResult?.results?.updated || 0);
-        const deleted = Number(syncResult?.results?.deleted || 0);
+        const deleted = Number(syncResult?.results?.deleted || 0) + Number(reconciliation?.cancelled || 0);
         const totalApplied = created + updated + deleted;
 
         const message = totalApplied > 0
@@ -1666,7 +1678,9 @@ export const syncChangesFromGoogle = async (req, res) => {
             created,
             updated,
             deleted,
-            errors: Array.isArray(syncResult?.results?.errors) ? syncResult.results.errors.length : 0
+            errors: Array.isArray(syncResult?.results?.errors) ? syncResult.results.errors.length : 0,
+            events_verified: reconciliation?.checked ?? 0,
+            cancelled_missing_events: reconciliation?.cancelled ?? 0
           }
         });
 

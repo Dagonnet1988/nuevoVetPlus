@@ -12,6 +12,67 @@ class SyncScheduler {
         this.lastOutboundSyncAt = null;
         this.isRunning = false;
         this.lastAutoSyncAt = null;
+        this.lastReconcileAt = null;
+        this.consecutiveSyncFailures = 0;
+        this.lastSyncAlertAt = null;
+    }
+
+    /**
+     * Alerta por correo cuando la sincronización con Google falla. Destinatario en
+     * SYNC_ALERT_EMAIL (sin esa variable no se envía nada). Si Google pide reconectar
+     * se avisa de inmediato; si no, tras 3 fallos seguidos. Máximo una alerta cada 6 h.
+     */
+    async registerSyncFailure(errorText, { requiresReauth = false } = {}) {
+        this.consecutiveSyncFailures++;
+        const threshold = requiresReauth ? 1 : 3;
+        if (this.consecutiveSyncFailures < threshold) return;
+
+        const to = String(process.env.SYNC_ALERT_EMAIL || '').trim();
+        if (!to) return;
+
+        const cooldownMs = 6 * 60 * 60 * 1000;
+        if (this.lastSyncAlertAt && Date.now() - this.lastSyncAlertAt.getTime() < cooldownMs) return;
+
+        try {
+            const tenantId = await bidirectionalSyncService.resolveActiveTenantId();
+            const safeError = String(errorText || 'sin detalle')
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').slice(0, 500);
+            const hora = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' });
+            const accion = requiresReauth
+                ? 'Google pidió volver a autorizar la conexión: reconectar en Configuración → Google Calendar.'
+                : 'Revisar la pestaña Sincronización de Auditoría y los logs del servidor.';
+
+            await sendEmail({
+                tenantId,
+                to,
+                subject: '[Ramelo] Falla en la sincronización con Google Calendar',
+                html: `<p>La sincronización automática con Google Calendar falló (${this.consecutiveSyncFailures} intento(s) seguidos).</p>
+<p><strong>Detalle:</strong> ${safeError}</p>
+<p><strong>Qué hacer:</strong> ${accion}</p>
+<p>Hora (Bogotá): ${hora}</p>`,
+                text: `La sincronización con Google Calendar falló (${this.consecutiveSyncFailures} intentos seguidos). Detalle: ${safeError}. ${accion} Hora (Bogotá): ${hora}`,
+                logContext: { tipo_envio: 'alerta_sincronizacion' }
+            });
+            this.lastSyncAlertAt = new Date();
+            console.warn(`📧 Alerta de falla de sincronización enviada a ${to}`);
+        } catch (alertError) {
+            console.warn('⚠️ No se pudo enviar la alerta de sincronización:', alertError.message);
+        }
+    }
+
+    /** Verificación de existencia de eventos, como máximo una vez por hora. */
+    async maybeReconcileEvents() {
+        const oneHourMs = 60 * 60 * 1000;
+        if (this.lastReconcileAt && Date.now() - this.lastReconcileAt.getTime() < oneHourMs) return;
+        this.lastReconcileAt = new Date();
+        try {
+            const summary = await bidirectionalSyncService.reconcileExistingEvents({ origen: 'automatica' });
+            if (summary.cancelled > 0 || summary.errors > 0) {
+                console.log(`🔎 Verificación de eventos: ${summary.checked} revisados, ${summary.cancelled} cancelados, ${summary.errors} con error`);
+            }
+        } catch (error) {
+            console.warn('⚠️ Error en verificación de eventos:', error.message);
+        }
     }
 
     getBogotaDateString(date = new Date()) {
@@ -316,6 +377,8 @@ class SyncScheduler {
                 this.lastAutoSyncAt = new Date();
                 
                 if (result.success) {
+                    this.consecutiveSyncFailures = 0;
+                    await this.maybeReconcileEvents();
                     // Registrar estadísticas y log solo cuando hubo cambios
                     if (result.results.total_changes > 0) {
                         console.log(
@@ -326,6 +389,7 @@ class SyncScheduler {
                     }
                 } else {
                     console.error('❌ Error en sincronización automática:', result.error);
+                    await this.registerSyncFailure(result.error, { requiresReauth: result.requires_reauth === true });
                     if (result.requires_reauth === true) {
                         await this.handleGoogleReauthRequired('auto_sync');
                     }
@@ -338,6 +402,7 @@ class SyncScheduler {
                 
             } catch (error) {
                 console.error('❌ Error en tarea de sincronización automática:', error);
+                await this.registerSyncFailure(error.message);
                 await this.logSyncActivity('auto_sync_error', { error: error.message });
             }
         }, {

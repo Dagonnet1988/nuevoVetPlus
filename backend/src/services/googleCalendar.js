@@ -906,10 +906,16 @@ class GoogleCalendarService {
             };
 
         } catch (error) {
-            console.error('Error obteniendo evento de Google Calendar:', error);
+            const status = error?.status || error?.code || error?.response?.status;
+            const notFound = status === 404 || status === 410;
+            if (!notFound) {
+                console.error('Error obteniendo evento de Google Calendar:', error);
+            }
             return {
                 success: false,
-                error: error.message
+                not_found: notFound,
+                status,
+                error: describeGoogleError(error)
             };
         }
     }

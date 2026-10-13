@@ -807,22 +807,46 @@ class BidirectionalSyncService {
             let mascota_id = null;
             let veterinario_id = null;
 
-            // Buscar cliente por nombre (coincidencia parcial)
+            // Buscar cliente por nombre: coincidencia EXACTA (sin tildes ni mayúsculas).
+            // Antes era parcial (LIKE %nombre% y por partes), lo que podía asociar la cita
+            // al propietario equivocado ("Ana Pérez" con "Ana Pérez Gómez").
             if (cliente_nombre) {
-                const clienteResult = await query(`
-                    SELECT id_cliente, nombre, telefono 
-                    FROM clinical.clientes 
-                    WHERE LOWER(nombre) LIKE LOWER($1) 
-                    AND id_tenant = $2
+                const targetClientName = this.normalizeText(cliente_nombre);
+                const candidateClients = await query(`
+                    SELECT id_cliente, nombre, email
+                    FROM clinical.clientes
+                    WHERE id_tenant = $1
                     AND activo = true
-                    ORDER BY 
-                        CASE WHEN LOWER(nombre) = LOWER($3) THEN 1 ELSE 2 END,
-                        nombre
-                    LIMIT 1
-                `, [`%${cliente_nombre}%`, tenantId, cliente_nombre]);
+                `, [tenantId]);
 
-                if (clienteResult.rows.length > 0) {
-                    cliente_id = clienteResult.rows[0].id_cliente;
+                const exactClients = candidateClients.rows.filter(
+                    row => this.normalizeText(row.nombre) === targetClientName
+                );
+
+                if (exactClients.length === 1) {
+                    cliente_id = exactClients[0].id_cliente;
+                } else if (exactClients.length > 1) {
+                    // Homónimos: se desempata por email del evento y luego por quien tenga
+                    // una mascota con ese nombre exacto; si nada desempata, no se adivina.
+                    const byEmail = cliente_email
+                        ? exactClients.find(row => row.email && row.email.toLowerCase() === String(cliente_email).toLowerCase())
+                        : null;
+                    if (byEmail) {
+                        cliente_id = byEmail.id_cliente;
+                    } else if (mascota_nombre) {
+                        const targetPetForTie = this.normalizeText(mascota_nombre);
+                        const petsOfCandidates = await query(`
+                            SELECT id_cliente, nombre
+                            FROM clinical.mascotas
+                            WHERE id_tenant = $1 AND activo = true AND id_cliente = ANY($2::uuid[])
+                        `, [tenantId, exactClients.map(row => row.id_cliente)]);
+                        const owners = [...new Set(
+                            petsOfCandidates.rows
+                                .filter(row => this.normalizeText(row.nombre) === targetPetForTie)
+                                .map(row => row.id_cliente)
+                        )];
+                        if (owners.length === 1) cliente_id = owners[0];
+                    }
                 }
             }
 
@@ -839,31 +863,6 @@ class BidirectionalSyncService {
 
                 if (clienteByEmail.rows.length > 0) {
                     cliente_id = clienteByEmail.rows[0].id_cliente;
-                }
-            }
-
-            // Fallback flexible por tokens de nombre (nombres compuestos)
-            if (!cliente_id && cliente_nombre) {
-                const candidateClients = await query(`
-                    SELECT id_cliente, nombre
-                    FROM clinical.clientes
-                    WHERE id_tenant = $1
-                    AND activo = true
-                    LIMIT 500
-                `, [tenantId]);
-
-                const targetName = this.normalizeText(cliente_nombre);
-                const targetTokens = targetName.split(/\s+/).filter(token => token.length >= 3);
-
-                const bestClient = candidateClients.rows.find(row => {
-                    const candidateName = this.normalizeText(row.nombre);
-                    if (candidateName === targetName) return true;
-                    if (targetTokens.length === 0) return candidateName.includes(targetName) || targetName.includes(candidateName);
-                    return targetTokens.every(token => candidateName.includes(token));
-                });
-
-                if (bestClient) {
-                    cliente_id = bestClient.id_cliente;
                 }
             }
 
@@ -1367,6 +1366,88 @@ class BidirectionalSyncService {
         } catch (error) {
             console.error('Error procesando respuestas de asistentes:', error);
             throw error;
+        }
+    }
+
+    /**
+     * Verificación de existencia: para las citas futuras vinculadas a un evento de
+     * Google, pregunta a Google si el evento sigue existiendo. Si ya no existe (404/410)
+     * o está cancelado, la cita se marca cancelada con la misma regla de siempre
+     * (con documentos clínicos no se oculta). Cubre eliminaciones que la sincronización
+     * incremental no ve (borrado definitivo, evento movido fuera de rango, etc.).
+     */
+    async reconcileExistingEvents({ tenantId = null, origen = 'automatica', maxCitas = 300 } = {}) {
+        const previousContextTenant = this.contextTenantId;
+        const summary = { checked: 0, cancelled: 0, errors: 0, stopped_early: false };
+        try {
+            this.contextTenantId = tenantId || this.contextTenantId;
+            const tenantIdResolved = await this.resolveActiveTenantId();
+
+            const citas = await query(`
+                SELECT id_cita, codigo_cita, google_event_id
+                FROM clinical.calendario_citas
+                WHERE id_tenant = $1
+                  AND google_event_id IS NOT NULL
+                  AND estado = 'confirmada'
+                  AND fecha_inicio >= (NOW() AT TIME ZONE 'America/Bogota')::date
+                ORDER BY fecha_inicio ASC
+                LIMIT $2
+            `, [tenantIdResolved, maxCitas]);
+
+            const entries = [];
+            for (const cita of citas.rows) {
+                summary.checked++;
+                const eventResult = await googleCalendarService.getEvent(cita.google_event_id);
+
+                const gone = (!eventResult.success && eventResult.not_found)
+                    || (eventResult.success && eventResult.data?.status === 'cancelled');
+
+                if (gone) {
+                    const deleteResult = await this.handleGoogleEventDeleted({
+                        parsed_data: { google_event_id: cita.google_event_id }
+                    });
+                    summary.cancelled++;
+                    entries.push({
+                        tenantId: tenantIdResolved,
+                        direccion: 'GOOGLE_A_RAMELO',
+                        origen,
+                        accion: 'deleted',
+                        exito: deleteResult.success,
+                        idCita: cita.id_cita,
+                        codigoCita: cita.codigo_cita,
+                        googleEventId: cita.google_event_id,
+                        motivo: 'verificacion_evento_inexistente',
+                        error: deleteResult.success ? null : deleteResult.error
+                    });
+                } else if (!eventResult.success) {
+                    summary.errors++;
+                    entries.push({
+                        tenantId: tenantIdResolved,
+                        direccion: 'GOOGLE_A_RAMELO',
+                        origen,
+                        accion: 'error',
+                        exito: false,
+                        idCita: cita.id_cita,
+                        codigoCita: cita.codigo_cita,
+                        googleEventId: cita.google_event_id,
+                        motivo: 'verificacion_fallida',
+                        error: eventResult.error
+                    });
+                    // Un fallo de autenticación/cuota se repetiría en todas: no insistir.
+                    if ([401, 403].includes(Number(eventResult.status)) || /invalid_grant/i.test(String(eventResult.error))) {
+                        summary.stopped_early = true;
+                        break;
+                    }
+                }
+            }
+
+            await logSyncEvents(entries);
+            return { success: true, ...summary };
+        } catch (error) {
+            console.error('Error verificando existencia de eventos:', error);
+            return { success: false, error: error.message, ...summary };
+        } finally {
+            this.contextTenantId = previousContextTenant;
         }
     }
 
