@@ -1376,7 +1376,7 @@ class BidirectionalSyncService {
      * (con documentos clínicos no se oculta). Cubre eliminaciones que la sincronización
      * incremental no ve (borrado definitivo, evento movido fuera de rango, etc.).
      */
-    async reconcileExistingEvents({ tenantId = null, origen = 'automatica', maxCitas = 300 } = {}) {
+    async reconcileExistingEvents({ tenantId = null, origen = 'automatica', maxCitas = 1000 } = {}) {
         const previousContextTenant = this.contextTenantId;
         const summary = { checked: 0, cancelled: 0, errors: 0, stopped_early: false };
         try {
@@ -1395,48 +1395,55 @@ class BidirectionalSyncService {
             `, [tenantIdResolved, maxCitas]);
 
             const entries = [];
-            for (const cita of citas.rows) {
-                summary.checked++;
-                const eventResult = await googleCalendarService.getEvent(cita.google_event_id);
+            const BATCH_SIZE = 10; // consultas a Google en paralelo por lote (≈10x más rápido)
 
-                const gone = (!eventResult.success && eventResult.not_found)
-                    || (eventResult.success && eventResult.data?.status === 'cancelled');
+            for (let i = 0; i < citas.rows.length && !summary.stopped_early; i += BATCH_SIZE) {
+                const batch = citas.rows.slice(i, i + BATCH_SIZE);
+                const outcomes = await Promise.all(
+                    batch.map(async (cita) => ({ cita, eventResult: await googleCalendarService.getEvent(cita.google_event_id) }))
+                );
 
-                if (gone) {
-                    const deleteResult = await this.handleGoogleEventDeleted({
-                        parsed_data: { google_event_id: cita.google_event_id }
-                    });
-                    summary.cancelled++;
-                    entries.push({
-                        tenantId: tenantIdResolved,
-                        direccion: 'GOOGLE_A_RAMELO',
-                        origen,
-                        accion: 'deleted',
-                        exito: deleteResult.success,
-                        idCita: cita.id_cita,
-                        codigoCita: cita.codigo_cita,
-                        googleEventId: cita.google_event_id,
-                        motivo: 'verificacion_evento_inexistente',
-                        error: deleteResult.success ? null : deleteResult.error
-                    });
-                } else if (!eventResult.success) {
-                    summary.errors++;
-                    entries.push({
-                        tenantId: tenantIdResolved,
-                        direccion: 'GOOGLE_A_RAMELO',
-                        origen,
-                        accion: 'error',
-                        exito: false,
-                        idCita: cita.id_cita,
-                        codigoCita: cita.codigo_cita,
-                        googleEventId: cita.google_event_id,
-                        motivo: 'verificacion_fallida',
-                        error: eventResult.error
-                    });
-                    // Un fallo de autenticación/cuota se repetiría en todas: no insistir.
-                    if ([401, 403].includes(Number(eventResult.status)) || /invalid_grant/i.test(String(eventResult.error))) {
-                        summary.stopped_early = true;
-                        break;
+                for (const { cita, eventResult } of outcomes) {
+                    summary.checked++;
+
+                    const gone = (!eventResult.success && eventResult.not_found)
+                        || (eventResult.success && eventResult.data?.status === 'cancelled');
+
+                    if (gone) {
+                        const deleteResult = await this.handleGoogleEventDeleted({
+                            parsed_data: { google_event_id: cita.google_event_id }
+                        });
+                        summary.cancelled++;
+                        entries.push({
+                            tenantId: tenantIdResolved,
+                            direccion: 'GOOGLE_A_RAMELO',
+                            origen,
+                            accion: 'deleted',
+                            exito: deleteResult.success,
+                            idCita: cita.id_cita,
+                            codigoCita: cita.codigo_cita,
+                            googleEventId: cita.google_event_id,
+                            motivo: 'verificacion_evento_inexistente',
+                            error: deleteResult.success ? null : deleteResult.error
+                        });
+                    } else if (!eventResult.success) {
+                        summary.errors++;
+                        entries.push({
+                            tenantId: tenantIdResolved,
+                            direccion: 'GOOGLE_A_RAMELO',
+                            origen,
+                            accion: 'error',
+                            exito: false,
+                            idCita: cita.id_cita,
+                            codigoCita: cita.codigo_cita,
+                            googleEventId: cita.google_event_id,
+                            motivo: 'verificacion_fallida',
+                            error: eventResult.error
+                        });
+                        // Un fallo de autenticación/cuota se repetiría en todas: no insistir.
+                        if ([401, 403].includes(Number(eventResult.status)) || /invalid_grant/i.test(String(eventResult.error))) {
+                            summary.stopped_early = true;
+                        }
                     }
                 }
             }

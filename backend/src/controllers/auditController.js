@@ -297,18 +297,18 @@ class AuditController {
       const conditions = ['s.id_tenant = $1'];
       const params = [tenantId];
       let n = 1;
-      if (direccion)    { n++; conditions.push(`s.direccion = ${n}`);   params.push(direccion); }
-      if (accion)       { n++; conditions.push(`s.accion = ${n}`);      params.push(accion); }
-      if (origen)       { n++; conditions.push(`s.origen = ${n}`);      params.push(origen); }
-      if (codigo_cita)  { n++; conditions.push(`s.codigo_cita ILIKE ${n}`); params.push(`%${codigo_cita}%`); }
-      if (exito !== undefined && exito !== '') { n++; conditions.push(`s.exito = ${n}`); params.push(exito === 'true'); }
-      if (fecha_inicio) { n++; conditions.push(`DATE(s.created_at) >= ${n}`); params.push(fecha_inicio); }
-      if (fecha_fin)    { n++; conditions.push(`DATE(s.created_at) <= ${n}`); params.push(fecha_fin); }
+      if (direccion)    { n++; conditions.push(`s.direccion = $${n}`);   params.push(direccion); }
+      if (accion)       { n++; conditions.push(`s.accion = $${n}`);      params.push(accion); }
+      if (origen)       { n++; conditions.push(`s.origen = $${n}`);      params.push(origen); }
+      if (codigo_cita)  { n++; conditions.push(`s.codigo_cita ILIKE $${n}`); params.push(`%${codigo_cita}%`); }
+      if (exito !== undefined && exito !== '') { n++; conditions.push(`s.exito = $${n}`); params.push(exito === 'true'); }
+      if (fecha_inicio) { n++; conditions.push(`DATE(s.created_at) >= $${n}`); params.push(fecha_inicio); }
+      if (fecha_fin)    { n++; conditions.push(`DATE(s.created_at) <= $${n}`); params.push(fecha_fin); }
       const where = ' WHERE ' + conditions.join(' AND ');
 
       const [result, countResult] = await Promise.all([
         query(
-          `SELECT s.* FROM system.sync_audit_log s${where} ORDER BY s.created_at DESC LIMIT ${n + 1} OFFSET ${n + 2}`,
+          `SELECT s.* FROM system.sync_audit_log s${where} ORDER BY s.created_at DESC LIMIT $${n + 1} OFFSET $${n + 2}`,
           [...params, limit, offset]
         ),
         query(`SELECT COUNT(*) AS total FROM system.sync_audit_log s${where}`, params)
