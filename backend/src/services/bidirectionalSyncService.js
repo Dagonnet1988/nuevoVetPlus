@@ -1395,9 +1395,13 @@ class BidirectionalSyncService {
             `, [tenantIdResolved, maxCitas]);
 
             const entries = [];
-            const BATCH_SIZE = 10; // consultas a Google en paralelo por lote (≈10x más rápido)
+            // Ritmo moderado: Google limita las consultas por minuto por usuario (con lotes de
+            // 10 sin pausa se superó el límite). 3 en paralelo + 2 s de pausa ≈ 90 consultas/min.
+            const BATCH_SIZE = 3;
+            const BATCH_PAUSE_MS = 2000;
 
             for (let i = 0; i < citas.rows.length && !summary.stopped_early; i += BATCH_SIZE) {
+                if (i > 0) await new Promise(resolve => setTimeout(resolve, BATCH_PAUSE_MS));
                 const batch = citas.rows.slice(i, i + BATCH_SIZE);
                 const outcomes = await Promise.all(
                     batch.map(async (cita) => ({ cita, eventResult: await googleCalendarService.getEvent(cita.google_event_id) }))

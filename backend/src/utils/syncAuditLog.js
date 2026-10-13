@@ -58,6 +58,8 @@ export const describeGoogleError = (error) => {
   let hint = '';
   if (reason === 'invalid_grant' || /invalid_grant/i.test(base)) {
     hint = ' — La conexión con Google venció o fue revocada: reconectar en Configuración.';
+  } else if (reason === 'rateLimitExceeded' || reason === 'userRateLimitExceeded' || status === 429) {
+    hint = ' — Límite de consultas por minuto de Google: se reintenta en la próxima pasada.';
   } else if (status === 404 || status === 410) {
     hint = ' — El evento ya no existe en Google Calendar.';
   } else if (status === 403) {
