@@ -336,5 +336,110 @@
       }
     </mat-tab>
 
+    <!-- ── Tab Sincronización ──────────────── -->
+    <mat-tab>
+      <ng-template mat-tab-label>
+        <mat-icon class="tab-icon">sync_alt</mat-icon>
+        Sincronización
+      </ng-template>
+      <div class="filters-bar">
+        <mat-form-field appearance="outline" class="filter-field">
+          <mat-label>Dirección</mat-label>
+          <mat-select [ngModel]="filtroSyncDireccion()"
+                      (ngModelChange)="filtroSyncDireccion.set($event); onSyncFilterChange()">
+            <mat-option value="">Todas</mat-option>
+            <mat-option value="GOOGLE_A_RAMELO">Google → Ramelo</mat-option>
+            <mat-option value="RAMELO_A_GOOGLE">Ramelo → Google</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="filter-field">
+          <mat-label>Acción</mat-label>
+          <mat-select [ngModel]="filtroSyncAccion()"
+                      (ngModelChange)="filtroSyncAccion.set($event); onSyncFilterChange()">
+            <mat-option value="">Todas</mat-option>
+            <mat-option value="created">Creada</mat-option>
+            <mat-option value="updated">Actualizada</mat-option>
+            <mat-option value="deleted">Eliminada/cancelada</mat-option>
+            <mat-option value="conflict">Conflicto</mat-option>
+            <mat-option value="skipped">Omitida</mat-option>
+            <mat-option value="error">Error</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="filter-field">
+          <mat-label>Resultado</mat-label>
+          <mat-select [ngModel]="filtroSyncExito()"
+                      (ngModelChange)="filtroSyncExito.set($event); onSyncFilterChange()">
+            <mat-option value="">Todos</mat-option>
+            <mat-option value="true">Exitoso</mat-option>
+            <mat-option value="false">Con error</mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
+
+      @if (loadingSync()) {
+        <div class="loading-center"><mat-spinner diameter="40"></mat-spinner></div>
+      } @else {
+        <div class="table-wrapper">
+          <table mat-table [dataSource]="syncLogs()" class="audit-table">
+            <ng-container matColumnDef="fecha">
+              <th mat-header-cell *matHeaderCellDef>Fecha / Hora</th>
+              <td mat-cell *matCellDef="let row">
+                <span class="timestamp">{{ row.created_at | date:'dd-MM-yy h:mm:ss a' }}</span>
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="direccion">
+              <th mat-header-cell *matHeaderCellDef>Dirección</th>
+              <td mat-cell *matCellDef="let row">
+                {{ row.direccion === 'GOOGLE_A_RAMELO' ? 'Google → Ramelo' : 'Ramelo → Google' }}
+                <span class="user-email">{{ row.origen }}</span>
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="accion">
+              <th mat-header-cell *matHeaderCellDef>Acción</th>
+              <td mat-cell *matCellDef="let row">
+                <span class="tipo-badge">{{ getSyncAccionLabel(row.accion) }}</span>
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="cita">
+              <th mat-header-cell *matHeaderCellDef>Cita</th>
+              <td mat-cell *matCellDef="let row">{{ row.codigo_cita ?? '—' }}</td>
+            </ng-container>
+            <ng-container matColumnDef="titulo">
+              <th mat-header-cell *matHeaderCellDef>Evento</th>
+              <td mat-cell *matCellDef="let row"><span class="descripcion">{{ row.titulo ?? '—' }}</span></td>
+            </ng-container>
+            <ng-container matColumnDef="detalle">
+              <th mat-header-cell *matHeaderCellDef>Detalle</th>
+              <td mat-cell *matCellDef="let row">
+                @if (row.error_mensaje) {
+                  <span class="descripcion" [matTooltip]="row.error_mensaje" style="color:#d32f2f">{{ row.error_mensaje }}</span>
+                } @else {
+                  <span class="descripcion">{{ row.motivo ?? '—' }}</span>
+                }
+              </td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="syncColumns; sticky: true"></tr>
+            <tr mat-row *matRowDef="let row; columns: syncColumns;" [class.row-error]="!row.exito"></tr>
+          </table>
+
+          @if (syncLogs().length === 0) {
+            <div class="empty-state">
+              <mat-icon>search_off</mat-icon>
+              <p>Aún no hay registros de sincronización con estos filtros</p>
+            </div>
+          }
+        </div>
+
+        <mat-paginator
+          [length]="totalSync()"
+          [pageSize]="pageSizeSync()"
+          [pageIndex]="pageIndexSync()"
+          [pageSizeOptions]="[10, 25, 50, 100]"
+          (page)="onPageSync($event)"
+          showFirstLastButtons>
+        </mat-paginator>
+      }
+    </mat-tab>
+
   </mat-tab-group>
 </div>

@@ -1626,7 +1626,8 @@ export const syncChangesFromGoogle = async (req, res) => {
           onlyToday: effectiveOnlyToday,
           startDate: start_date,
           endDate: end_date,
-          tenantId: req.tenantId ?? req.user?.tenant_id ?? null
+          tenantId: req.tenantId ?? req.user?.tenant_id ?? null,
+          origen: 'manual'
         });
 
         if (!syncResult.success) {

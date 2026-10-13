@@ -38,6 +38,32 @@ export interface ActivityLog {
   response_data?: Record<string, any> | null;
 }
 
+export interface SyncLogEntry {
+  id_log: string;
+  direccion: 'GOOGLE_A_RAMELO' | 'RAMELO_A_GOOGLE';
+  origen: string;
+  accion: string;
+  exito: boolean;
+  codigo_cita?: string | null;
+  google_event_id?: string | null;
+  titulo?: string | null;
+  motivo?: string | null;
+  error_mensaje?: string | null;
+  created_at: string;
+}
+
+export interface SyncFilters {
+  direccion?: string;
+  accion?: string;
+  exito?: string;
+  origen?: string;
+  codigo_cita?: string;
+  fecha_inicio?: string;
+  fecha_fin?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export interface SessionLog {
   id_session: string;
   id_usuario: string;
@@ -128,6 +154,17 @@ export class AuditoriaService {
     if (filters.limit)         params = params.set('limit', filters.limit.toString());
     if (filters.offset !== undefined) params = params.set('offset', filters.offset.toString());
     return this.http.get<PaginatedResponse<SessionLog>>(`${this.apiUrl}/sessions`, { params });
+  }
+
+  getSyncLog(filters: SyncFilters = {}): Observable<PaginatedResponse<SyncLogEntry>> {
+    let params = new HttpParams();
+    (Object.keys(filters) as (keyof SyncFilters)[]).forEach(key => {
+      const value = filters[key];
+      if (value !== undefined && value !== '' && value !== null) {
+        params = params.set(key, String(value));
+      }
+    });
+    return this.http.get<PaginatedResponse<SyncLogEntry>>(`${this.apiUrl}/sync`, { params });
   }
 
   getStats(startDate?: string, endDate?: string): Observable<{ success: boolean; data: AuditStats }> {

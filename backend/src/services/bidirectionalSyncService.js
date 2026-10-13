@@ -1,3 +1,4 @@
+import { logSyncEvents } from '../utils/syncAuditLog.js';
 import { query } from '../config/database.js';
 import { v4 as uuidv4 } from 'uuid';
 import googleCalendarService from './googleCalendar.js';
@@ -83,6 +84,42 @@ class BidirectionalSyncService {
             .replace(/[^a-z0-9\s]/g, ' ')
             .replace(/\s+/g, ' ')
             .trim();
+    }
+
+    /**
+     * Guarda en sync_audit_log lo que se procesó (Google -> Ramelo). Se omiten los
+     * eventos sin novedad (ya existían iguales) para no llenar la tabla de ruido.
+     */
+    async persistSyncLogs(logs, { origen, tenantId }) {
+        const entries = (logs || [])
+            .filter(l => l && l.action && !(l.action === 'skipped' && l.reason === 'existing_no_changes'))
+            .map(l => {
+                const isError = l.action === 'error';
+                const details = (l.details && typeof l.details === 'object') ? l.details : {};
+                const errorText = isError
+                    ? (typeof l.details === 'string' ? l.details : (details.error || l.reason))
+                    : null;
+                return {
+                    tenantId,
+                    direccion: 'GOOGLE_A_RAMELO',
+                    origen,
+                    accion: l.action === 'pending' ? 'skipped' : l.action,
+                    exito: !isError,
+                    idCita: details.id_cita || details.existing_id_cita || null,
+                    codigoCita: details.codigo_cita || details.existing_codigo_cita || null,
+                    googleEventId: l.google_event_id,
+                    titulo: l.titulo,
+                    motivo: l.reason,
+                    error: errorText,
+                    detalle: {
+                        tipo_detectado: l.tipo_detectado || l.change_type || null,
+                        fecha_inicio: l.fecha_inicio || null,
+                        cliente_id: details.cliente_id || null,
+                        mascota_id: details.mascota_id || null
+                    }
+                };
+            });
+        await logSyncEvents(entries);
     }
 
     toTitleCase(value) {
@@ -487,6 +524,10 @@ class BidirectionalSyncService {
 
             // Actualizar última sincronización
             if (!dryRun) {
+                await this.persistSyncLogs(results.event_logs, {
+                    origen: options.origen || 'manual',
+                    tenantId: await this.resolveActiveTenantId()
+                });
                 await this.updateLastSyncTime('import_from_google');
             }
 
@@ -526,6 +567,7 @@ class BidirectionalSyncService {
             const rangeStart = startDate || (onlyToday ? todayBogota : null);
             const rangeEnd = endDate || (onlyToday ? todayBogota : null);
             const tenantIdResolved = await this.resolveActiveTenantId();
+            const origen = options.origen || 'automatica';
 
             // Obtener última sincronización
             const lastSyncResult = await query(`
@@ -579,7 +621,8 @@ class BidirectionalSyncService {
                     autoMatch: true,
                     createMissingData: true,
                     dryRun: false,
-                    tenantId: tenantIdResolved
+                    tenantId: tenantIdResolved,
+                    origen
                 });
 
                 if (fallbackImport?.success) {
@@ -701,6 +744,10 @@ class BidirectionalSyncService {
                     });
                 }
             }
+
+            // Historial persistente de los cambios incrementales (el import de
+            // reconciliación registra el suyo por separado).
+            await this.persistSyncLogs(results.change_logs, { origen, tenantId: tenantIdResolved });
 
             // Actualizar marca de tiempo de sincronización
             await this.updateLastSyncTime('sync_changes_from_google');

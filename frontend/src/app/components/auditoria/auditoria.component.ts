@@ -26,6 +26,7 @@ import {
   AuditoriaService,
   ActivityLog,
   SessionLog,
+  SyncLogEntry,
   AuditStats,
   ActivityFilters,
   SessionFilters
@@ -70,6 +71,15 @@ export class AuditoriaComponent implements OnInit {
   // ── Datos ─────────────────────────────────────────────
   activities = signal<ActivityLog[]>([]);
   sessions   = signal<SessionLog[]>([]);
+  syncLogs   = signal<SyncLogEntry[]>([]);
+  loadingSync = signal(false);
+  totalSync = signal(0);
+  pageSizeSync = signal(25);
+  pageIndexSync = signal(0);
+  filtroSyncDireccion = signal('');
+  filtroSyncAccion = signal('');
+  filtroSyncExito = signal('');
+  syncColumns = ['fecha', 'direccion', 'accion', 'cita', 'titulo', 'detalle'];
   stats      = signal<AuditStats | null>(null);
 
   // ── Paginación actividades ────────────────────────────
@@ -144,6 +154,7 @@ export class AuditoriaComponent implements OnInit {
   ];
 
   ngOnInit(): void {
+    this.loadSync();
     this.loadActivities();
     this.loadSessions();
     this.loadStats();
@@ -174,6 +185,46 @@ export class AuditoriaComponent implements OnInit {
         this.loadingActivities.set(false);
       }
     });
+  }
+
+  loadSync(): void {
+    this.loadingSync.set(true);
+    this.auditoriaService.getSyncLog({
+      direccion: this.filtroSyncDireccion(),
+      accion: this.filtroSyncAccion(),
+      exito: this.filtroSyncExito(),
+      limit: this.pageSizeSync(),
+      offset: this.pageIndexSync() * this.pageSizeSync()
+    }).subscribe({
+      next: (res) => {
+        this.syncLogs.set(res.data ?? []);
+        this.totalSync.set(res.pagination?.total ?? res.data?.length ?? 0);
+        this.loadingSync.set(false);
+      },
+      error: (err) => {
+        this.snackBar.open(extractError(err, 'Error cargando historial de sincronización'), 'Cerrar', { duration: 3000 });
+        this.loadingSync.set(false);
+      }
+    });
+  }
+
+  onSyncFilterChange(): void {
+    this.pageIndexSync.set(0);
+    this.loadSync();
+  }
+
+  onPageSync(event: PageEvent): void {
+    this.pageIndexSync.set(event.pageIndex);
+    this.pageSizeSync.set(event.pageSize);
+    this.loadSync();
+  }
+
+  getSyncAccionLabel(accion: string): string {
+    const labels: Record<string, string> = {
+      created: 'Creada', updated: 'Actualizada', deleted: 'Eliminada/cancelada',
+      conflict: 'Conflicto', skipped: 'Omitida', error: 'Error'
+    };
+    return labels[accion] ?? accion;
   }
 
   loadSessions(): void {
@@ -321,6 +372,7 @@ export class AuditoriaComponent implements OnInit {
   }
 
   refrescar(): void {
+    this.loadSync();
     this.loadActivities();
     this.loadSessions();
     this.loadStats();

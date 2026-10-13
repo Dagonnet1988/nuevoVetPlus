@@ -422,6 +422,17 @@ class SyncScheduler {
                     AND created_at < CURRENT_DATE - INTERVAL '30 days'
                 `);
 
+                // Historial de sincronización Ramelo <-> Google: se conserva 90 días.
+                try {
+                    const syncCleanup = await query(`
+                        DELETE FROM system.sync_audit_log
+                        WHERE created_at < CURRENT_DATE - INTERVAL '90 days'
+                    `);
+                    console.log(`🧹 sync_audit_log: ${syncCleanup.rowCount} registros eliminados`);
+                } catch (syncCleanupError) {
+                    console.warn('⚠️ No se pudo limpiar sync_audit_log:', syncCleanupError.message);
+                }
+
                 console.log(`✅ Limpieza completada: ${cleanupResult.rowCount} logs eliminados`);
                 
             } catch (error) {
@@ -456,7 +467,8 @@ class SyncScheduler {
                     {
                         autoMatch: true,
                         createMissingData: false,
-                        dryRun: false
+                        dryRun: false,
+                        origen: 'automatica'
                     }
                 );
 

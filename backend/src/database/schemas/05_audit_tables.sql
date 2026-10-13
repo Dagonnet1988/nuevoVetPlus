@@ -231,3 +231,25 @@ BEGIN
     LEFT JOIN top_user t ON true;
 END;
 $$ LANGUAGE plpgsql;
+-- Historial de sincronización Ramelo <-> Google Calendar (ambos sentidos).
+CREATE TABLE IF NOT EXISTS system.sync_audit_log (
+    id_log UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id_tenant UUID,
+    direccion VARCHAR(20) NOT NULL,   -- GOOGLE_A_RAMELO | RAMELO_A_GOOGLE
+    origen VARCHAR(20) NOT NULL,      -- automatica | manual | usuario | reintento
+    accion VARCHAR(20) NOT NULL,      -- created | updated | deleted | conflict | skipped | error
+    exito BOOLEAN NOT NULL DEFAULT true,
+    id_cita UUID,
+    codigo_cita VARCHAR(30),
+    google_event_id VARCHAR(255),
+    titulo TEXT,
+    motivo VARCHAR(100),              -- razón corta (ej. local_changes_pending, create_failed)
+    error_mensaje TEXT,
+    detalle JSONB,
+    id_usuario UUID,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_sync_audit_tenant_fecha ON system.sync_audit_log(id_tenant, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sync_audit_cita ON system.sync_audit_log(id_cita, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sync_audit_accion ON system.sync_audit_log(accion, created_at DESC);

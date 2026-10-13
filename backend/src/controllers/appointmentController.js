@@ -4,6 +4,7 @@ import googleCalendarService from '../services/googleCalendar.js';
 import appointmentConflictService from '../services/appointmentConflictService.js';
 import { sendEmail } from '../services/emailService.js';
 import { renderEmailTemplate } from '../services/emailTemplateService.js';
+import { logSyncEvents, describeGoogleError } from '../utils/syncAuditLog.js';
 
 /**
  * Convertir fecha a formato Colombia (sin zona horaria)
@@ -543,7 +544,21 @@ const hasRescheduleAuditColumns = async () => {
 /**
  * Sincronizar cita con Google Calendar
  */
-const syncAppointmentWithGoogle = async (appointmentData, action = 'create') => {
+const syncAppointmentWithGoogle = async (appointmentData, action = 'create', origen = 'usuario') => {
+    const registrarSync = (result) => logSyncEvents([{
+        tenantId: appointmentData?.id_tenant,
+        direccion: 'RAMELO_A_GOOGLE',
+        origen,
+        accion: action === 'create' ? 'created' : action === 'update' ? 'updated' : 'deleted',
+        exito: Boolean(result?.success) && !result?.skipped,
+        idCita: appointmentData?.id_cita,
+        codigoCita: appointmentData?.codigo_cita,
+        googleEventId: result?.eventId || appointmentData?.google_event_id,
+        titulo: appointmentData?.mascota_nombre,
+        motivo: result?.skipped ? 'saliente_deshabilitada' : (result?.already_deleted ? 'evento_ya_no_existia' : null),
+        error: result?.success ? null : result?.error
+    }]);
+
     try {
         if (!isOutboundGoogleSyncEnabled()) {
             if (appointmentData?.id_cita) {
@@ -557,19 +572,23 @@ const syncAppointmentWithGoogle = async (appointmentData, action = 'create') => 
                 `, [appointmentData.id_cita]);
             }
 
-            return {
+            const skippedResult = {
                 success: true,
                 skipped: true,
                 message: 'Sincronizacion saliente deshabilitada (solo Google -> Ramelo)'
             };
+            await registrarSync(skippedResult);
+            return skippedResult;
         }
 
         // Verificar si Google Calendar está configurado
         if (!await googleCalendarService.hasValidTokens()) {
-            return {
+            const notConfigured = {
                 success: false,
                 error: 'Google Calendar no está configurado'
             };
+            await registrarSync(notConfigured);
+            return notConfigured;
         }
 
         const {
@@ -701,10 +720,13 @@ Código de cita: ${appointmentData.codigo_cita}
             `, [result.error, id_cita]);
         }
 
+        await registrarSync(result);
         return result;
 
     } catch (error) {
         console.error('Error sincronizando con Google Calendar:', error);
+        const detailedError = describeGoogleError(error);
+        await registrarSync({ success: false, error: detailedError });
         
         // Marcar como fallido en la base de datos
         await query(`
@@ -714,11 +736,11 @@ Código de cita: ${appointmentData.codigo_cita}
                 google_sync_error = $1,
                 last_google_sync = CURRENT_TIMESTAMP
             WHERE id_cita = $2
-        `, [error.message, appointmentData.id_cita]);
+        `, [detailedError, appointmentData.id_cita]);
 
         return {
             success: false,
-            error: error.message
+            error: detailedError
         };
     }
 };
@@ -2350,7 +2372,7 @@ export const syncPendingOutboundAppointments = async () => {
                 // no crear uno nuevo — 'create' siempre acá duplicaba el evento
                 // en cada reintento de una cita que ya se había sincronizado antes.
                 const action = cita.google_event_id ? 'update' : 'create';
-                const syncResult = await syncAppointmentWithGoogle(cita, action);
+                const syncResult = await syncAppointmentWithGoogle(cita, action, 'reintento');
                 if (syncResult.success) {
                     results.synced++;
                 } else {

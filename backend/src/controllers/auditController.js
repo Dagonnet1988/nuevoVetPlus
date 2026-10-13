@@ -278,6 +278,63 @@ class AuditController {
   }
 
   // Obtener sesiones de usuarios
+  // Historial de sincronización Ramelo <-> Google Calendar (ambos sentidos)
+  static async getSyncLog(req, res) {
+    try {
+      const {
+        direccion,
+        accion,
+        exito,
+        origen,
+        codigo_cita,
+        fecha_inicio,
+        fecha_fin,
+        limit = 50,
+        offset = 0
+      } = req.query;
+
+      const tenantId = req.tenantId ?? req.user?.tenant_id;
+      const conditions = ['s.id_tenant = $1'];
+      const params = [tenantId];
+      let n = 1;
+      if (direccion)    { n++; conditions.push(`s.direccion = ${n}`);   params.push(direccion); }
+      if (accion)       { n++; conditions.push(`s.accion = ${n}`);      params.push(accion); }
+      if (origen)       { n++; conditions.push(`s.origen = ${n}`);      params.push(origen); }
+      if (codigo_cita)  { n++; conditions.push(`s.codigo_cita ILIKE ${n}`); params.push(`%${codigo_cita}%`); }
+      if (exito !== undefined && exito !== '') { n++; conditions.push(`s.exito = ${n}`); params.push(exito === 'true'); }
+      if (fecha_inicio) { n++; conditions.push(`DATE(s.created_at) >= ${n}`); params.push(fecha_inicio); }
+      if (fecha_fin)    { n++; conditions.push(`DATE(s.created_at) <= ${n}`); params.push(fecha_fin); }
+      const where = ' WHERE ' + conditions.join(' AND ');
+
+      const [result, countResult] = await Promise.all([
+        query(
+          `SELECT s.* FROM system.sync_audit_log s${where} ORDER BY s.created_at DESC LIMIT ${n + 1} OFFSET ${n + 2}`,
+          [...params, limit, offset]
+        ),
+        query(`SELECT COUNT(*) AS total FROM system.sync_audit_log s${where}`, params)
+      ]);
+
+      res.json({
+        success: true,
+        data: result.rows,
+        pagination: {
+          currentPage: Math.floor(offset / limit) + 1,
+          limit: parseInt(limit),
+          offset: parseInt(offset),
+          total: parseInt(countResult.rows[0].total),
+          pages: Math.ceil(countResult.rows[0].total / limit)
+        }
+      });
+    } catch (error) {
+      console.error('Error al obtener historial de sincronización:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor (¿falta crear la tabla sync_audit_log?)',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  }
+
   static async getUserSessions(req, res) {
     try {
       const {

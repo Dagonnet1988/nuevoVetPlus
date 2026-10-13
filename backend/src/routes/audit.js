@@ -158,6 +158,20 @@ router.get('/suspicious',
 );
 
 /**
+ * @route   GET /api/audit/sync
+ * @desc    Historial de sincronización Ramelo <-> Google Calendar
+ * @access  Private (Admin only)
+ */
+router.get('/sync',
+  authenticateToken,
+  authorize(['admin']),
+  query('limit').optional().isInt({ min: 1, max: 500 }),
+  query('offset').optional().isInt({ min: 0 }),
+  handleValidationErrors,
+  AuditController.getSyncLog
+);
+
+/**
  * @route   GET /api/audit/sessions
  * @desc    Obtener sesiones de usuarios
  * @access  Private (Admin only)

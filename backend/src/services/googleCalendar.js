@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { query } from '../config/database.js';
+import { describeGoogleError } from '../utils/syncAuditLog.js';
 
 class GoogleCalendarService {
     constructor() {
@@ -653,7 +654,7 @@ class GoogleCalendarService {
             console.error('Error creando evento en Google Calendar:', error);
             return {
                 success: false,
-                error: error.message
+                error: describeGoogleError(error)
             };
         }
     }
@@ -744,7 +745,7 @@ class GoogleCalendarService {
             console.error('Error actualizando evento en Google Calendar:', error);
             return {
                 success: false,
-                error: error.message
+                error: describeGoogleError(error)
             };
         }
     }
@@ -867,10 +868,19 @@ class GoogleCalendarService {
             };
 
         } catch (error) {
+            const status = error?.status || error?.code || error?.response?.status;
+            // 404/410: el evento ya no existe en Google; el objetivo (que no exista) ya se cumplió.
+            if (status === 404 || status === 410) {
+                return {
+                    success: true,
+                    already_deleted: true,
+                    message: 'El evento ya no existía en Google Calendar'
+                };
+            }
             console.error('Error eliminando evento en Google Calendar:', error);
             return {
                 success: false,
-                error: error.message
+                error: describeGoogleError(error)
             };
         }
     }
