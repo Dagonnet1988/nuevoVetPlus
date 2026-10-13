@@ -730,7 +730,9 @@ class BidirectionalSyncService {
 
                         case 'deleted':
                             const deleteResult = await this.handleGoogleEventDeleted(change);
-                            if (deleteResult.success) results.deleted++;
+                            // Solo cuenta si había una cita ligada: Google devuelve una "lápida" por cada evento
+                            // borrado en la ventana y la mayoría no corresponden a ninguna cita de Ramelo.
+                            if (deleteResult.success && deleteResult.data) results.deleted++;
                             else results.errors.push(deleteResult.error);
                             results.change_logs.push({
                                 google_event_id: change?.parsed_data?.google_event_id,

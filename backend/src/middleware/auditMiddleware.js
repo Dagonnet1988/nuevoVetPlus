@@ -481,7 +481,9 @@ function translateFieldName(field) {
     notas: 'notas',
     tipo_documento: 'tipo de documento',
     diagnostico: 'diagnostico',
-    tratamiento: 'tratamiento'
+    tratamiento: 'tratamiento',
+    fecha_inicio: 'hora de inicio',
+    fecha_fin: 'hora de fin'
   };
   return map[field] || field;
 }
@@ -549,7 +551,9 @@ async function captureEntityContext(req, requestData, ctxTenantId = null) {
 
     if (requestData.url.includes('/clinical/citas') || requestData.url.includes('/clinical/appointments')) {
       const result = await query(
-        `SELECT id_cita, codigo_cita, estado, tipo, motivo
+        `SELECT id_cita, codigo_cita, estado, tipo, motivo,
+                TO_CHAR(fecha_inicio, 'YYYY-MM-DD"T"HH24:MI:SS') AS fecha_inicio,
+                TO_CHAR(fecha_fin, 'YYYY-MM-DD"T"HH24:MI:SS') AS fecha_fin
          FROM clinical.calendario_citas
          WHERE id_cita = $1 AND id_tenant = $2`,
         [requestData.entityId, tenantId]
