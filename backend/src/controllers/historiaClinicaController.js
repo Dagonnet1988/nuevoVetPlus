@@ -264,6 +264,30 @@ function buildChildUpdate(tabla, idHistoria, datos) {
   };
 }
 
+/**
+ * Siguiente número de sesión (terapia/hidroterapia) de una mascota: sigue el número más
+ * alto ya usado en sus documentos de seguimiento (el último fue 3 → sigue el 4). Terapia e
+ * hidroterapia comparten la misma numeración. Los documentos cancelados NO cuentan: al
+ * cancelar un documento su número se libera y el siguiente lo reutiliza. Si ningún
+ * documento tiene número (datos antiguos), se usa la cantidad de documentos + 1.
+ */
+async function siguienteNumeroSesion(tenantId, idMascota) {
+  const result = await query(
+    `SELECT
+       MAX(s.numero_sesion) AS maximo,
+       COUNT(*) AS activos
+     FROM clinical.historias_clinicas h
+     JOIN clinical.historia_seguimiento s ON s.id_historia = h.id_historia
+     WHERE h.id_tenant = $1
+       AND h.id_mascota = $2
+       AND h.estado <> 'Cancelado'`,
+    [tenantId, idMascota]
+  );
+  const maximo = result.rows[0]?.maximo;
+  if (maximo !== null && maximo !== undefined) return Number(maximo) + 1;
+  return Number(result.rows[0]?.activos || 0) + 1;
+}
+
 // ─── CREATE ───────────────────────────────────────────────────────────────────
 
 export const createHistoria = async (req, res) => {
@@ -370,6 +394,11 @@ export const createHistoria = async (req, res) => {
 
     // ── Insertar hijo ─────────────────────────────────────────────────────────
     const datosHijo = extraerDatosHijo(tipo_documento, req.body);
+    // El número de sesión lo asigna el servidor (consecutivo por paciente); se ignora
+    // cualquier valor que venga del formulario.
+    if (tipo_documento === 'seguimiento') {
+      datosHijo.numero_sesion = await siguienteNumeroSesion(tenantId, id_mascota);
+    }
     const { text, values } = buildChildInsert(TABLA_HIJA[tipo_documento], id_historia, datosHijo);
     await query(text, values);
 
@@ -738,6 +767,10 @@ export const updateHistoria = async (req, res) => {
 
     // ── Actualizar hijo ───────────────────────────────────────────────────────
     const datosHijo = extraerDatosHijo(tipo, req.body);
+    // El número de sesión se asigna una sola vez al crear: editar el documento no lo cambia.
+    if (tipo === 'seguimiento') {
+      delete datosHijo.numero_sesion;
+    }
     const childQuery = buildChildUpdate(TABLA_HIJA[tipo], id, datosHijo);
     if (childQuery) {
       await query(childQuery.text, childQuery.values);
@@ -802,6 +835,36 @@ export const reactivateHistoria = async (req, res) => {
     const tenantId = req.tenantId;
     const { id } = req.params;
 
+    // Al cancelar un documento de seguimiento su número de sesión se libera y puede
+    // haberse reutilizado. Si al reactivarlo ese número ya lo tiene otro documento activo
+    // del mismo paciente, se le asigna el siguiente disponible para no duplicar sesiones.
+    let nuevoNumeroSesion = null;
+    const previo = await query(
+      `SELECT h.tipo_documento, h.id_mascota, s.numero_sesion
+       FROM clinical.historias_clinicas h
+       LEFT JOIN clinical.historia_seguimiento s ON s.id_historia = h.id_historia
+       WHERE h.id_historia = $1 AND h.id_tenant = $2`,
+      [id, tenantId]
+    );
+    const docPrevio = previo.rows[0];
+    if (docPrevio?.tipo_documento === 'seguimiento' && docPrevio.numero_sesion !== null) {
+      const choque = await query(
+        `SELECT 1
+         FROM clinical.historias_clinicas h
+         JOIN clinical.historia_seguimiento s ON s.id_historia = h.id_historia
+         WHERE h.id_tenant = $1
+           AND h.id_mascota = $2
+           AND h.id_historia <> $3
+           AND h.estado <> 'Cancelado'
+           AND s.numero_sesion = $4
+         LIMIT 1`,
+        [tenantId, docPrevio.id_mascota, id, docPrevio.numero_sesion]
+      );
+      if (choque.rows.length) {
+        nuevoNumeroSesion = await siguienteNumeroSesion(tenantId, docPrevio.id_mascota);
+      }
+    }
+
     const result = await query(
       `UPDATE clinical.historias_clinicas
        SET estado = 'Completado',
@@ -814,6 +877,13 @@ export const reactivateHistoria = async (req, res) => {
 
     if (!result.rows.length) {
       return res.status(404).json({ success: false, message: 'Historia clínica no encontrada' });
+    }
+
+    if (nuevoNumeroSesion !== null) {
+      await query(
+        `UPDATE clinical.historia_seguimiento SET numero_sesion = $1 WHERE id_historia = $2`,
+        [nuevoNumeroSesion, id]
+      );
     }
 
     return res.json({ success: true, message: 'Historia reactivada correctamente' });

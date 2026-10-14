@@ -769,7 +769,7 @@ export class HistoriaClinicaFormComponent implements OnInit, OnDestroy, CanCompo
 
       // ── Seguimiento ───────────────────────────────────────────────────────
       seguimiento: this.fb.group({
-        numero_sesion:         [null, Validators.required],
+        numero_sesion:         [null],
         observaciones_en_casa: [''],
         ejercicios_realizados: [''],
         recomendaciones_casa:  [''],
