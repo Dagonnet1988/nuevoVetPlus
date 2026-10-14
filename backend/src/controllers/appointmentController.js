@@ -2360,15 +2360,49 @@ export const republishFutureAppointments = async (req, res) => {
         }
 
         const tenantId = req.tenantId ?? req.user?.tenant_id;
-        const pending = await query(`
-            SELECT id_cita
-            FROM clinical.calendario_citas
-            WHERE id_tenant = $1
-              AND google_event_id IS NOT NULL
-              AND estado IN ('confirmada', 'en_curso')
-              AND fecha_inicio >= CURRENT_DATE
-            ORDER BY fecha_inicio ASC
-        `, [tenantId]);
+
+        // Rango opcional (YYYY-MM-DD): con rango se reescriben las citas de esas fechas, pasadas
+        // o futuras, en cualquier estado salvo canceladas (su evento ya no existe en Google).
+        // Sin rango: de hoy en adelante.
+        const { fecha_inicio: desde, fecha_fin: hasta } = req.body || {};
+        const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+        const hasRange = Boolean(desde || hasta);
+        if (hasRange) {
+            if (!dateRe.test(String(desde)) || !dateRe.test(String(hasta))) {
+                return res.status(400).json({ success: false, message: 'Indica fecha de inicio y fin válidas (AAAA-MM-DD)' });
+            }
+            if (String(desde) > String(hasta)) {
+                return res.status(400).json({ success: false, message: 'La fecha de inicio no puede ser posterior a la de fin' });
+            }
+            const dias = (new Date(hasta) - new Date(desde)) / 86400000;
+            if (dias > 400) {
+                return res.status(400).json({ success: false, message: 'El rango máximo es de 400 días' });
+            }
+        }
+
+        const pending = hasRange
+            ? await query(`
+                SELECT id_cita
+                FROM clinical.calendario_citas
+                WHERE id_tenant = $1
+                  AND google_event_id IS NOT NULL
+                  AND estado <> 'cancelada'
+                  AND fecha_inicio >= $2::date
+                  AND fecha_inicio < ($3::date + INTERVAL '1 day')
+                ORDER BY fecha_inicio ASC
+            `, [tenantId, desde, hasta])
+            : await query(`
+                SELECT id_cita
+                FROM clinical.calendario_citas
+                WHERE id_tenant = $1
+                  AND google_event_id IS NOT NULL
+                  AND (
+                        (estado IN ('confirmada', 'en_curso') AND fecha_inicio >= CURRENT_DATE)
+                     OR (estado IN ('completada', 'no_asistio') AND fecha_inicio >= CURRENT_DATE
+                         AND fecha_inicio < CURRENT_DATE + INTERVAL '1 day')
+                  )
+                ORDER BY fecha_inicio ASC
+            `, [tenantId]);
 
         res.status(202).json({
             success: true,

@@ -20,6 +20,7 @@ import { Router } from '@angular/router';
 import { ConfiguracionService, GoogleCalendarConfig, GoogleCalendarStatus, SyncStats } from '../../../services/configuracion.service';
 import { CitasService } from '../../../services/citas.service';
 import { SyncDialogComponent } from '../../citas/sync-dialog.component';
+import { RepublishDialogComponent, RepublishRange } from './republish-dialog.component';
 
 @Component({
   selector: 'app-google-calendar-config',
@@ -189,13 +190,13 @@ import { SyncDialogComponent } from '../../citas/sync-dialog.component';
 
                           <button mat-stroked-button (click)="republishEvents()" [disabled]="syncing()" class="sync-button">
                             <mat-icon>edit_calendar</mat-icon>
-                            Reescribir eventos futuros
+                            Reescribir eventos
                           </button>
                         </div>
                         <p class="help-text">
                           <strong>Sincronizar Ahora:</strong> Sincroniza cambios recientes<br>
                           <strong>Sincronización Completa:</strong> Sincronización bidireccional con opciones avanzadas<br>
-                          <strong>Reescribir eventos futuros:</strong> Actualiza en Google el título (nombre de la mascota), hora y color de las citas de hoy en adelante
+                          <strong>Reescribir eventos futuros:</strong> Actualiza en Google el título (nombre de la mascota), hora y color de las citas del rango de fechas que elijas, pasadas o futuras
                         </p>
                       </div>
 
@@ -1140,17 +1141,17 @@ export class GoogleCalendarConfigComponent implements OnInit {
   // ===============================
 
   republishEvents(): void {
-    const ok = window.confirm(
-      'Se reescribirán en Google Calendar los eventos de las citas de hoy en adelante (título con el nombre de la mascota, hora y color). ' +
-      'No se envían correos a los invitados. Tarda unos minutos y corre en segundo plano.\n\n¿Continuar?'
-    );
-    if (!ok) return;
+    const dialogRef = this.dialog.open(RepublishDialogComponent, { width: '520px', maxWidth: '95vw' });
 
-    this.citasService.republishFutureToGoogle().subscribe({
-      next: (res) => this.snackBar.open(res?.message || 'Reescritura iniciada', 'Cerrar', { duration: 8000 }),
-      error: (err) => this.snackBar.open(
-        err?.error?.message || 'No se pudo iniciar la reescritura de eventos', 'Cerrar', { duration: 6000 }
-      )
+    dialogRef.afterClosed().subscribe((range: RepublishRange | null) => {
+      if (!range) return;
+
+      this.citasService.republishFutureToGoogle(range).subscribe({
+        next: (res) => this.snackBar.open(res?.message || 'Reescritura iniciada', 'Cerrar', { duration: 8000 }),
+        error: (err) => this.snackBar.open(
+          err?.error?.message || 'No se pudo iniciar la reescritura de eventos', 'Cerrar', { duration: 6000 }
+        )
+      });
     });
   }
 

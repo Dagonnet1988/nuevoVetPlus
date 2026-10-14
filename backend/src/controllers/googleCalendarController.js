@@ -1648,9 +1648,14 @@ export const syncChangesFromGoogle = async (req, res) => {
         // que la sincronización incremental no ve).
         let reconciliation = null;
         try {
+          // Solo el rango pedido (hoy por defecto): revisar todas las citas futuras puede
+          // tardar varios minutos y la petición HTTP caducaría antes de responder.
+          const todayBogota = bidirectionalSyncService.getBogotaDateString();
           reconciliation = await bidirectionalSyncService.reconcileExistingEvents({
             tenantId: req.tenantId ?? req.user?.tenant_id ?? null,
-            origen: 'manual'
+            origen: 'manual',
+            startDate: hasExplicitRange ? start_date : todayBogota,
+            endDate: hasExplicitRange ? end_date : todayBogota
           });
         } catch (reconcileError) {
           console.warn('⚠️ Verificación de eventos falló:', reconcileError.message);

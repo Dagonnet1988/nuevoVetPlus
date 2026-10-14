@@ -158,9 +158,9 @@ export class CitasService {
     return this.http.post<any>(`${this.API_URL}/appointments/${citaId}/sync-google`, {});
   }
 
-  /** Reescribe en Google Calendar los eventos de las citas futuras (admin). */
-  republishFutureToGoogle(): Observable<any> {
-    return this.http.post<any>(`${this.API_URL}/appointments/republish-google`, {});
+  /** Reescribe en Google Calendar los eventos de las citas del rango (o de hoy en adelante) — admin. */
+  republishFutureToGoogle(range?: { fecha_inicio: string; fecha_fin: string }): Observable<any> {
+    return this.http.post<any>(`${this.API_URL}/appointments/republish-google`, range ?? {});
   }
 
   forceSyncAllPending(): Observable<any> {

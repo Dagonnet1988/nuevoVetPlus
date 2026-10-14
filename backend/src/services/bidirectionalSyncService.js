@@ -1394,12 +1394,21 @@ class BidirectionalSyncService {
      * (con documentos clínicos no se oculta). Cubre eliminaciones que la sincronización
      * incremental no ve (borrado definitivo, evento movido fuera de rango, etc.).
      */
-    async reconcileExistingEvents({ tenantId = null, origen = 'automatica', maxCitas = 1000 } = {}) {
+    async reconcileExistingEvents({ tenantId = null, origen = 'automatica', maxCitas = 1000, startDate = null, endDate = null } = {}) {
         const previousContextTenant = this.contextTenantId;
         const summary = { checked: 0, cancelled: 0, errors: 0, stopped_early: false };
         try {
             this.contextTenantId = tenantId || this.contextTenantId;
             const tenantIdResolved = await this.resolveActiveTenantId();
+
+            // Con rango (sincronización manual) solo se revisan las citas de esas fechas; sin
+            // rango (automática) todas las de hoy en adelante.
+            const rangeFilter = (startDate && endDate)
+                ? 'AND c.fecha_inicio >= $3::date AND c.fecha_inicio < ($4::date + INTERVAL \'1 day\')'
+                : 'AND c.fecha_inicio >= (NOW() AT TIME ZONE \'America/Bogota\')::date';
+            const params = (startDate && endDate)
+                ? [tenantIdResolved, maxCitas, startDate, endDate]
+                : [tenantIdResolved, maxCitas];
 
             const citas = await query(`
                 SELECT c.id_cita, c.codigo_cita, c.google_event_id, c.fecha_inicio, m.nombre AS mascota_nombre
@@ -1408,10 +1417,10 @@ class BidirectionalSyncService {
                 WHERE c.id_tenant = $1
                   AND c.google_event_id IS NOT NULL
                   AND c.estado = 'confirmada'
-                  AND c.fecha_inicio >= (NOW() AT TIME ZONE 'America/Bogota')::date
+                  ${rangeFilter}
                 ORDER BY c.fecha_inicio ASC
                 LIMIT $2
-            `, [tenantIdResolved, maxCitas]);
+            `, params);
 
             const entries = [];
             // Ritmo moderado: Google limita las consultas por minuto por usuario (con lotes de
