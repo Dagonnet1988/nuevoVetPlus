@@ -186,10 +186,16 @@ import { SyncDialogComponent } from '../../citas/sync-dialog.component';
                             }
                             Sincronización Completa
                           </button>
+
+                          <button mat-stroked-button (click)="republishEvents()" [disabled]="syncing()" class="sync-button">
+                            <mat-icon>edit_calendar</mat-icon>
+                            Reescribir eventos futuros
+                          </button>
                         </div>
                         <p class="help-text">
                           <strong>Sincronizar Ahora:</strong> Sincroniza cambios recientes<br>
-                          <strong>Sincronización Completa:</strong> Sincronización bidireccional con opciones avanzadas
+                          <strong>Sincronización Completa:</strong> Sincronización bidireccional con opciones avanzadas<br>
+                          <strong>Reescribir eventos futuros:</strong> Actualiza en Google el título (nombre de la mascota), hora y color de las citas de hoy en adelante
                         </p>
                       </div>
 
@@ -1132,6 +1138,21 @@ export class GoogleCalendarConfigComponent implements OnInit {
   // ===============================
   // SINCRONIZACIÓN BIDIRECCIONAL COMPLETA
   // ===============================
+
+  republishEvents(): void {
+    const ok = window.confirm(
+      'Se reescribirán en Google Calendar los eventos de las citas de hoy en adelante (título con el nombre de la mascota, hora y color). ' +
+      'No se envían correos a los invitados. Tarda unos minutos y corre en segundo plano.\n\n¿Continuar?'
+    );
+    if (!ok) return;
+
+    this.citasService.republishFutureToGoogle().subscribe({
+      next: (res) => this.snackBar.open(res?.message || 'Reescritura iniciada', 'Cerrar', { duration: 8000 }),
+      error: (err) => this.snackBar.open(
+        err?.error?.message || 'No se pudo iniciar la reescritura de eventos', 'Cerrar', { duration: 6000 }
+      )
+    });
+  }
 
   openAdvancedSyncDialog(): void {
     const dialogRef = this.dialog.open(SyncDialogComponent, {

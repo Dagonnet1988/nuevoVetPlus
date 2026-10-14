@@ -681,9 +681,13 @@ class GoogleCalendarService {
 
             const colorId = this.getColorIdForTipo(tipo);
 
+            // PATCH (no reemplazo completo): solo se envían los campos que Ramelo maneja.
+            // Con events.update se borraban la descripción escrita a mano y los invitados
+            // agregados en Calendar. description se omite (undefined) para eventos que se
+            // crearon en Google; attendees solo se envía si hay un invitado que agregar.
             const event = {
                 summary,
-                description,
+                ...(description !== undefined ? { description } : {}),
                 location: location || process.env.CLINIC_ADDRESS || 'Ramelo Clínica',
                 ...(colorId ? { colorId } : {}),
                 start: {
@@ -694,7 +698,6 @@ class GoogleCalendarService {
                     dateTime: endDateTime,
                     timeZone: 'America/Bogota'
                 },
-                attendees: [],
                 reminders: {
                     useDefault: false,
                     overrides: []
@@ -723,15 +726,15 @@ class GoogleCalendarService {
             }
 
             if (attendeeEmail) {
-                event.attendees.push({ email: attendeeEmail });
+                event.attendees = [{ email: attendeeEmail }];
             }
 
             const calendarId = await this.getActiveCalendarId();
-            const response = await this.calendar.events.update({
+            const response = await this.calendar.events.patch({
                 calendarId,
                 eventId: eventId,
                 resource: event,
-                sendUpdates: 'all'
+                sendUpdates: eventData.sendUpdates || 'all'
             });
 
             return {

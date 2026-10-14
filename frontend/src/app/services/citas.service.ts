@@ -158,6 +158,11 @@ export class CitasService {
     return this.http.post<any>(`${this.API_URL}/appointments/${citaId}/sync-google`, {});
   }
 
+  /** Reescribe en Google Calendar los eventos de las citas futuras (admin). */
+  republishFutureToGoogle(): Observable<any> {
+    return this.http.post<any>(`${this.API_URL}/appointments/republish-google`, {});
+  }
+
   forceSyncAllPending(): Observable<any> {
     return this.http.post<any>(`${this.API_URL}/appointments/force-sync-google`, {});
   }

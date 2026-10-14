@@ -544,7 +544,7 @@ const hasRescheduleAuditColumns = async () => {
 /**
  * Sincronizar cita con Google Calendar
  */
-const syncAppointmentWithGoogle = async (appointmentData, action = 'create', origen = 'usuario') => {
+const syncAppointmentWithGoogle = async (appointmentData, action = 'create', origen = 'usuario', opts = {}) => {
     const registrarSync = (result) => logSyncEvents([{
         tenantId: appointmentData?.id_tenant,
         direccion: 'RAMELO_A_GOOGLE',
@@ -654,8 +654,14 @@ Código de cita: ${appointmentData.codigo_cita}
         `.trim();
 
         const eventData = {
-            summary: `Cita Veterinaria - ${clinicName}`,
-            description,
+            // Título = nombre de la mascota (como en los eventos antiguos del calendario).
+            summary: String(mascota_nombre || '').trim() || `Cita Veterinaria - ${clinicName}`,
+            // En actualizaciones de citas que nacieron en Google (GCL-) no se pisa la descripción
+            // escrita allí; en las creadas en Ramelo sí se refresca para que no quede desfasada.
+            description: (action === 'update' && String(appointmentData?.codigo_cita || '').startsWith('GCL-'))
+                ? undefined
+                : description,
+            sendUpdates: opts.sendUpdates,
             startDateTime: formattedStartDateTime,
             endDateTime: formattedEndDateTime,
             attendeeEmail: inviteOwnerToCalendar ? cliente_email : null,
@@ -2329,6 +2335,73 @@ export const forceSyncWithGoogle = async (req, res) => {
             message: 'Error interno del servidor',
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
+    }
+};
+
+let republishInProgress = false;
+
+/**
+ * Reparación: reescribe en Google Calendar el evento de cada cita futura vinculada
+ * (título = nombre de la mascota, hora, color), a ritmo moderado para no superar el
+ * límite de consultas de Google y sin enviar correos de actualización a invitados.
+ * Corre en segundo plano; el resultado queda en el historial de sincronización
+ * (origen "reparacion").
+ */
+export const republishFutureAppointments = async (req, res) => {
+    try {
+        if (!isOutboundGoogleSyncEnabled()) {
+            return res.status(400).json({
+                success: false,
+                message: 'La sincronización saliente (Ramelo → Google) está deshabilitada'
+            });
+        }
+        if (republishInProgress) {
+            return res.status(409).json({ success: false, message: 'Ya hay una reescritura en curso' });
+        }
+
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+        const pending = await query(`
+            SELECT id_cita
+            FROM clinical.calendario_citas
+            WHERE id_tenant = $1
+              AND google_event_id IS NOT NULL
+              AND estado IN ('confirmada', 'en_curso')
+              AND fecha_inicio >= CURRENT_DATE
+            ORDER BY fecha_inicio ASC
+        `, [tenantId]);
+
+        res.status(202).json({
+            success: true,
+            message: `Reescribiendo ${pending.rows.length} eventos en Google Calendar en segundo plano (≈${Math.ceil(pending.rows.length * 0.8 / 60)} min). El avance queda en Auditoría → Sincronización.`,
+            total: pending.rows.length
+        });
+
+        republishInProgress = true;
+        (async () => {
+            let ok = 0;
+            let failed = 0;
+            for (const row of pending.rows) {
+                try {
+                    const cita = await getAppointmentWithDetails(row.id_cita);
+                    if (cita) {
+                        const result = await syncAppointmentWithGoogle(cita, 'update', 'reparacion', { sendUpdates: 'none' });
+                        if (result?.success) ok++; else failed++;
+                    }
+                } catch (error) {
+                    failed++;
+                    console.warn('⚠️ Reescritura de evento falló:', error.message);
+                }
+                await new Promise(resolve => setTimeout(resolve, 800));
+            }
+            republishInProgress = false;
+            console.log(`✅ Reescritura de eventos terminada: ${ok} correctos, ${failed} con error`);
+        })();
+    } catch (error) {
+        republishInProgress = false;
+        console.error('Error iniciando reescritura de eventos:', error);
+        if (!res.headersSent) {
+            res.status(500).json({ success: false, message: 'Error interno del servidor' });
+        }
     }
 };
 

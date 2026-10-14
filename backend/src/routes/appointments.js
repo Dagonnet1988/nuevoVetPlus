@@ -14,6 +14,7 @@ import {
     getCalendarView,
     forceSyncWithGoogle,
     syncAllPendingAppointments,
+    republishFutureAppointments,
     getVeterinarianAvailability,
     suggestAvailableSlots,
     getAppointmentStats,
@@ -230,6 +231,17 @@ router.post(
     '/force-sync-google',
     authorize(['admin', 'vet', 'aux']),
     syncAllPendingAppointments
+);
+
+/**
+ * @route   POST /api/clinical/appointments/republish-google
+ * @desc    Reescribe en Google Calendar los eventos de las citas futuras (títulos, hora, color)
+ * @access  Admin
+ */
+router.post(
+    '/republish-google',
+    authorize(['admin']),
+    republishFutureAppointments
 );
 
 /**
