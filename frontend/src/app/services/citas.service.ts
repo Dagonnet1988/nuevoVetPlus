@@ -14,6 +14,7 @@ import {
   SugerenciaHorario,
   CalendarView
 } from '../models/cita.interface';
+import { EventoCalendario, EventoCalendarioPayload, UsuarioCompartible } from '../models/evento-calendario.interface';
 
 @Injectable({
   providedIn: 'root'
@@ -459,5 +460,39 @@ export class CitasService {
       // "2025-08-12" -> "2025-08-12T00:00:00"
       return fecha + 'T00:00:00';
     }
+  }
+
+  // ===============================
+  // EVENTOS PROPIOS DEL CALENDARIO (recordatorios, no son citas)
+  // ===============================
+
+  getEventosCalendario(fechaInicio: string, fechaFin: string): Observable<EventoCalendario[]> {
+    const params = new HttpParams().set('fecha_inicio', fechaInicio).set('fecha_fin', fechaFin);
+    return this.http.get<any>(`${this.API_URL}/eventos`, { params }).pipe(
+      map((response: any) => (Array.isArray(response?.data) ? response.data : [])),
+      catchError((error) => {
+        console.error('Error obteniendo eventos del calendario:', error);
+        return of([]);
+      })
+    );
+  }
+
+  getUsuariosParaCompartir(): Observable<UsuarioCompartible[]> {
+    return this.http.get<any>(`${this.API_URL}/eventos/usuarios`).pipe(
+      map((response: any) => (Array.isArray(response?.data) ? response.data : [])),
+      catchError(() => of([]))
+    );
+  }
+
+  createEventoCalendario(payload: EventoCalendarioPayload): Observable<any> {
+    return this.http.post<any>(`${this.API_URL}/eventos`, payload);
+  }
+
+  updateEventoCalendario(id: string, payload: EventoCalendarioPayload): Observable<any> {
+    return this.http.put<any>(`${this.API_URL}/eventos/${id}`, payload);
+  }
+
+  deleteEventoCalendario(id: string): Observable<any> {
+    return this.http.delete<any>(`${this.API_URL}/eventos/${id}`);
   }
 }

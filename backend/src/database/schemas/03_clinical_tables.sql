@@ -314,3 +314,25 @@ CREATE INDEX idx_google_audit_appointment ON clinical.google_calendar_audit_log(
 CREATE INDEX idx_google_audit_action      ON clinical.google_calendar_audit_log(action_type);
 CREATE INDEX idx_google_audit_date        ON clinical.google_calendar_audit_log(created_at);
 
+
+-- Eventos propios del calendario (recordatorios del usuario, no son citas).
+-- Se muestran en el calendario de Ramelo y se publican en Google Calendar (solo Ramelo -> Google).
+CREATE TABLE IF NOT EXISTS clinical.calendario_eventos (
+    id_evento UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id_tenant UUID NOT NULL REFERENCES system.tenants(id_tenant) ON DELETE RESTRICT,
+    titulo VARCHAR(200) NOT NULL,
+    descripcion TEXT,
+    fecha_inicio TIMESTAMP NOT NULL,
+    fecha_fin TIMESTAMP NOT NULL,
+    id_creador UUID NOT NULL REFERENCES vetplus_auth.usuarios(id_usuario),
+    compartido_con UUID[] NOT NULL DEFAULT ARRAY[]::UUID[],
+    google_event_id VARCHAR(255),
+    google_sync_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    google_sync_error TEXT,
+    last_google_sync TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_evento_fechas CHECK (fecha_fin > fecha_inicio)
+);
+CREATE INDEX IF NOT EXISTS idx_calendario_eventos_tenant_fecha ON clinical.calendario_eventos(id_tenant, fecha_inicio);
+CREATE INDEX IF NOT EXISTS idx_calendario_eventos_creador ON clinical.calendario_eventos(id_creador);

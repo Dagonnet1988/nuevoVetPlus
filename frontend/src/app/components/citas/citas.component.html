@@ -43,6 +43,14 @@
           </button>
 
           <button mat-stroked-button
+                  (click)="openEventoDialog()"
+                  class="evento-button"
+                  matTooltip="Crear un recordatorio propio en el calendario (no es una cita)">
+            <mat-icon>push_pin</mat-icon>
+            Nuevo evento
+          </button>
+
+          <button mat-stroked-button
                   (click)="openExportDialog()"
                   class="export-button">
             <mat-icon>download</mat-icon>

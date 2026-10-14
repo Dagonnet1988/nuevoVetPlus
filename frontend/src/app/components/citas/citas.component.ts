@@ -36,6 +36,8 @@ import { ExportService, ExportOptions } from '../../services/export.service';
 import { AuthService } from '../../services/auth.service';
 import { ConfiguracionService, DiaEspecial } from '../../services/configuracion.service';
 import { ExportDialogComponent } from './export-dialog.component';
+import { EventoDialogComponent, EventoDialogData, EventoDialogResult } from './evento-dialog.component';
+import { EventoCalendario } from '../../models/evento-calendario.interface';
 import {
   Cita,
   CitaFilter,
@@ -84,6 +86,8 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
   syncing = signal(false);
   stats = signal<CitaStats | null>(null);
   citas = signal<Cita[]>([]);
+  // Eventos propios (recordatorios del usuario; no son citas)
+  eventos = signal<EventoCalendario[]>([]);
   veterinarios = signal<any[]>([]);
   currentView = signal<string>('timeGridFiveDay');
   currentCalendarDate = signal<Date>(new Date());
@@ -749,6 +753,11 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
       fecha_fin: endDate.toISOString().split('T')[0]
     };
 
+    this.citasService.getEventosCalendario(filters.fecha_inicio!, filters.fecha_fin!).subscribe(eventos => {
+      this.eventos.set(eventos);
+      this.applyCalendarEventLayers();
+    });
+
     this.fetchAllCitas(filters).subscribe({
       next: (citasArray) => {
         this.citas.set(citasArray);
@@ -829,7 +838,7 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
 
     this.calendarOptions = {
       ...this.calendarOptions,
-      events: [...overlayEvents, ...citaEvents],
+      events: [...overlayEvents, ...citaEvents, ...this.transformEventosToEvents(this.eventos())],
       slotMinTime: forceDayRange ? '07:00:00' : slotMinTime,
       slotMaxTime: forceDayRange ? '18:00:00' : slotMaxTime
     };
@@ -913,6 +922,32 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
           veterinarioId: cita.id_veterinario
         }
       };
+    });
+  }
+
+  /** Eventos propios: estilo distinto al de las citas y sin arrastrar/redimensionar. */
+  private transformEventosToEvents(eventos: EventoCalendario[]): EventInput[] {
+    return eventos.map(ev => ({
+      id: `evento-${ev.id_evento}`,
+      title: ev.titulo,
+      start: this.parseLocalDate(ev.fecha_inicio),
+      end: this.parseLocalDate(ev.fecha_fin),
+      backgroundColor: '#eceff1',
+      borderColor: '#607d8b',
+      textColor: '#37474f',
+      editable: false,
+      classNames: ['evento-propio'],
+      extendedProps: { eventoPropio: ev }
+    }));
+  }
+
+  openEventoDialog(evento?: EventoCalendario, inicio?: Date, fin?: Date): void {
+    const ref = this.dialog.open<EventoDialogComponent, EventoDialogData, EventoDialogResult>(
+      EventoDialogComponent,
+      { data: { evento, inicio, fin }, width: '520px', maxWidth: '95vw' }
+    );
+    ref.afterClosed().subscribe(result => {
+      if (result) this.loadCalendarEvents(true);
     });
   }
 
@@ -1001,6 +1036,12 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   handleEventClick(clickInfo: EventClickArg): void {
+    const eventoPropio = clickInfo.event.extendedProps['eventoPropio'] as EventoCalendario | undefined;
+    if (eventoPropio) {
+      this.openEventoDialog(eventoPropio);
+      return;
+    }
+
     const cita = clickInfo.event.extendedProps['cita'] as Cita;
 
     this.router.navigate(['/citas', cita.id_cita], {
@@ -1053,6 +1094,16 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
   renderEventContent(eventInfo: any): any {
     if (eventInfo?.event?.extendedProps?.overlayType) {
       return { html: '' };
+    }
+
+    const eventoPropio = eventInfo?.event?.extendedProps?.['eventoPropio'] as EventoCalendario | undefined;
+    if (eventoPropio) {
+      const hora = this.formatearHoraEvento(eventInfo.event.start ?? new Date());
+      const titulo = this.sanitizeInlineText(eventoPropio.titulo);
+      const compartido = !eventoPropio.es_propio ? ' (compartido)' : '';
+      return {
+        html: `<div class="evento-propio-content"><span class="evento-propio-hora">📌 ${hora}</span> <span class="evento-propio-titulo">${titulo}${compartido}</span></div>`
+      };
     }
 
     const cita = eventInfo.event.extendedProps['cita'] as Cita;
@@ -1398,7 +1449,10 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
     const citasVisibles = this.citasVisiblesDelDiaSeleccionado();
     const citaEvents = this.transformCitasToEvents(citasVisibles as Cita[]);
     const overlayEvents = this.buildNotAllowedRangeOverlays(selected, selected);
-    const events = [...overlayEvents, ...citaEvents];
+    const dayKey = this.getLocalDateString(selected);
+    const eventosDelDia = this.eventos().filter(ev =>
+      ev.fecha_inicio.slice(0, 10) <= dayKey && ev.fecha_fin.slice(0, 10) >= dayKey);
+    const events = [...overlayEvents, ...citaEvents, ...this.transformEventosToEvents(eventosDelDia)];
     const { slotMinTime, slotMaxTime } = this.calcularRangoHorarioVistaDia(citasVisibles as Cita[]);
 
     this.dayCalendarOptions = {

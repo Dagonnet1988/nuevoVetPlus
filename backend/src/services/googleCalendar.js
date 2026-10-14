@@ -405,6 +405,11 @@ class GoogleCalendarService {
     }
 
     classifyEventForImport(event) {
+        // Eventos propios creados desde Ramelo (recordatorios del usuario): nunca son citas.
+        if (event?.extendedProperties?.private?.ramelo_evento_propio === '1') {
+            return { isAppointment: false, reason: 'ramelo_evento_propio' };
+        }
+
         const summary = event?.summary || '';
         const description = event?.description || '';
 
@@ -656,6 +661,66 @@ class GoogleCalendarService {
                 success: false,
                 error: describeGoogleError(error)
             };
+        }
+    }
+
+    /**
+     * Eventos propios de Ramelo (recordatorios del usuario, no citas): color grafito, sin
+     * invitados ni recordatorios de Google, y marcados para que el importador los ignore.
+     */
+    buildPersonalEventBody({ summary, description, startDateTime, endDateTime, idEvento }) {
+        const timeZone = this.config?.timezone || 'America/Bogota';
+        return {
+            summary,
+            description: description || '',
+            colorId: '8',
+            start: { dateTime: startDateTime, timeZone },
+            end: { dateTime: endDateTime, timeZone },
+            reminders: { useDefault: false, overrides: [] },
+            extendedProperties: {
+                private: { ramelo_evento_propio: '1', ramelo_id_evento: String(idEvento || '') }
+            }
+        };
+    }
+
+    async createPersonalEvent(data) {
+        try {
+            if (!await this.hasValidTokens()) {
+                throw new Error('Google Calendar no está configurado');
+            }
+            const calendarId = await this.getActiveCalendarId();
+            const response = await this.calendar.events.insert({
+                calendarId,
+                resource: this.buildPersonalEventBody(data),
+                sendUpdates: 'none'
+            });
+            return { success: true, eventId: response.data.id };
+        } catch (error) {
+            console.error('Error creando evento propio en Google Calendar:', error);
+            return { success: false, error: describeGoogleError(error) };
+        }
+    }
+
+    async updatePersonalEvent(eventId, data) {
+        try {
+            if (!this.isConfigured()) {
+                throw new Error('Google Calendar no está configurado');
+            }
+            const calendarId = await this.getActiveCalendarId();
+            const response = await this.calendar.events.patch({
+                calendarId,
+                eventId,
+                resource: this.buildPersonalEventBody(data),
+                sendUpdates: 'none'
+            });
+            return { success: true, eventId: response.data.id };
+        } catch (error) {
+            const status = error?.status || error?.code || error?.response?.status;
+            if (status === 404 || status === 410) {
+                return { success: false, not_found: true, error: 'El evento ya no existe en Google Calendar' };
+            }
+            console.error('Error actualizando evento propio en Google Calendar:', error);
+            return { success: false, error: describeGoogleError(error) };
         }
     }
 

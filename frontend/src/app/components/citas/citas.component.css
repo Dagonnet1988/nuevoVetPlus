@@ -2931,3 +2931,21 @@
   display: block;
   max-width: 100%;
 }
+
+/* Eventos propios (recordatorios del usuario, no son citas) */
+:host ::ng-deep .fc-event.evento-propio {
+  border-style: dashed;
+  border-width: 1px;
+  opacity: 0.95;
+  cursor: pointer;
+}
+:host ::ng-deep .evento-propio-content {
+  padding: 1px 4px;
+  font-size: 12px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:host ::ng-deep .evento-propio-hora {
+  font-weight: 600;
+}

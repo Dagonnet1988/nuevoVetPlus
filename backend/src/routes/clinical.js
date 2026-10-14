@@ -4,6 +4,7 @@ import petRoutes from './pets.js';
 import pacientesRoutes from './pacientes.js';
 import consultationRoutes from './consultations.js';
 import appointmentRoutes from './appointments.js';
+import eventosCalendarioRoutes from './eventosCalendario.js';
 import historiaRoutes from './historias.js';
 import { getEspecies, getRazasByEspecie } from '../controllers/pacientesController.js';
 import { authenticateToken, authorize } from '../middleware/auth.js';
@@ -330,5 +331,8 @@ router.use('/historias', authenticateToken, tenantContext, historiaRoutes);
 
 // Montar las rutas de citas
 router.use('/appointments', authenticateToken, tenantContext, appointmentRoutes);
+
+// Eventos propios del calendario (recordatorios del usuario)
+router.use('/eventos', authenticateToken, tenantContext, eventosCalendarioRoutes);
 
 export default router;
