@@ -602,50 +602,36 @@ class SyncScheduler {
     /**
      * Obtener estadísticas de sincronización
      */
-    async getSyncStats() {
+    async getSyncStats(tenantId) {
         try {
-            const statsResult = await query(`
-                SELECT 
-                    split_part(descripcion, ':', 2) as accion,
-                    COUNT(*) as total,
-                    MAX(created_at) as ultima_ejecucion
-                FROM system.activity_log
-                WHERE tipo_actividad = 'SYNC_CALENDAR'
-                AND created_at >= CURRENT_DATE - INTERVAL '7 days'
-                GROUP BY split_part(descripcion, ':', 2)
-                ORDER BY ultima_ejecucion DESC
-            `);
+            const res = await query(`
+                SELECT accion, exito, COUNT(*)::int AS total, MAX(created_at) AS ultima
+                FROM system.sync_audit_log
+                WHERE id_tenant = $1
+                  AND created_at >= CURRENT_DATE - INTERVAL '7 days'
+                GROUP BY accion, exito
+            `, [tenantId]);
 
-            const recentErrorsResult = await query(`
-                SELECT 
-                    split_part(descripcion, ':', 2) as accion,
-                    response_data as datos_nuevos,
-                    created_at as timestamp
-                FROM system.activity_log
-                WHERE tipo_actividad = 'SYNC_CALENDAR'
-                AND descripcion ILIKE '%error%'
-                AND created_at >= CURRENT_DATE - INTERVAL '3 days'
-                ORDER BY created_at DESC
-                LIMIT 10
-            `);
+            const sum = (fn) => res.rows.filter(fn).reduce((acc, r) => acc + r.total, 0);
+            const ultima = res.rows.reduce((max, r) => (!max || r.ultima > max ? r.ultima : max), null);
 
             return {
-                success: true,
-                stats: statsResult.rows,
-                recent_errors: recentErrorsResult.rows,
+                total_eventos: sum(r => r.exito && ['created', 'updated', 'deleted'].includes(r.accion)),
+                eventos_creados: sum(r => r.exito && r.accion === 'created'),
+                eventos_actualizados: sum(r => r.exito && r.accion === 'updated'),
+                eventos_eliminados: sum(r => r.exito && r.accion === 'deleted'),
+                conflictos_resueltos: sum(r => r.accion === 'conflict'),
+                errores: sum(r => !r.exito || r.accion === 'error'),
+                ultima_ejecucion: ultima,
+                proxima_ejecucion: null,
                 scheduler_status: {
                     is_running: this.isRunning,
-                    jobs_count: this.jobs.size,
-                    active_jobs: Array.from(this.jobs.keys())
+                    jobs_count: this.jobs.size
                 }
             };
-
         } catch (error) {
             console.error('Error obteniendo estadísticas de sync:', error);
-            return {
-                success: false,
-                error: error.message
-            };
+            throw error;
         }
     }
 

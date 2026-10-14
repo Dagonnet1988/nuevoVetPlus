@@ -701,13 +701,26 @@ class GoogleCalendarSimpleController {
       const hasTokens = config.access_token && config.refresh_token;
       const isActive = config.activo;
 
+      const [countRes, lastRes, errRes] = await Promise.all([
+        query(`SELECT COUNT(*)::int AS n FROM clinical.calendario_citas
+               WHERE id_tenant = $1 AND google_event_id IS NOT NULL AND estado <> 'cancelada'`, [tenantId]),
+        query(`SELECT MAX(created_at) AS ultima FROM system.sync_audit_log
+               WHERE id_tenant = $1 AND exito = true`, [tenantId]),
+        query(`SELECT error_mensaje FROM system.sync_audit_log
+               WHERE id_tenant = $1 AND exito = false AND error_mensaje IS NOT NULL
+                 AND created_at >= NOW() - INTERVAL '3 days'
+               ORDER BY created_at DESC LIMIT 5`, [tenantId])
+      ]);
+      const errores = errRes.rows.map(r => r.error_mensaje);
+      if (!hasTokens) errores.unshift('No autorizado');
+
       res.json({
         success: true,
         data: {
           conectado: hasTokens && isActive,
-          ultimo_sync: config.updated_at || 'Nunca',
-          eventos_sincronizados: 0,
-          errores_recientes: hasTokens ? [] : ['No autorizado'],
+          ultimo_sync: lastRes.rows[0]?.ultima || config.updated_at || 'Nunca',
+          eventos_sincronizados: countRes.rows[0].n,
+          errores_recientes: errores,
           calendario_info: {
             nombre: config.calendar_id || 'primary',
             descripcion: hasTokens ? 'Conectado' : 'No autorizado',
@@ -1139,7 +1152,7 @@ export const getSchedulerStats = async (req, res) => {
             });
         }
 
-        const stats = await syncScheduler.getSyncStats();
+        const stats = await syncScheduler.getSyncStats(req.tenantId ?? req.user?.tenant_id);
         
         res.json({
             success: true,
@@ -1647,18 +1660,32 @@ export const syncChangesFromGoogle = async (req, res) => {
         // Verificación de existencia de eventos de citas futuras (captura eliminaciones
         // que la sincronización incremental no ve).
         let reconciliation = null;
-        try {
-          // Solo el rango pedido (hoy por defecto): revisar todas las citas futuras puede
-          // tardar varios minutos y la petición HTTP caducaría antes de responder.
-          const todayBogota = bidirectionalSyncService.getBogotaDateString();
-          reconciliation = await bidirectionalSyncService.reconcileExistingEvents({
-            tenantId: req.tenantId ?? req.user?.tenant_id ?? null,
-            origen: 'manual',
-            startDate: hasExplicitRange ? start_date : todayBogota,
-            endDate: hasExplicitRange ? end_date : todayBogota
-          });
-        } catch (reconcileError) {
-          console.warn('⚠️ Verificación de eventos falló:', reconcileError.message);
+        let reconcileInBackground = false;
+        const todayBogota = bidirectionalSyncService.getBogotaDateString();
+        const reconcileArgs = {
+          tenantId: req.tenantId ?? req.user?.tenant_id ?? null,
+          origen: 'manual',
+          startDate: hasExplicitRange ? start_date : todayBogota,
+          endDate: hasExplicitRange ? end_date : todayBogota
+        };
+        const rangeDays = hasExplicitRange
+          ? (new Date(end_date).getTime() - new Date(start_date).getTime()) / 86400000
+          : 0;
+
+        if (rangeDays > 2) {
+          // Un rango largo verifica cientos de eventos (varios minutos) y nginx corta la
+          // petición a los 60 s (el navegador lo ve como error de CORS). Se responde ya y
+          // la verificación sigue en segundo plano; el resultado queda en Auditoría > Sincronización.
+          reconcileInBackground = true;
+          bidirectionalSyncService.reconcileExistingEvents(reconcileArgs)
+            .then(r => console.log(`✅ Verificación en segundo plano: ${r?.checked ?? 0} revisados, ${r?.cancelled ?? 0} cancelados`))
+            .catch(err => console.warn('⚠️ Verificación de eventos falló:', err.message));
+        } else {
+          try {
+            reconciliation = await bidirectionalSyncService.reconcileExistingEvents(reconcileArgs);
+          } catch (reconcileError) {
+            console.warn('⚠️ Verificación de eventos falló:', reconcileError.message);
+          }
         }
 
         const created = Number(syncResult?.results?.created || 0);
@@ -1673,12 +1700,16 @@ export const syncChangesFromGoogle = async (req, res) => {
           : (effectiveOnlyToday
             ? 'Sincronización de hoy completada sin cambios aplicados'
             : 'Sincronización por rango completada sin cambios aplicados');
+        const finalMessage = reconcileInBackground
+          ? `${message}. La verificación de eventos eliminados continúa en segundo plano; revisa el resultado en Auditoría > Sincronización.`
+          : message;
 
         res.json({
           success: true,
-          message,
+          message: finalMessage,
           data: syncResult.results,
           sync_summary: {
+            verification_in_background: reconcileInBackground,
             applied_changes: totalApplied,
             created,
             updated,
