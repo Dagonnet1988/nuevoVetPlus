@@ -68,7 +68,7 @@ const parseBody = async (body, tenantId, creatorId) => {
         if (ids.length > 0) {
             const valid = await query(
                 `SELECT id_usuario FROM vetplus_auth.usuarios
-                 WHERE id_tenant = $1 AND activo = true AND id_usuario = ANY($2::uuid[])`,
+                 WHERE id_tenant = $1 AND activo = true AND rol <> 'admin' AND id_usuario = ANY($2::uuid[])`,
                 [tenantId, ids]
             );
             compartidoCon = valid.rows.map(r => r.id_usuario);
@@ -178,7 +178,7 @@ export const listUsuariosParaCompartir = async (req, res) => {
         const result = await query(
             `SELECT id_usuario, TRIM(CONCAT(nombre, ' ', apellido)) AS nombre, rol
              FROM vetplus_auth.usuarios
-             WHERE id_tenant = $1 AND activo = true AND id_usuario <> $2
+             WHERE id_tenant = $1 AND activo = true AND rol <> 'admin' AND id_usuario <> $2
              ORDER BY nombre ASC`,
             [tenantId, userId]
         );

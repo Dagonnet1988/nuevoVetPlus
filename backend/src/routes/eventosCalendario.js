@@ -11,7 +11,8 @@ import {
 const router = express.Router();
 
 // Nota: authenticateToken y tenantContext ya están aplicados en clinical.js
-router.use(authorize(['admin', 'vet', 'aux']));
+// Los administradores no crean ni reciben eventos propios.
+router.use(authorize(['vet', 'aux']));
 
 router.get('/usuarios', listUsuariosParaCompartir);
 router.get('/', listEventos);

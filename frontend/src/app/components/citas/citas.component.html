@@ -43,6 +43,7 @@
           </button>
 
           <button mat-stroked-button
+                  *ngIf="puedeUsarEventos()"
                   (click)="openEventoDialog()"
                   class="evento-button"
                   matTooltip="Crear un recordatorio propio en el calendario (no es una cita)">

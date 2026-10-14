@@ -753,10 +753,12 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
       fecha_fin: endDate.toISOString().split('T')[0]
     };
 
-    this.citasService.getEventosCalendario(filters.fecha_inicio!, filters.fecha_fin!).subscribe(eventos => {
-      this.eventos.set(eventos);
-      this.applyCalendarEventLayers();
-    });
+    if (this.puedeUsarEventos()) {
+      this.citasService.getEventosCalendario(filters.fecha_inicio!, filters.fecha_fin!).subscribe(eventos => {
+        this.eventos.set(eventos);
+        this.applyCalendarEventLayers();
+      });
+    }
 
     this.fetchAllCitas(filters).subscribe({
       next: (citasArray) => {
@@ -939,6 +941,12 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
       classNames: ['evento-propio'],
       extendedProps: { eventoPropio: ev }
     }));
+  }
+
+  /** Los administradores no crean ni reciben eventos propios. */
+  puedeUsarEventos(): boolean {
+    const rol = this.authService.currentUser()?.rol;
+    return !!rol && rol !== 'admin';
   }
 
   openEventoDialog(evento?: EventoCalendario, inicio?: Date, fin?: Date): void {
