@@ -264,6 +264,23 @@ type EjercicioCategoriaKey = 'calentamiento' | 'fortalecimiento' | 'hidroterapia
       line-height: 1.35;
     }
 
+    /* Barra de acciones siempre visible al pie (no depende de llegar al final del formulario) */
+    .form-actions {
+      position: sticky;
+      bottom: 0;
+      z-index: 20;
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      margin-top: 16px;
+      padding: 12px 16px;
+      padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+      background: var(--vp-surface, #fff);
+      border-top: 1px solid var(--vp-border, #e0e0e0);
+      box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
+    }
+    .form-actions button { display: inline-flex; align-items: center; gap: 6px; }
+
     @media (max-width: 1024px) {
       .form-grid mat-form-field { grid-column: span 6; }
       .form-grid .field-compact { grid-column: span 6; }
@@ -278,6 +295,8 @@ type EjercicioCategoriaKey = 'calentamiento' | 'fortalecimiento' | 'hidroterapia
     }
 
     @media (max-width: 640px) {
+      .form-actions { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; }
+      .form-actions button { flex: 1; justify-content: center; }
       .form-grid mat-form-field { grid-column: 1 / -1; }
       .form-grid .field-compact,
       .form-grid .field-medium,

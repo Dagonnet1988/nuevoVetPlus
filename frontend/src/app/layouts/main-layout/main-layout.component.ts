@@ -203,13 +203,19 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
   `,
   styles: [`
     .sidenav-container { height: 100%; }
+    /* En celular 100vh incluye la barra del navegador: usar la altura dinámica visible. */
+    @supports (height: 100dvh) {
+      .sidenav-container { height: 100dvh; }
+    }
 
     /* Animar el contenido cuando el sidebar cambia de tamaño */
     mat-sidenav-content {
       transition: margin-left 0.25s ease !important;
       display: flex;
       flex-direction: column;
-      min-height: 100vh;
+      /* No 100vh: en celular es más alto que la pantalla visible y la parte inferior
+         (botones Guardar/Cancelar) quedaba recortada e inalcanzable. */
+      min-height: 100%;
     }
 
     /* ── Sidebar base ── */
