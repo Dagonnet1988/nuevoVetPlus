@@ -1409,6 +1409,15 @@ export const updateAppointment = async (req, res) => {
         
         const cita = citaExistente.rows[0];
 
+        // Una cita en curso solo la puede editar un administrador (los cambios de estado
+        // van por PATCH /:id/status y no se ven afectados).
+        if (cita.estado === 'en_curso' && req.user?.rol !== 'admin') {
+            return res.status(403).json({
+                success: false,
+                message: 'Una cita en curso solo puede ser editada por un administrador'
+            });
+        }
+
         // Regla de negocio: no laborable bloquea día completo; horario especial bloquea fuera de franja.
         const effectiveFechaInicio = updateData.fecha_inicio !== undefined ? updateData.fecha_inicio : cita.fecha_inicio;
         const effectiveFechaFin = updateData.fecha_fin !== undefined ? updateData.fecha_fin : cita.fecha_fin;

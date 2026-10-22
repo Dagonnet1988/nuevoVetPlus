@@ -364,14 +364,6 @@ export class CitaDetailsComponent implements OnInit {
     // En cita en curso siempre se lleva al formulario.
     // La validación de duplicados por tipo ocurre al guardar en el módulo de historias.
     if (cita.estado === 'en_curso') {
-      if (this.authService.isAux() && !['terapia', 'hidroterapia'].includes(String(cita.tipo || '').toLowerCase())) {
-        this.snackBar.open(
-          'Tu rol solo puede crear historias de Terapia/Hidroterapia. Esta cita no es de ese tipo.',
-          'Cerrar',
-          { duration: 5000 }
-        );
-        return;
-      }
       this.navigateToHistoriaCreationFromCita(cita);
       return;
     }
@@ -445,7 +437,8 @@ export class CitaDetailsComponent implements OnInit {
         id_mascota: cita.id_mascota,
         id_veterinario: cita.id_veterinario,
         id_cita: cita.id_cita,
-        tipo_documento: this.getHistoriaTipoDocumentoFromCita(cita)
+        // El auxiliar solo crea documentos de Terapia/Hidroterapia (seguimiento), sea cual sea el tipo de cita.
+        tipo_documento: this.authService.isAux() ? 'seguimiento' : this.getHistoriaTipoDocumentoFromCita(cita)
       }
     });
   }
@@ -698,8 +691,8 @@ export class CitaDetailsComponent implements OnInit {
     const cita = this.cita();
     if (!cita) return false;
 
-    // En curso: sólo administrador puede editar la cita
-    if (cita.estado === 'en_curso' && this.authService.isVet()) {
+    // En curso: sólo administrador puede editar la cita (el backend también lo exige)
+    if (cita.estado === 'en_curso' && !this.authService.isAdmin()) {
       return false;
     }
 

@@ -310,8 +310,8 @@ export const createHistoria = async (req, res) => {
     }
 
     // El rol auxiliar solo puede crear/editar documentos de seguimiento
-    // (Terapia/Hidroterapia); valoración, fórmula y remisión quedan de solo
-    // lectura para ese rol (ver GET routes, siguen abiertas para 'aux').
+    // (Terapia/Hidroterapia), sin importar el tipo de la cita (p. ej. domicilio);
+    // valoración, fórmula y remisión quedan de solo lectura para ese rol.
     if (req.user.rol === 'aux') {
       if (tipo_documento !== 'seguimiento') {
         return res.status(403).json({
@@ -336,12 +336,8 @@ export const createHistoria = async (req, res) => {
         return res.status(404).json({ success: false, message: 'Cita no encontrada' });
       }
 
-      if (!['terapia', 'hidroterapia'].includes(citaResult.rows[0].tipo)) {
-        return res.status(403).json({
-          success: false,
-          message: 'Solo se puede crear un documento de Terapia/Hidroterapia para citas de tipo Terapia o Hidroterapia',
-        });
-      }
+      // Sin restricción por tipo de cita: una terapia puede darse en una cita de domicilio
+      // (u otro tipo) y el auxiliar debe poder documentarla.
     }
 
     // Regla de consistencia: una cita no debe tener dos documentos activos del mismo tipo.
@@ -737,12 +733,7 @@ export const updateHistoria = async (req, res) => {
           return res.status(404).json({ success: false, message: 'Cita no encontrada' });
         }
 
-        if (!['terapia', 'hidroterapia'].includes(citaResult.rows[0].tipo)) {
-          return res.status(403).json({
-            success: false,
-            message: 'Solo se puede vincular a citas de tipo Terapia o Hidroterapia',
-          });
-        }
+        // Sin restricción por tipo de cita (ver createHistoria).
       }
     }
 
