@@ -37,6 +37,7 @@ import { AuthService } from '../../services/auth.service';
 import { ConfiguracionService, DiaEspecial } from '../../services/configuracion.service';
 import { ExportDialogComponent } from './export-dialog.component';
 import { EventoDialogComponent, EventoDialogData, EventoDialogResult } from './evento-dialog.component';
+import { CancelacionMasivaDialogComponent, CancelacionMasivaData } from './cancelacion-masiva-dialog.component';
 import { EventoCalendario } from '../../models/evento-calendario.interface';
 import {
   Cita,
@@ -941,6 +942,21 @@ export class CitasComponent implements OnInit, OnDestroy, AfterViewInit {
       classNames: ['evento-propio'],
       extendedProps: { eventoPropio: ev }
     }));
+  }
+
+  /** Cancelación masiva: solo administradores y veterinarios. */
+  puedeCancelarEnLote(): boolean {
+    return this.authService.hasAnyRole(['admin', 'vet']);
+  }
+
+  openCancelacionMasiva(): void {
+    const ref = this.dialog.open<CancelacionMasivaDialogComponent, CancelacionMasivaData, boolean>(
+      CancelacionMasivaDialogComponent,
+      { data: {}, width: '720px', maxWidth: '95vw' }
+    );
+    ref.afterClosed().subscribe(changed => {
+      if (changed) this.refreshCalendar(true);
+    });
   }
 
   /** Los administradores no crean ni reciben eventos propios. */

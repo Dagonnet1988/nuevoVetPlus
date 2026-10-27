@@ -27,6 +27,7 @@ import { ConsultasService } from '../../services/consultas.service';
 import { AuthService } from '../../services/auth.service';
 import { HistoriaClinica, HistoriaClinicaService } from '../../services/historia-clinica.service';
 import { Cita, TIPOS_CITA, ESTADOS_CITA } from '../../models/cita.interface';
+import { CancelacionMasivaDialogComponent, CancelacionMasivaData } from '../citas/cancelacion-masiva-dialog.component';
 
 @Component({
   selector: 'app-cita-details',
@@ -698,6 +699,33 @@ export class CitaDetailsComponent implements OnInit {
 
     // No se puede editar si está completada, no asistió o cancelada
     return !['completada', 'no_asistio', 'cancelada'].includes(cita.estado);
+  }
+
+  /** Cancelación masiva: solo administradores y veterinarios. */
+  canBulkCancel(): boolean {
+    return !!this.cita() && this.authService.hasAnyRole(['admin', 'vet']);
+  }
+
+  /** modo 'serie': esta y las siguientes de la serie; modo 'paciente': varias citas del paciente. */
+  onBulkCancel(modo: 'serie' | 'paciente'): void {
+    const cita = this.cita();
+    if (!cita) return;
+    const data: CancelacionMasivaData = modo === 'serie'
+      ? { id_serie: cita.id_serie || undefined, desde: this.toLocalYmd(new Date(cita.fecha_inicio)) }
+      : { id_mascota: cita.id_mascota, mascota_nombre: cita.mascota?.nombre || cita.mascota_nombre };
+
+    const ref = this.dialog.open<CancelacionMasivaDialogComponent, CancelacionMasivaData, boolean>(
+      CancelacionMasivaDialogComponent,
+      { data, width: '720px', maxWidth: '95vw' }
+    );
+    ref.afterClosed().subscribe(async changed => {
+      if (changed) await this.loadCita(cita.id_cita);
+    });
+  }
+
+  private toLocalYmd(d: Date): string {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
 
   canCancelCita(): boolean {

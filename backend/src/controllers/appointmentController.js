@@ -5,6 +5,7 @@ import appointmentConflictService from '../services/appointmentConflictService.j
 import { sendEmail } from '../services/emailService.js';
 import { renderEmailTemplate } from '../services/emailTemplateService.js';
 import { logSyncEvents, describeGoogleError } from '../utils/syncAuditLog.js';
+import { logActivity } from '../utils/activityLog.js';
 
 /**
  * Convertir fecha a formato Colombia (sin zona horaria)
@@ -3085,4 +3086,240 @@ const getAppointmentWithDetails = async (id_cita, tenantId = null) => {
     }
     
     return cita || null;
+};
+
+// ===============================
+// CANCELACIÓN MASIVA DE CITAS
+// ===============================
+
+const BULK_CANCEL_MAX = 500;
+const BULK_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const BULK_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+const EXCLUSION_LABELS = {
+    cancelada: 'Ya está cancelada',
+    completada: 'Completada',
+    no_asistio: 'Marcada como no asistió',
+    en_curso: 'En curso'
+};
+
+/** Por qué una cita no se puede cancelar en lote (null = sí se puede). */
+const getBulkExclusion = (cita) => {
+    if (cita.tiene_historia) return 'Tiene documento clínico asociado';
+    if (cita.estado !== 'confirmada') return EXCLUSION_LABELS[cita.estado] || `Estado ${cita.estado}`;
+    return null;
+};
+
+/**
+ * POST /appointments/bulk-cancel/preview
+ * Body: { id_mascota?, id_serie?, fecha_inicio: 'YYYY-MM-DD', fecha_fin: 'YYYY-MM-DD', tipo? }
+ * Exige paciente o serie para no barrer por error la agenda completa de la clínica.
+ */
+export const previewBulkCancel = async (req, res) => {
+    try {
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+        const { id_mascota, id_serie, fecha_inicio, fecha_fin, tipo } = req.body || {};
+
+        if (!id_mascota && !id_serie) {
+            return res.status(400).json({ success: false, message: 'Elige un paciente o una serie de citas' });
+        }
+        if ((id_mascota && !BULK_UUID_RE.test(id_mascota)) || (id_serie && !BULK_UUID_RE.test(id_serie))) {
+            return res.status(400).json({ success: false, message: 'Identificador inválido' });
+        }
+        if (!BULK_DATE_RE.test(String(fecha_inicio || '')) || !BULK_DATE_RE.test(String(fecha_fin || ''))) {
+            return res.status(400).json({ success: false, message: 'fecha_inicio y fecha_fin (YYYY-MM-DD) son obligatorias' });
+        }
+        if (fecha_fin < fecha_inicio) {
+            return res.status(400).json({ success: false, message: 'La fecha final no puede ser anterior a la inicial' });
+        }
+        const dias = (new Date(fecha_fin).getTime() - new Date(fecha_inicio).getTime()) / 86400000;
+        if (dias > 400) {
+            return res.status(400).json({ success: false, message: 'El rango máximo es de 400 días' });
+        }
+
+        const params = [tenantId, fecha_inicio, fecha_fin];
+        const where = ['c.id_tenant = $1', 'c.fecha_inicio >= $2::date', 'c.fecha_inicio < ($3::date + 1)'];
+        if (id_mascota) { params.push(id_mascota); where.push(`c.id_mascota = $${params.length}`); }
+        if (id_serie) { params.push(id_serie); where.push(`c.id_serie = $${params.length}`); }
+        if (tipo) { params.push(String(tipo).toLowerCase()); where.push(`LOWER(c.tipo) = $${params.length}`); }
+
+        const result = await query(`
+            SELECT
+                c.id_cita, c.codigo_cita, c.tipo, c.estado, c.id_serie,
+                TO_CHAR(c.fecha_inicio, 'YYYY-MM-DD"T"HH24:MI:SS') AS fecha_inicio,
+                TO_CHAR(c.fecha_fin, 'YYYY-MM-DD"T"HH24:MI:SS') AS fecha_fin,
+                (c.google_event_id IS NOT NULL) AS en_google,
+                m.nombre AS mascota_nombre,
+                TRIM(CONCAT(u.nombre, ' ', u.apellido)) AS veterinario_nombre,
+                EXISTS (SELECT 1 FROM clinical.historias_clinicas h
+                        WHERE h.id_cita = c.id_cita AND h.id_tenant = c.id_tenant) AS tiene_historia
+            FROM clinical.calendario_citas c
+            JOIN clinical.mascotas m ON m.id_mascota = c.id_mascota
+            LEFT JOIN vetplus_auth.usuarios u ON u.id_usuario = c.id_veterinario
+            WHERE ${where.join(' AND ')}
+            ORDER BY c.fecha_inicio ASC
+            LIMIT ${BULK_CANCEL_MAX + 1}
+        `, params);
+
+        const truncated = result.rows.length > BULK_CANCEL_MAX;
+        const rows = result.rows.slice(0, BULK_CANCEL_MAX);
+        const yaCanceladas = rows.filter(r => r.estado === 'cancelada').length;
+        const citas = rows
+            .filter(r => r.estado !== 'cancelada')
+            .map(r => {
+                const motivo = getBulkExclusion(r);
+                return { ...r, cancelable: !motivo, motivo_exclusion: motivo };
+            });
+
+        res.json({
+            success: true,
+            data: {
+                citas,
+                resumen: {
+                    encontradas: citas.length,
+                    cancelables: citas.filter(c => c.cancelable).length,
+                    excluidas: citas.filter(c => !c.cancelable).length,
+                    ya_canceladas: yaCanceladas,
+                    truncado: truncated
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error en vista previa de cancelación masiva:', error);
+        res.status(500).json({ success: false, message: 'Error interno del servidor' });
+    }
+};
+
+/** Borra de Google los eventos de las citas canceladas en lote (en segundo plano, con pausa). */
+const deleteBulkCancelledFromGoogle = async (ids, tenantId, lote) => {
+    let ok = 0;
+    let failed = 0;
+    for (const id of ids) {
+        try {
+            const cita = await getAppointmentWithDetails(id, tenantId);
+            if (cita?.google_event_id) {
+                const result = await syncAppointmentWithGoogle(cita, 'delete', 'masiva');
+                if (result?.success) ok++; else failed++;
+                await new Promise(resolve => setTimeout(resolve, 800));
+            }
+        } catch (error) {
+            failed++;
+            console.warn(`⚠️ Cancelación masiva ${lote}: no se pudo quitar de Google la cita ${id}:`, error.message);
+        }
+    }
+    console.log(`✅ Cancelación masiva ${lote}: Google eliminados ${ok}, fallidos ${failed}`);
+};
+
+/**
+ * POST /appointments/bulk-cancel
+ * Body: { ids: uuid[], motivo: string }
+ * Revalida cada cita (tenant, estado confirmada, sin documento clínico) dentro de una
+ * transacción; las que no cumplen se informan y no se tocan.
+ */
+export const bulkCancelAppointments = async (req, res) => {
+    let txClient = null;
+    try {
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
+        const { ids, motivo } = req.body || {};
+        const motivoLimpio = String(motivo || '').trim();
+
+        if (!Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ success: false, message: 'No hay citas seleccionadas' });
+        }
+        const uniqueIds = [...new Set(ids.map(String))];
+        if (uniqueIds.length > BULK_CANCEL_MAX) {
+            return res.status(400).json({ success: false, message: `Máximo ${BULK_CANCEL_MAX} citas por lote` });
+        }
+        if (uniqueIds.some(id => !BULK_UUID_RE.test(id))) {
+            return res.status(400).json({ success: false, message: 'Lista de citas inválida' });
+        }
+        if (motivoLimpio.length < 5) {
+            return res.status(400).json({ success: false, message: 'El motivo es obligatorio (mínimo 5 caracteres)' });
+        }
+
+        const lote = `LOTE-${Date.now().toString(36).toUpperCase()}`;
+
+        txClient = await getClient();
+        await txClient.query('BEGIN');
+
+        const current = await txClient.query(`
+            SELECT c.id_cita, c.codigo_cita, c.estado, c.google_event_id,
+                   TO_CHAR(c.fecha_inicio, 'YYYY-MM-DD"T"HH24:MI:SS') AS fecha_inicio,
+                   m.nombre AS mascota_nombre,
+                   EXISTS (SELECT 1 FROM clinical.historias_clinicas h
+                           WHERE h.id_cita = c.id_cita AND h.id_tenant = c.id_tenant) AS tiene_historia
+            FROM clinical.calendario_citas c
+            JOIN clinical.mascotas m ON m.id_mascota = c.id_mascota
+            WHERE c.id_tenant = $1 AND c.id_cita = ANY($2::uuid[])
+            FOR UPDATE OF c
+        `, [tenantId, uniqueIds]);
+
+        const encontradas = new Map(current.rows.map(r => [r.id_cita, r]));
+        const omitidas = [];
+        const aCancelar = [];
+        for (const id of uniqueIds) {
+            const cita = encontradas.get(id);
+            if (!cita) { omitidas.push({ id_cita: id, motivo: 'No encontrada' }); continue; }
+            const exclusion = getBulkExclusion(cita);
+            if (exclusion) omitidas.push({ id_cita: id, codigo_cita: cita.codigo_cita, motivo: exclusion });
+            else aCancelar.push(cita);
+        }
+
+        if (aCancelar.length > 0) {
+            await txClient.query(`
+                UPDATE clinical.calendario_citas
+                SET estado = 'cancelada',
+                    notas = CASE WHEN notas IS NULL OR notas = '' THEN $3
+                                 ELSE notas || ' | ' || $3 END,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id_tenant = $1 AND id_cita = ANY($2::uuid[])
+            `, [tenantId, aCancelar.map(c => c.id_cita), `CANCELADA (masiva ${lote}): ${motivoLimpio}`]);
+        }
+
+        await txClient.query('COMMIT');
+        txClient.release();
+        txClient = null;
+
+        // Rastro por cita en Auditoría (además del registro global de la petición).
+        for (const cita of aCancelar) {
+            await logActivity({
+                req,
+                type: 'CITAS',
+                description: `Cita ${cita.codigo_cita} (${cita.mascota_nombre}) cancelada en lote ${lote}`,
+                entityId: cita.id_cita,
+                payload: {
+                    accion: 'cancelacion_masiva',
+                    lote,
+                    motivo: motivoLimpio,
+                    antes: { estado: cita.estado, fecha_inicio: cita.fecha_inicio },
+                    despues: { estado: 'cancelada' }
+                }
+            });
+        }
+
+        const conGoogle = aCancelar.filter(c => c.google_event_id).map(c => c.id_cita);
+        if (conGoogle.length > 0) {
+            // No se espera: con muchas citas tardaría más que el timeout de nginx (60 s).
+            deleteBulkCancelledFromGoogle(conGoogle, tenantId, lote)
+                .catch(err => console.error(`Cancelación masiva ${lote}: error quitando eventos de Google:`, err));
+        }
+
+        res.json({
+            success: true,
+            message: `${aCancelar.length} cita(s) cancelada(s)` + (omitidas.length ? `, ${omitidas.length} omitida(s)` : ''),
+            data: {
+                lote,
+                canceladas: aCancelar.length,
+                omitidas,
+                google_en_proceso: conGoogle.length
+            }
+        });
+    } catch (error) {
+        if (txClient) {
+            try { await txClient.query('ROLLBACK'); } catch {}
+            txClient.release();
+        }
+        console.error('Error en cancelación masiva:', error);
+        res.status(500).json({ success: false, message: 'Error interno del servidor' });
+    }
 };

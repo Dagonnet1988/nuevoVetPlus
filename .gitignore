@@ -82,3 +82,5 @@ backend/uploads/pacientes/default/*
 # Development and debugging
 debug.log
 error.log
+# Scripts de mantenimiento de una sola vez (operaciones manuales en producción)
+backend/scripts/borrar-eventos-google-propietarios.js

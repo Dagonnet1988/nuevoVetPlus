@@ -162,7 +162,8 @@ export class EditarPropietarioDialogComponent {
     MatProgressSpinnerModule,
     MatDialogModule,
     MatDividerModule,
-    MatChipsModule
+    MatChipsModule,
+    MatTooltipModule
   ],
   template: `
     <div class="dialog-header">
@@ -185,7 +186,9 @@ export class EditarPropietarioDialogComponent {
       } @else {
         <div class="mascotas-list">
           @for (m of mascotas(); track m.id_mascota) {
-            <div class="mascota-item">
+            <div class="mascota-item" role="button" tabindex="0"
+                 (click)="verMascota(m)" (keydown.enter)="verMascota(m)"
+                 matTooltip="Ver ficha de {{ m.nombre }}">
               <div class="mascota-avatar">
                 @if (m.foto_url && m.foto_url.trim() !== '') {
                   <img [src]="getImageUrl(m.foto_url)" [alt]="m.nombre" class="mascota-foto" (error)="onImgError($event)" />
@@ -209,6 +212,7 @@ export class EditarPropietarioDialogComponent {
                   <mat-chip style="font-size:11px">Inactivo</mat-chip>
                 }
               </div>
+              <mat-icon class="mascota-chevron">chevron_right</mat-icon>
             </div>
             <mat-divider></mat-divider>
           }
@@ -223,7 +227,9 @@ export class EditarPropietarioDialogComponent {
     <style>
       .dialog-header { padding: 16px 24px 0; }
       .mascotas-list { display: flex; flex-direction: column; gap: 0; }
-      .mascota-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
+      .mascota-item { display: flex; align-items: center; gap: 12px; padding: 12px 8px; margin: 0 -8px; cursor: pointer; border-radius: 8px; }
+      .mascota-item:hover, .mascota-item:focus-visible { background: #f0f4ff; outline: none; }
+      .mascota-chevron { color: #9e9e9e; flex-shrink: 0; }
       .mascota-avatar { width: 48px; height: 48px; border-radius: 50%; background: #f0f4ff; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; }
       .mascota-foto { width: 100%; height: 100%; object-fit: cover; }
       .mascota-icon-placeholder { color: #3f51b5; font-size: 28px; width: 28px; height: 28px; }
@@ -236,6 +242,8 @@ export class EditarPropietarioDialogComponent {
 })
 export class MascotasPropietarioDialogComponent implements OnInit {
   private pacientesService = inject(PacientesService);
+  private router = inject(Router);
+  private dialogRef = inject(MatDialogRef<MascotasPropietarioDialogComponent>);
   data: Cliente = inject(MAT_DIALOG_DATA);
 
   loading = signal(true);
@@ -253,6 +261,12 @@ export class MascotasPropietarioDialogComponent implements OnInit {
         this.loading.set(false);
       }
     });
+  }
+
+  /** Cierra el diálogo y abre la ficha de la mascota. */
+  verMascota(mascota: Mascota): void {
+    this.dialogRef.close();
+    this.router.navigate(['/pacientes', mascota.id_mascota]);
   }
 
   getImageUrl(fotoUrl: string): string {

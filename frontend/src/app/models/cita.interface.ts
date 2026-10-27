@@ -10,6 +10,7 @@ export interface Cita {
   motivo?: string;
   observaciones?: string;
   google_event_id?: string;
+  id_serie?: string | null;
   google_sync_status?: 'pending' | 'synced' | 'failed' | 'disabled' | 'conflict';
   google_sync_error?: string;
   recordatorio_enviado?: boolean;

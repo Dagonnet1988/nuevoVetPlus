@@ -43,6 +43,15 @@
           </button>
 
           <button mat-stroked-button
+                  *ngIf="puedeCancelarEnLote()"
+                  (click)="openCancelacionMasiva()"
+                  class="bulk-cancel-button"
+                  matTooltip="Cancelar varias citas de un paciente a la vez">
+            <mat-icon>event_busy</mat-icon>
+            Cancelar en lote
+          </button>
+
+          <button mat-stroked-button
                   *ngIf="puedeUsarEventos()"
                   (click)="openEventoDialog()"
                   class="evento-button"

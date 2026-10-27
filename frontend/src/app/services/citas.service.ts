@@ -16,6 +16,27 @@ import {
 } from '../models/cita.interface';
 import { EventoCalendario, EventoCalendarioPayload, UsuarioCompartible } from '../models/evento-calendario.interface';
 
+export interface BulkCancelPreviewCita {
+  id_cita: string;
+  codigo_cita: string;
+  tipo: string;
+  estado: string;
+  id_serie?: string | null;
+  fecha_inicio: string;
+  fecha_fin: string;
+  en_google: boolean;
+  mascota_nombre: string;
+  veterinario_nombre?: string;
+  tiene_historia: boolean;
+  cancelable: boolean;
+  motivo_exclusion: string | null;
+}
+
+export interface BulkCancelPreview {
+  citas: BulkCancelPreviewCita[];
+  resumen: { encontradas: number; cancelables: number; excluidas: number; ya_canceladas: number; truncado: boolean };
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -494,5 +515,19 @@ export class CitasService {
 
   deleteEventoCalendario(id: string): Observable<any> {
     return this.http.delete<any>(`${this.API_URL}/eventos/${id}`);
+  }
+
+  // ===============================
+  // CANCELACIÓN MASIVA (admin y vet)
+  // ===============================
+
+  previewBulkCancel(filtro: { id_mascota?: string; id_serie?: string; fecha_inicio: string; fecha_fin: string; tipo?: string }): Observable<BulkCancelPreview> {
+    return this.http.post<any>(`${this.API_URL}/appointments/bulk-cancel/preview`, filtro).pipe(
+      map((response: any) => response.data as BulkCancelPreview)
+    );
+  }
+
+  bulkCancel(ids: string[], motivo: string): Observable<any> {
+    return this.http.post<any>(`${this.API_URL}/appointments/bulk-cancel`, { ids, motivo });
   }
 }

@@ -3,6 +3,8 @@ import { query } from '../config/database.js';
 import { 
     createAppointment,
     previewRecurringAppointments,
+    previewBulkCancel,
+    bulkCancelAppointments,
     createRecurringAppointments,
     getAppointments,
     getAppointmentById,
@@ -56,6 +58,28 @@ router.post(
     validateCreateAppointment,
     validateRequest,
     createAppointment
+);
+
+/**
+ * @route   POST /api/clinical/appointments/bulk-cancel/preview
+ * @desc    Vista previa de cancelación masiva (por paciente o serie, en un rango)
+ * @access  Admin, Veterinario
+ */
+router.post(
+    '/bulk-cancel/preview',
+    authorize(['admin', 'vet']),
+    previewBulkCancel
+);
+
+/**
+ * @route   POST /api/clinical/appointments/bulk-cancel
+ * @desc    Cancelar en lote las citas seleccionadas en la vista previa
+ * @access  Admin, Veterinario
+ */
+router.post(
+    '/bulk-cancel',
+    authorize(['admin', 'vet']),
+    bulkCancelAppointments
 );
 
 /**

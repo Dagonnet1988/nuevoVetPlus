@@ -31,7 +31,7 @@
         </div>
 
         <div class="header-actions">
-          @if (canEditCita() || canCancelCita()) {
+          @if (canEditCita() || canCancelCita() || canBulkCancel()) {
             <button mat-icon-button [matMenuTriggerFor]="citaActionsMenu" [disabled]="updating()"
                     matTooltip="Más acciones">
               <mat-icon>more_vert</mat-icon>
@@ -54,6 +54,19 @@
                 <button mat-menu-item (click)="onCancel()" class="menu-item-warn">
                   <mat-icon>event_busy</mat-icon>
                   <span>Cancelar cita</span>
+                </button>
+              }
+
+              @if (canBulkCancel()) {
+                @if (cita()?.id_serie) {
+                  <button mat-menu-item (click)="onBulkCancel('serie')" class="menu-item-warn">
+                    <mat-icon>event_repeat</mat-icon>
+                    <span>Cancelar esta y las siguientes de la serie</span>
+                  </button>
+                }
+                <button mat-menu-item (click)="onBulkCancel('paciente')" class="menu-item-warn">
+                  <mat-icon>playlist_remove</mat-icon>
+                  <span>Cancelar varias citas del paciente</span>
                 </button>
               }
             </mat-menu>
