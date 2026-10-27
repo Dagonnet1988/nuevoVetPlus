@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, signal, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, ViewChild, inject } from '@angular/core';
 import { extractError } from '../../utils/error.utils';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
@@ -18,7 +18,8 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
+import { AuthService } from '../../services/auth.service';
 import { Subscription, debounceTime, distinctUntilChanged } from 'rxjs';
 
 import { PacientesService } from '../../services/pacientes.service';
@@ -46,7 +47,8 @@ import { environment } from '../../../environments/environment';
     MatDividerModule,
     MatSnackBarModule,
     MatTooltipModule,
-    MatProgressSpinnerModule
+    MatProgressSpinnerModule,
+    RouterLink
   ],
   templateUrl: './pacientes.component.html',
   styleUrl: './pacientes.component.css'
@@ -81,6 +83,13 @@ export class PacientesComponent implements OnInit, OnDestroy {
 
   @ViewChild(MatPaginator) paginator!: MatPaginator;
   @ViewChild(MatSort) sort!: MatSort;
+
+  private authService = inject(AuthService);
+
+  /** Unificar pacientes: solo administradores y veterinarios. */
+  puedeUnificar(): boolean {
+    return this.authService.hasAnyRole(['admin', 'vet']);
+  }
 
   constructor(
     private fb: FormBuilder,

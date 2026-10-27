@@ -13,6 +13,57 @@ import {
   CreatePacienteResponse
 } from '../models/paciente.interface';
 
+export interface UnificacionPaciente {
+  id_mascota: string;
+  id_cliente: string;
+  ficha: Record<string, any> & { nombre: string };
+  propietario: {
+    id_cliente: string; nombre: string; cedula?: string | null; telefono?: string | null; email?: string | null;
+    total_mascotas: number; consentimientos: number; envios: number;
+  };
+  conteos: {
+    citas: number; citas_en_google: number; citas_futuras: number;
+    primera_cita: string | null; ultima_cita_pasada: string | null;
+    historias: number; sesiones_terapia: number; historias_por_tipo: Record<string, number>; series: number;
+  };
+}
+
+export interface UnificacionPreview {
+  principal: UnificacionPaciente;
+  secundario: UnificacionPaciente;
+  campos_elegibles: string[];
+  efectos: {
+    nombre_final: string;
+    propietario_final: { id_cliente: string; nombre: string };
+    citas_a_mover: number;
+    historias_a_mover: number;
+    series_a_mover: number;
+    sesiones_a_renumerar: number;
+    propietarios_a_eliminar: { id_cliente: string; nombre: string; consentimientos_a_mover: number; envios_a_mover: number }[];
+    eventos_google_a_retitular: number;
+  };
+}
+
+export interface UnificacionHistorial {
+  id_unificacion: string;
+  id_mascota_principal: string;
+  nombre_principal: string;
+  nombre_eliminada: string;
+  motivo: string;
+  resumen: any;
+  created_at: string;
+  usuario_nombre?: string;
+  principal_existe: boolean;
+}
+
+export interface UnificacionCuerpo {
+  id_principal: string;
+  id_secundario: string;
+  propietario: 'principal' | 'secundario';
+  campos: Record<string, 'principal' | 'secundario'>;
+  motivo?: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -198,4 +249,25 @@ export class PacientesService {
   }
 
   // Funciones de especies y razas ahora conectadas al backend real
+
+  // ===============================
+  // UNIFICACIÓN DE PACIENTES (admin y vet)
+  // ===============================
+
+  previewUnificacion(cuerpo: UnificacionCuerpo): Observable<UnificacionPreview> {
+    return this.http.post<any>(`${this.API_URL}/unificaciones/preview`, cuerpo).pipe(
+      map((r: any) => r.data as UnificacionPreview)
+    );
+  }
+
+  ejecutarUnificacion(cuerpo: UnificacionCuerpo): Observable<any> {
+    return this.http.post<any>(`${this.API_URL}/unificaciones`, cuerpo);
+  }
+
+  listarUnificaciones(limit = 20, offset = 0): Observable<{ data: UnificacionHistorial[]; total: number }> {
+    const params = new HttpParams().set('limit', String(limit)).set('offset', String(offset));
+    return this.http.get<any>(`${this.API_URL}/unificaciones`, { params }).pipe(
+      map((r: any) => ({ data: r?.data ?? [], total: r?.total ?? 0 }))
+    );
+  }
 }

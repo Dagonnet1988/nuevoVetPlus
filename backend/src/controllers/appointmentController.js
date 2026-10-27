@@ -3323,3 +3323,6 @@ export const bulkCancelAppointments = async (req, res) => {
         res.status(500).json({ success: false, message: 'Error interno del servidor' });
     }
 };
+
+// Reutilizados por la unificación de pacientes (reescritura de títulos en Google).
+export { syncAppointmentWithGoogle, getAppointmentWithDetails };

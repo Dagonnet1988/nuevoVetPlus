@@ -4,7 +4,7 @@ export const environment = {
   backendUrl: 'http://localhost:3000',
   rootDomain: 'ramelo.app',
   appName: 'Ramelo',
-  version: '1.0.0',
+  version: '1.1.0',
   defaultTheme: 'light',
   enableDebug: true,
 

@@ -216,6 +216,9 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
       /* No 100vh: en celular es más alto que la pantalla visible y la parte inferior
          (botones Guardar/Cancelar) quedaba recortada e inalcanzable. */
       min-height: 100%;
+      /* Alto del footer fijo: lo usan las barras "sticky" inferiores de las páginas
+         (p. ej. Guardar/Cancelar de historia clínica) para no quedar debajo de él. */
+      --app-footer-h: 32px;
     }
 
     /* ── Sidebar base ── */
@@ -650,6 +653,11 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
     }
 
     .app-footer-mini {
+      /* Fijo al pie del área de contenido (el scroll lo hace mat-sidenav-content). */
+      position: sticky;
+      bottom: 0;
+      z-index: 30;
+      flex-shrink: 0;
       height: 32px;
       padding: 0 16px;
       border-top: 1px solid var(--vp-border);
@@ -714,6 +722,7 @@ const SIDEBAR_KEY = 'vetplus_sidebar_collapsed';
       .sidenav { width: 100%; }
       .main-content { padding: 16px; }
       .app-footer-mini { display: none; }
+      mat-sidenav-content { --app-footer-h: 0px; }
       .page-title { font-size: 16px; }
     }
 

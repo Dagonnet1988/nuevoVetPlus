@@ -336,3 +336,21 @@ CREATE TABLE IF NOT EXISTS clinical.calendario_eventos (
 );
 CREATE INDEX IF NOT EXISTS idx_calendario_eventos_tenant_fecha ON clinical.calendario_eventos(id_tenant, fecha_inicio);
 CREATE INDEX IF NOT EXISTS idx_calendario_eventos_creador ON clinical.calendario_eventos(id_creador);
+
+-- Historial de unificaciones de pacientes duplicados (ej. "Lulu" y "Lulú").
+-- detalle guarda copia de la mascota/propietarios eliminados y los ids movidos.
+CREATE TABLE IF NOT EXISTS clinical.unificaciones_pacientes (
+    id_unificacion UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id_tenant UUID NOT NULL REFERENCES system.tenants(id_tenant) ON DELETE RESTRICT,
+    id_mascota_principal UUID NOT NULL,
+    id_mascota_eliminada UUID NOT NULL,
+    nombre_principal VARCHAR(100),
+    nombre_eliminada VARCHAR(100),
+    motivo TEXT NOT NULL,
+    resumen JSONB NOT NULL DEFAULT '{}'::jsonb,
+    detalle JSONB NOT NULL DEFAULT '{}'::jsonb,
+    id_usuario UUID REFERENCES vetplus_auth.usuarios(id_usuario) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_unificaciones_tenant_fecha ON clinical.unificaciones_pacientes(id_tenant, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_unificaciones_principal ON clinical.unificaciones_pacientes(id_mascota_principal);

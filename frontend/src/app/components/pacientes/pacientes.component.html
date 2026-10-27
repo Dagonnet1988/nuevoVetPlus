@@ -10,6 +10,15 @@
         <p class="page-subtitle">Administra la información de mascotas y sus propietarios</p>
       </div>
       <div class="actions-section">
+        @if (puedeUnificar()) {
+          <button mat-stroked-button
+                  routerLink="/pacientes/unificar"
+                  class="unificar-button"
+                  matTooltip="Juntar dos registros del mismo paciente">
+            <mat-icon>merge_type</mat-icon>
+            Unificar pacientes
+          </button>
+        }
         <button mat-raised-button
                 color="primary"
                 (click)="openCreateDialog()"

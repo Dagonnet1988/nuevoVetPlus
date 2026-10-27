@@ -1264,10 +1264,11 @@ export async function inactivarMascota(req, res) {
       });
     }
 
-    // Verificar si tiene consultas o citas activas
+    // Verificar si tiene historias clínicas o citas activas
+    // (clinical.consultas_clinicas es una tabla antigua que ya no existe en producción).
     const relacionesResult = await query(
       `SELECT
-        (SELECT COUNT(*) FROM clinical.consultas_clinicas WHERE id_mascota = $1 AND id_tenant = $2) AS consultas,
+        (SELECT COUNT(*) FROM clinical.historias_clinicas WHERE id_mascota = $1 AND id_tenant = $2) AS consultas,
         (SELECT COUNT(*) FROM clinical.calendario_citas
          WHERE id_mascota = $1 AND id_tenant = $2 AND estado IN ('confirmada', 'en_curso')) AS citas_activas`,
       [id, tenantId]
@@ -1278,7 +1279,7 @@ export async function inactivarMascota(req, res) {
     if (parseInt(consultas) > 0 && motivo === 'Error de registro') {
       return res.status(409).json({
         success: false,
-        message: `No se puede marcar como 'Error de registro' una mascota con ${consultas} consulta(s) en su historial clínico.`
+        message: `No se puede marcar como 'Error de registro' una mascota con ${consultas} documento(s) en su historia clínica.`
       });
     }
 

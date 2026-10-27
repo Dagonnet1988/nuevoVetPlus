@@ -498,6 +498,14 @@ export async function deleteClient(req, res) {
     const totalPets = parseInt(petsResult.rows[0].pets_count, 10);
     const activePets = parseInt(petsResult.rows[0].active_pets_count, 10);
 
+    // El auxiliar solo puede eliminar propietarios sin ninguna mascota (ni activa ni inactiva).
+    if (req.user?.rol === 'aux' && totalPets > 0) {
+      return res.status(403).json({
+        success: false,
+        message: 'Tu rol solo puede eliminar propietarios que no tengan mascotas registradas.'
+      });
+    }
+
     if (activePets > 0) {
       return res.status(409).json({
         success: false,

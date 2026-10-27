@@ -267,7 +267,7 @@ type EjercicioCategoriaKey = 'calentamiento' | 'fortalecimiento' | 'hidroterapia
     /* Barra de acciones siempre visible al pie (no depende de llegar al final del formulario) */
     .form-actions {
       position: sticky;
-      bottom: 0;
+      bottom: var(--app-footer-h, 0px);
       z-index: 20;
       display: flex;
       justify-content: flex-end;

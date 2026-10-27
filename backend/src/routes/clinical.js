@@ -5,6 +5,7 @@ import pacientesRoutes from './pacientes.js';
 import consultationRoutes from './consultations.js';
 import appointmentRoutes from './appointments.js';
 import eventosCalendarioRoutes from './eventosCalendario.js';
+import unificacionPacientesRoutes from './unificacionPacientes.js';
 import historiaRoutes from './historias.js';
 import { getEspecies, getRazasByEspecie } from '../controllers/pacientesController.js';
 import { authenticateToken, authorize } from '../middleware/auth.js';
@@ -334,5 +335,8 @@ router.use('/appointments', authenticateToken, tenantContext, appointmentRoutes)
 
 // Eventos propios del calendario (recordatorios del usuario)
 router.use('/eventos', authenticateToken, tenantContext, eventosCalendarioRoutes);
+
+// Unificación de pacientes duplicados (admin y vet)
+router.use('/unificaciones', authenticateToken, tenantContext, unificacionPacientesRoutes);
 
 export default router;
