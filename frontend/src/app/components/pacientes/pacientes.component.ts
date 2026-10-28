@@ -60,7 +60,7 @@ export class PacientesComponent implements OnInit, OnDestroy {
   totalClientes = signal(0);
   totalEspecies = signal(0);
   totalRecords = signal(0);
-  pageSize = signal(10);
+  pageSize = signal(50);
   currentPage = signal(0);
   sortActive = signal<string>('paciente');
   sortDirection = signal<SortDirection>('asc');

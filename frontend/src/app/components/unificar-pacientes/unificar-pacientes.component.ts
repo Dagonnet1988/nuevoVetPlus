@@ -14,6 +14,7 @@ import { MatRadioModule } from '@angular/material/radio';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { environment } from '../../../environments/environment';
 import {
   PacientesService,
   UnificacionPreview,
@@ -39,6 +40,9 @@ const CAMPOS: { key: string; label: string }[] = [
 ];
 
 const vacio = (v: unknown) => v === null || v === undefined || String(v).trim() === '';
+// Las mascotas sin foto subida guardan el ícono por especie (/uploads/pacientes/default/...).
+const esFotoPorDefecto = (v: unknown) => String(v ?? '').includes('/uploads/pacientes/default/');
+const esFotoReal = (v: unknown) => !vacio(v) && !esFotoPorDefecto(v);
 
 @Component({
   selector: 'app-unificar-pacientes',
@@ -71,7 +75,7 @@ const vacio = (v: unknown) => v === null || v === undefined || String(v).trim() 
                      [matAutocomplete]="auto" placeholder="Nombre del paciente">
               <mat-autocomplete #auto="matAutocomplete" [displayWith]="mostrar"
                                 (optionSelected)="elegir(lado, $event.option.value)">
-                @for (o of opciones[lado](); track o.id) {
+                @for (o of opcionesPara(lado); track o.id) {
                   <mat-option [value]="o">{{ o.nombre }} <span class="muted">· {{ o.especie }} · {{ o.propietario }}</span></mat-option>
                 }
               </mat-autocomplete>
@@ -120,6 +124,9 @@ const vacio = (v: unknown) => v === null || v === undefined || String(v).trim() 
                                             (change)="elegirCampo(c.key, lado)">
                             {{ mostrarValor(c.key, lado) }}
                           </mat-radio-button>
+                        }
+                        @if (c.key === 'foto_url' && urlFoto(lado); as src) {
+                          <div><img class="miniatura" [src]="src" alt="Foto"></div>
                         }
                       </td>
                     }
@@ -262,6 +269,7 @@ const vacio = (v: unknown) => v === null || v === undefined || String(v).trim() 
     td.campo { font-weight: 600; color: #455a64; white-space: nowrap; width: 160px; }
     td.elegido { background: #f1f8e9; }
     tr.conteo td { background: #fafafa; }
+    .miniatura { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; margin-top: 6px; border: 1px solid #eceff1; }
     .efectos ul { margin: 0 0 16px; padding-left: 20px; line-height: 1.6; }
     .full { width: 100%; }
     .acciones { display: flex; justify-content: flex-end; gap: 8px; }
@@ -328,8 +336,21 @@ export class UnificarPacientesComponent implements OnInit, OnDestroy {
 
   mostrar = (o: Opcion | string | null): string => typeof o === 'string' ? o : (o?.nombre ?? '');
 
+  /** Opciones del buscador sin el paciente ya elegido en el otro lado. */
+  opcionesPara(lado: Lado): Opcion[] {
+    const otro = this.ids[lado === 'A' ? 'B' : 'A'];
+    return this.opciones[lado]().filter(o => o.id !== otro);
+  }
+
+  urlFoto(lado: Lado): string | null {
+    const v = (this.datos[lado]?.ficha as any)?.foto_url;
+    if (vacio(v)) return null;
+    return String(v).startsWith('http') ? String(v) : `${environment.backendUrl}${v}`;
+  }
+
   onEscribir(lado: Lado, valor: string | Opcion): void {
     if (typeof valor !== 'string') return;
+    this.resultado.set(null);
     this.ids[lado] = null;
     this.limpiarVista();
     this.busqueda$[lado].next(valor);
@@ -384,7 +405,12 @@ export class UnificarPacientesComponent implements OnInit, OnDestroy {
     for (const c of CAMPOS) {
       const vp = (this.datos[p]!.ficha as any)[c.key];
       const vs = (this.datos[s]!.ficha as any)[c.key];
-      this.eleccion[c.key] = vacio(vp) && !vacio(vs) ? s : p;
+      if (c.key === 'foto_url') {
+        // Una foto subida gana sobre el ícono por defecto o la ausencia de foto.
+        this.eleccion[c.key] = !esFotoReal(vp) && esFotoReal(vs) ? s : p;
+      } else {
+        this.eleccion[c.key] = vacio(vp) && !vacio(vs) ? s : p;
+      }
     }
     this.propietarioDe = p;
   }
@@ -422,12 +448,14 @@ export class UnificarPacientesComponent implements OnInit, OnDestroy {
   iguales(campo: string): boolean {
     const a = (this.datos.A?.ficha as any)?.[campo];
     const b = (this.datos.B?.ficha as any)?.[campo];
+    // Sin foto subida en ninguno de los dos: no hay nada que elegir.
+    if (campo === 'foto_url' && !esFotoReal(a) && !esFotoReal(b)) return true;
     return String(a ?? '') === String(b ?? '');
   }
 
   mostrarValor(campo: string, lado: Lado): string {
     const v = (this.datos[lado]?.ficha as any)?.[campo];
-    if (campo === 'foto_url') return vacio(v) ? 'Sin foto' : 'Con foto';
+    if (campo === 'foto_url') return esFotoReal(v) ? 'Foto subida' : (esFotoPorDefecto(v) ? 'Imagen por defecto' : 'Sin foto');
     if (campo === 'esterilizado') return v === true ? 'Sí' : v === false ? 'No' : '—';
     return vacio(v) ? '—' : String(v);
   }
@@ -444,6 +472,7 @@ export class UnificarPacientesComponent implements OnInit, OnDestroy {
     this.pacientesService.ejecutarUnificacion({ ...this.construirCuerpo(), motivo: this.motivo.trim() }).subscribe({
       next: (r) => {
         this.ejecutando.set(false);
+        this.limpiarFormulario();
         this.resultado.set(r);
         this.snackBar.open(r?.message || 'Pacientes unificados', 'Cerrar', { duration: 4000 });
         this.cargarHistorial(false);
@@ -461,12 +490,19 @@ export class UnificarPacientesComponent implements OnInit, OnDestroy {
     this.error.set('');
   }
 
-  reiniciar(): void {
+  /** Deja en blanco la búsqueda y la comparación. */
+  private limpiarFormulario(): void {
     this.texto = { A: '', B: '' };
     this.ids = { A: null, B: null };
+    this.opciones.A.set([]);
+    this.opciones.B.set([]);
     this.motivo = '';
-    this.resultado.set(null);
     this.limpiarVista();
+  }
+
+  reiniciar(): void {
+    this.limpiarFormulario();
+    this.resultado.set(null);
   }
 
   cargarHistorial(masAdelante: boolean): void {

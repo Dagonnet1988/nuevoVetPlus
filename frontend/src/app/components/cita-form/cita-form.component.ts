@@ -32,6 +32,7 @@ import {
   RecurringPreviewItem,
   SugerenciaHorario
 } from '../../models/cita.interface';
+import { sinTildes } from '../../utils/text.utils';
 
 interface EditableRecurringOccurrence {
   indice: number;
@@ -635,14 +636,14 @@ export class CitaFormComponent implements OnInit {
   }
 
   private filterPacientes(searchTerm: string): void {
-    const term = String(searchTerm || '').trim().toLowerCase();
+    const term = sinTildes(String(searchTerm || '').trim());
     if (!term) {
       this.pacientesFiltrados.set(this.pacientes());
       return;
     }
 
     const filtered = this.pacientes().filter((paciente) => {
-      const base = `${paciente.nombre} ${paciente.propietario} ${paciente.especie} ${paciente.raza}`.toLowerCase();
+      const base = sinTildes(`${paciente.nombre} ${paciente.propietario} ${paciente.especie} ${paciente.raza}`);
       return base.includes(term);
     });
 

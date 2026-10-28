@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { contieneSinTildes } from '../utils/textSearch.js';
 import { query } from '../config/database.js';
 import { validationResult } from 'express-validator/lib/index.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -238,7 +239,8 @@ export const getUsers = async (req, res) => {
 
         if (search) {
             paramCount++;
-            selectSQL += ` AND (nombre ILIKE $${paramCount} OR apellido ILIKE $${paramCount} OR email ILIKE $${paramCount})`;
+            const p = `$${paramCount}`;
+            selectSQL += ` AND (${contieneSinTildes('nombre', p)} OR ${contieneSinTildes('apellido', p)} OR ${contieneSinTildes('email', p)})`;
             values.push(`%${search}%`);
         }
 
@@ -274,7 +276,8 @@ export const getUsers = async (req, res) => {
 
         if (search) {
             countParamCount++;
-            countSQL += ` AND (nombre ILIKE $${countParamCount} OR apellido ILIKE $${countParamCount} OR email ILIKE $${countParamCount})`;
+            const p = `$${countParamCount}`;
+            countSQL += ` AND (${contieneSinTildes('nombre', p)} OR ${contieneSinTildes('apellido', p)} OR ${contieneSinTildes('email', p)})`;
             countValues.push(`%${search}%`);
         }
 

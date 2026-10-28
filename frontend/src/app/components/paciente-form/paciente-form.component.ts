@@ -25,6 +25,7 @@ import { QRModalComponent, QRModalData } from '../qr-modal/qr-modal.component';
 import { Cliente, Mascota, PacienteFormData, CreatePacienteResponse } from '../../models/paciente.interface';
 import { sexoDbToFrontend, sexoFrontendToDb, processBackendResponse } from '../../utils/paciente.utils';
 import { environment } from '../../../environments/environment';
+import { sinTildes } from '../../utils/text.utils';
 
 @Component({
   selector: 'app-paciente-form',
@@ -1006,7 +1007,7 @@ export class PacienteFormComponent implements OnInit {
   }
 
     private updateFilteredRazas(rawSearch: string): void {
-      const search = String(rawSearch || '').trim().toLowerCase();
+      const search = sinTildes(String(rawSearch || '').trim());
       const allRazas = this.razasDisponibles() || [];
 
       if (!search) {
@@ -1015,7 +1016,7 @@ export class PacienteFormComponent implements OnInit {
       }
 
       this.filteredRazas.set(
-        allRazas.filter((raza) => String(raza || '').toLowerCase().includes(search))
+        allRazas.filter((raza) => sinTildes(raza).includes(search))
       );
     }
 

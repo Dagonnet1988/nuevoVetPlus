@@ -26,6 +26,7 @@ import { HistoriaClinicaService, TipoDocumento, TIPO_LABELS, TIPO_ICONS } from '
 import { PacientesService } from '../../../services/pacientes.service';
 import { CitasService } from '../../../services/citas.service';
 import { AuthService } from '../../../services/auth.service';
+import { sinTildes } from '../../../utils/text.utils';
 
 type EjercicioCategoriaKey = 'calentamiento' | 'fortalecimiento' | 'hidroterapia' | 'pasivos' | 'agentes';
 
@@ -890,7 +891,7 @@ export class HistoriaClinicaFormComponent implements OnInit, OnDestroy, CanCompo
   }
 
   updateMedicamentosFiltrados(rawSearch: string): void {
-    const search = String(rawSearch || '').trim().toLowerCase();
+    const search = sinTildes(String(rawSearch || '').trim());
     const source = this.medicamentosSugeridos();
 
     if (!search) {
@@ -899,7 +900,7 @@ export class HistoriaClinicaFormComponent implements OnInit, OnDestroy, CanCompo
     }
 
     this.medicamentosFiltrados.set(
-      source.filter((medicamento) => String(medicamento || '').toLowerCase().includes(search))
+      source.filter((medicamento) => sinTildes(medicamento).includes(search))
     );
   }
 

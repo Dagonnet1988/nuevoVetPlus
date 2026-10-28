@@ -11,6 +11,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Router } from '@angular/router';
 import { ConfiguracionService, DiaEspecial, EmpresaConfig, HorarioAtencion } from '../../../services/configuracion.service';
+import { sinTildes } from '../../../utils/text.utils';
 
 const DDMMYYYY_REGEX = /^\d{2}-\d{2}-\d{4}$/;
 const CURRENT_YEAR = String(new Date().getFullYear());
@@ -69,7 +70,7 @@ export class EmpresaConfigComponent implements OnInit {
       const byTipo = tipo === 'todos' || dia.tipo === tipo;
       const byText =
         !text ||
-        dia.descripcion.toLowerCase().includes(text) ||
+        sinTildes(dia.descripcion).includes(sinTildes(text)) ||
         this.formatYmdToDdMmYyyy(dia.fecha).toLowerCase().includes(text);
 
       return byYear && byOrigen && byTipo && byText;

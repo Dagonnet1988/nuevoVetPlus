@@ -1,4 +1,5 @@
 import { query } from '../config/database.js';
+import { contieneSinTildes } from '../utils/textSearch.js';
 import { validationResult } from 'express-validator/lib/index.js';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -169,9 +170,9 @@ export async function getClients(req, res) {
     if (search) {
       paramCount++;
       queryText += ` AND (
-        LOWER(nombre) LIKE LOWER($${paramCount}) OR 
+        ${contieneSinTildes('nombre', `$${paramCount}`)} OR 
         telefono LIKE $${paramCount} OR 
-        LOWER(email) LIKE LOWER($${paramCount}) OR
+        ${contieneSinTildes('email', `$${paramCount}`)} OR
         cedula LIKE $${paramCount}
       )`;
       queryParams.push(`%${search}%`);
@@ -217,9 +218,9 @@ export async function getClients(req, res) {
     if (search) {
       countParamCount++;
       countQuery += ` AND (
-        LOWER(nombre) LIKE LOWER($${countParamCount}) OR 
+        ${contieneSinTildes('nombre', `$${countParamCount}`)} OR 
         telefono LIKE $${countParamCount} OR 
-        LOWER(email) LIKE LOWER($${countParamCount}) OR
+        ${contieneSinTildes('email', `$${countParamCount}`)} OR
         cedula LIKE $${countParamCount}
       )`;
       countParams.push(`%${search}%`);

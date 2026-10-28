@@ -1,4 +1,5 @@
 import { query } from '../config/database.js';
+import { contieneSinTildes } from '../utils/textSearch.js';
 import { v4 as uuidv4 } from 'uuid';
 import { handleDatabaseError } from '../utils/errorHandler.js';
 import { generarPDFHistoria } from '../services/historiaClinicaPDFService.js';
@@ -61,7 +62,7 @@ export const getMedicamentosSugeridos = async (req, res) => {
     let searchClause = '';
     if (search) {
       params.push(`%${search}%`);
-      searchClause = `AND medicamento ILIKE $${params.length}`;
+      searchClause = `AND ${contieneSinTildes('medicamento', `$${params.length}`)}`;
     }
 
     const result = await query(
@@ -462,7 +463,8 @@ export const getHistorias = async (req, res) => {
     }
     if (search) {
       params.push(`%${search}%`);
-      filters.push(`(m.nombre ILIKE $${params.length} OR c.nombre ILIKE $${params.length} OR h.codigo_historia ILIKE $${params.length})`);
+      const p = `$${params.length}`;
+      filters.push(`(${contieneSinTildes('m.nombre', p)} OR ${contieneSinTildes('c.nombre', p)} OR h.codigo_historia ILIKE ${p})`);
     }
 
     const where = filters.join(' AND ');
