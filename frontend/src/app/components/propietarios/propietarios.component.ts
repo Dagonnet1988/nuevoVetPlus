@@ -2,7 +2,8 @@ import { Component, OnInit, signal } from '@angular/core';
 import { extractError } from '../../utils/error.utils';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, ActivatedRoute } from '@angular/router';
+import { ParamMap, Router } from '@angular/router';
+import { usarListaEnUrl } from '../../utils/lista-url.utils';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -346,14 +347,14 @@ export class PropietariosComponent implements OnInit {
   readonly pageSize = 20;
 
   searchForm: FormGroup;
+  private listaUrl = usarListaEnUrl();
 
   constructor(
     private fb: FormBuilder,
     private clientesService: ClientesService,
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
-    private router: Router,
-    private route: ActivatedRoute
+    private router: Router
   ) {
     this.searchForm = this.fb.group({
       search: [''],
@@ -362,12 +363,12 @@ export class PropietariosComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    const initialSearch = String(this.route.snapshot.queryParamMap.get('search') || '').trim();
-    if (initialSearch) {
-      this.searchForm.patchValue({ search: initialSearch }, { emitEvent: false });
-    }
-
+    this.restaurarEstado(this.listaUrl.params());
     this.cargarPropietarios();
+    this.listaUrl.alCambiarDesdeFuera(params => {
+      this.restaurarEstado(params);
+      this.cargarPropietarios();
+    });
 
     // Búsqueda con debounce manual
     let debounce: any;
@@ -385,10 +386,25 @@ export class PropietariosComponent implements OnInit {
     });
   }
 
+  private restaurarEstado(params: ParamMap): void {
+    this.searchForm.patchValue({
+      search: String(params.get('search') || '').trim(),
+      activo: params.get('activo') !== 'false'
+    }, { emitEvent: false });
+
+    const pagina = Number(params.get('page'));
+    this.currentPage.set(Number.isInteger(pagina) && pagina > 1 ? pagina : 1);
+  }
+
   cargarPropietarios(): void {
     this.loading.set(true);
     const search = this.searchForm.get('search')!.value?.trim() || undefined;
     const activo = this.searchForm.get('activo')!.value;
+    this.listaUrl.guardar({
+      search,
+      activo: activo === false ? 'false' : null,
+      page: this.currentPage() > 1 ? this.currentPage() : null
+    });
 
     this.clientesService.getClientes(this.currentPage(), this.pageSize, search, activo).subscribe({
       next: (res) => {

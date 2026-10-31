@@ -1,7 +1,8 @@
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { ParamMap } from '@angular/router';
+import { usarListaEnUrl } from '../../utils/lista-url.utils';
 import { Router } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -18,7 +19,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { Observable, of } from 'rxjs';
-import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
+import { debounceTime, switchMap } from 'rxjs/operators';
 
 import {
   HistoriaClinicaService, HistoriaClinica, HistoriaFilter,
@@ -103,6 +104,7 @@ export class HistoriaClinicaComponent implements OnInit {
   pacienteColumns = ['mascota', 'propietario', 'total', 'ultima', 'acciones'];
   historyColumns  = ['fecha', 'codigo', 'tipo', 'veterinario', 'acciones'];
   private pendingMascotaId: string | null = null;
+  private listaUrl = usarListaEnUrl();
 
   constructor(
     private fb: FormBuilder,
@@ -110,7 +112,6 @@ export class HistoriaClinicaComponent implements OnInit {
     private citasService: CitasService,
     private snackBar: MatSnackBar,
     private dialog: MatDialog,
-    private route: ActivatedRoute,
     private router: Router
   ) {
     this.filterForm = this.fb.group({
@@ -121,12 +122,44 @@ export class HistoriaClinicaComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.pendingMascotaId = this.route.snapshot.queryParamMap.get('id_mascota');
+    this.restaurarEstado(this.listaUrl.params());
     this.loadHistorias();
     this.filterForm.valueChanges.pipe(
-      debounceTime(400),
-      distinctUntilChanged((a, b) => JSON.stringify(a) === JSON.stringify(b))
+      debounceTime(400)
     ).subscribe(() => this.loadHistorias());
+    this.listaUrl.alCambiarDesdeFuera(params => {
+      this.mascotaActual.set(null);
+      this.vistaActual.set('pacientes');
+      this.restaurarEstado(params);
+      this.loadHistorias();
+    });
+  }
+
+  private restaurarEstado(params: ParamMap): void {
+    this.pendingMascotaId = params.get('id_mascota');
+    this.mostrarAnulados = params.get('anulados') === '1';
+    this.filterForm.patchValue({
+      search: params.get('search') ?? '',
+      fecha_desde: this.fechaDesdeUrl(params.get('desde')),
+      fecha_hasta: this.fechaDesdeUrl(params.get('hasta'))
+    }, { emitEvent: false });
+  }
+
+  private guardarEstado(): void {
+    const v = this.filterForm.value;
+    this.listaUrl.guardar({
+      search: v.search,
+      desde: v.fecha_desde ? this.toDateStr(v.fecha_desde) : null,
+      hasta: v.fecha_hasta ? this.toDateStr(v.fecha_hasta) : null,
+      anulados: this.mostrarAnulados ? 1 : null,
+      id_mascota: this.mascotaActual()?.id_mascota ?? this.pendingMascotaId
+    });
+  }
+
+  /** La fecha de la URL (YYYY-MM-DD) se interpreta en hora local para no mover el día. */
+  private fechaDesdeUrl(valor: string | null): Date | string {
+    const partes = /^(\d{4})-(\d{2})-(\d{2})$/.exec(valor ?? '');
+    return partes ? new Date(+partes[1], +partes[2] - 1, +partes[3]) : '';
   }
 
   sortBy(col: string): void {
@@ -164,6 +197,7 @@ export class HistoriaClinicaComponent implements OnInit {
 
   loadHistorias(): void {
     this.loading.set(true);
+    this.guardarEstado();
     const v = this.filterForm.value;
     const filters: HistoriaFilter = {
       search:      v.search      || undefined,
@@ -208,11 +242,13 @@ export class HistoriaClinicaComponent implements OnInit {
     }
     this.mascotaActual.set(p);
     this.vistaActual.set('historias');
+    this.guardarEstado();
   }
 
   volverAPacientes(): void {
     this.mascotaActual.set(null);
     this.vistaActual.set('pacientes');
+    this.guardarEstado();
   }
 
   nueva(): void {

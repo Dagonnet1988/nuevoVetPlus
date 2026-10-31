@@ -127,6 +127,7 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
             color: rawData.color,
             microchip: rawData.microchip,
             foto_url: rawData.foto_url, // ¡FALTABA ESTE CAMPO!
+            foto_encuadre: rawData.foto_encuadre,
             activo: rawData.activo,
             fecha_registro: rawData.created_at || rawData.fecha_registro,
             cliente: {

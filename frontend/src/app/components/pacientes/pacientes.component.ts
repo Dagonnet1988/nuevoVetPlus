@@ -18,9 +18,10 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { Router, RouterLink } from '@angular/router';
+import { ParamMap, Router, RouterLink } from '@angular/router';
+import { usarListaEnUrl } from '../../utils/lista-url.utils';
 import { AuthService } from '../../services/auth.service';
-import { Subscription, debounceTime, distinctUntilChanged } from 'rxjs';
+import { Subscription, debounceTime } from 'rxjs';
 
 import { PacientesService } from '../../services/pacientes.service';
 import { Mascota, PacienteFilter } from '../../models/paciente.interface';
@@ -88,6 +89,7 @@ export class PacientesComponent implements OnInit, OnDestroy {
   @ViewChild(MatSort) sort!: MatSort;
 
   private authService = inject(AuthService);
+  private listaUrl = usarListaEnUrl();
 
   /** Unificar pacientes: solo administradores y veterinarios. */
   puedeUnificar(): boolean {
@@ -112,16 +114,51 @@ export class PacientesComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.restaurarEstado(this.listaUrl.params());
     this.loadPacientes();
     this.loadEstadisticas();
     this.setupFilters();
     this.setupPhotoUpdateListener();
+    this.listaUrl.alCambiarDesdeFuera(params => {
+      this.restaurarEstado(params);
+      this.loadPacientes();
+    });
+  }
+
+  private restaurarEstado(params: ParamMap): void {
+    const activo = params.get('activo');
+    this.filterForm.patchValue({
+      search: params.get('search') ?? '',
+      especie: params.get('especie') ?? '',
+      activo: activo === null ? null : activo === 'true'
+    }, { emitEvent: false });
+
+    const pagina = Number(params.get('page'));
+    const tamano = Number(params.get('size'));
+    this.currentPage.set(Number.isInteger(pagina) && pagina > 1 ? pagina - 1 : 0);
+    this.pageSize.set([10, 25, 50, 100].includes(tamano) ? tamano : 50);
+
+    const [columna, direccion] = (params.get('orden') ?? '').split(':');
+    this.aplicarOrden(columna || 'paciente', direccion === 'desc' ? 'desc' : 'asc');
+  }
+
+  private guardarEstado(): void {
+    const { search, especie, activo } = this.filterForm.value;
+    const ordenPorDefecto = this.sortActive() === 'paciente' && this.sortDirection() === 'asc';
+    this.listaUrl.guardar({
+      search,
+      especie,
+      activo,
+      page: this.currentPage() > 0 ? this.currentPage() + 1 : null,
+      size: this.pageSize() !== 50 ? this.pageSize() : null,
+      orden: ordenPorDefecto ? null : `${this.sortActive()}:${this.sortDirection()}`
+    });
   }
 
   private setupFilters(): void {
     // Configurar filtros reactivos con debounce
     this.filterForm.get('search')?.valueChanges
-      .pipe(debounceTime(300), distinctUntilChanged())
+      .pipe(debounceTime(300))
       .subscribe(() => {
         this.onFilterChange();
       });
@@ -130,6 +167,7 @@ export class PacientesComponent implements OnInit, OnDestroy {
   loadPacientes(): void {
     this.loading.set(true);
     this.loadSubscription?.unsubscribe();
+    this.guardarEstado();
 
     const filters: PacienteFilter = {
       search: this.filterForm.value.search || undefined,
@@ -253,13 +291,17 @@ export class PacientesComponent implements OnInit, OnDestroy {
   }
 
   onSortChange(event: Sort): void {
+    this.aplicarOrden(event.active || 'paciente', (event.direction || 'asc') as SortDirection);
+    this.currentPage.set(0);
+    this.loadPacientes();
+  }
+
+  private aplicarOrden(uiActive: string, uiDirection: SortDirection): void {
     const sortMap: { [key: string]: 'nombre' | 'cliente_nombre' } = {
       paciente: 'nombre',
       propietario: 'cliente_nombre'
     };
 
-    const uiActive = event.active || 'paciente';
-    const uiDirection: SortDirection = (event.direction || 'asc') as SortDirection;
     const mappedSortBy = sortMap[uiActive] || 'nombre';
     const mappedSortOrder: 'ASC' | 'DESC' = uiDirection === 'desc' ? 'DESC' : 'ASC';
 
@@ -268,8 +310,6 @@ export class PacientesComponent implements OnInit, OnDestroy {
 
     this.sortBy.set(mappedSortBy);
     this.sortOrder.set(mappedSortOrder);
-    this.currentPage.set(0);
-    this.loadPacientes();
   }
 
   // Acciones de la tabla

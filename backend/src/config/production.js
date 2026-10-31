@@ -14,7 +14,7 @@ export const productionConfig = {
     // Configuración general
     app: {
         name: process.env.APP_NAME || 'VetPlus',
-        version: process.env.APP_VERSION || '1.2.0',
+        version: process.env.APP_VERSION || '1.3.0',
         port: parseInt(process.env.PORT) || 3000,
         env: process.env.NODE_ENV || 'development',
         timezone: process.env.TIMEZONE || 'America/Bogota',

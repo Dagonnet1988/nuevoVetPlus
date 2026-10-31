@@ -18,7 +18,8 @@ import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatBadgeModule } from '@angular/material/badge';
-import { Router } from '@angular/router';
+import { ParamMap, Router } from '@angular/router';
+import { usarListaEnUrl } from '../../utils/lista-url.utils';
 import { environment } from '../../../environments/environment';
 import { TempPasswordDialogComponent } from './components/usuario-profile.component';
 
@@ -66,6 +67,7 @@ export class UsuariosComponent implements OnInit {
   private snackBar = inject(MatSnackBar);
   private dialog = inject(MatDialog);
   private router = inject(Router);
+  private listaUrl = usarListaEnUrl();
   private location = inject(Location);
 
   // Signals
@@ -107,8 +109,23 @@ export class UsuariosComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.restaurarEstado(this.listaUrl.params());
     this.loadInitialData();
     this.setupFilters();
+    this.listaUrl.alCambiarDesdeFuera(params => {
+      this.restaurarEstado(params);
+      this.loadUsuarios();
+    });
+  }
+
+  private restaurarEstado(params: ParamMap): void {
+    this.filterForm.patchValue({
+      search: params.get('search') ?? '',
+      rol: params.get('rol') ?? ''
+    }, { emitEvent: false });
+
+    const vista = params.get('vista');
+    this.currentView.set(vista === 'activos' || vista === 'inactivos' ? vista : 'todos');
   }
 
   private loadInitialData(): void {
@@ -117,6 +134,13 @@ export class UsuariosComponent implements OnInit {
 
   private loadUsuarios(): void {
     this.loading.set(true);
+
+    const { search, rol } = this.filterForm.value;
+    this.listaUrl.guardar({
+      search,
+      rol,
+      vista: this.currentView() !== 'todos' ? this.currentView() : null
+    });
 
     const filtros: FiltroUsuarios = this.buildFiltros();
 

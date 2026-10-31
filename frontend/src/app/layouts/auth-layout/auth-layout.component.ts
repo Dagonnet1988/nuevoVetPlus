@@ -4,6 +4,7 @@ import { RouterOutlet } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-auth-layout',
@@ -56,7 +57,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 
         <div class="footer-bottom">
           <p class="copyright">© {{ currentYear }} Ramelo. Todos los derechos reservados.</p>
-          <p class="version">Versión 1.0.0</p>
+          <p class="version">Versión {{ appVersion }}</p>
         </div>
       </footer>
     </div>
@@ -269,4 +270,5 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 })
 export class AuthLayoutComponent {
   currentYear = new Date().getFullYear();
+  readonly appVersion = environment.version;
 }
