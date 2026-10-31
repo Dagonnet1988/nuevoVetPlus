@@ -24,7 +24,10 @@ import { CitasService } from '../../services/citas.service';
 import { ConsultasService } from '../../services/consultas.service';
 import { HistoriaClinicaService } from '../../services/historia-clinica.service';
 import { ConsentimientoStatusComponent } from '../consentimiento-status/consentimiento-status.component';
-import { Mascota, Cliente } from '../../models/paciente.interface';
+import { FotoEncuadre, Mascota, Cliente } from '../../models/paciente.interface';
+import { esFotoSubida } from '../../utils/paciente.utils';
+import { FotoEncuadreDirective } from '../../directives/foto-encuadre.directive';
+import { FotoEncuadreDialogComponent, FotoEncuadreDialogData } from '../foto-encuadre-dialog/foto-encuadre-dialog.component';
 import { environment } from '../../../environments/environment';
 import { Subscription, firstValueFrom } from 'rxjs';
 
@@ -33,6 +36,7 @@ import { Subscription, firstValueFrom } from 'rxjs';
   standalone: true,
   imports: [
     CommonModule,
+    FotoEncuadreDirective,
     MatCardModule,
     MatButtonModule,
     MatIconModule,
@@ -689,6 +693,33 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
     }
   }
 
+  puedeEncuadrar(): boolean {
+    return esFotoSubida(this.paciente()?.foto_url);
+  }
+
+  encuadrarFoto(): void {
+    const paciente = this.paciente();
+    if (!paciente?.foto_url || !this.pacienteId) return;
+
+    this.abrirEncuadre(this.getImageUrl(paciente.foto_url), paciente.foto_encuadre).subscribe(encuadre => {
+      if (!encuadre) return;
+      this.pacientesService.actualizarEncuadreFoto(this.pacienteId!, encuadre).subscribe({
+        next: () => this.snackBar.open('Encuadre guardado', 'Cerrar', { duration: 3000 }),
+        error: (error) => {
+          console.error('Error guardando encuadre:', error);
+          this.snackBar.open('Error al guardar el encuadre', 'Cerrar', { duration: 3000 });
+        }
+      });
+    });
+  }
+
+  private abrirEncuadre(src: string, encuadre?: FotoEncuadre | null) {
+    return this.dialog.open<FotoEncuadreDialogComponent, FotoEncuadreDialogData, FotoEncuadre>(
+      FotoEncuadreDialogComponent,
+      { data: { src, encuadre }, width: '420px', maxWidth: '95vw' }
+    ).afterClosed();
+  }
+
   // Funciones para cambio de foto
   changePhoto(): void {
     // Activar el input de archivo oculto
@@ -720,16 +751,24 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.pacientesService.uploadFotoPaciente(this.pacienteId, file).subscribe({
-      next: (response) => {
-        this.snackBar.open('Foto actualizada exitosamente', 'Cerrar', { duration: 3000 });
-        // La actualización se hará automáticamente mediante el listener de photoUpdated$
-      },
-      error: (error) => {
-        console.error('Error subiendo foto:', error);
-        this.snackBar.open('Error al subir la foto', 'Cerrar', { duration: 3000 });
-      }
-    });
+    // Elegir el encuadre antes de subir; si se cancela no se cambia la foto
+    const reader = new FileReader();
+    reader.onload = (e: any) => {
+      this.abrirEncuadre(e.target.result).subscribe(encuadre => {
+        if (!encuadre) return;
+        this.pacientesService.uploadFotoPaciente(this.pacienteId!, file, encuadre).subscribe({
+          next: (response) => {
+            this.snackBar.open('Foto actualizada exitosamente', 'Cerrar', { duration: 3000 });
+            // La actualización se hará automáticamente mediante el listener de photoUpdated$
+          },
+          error: (error) => {
+            console.error('Error subiendo foto:', error);
+            this.snackBar.open('Error al subir la foto', 'Cerrar', { duration: 3000 });
+          }
+        });
+      });
+    };
+    reader.readAsDataURL(file);
 
     // Limpiar el input
     event.target.value = '';
@@ -893,7 +932,8 @@ export class PacienteDetailsComponent implements OnInit, OnDestroy {
         if (currentPaciente) {
           this.paciente.set({
             ...currentPaciente,
-            foto_url: photoUpdate.fotoUrl
+            foto_url: photoUpdate.fotoUrl,
+            foto_encuadre: photoUpdate.encuadre ?? null
           });
         }
       }

@@ -175,7 +175,7 @@
                       <div class="patient-header">
                         <div class="patient-avatar">
                           @if (cita()!.mascota!.foto_url) {
-                            <img [src]="getAssetUrl(cita()!.mascota!.foto_url)" [alt]="cita()!.mascota!.nombre">
+                            <img [src]="getAssetUrl(cita()!.mascota!.foto_url)" [alt]="cita()!.mascota!.nombre" [appFotoEncuadre]="cita()!.mascota!.foto_encuadre">
                           } @else {
                             <mat-icon>pets</mat-icon>
                           }

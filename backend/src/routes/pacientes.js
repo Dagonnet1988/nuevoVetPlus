@@ -12,6 +12,7 @@ import {
   getEspecies,
   getRazasByEspecie,
   uploadFotoPaciente,
+  actualizarEncuadreFoto,
   eliminarFotoPaciente,
   getFotoPaciente
 } from '../controllers/pacientesController.js';
@@ -160,6 +161,17 @@ router.post('/:id/foto',
   authorize(['admin', 'vet', 'aux']),
   uploadPacienteFoto,
   uploadFotoPaciente
+);
+
+/**
+ * @route   PUT /api/clinical/pacientes/:id/foto/encuadre
+ * @desc    Guardar cómo se muestra la foto (no modifica el archivo)
+ * @access  Private (admin, vet, aux)
+ */
+router.put('/:id/foto/encuadre',
+  authenticateToken,
+  authorize(['admin', 'vet', 'aux']),
+  actualizarEncuadreFoto
 );
 
 /**

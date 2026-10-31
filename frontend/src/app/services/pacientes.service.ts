@@ -5,6 +5,7 @@ import { map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import {
   Cliente,
+  FotoEncuadre,
   Mascota,
   PacienteCompleto,
   PacienteFormData,
@@ -71,7 +72,7 @@ export class PacientesService {
   private readonly API_URL = `${environment.apiUrl}/clinical`;
 
   // BehaviorSubject para notificar cambios de fotos
-  private photoUpdatedSubject = new BehaviorSubject<{mascotaId: string, fotoUrl: string} | null>(null);
+  private photoUpdatedSubject = new BehaviorSubject<{mascotaId: string, fotoUrl: string, encuadre?: FotoEncuadre | null} | null>(null);
   public photoUpdated$ = this.photoUpdatedSubject.asObservable();
 
   constructor(private http: HttpClient) {}
@@ -205,9 +206,12 @@ export class PacientesService {
   // MANEJO DE FOTOS
   // ===============================
 
-  uploadFotoPaciente(id: string, foto: File): Observable<any> {
+  uploadFotoPaciente(id: string, foto: File, encuadre?: FotoEncuadre | null): Observable<any> {
     const formData = new FormData();
     formData.append('foto', foto);
+    if (encuadre) {
+      formData.append('encuadre', JSON.stringify(encuadre));
+    }
     return this.http.post<any>(`${this.API_URL}/pacientes/${id}/foto`, formData)
       .pipe(
         map(response => {
@@ -215,7 +219,24 @@ export class PacientesService {
           if (response.success && response.data?.foto_url) {
             this.photoUpdatedSubject.next({
               mascotaId: id,
-              fotoUrl: response.data.foto_url
+              fotoUrl: response.data.foto_url,
+              encuadre: response.data.foto_encuadre ?? null
+            });
+          }
+          return response;
+        })
+      );
+  }
+
+  actualizarEncuadreFoto(id: string, encuadre: FotoEncuadre | null): Observable<any> {
+    return this.http.put<any>(`${this.API_URL}/pacientes/${id}/foto/encuadre`, { encuadre })
+      .pipe(
+        map(response => {
+          if (response.success) {
+            this.photoUpdatedSubject.next({
+              mascotaId: id,
+              fotoUrl: response.data?.foto_url || '',
+              encuadre: response.data?.foto_encuadre ?? null
             });
           }
           return response;
@@ -235,7 +256,8 @@ export class PacientesService {
           if (response.success) {
             this.photoUpdatedSubject.next({
               mascotaId: id,
-              fotoUrl: response.data?.foto_url || ''
+              fotoUrl: response.data?.foto_url || '',
+              encuadre: null
             });
           }
           return response;

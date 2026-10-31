@@ -3,6 +3,7 @@ import { validationResult } from 'express-validator/lib/index.js';
 import { v4 as uuidv4 } from 'uuid';
 import { calculatePetAge } from '../utils/ageCalculator.js';
 import { eliminarFotoAnterior, getFotoDefaultPorEspecie } from '../middleware/uploadMiddleware.js';
+import { normalizarEncuadre } from '../utils/fotoEncuadre.js';
 import path from 'path';
 
 /**
@@ -240,6 +241,7 @@ export async function getPacienteById(req, res) {
         m.microchip,
         m.notas,
         m.foto_url,
+        m.foto_encuadre,
         m.activo,
         m.created_at,
         m.updated_at,
@@ -282,6 +284,7 @@ export async function getPacienteById(req, res) {
       microchip: paciente.microchip,
       notas: paciente.notas,
       foto_url: paciente.foto_url,
+      foto_encuadre: paciente.foto_encuadre,
       activo: paciente.activo,
       created_at: paciente.created_at,
       updated_at: paciente.updated_at,
@@ -655,6 +658,7 @@ export async function getMascotasConCliente(req, res) {
         m.microchip,
         m.esterilizado,
         m.foto_url,
+        m.foto_encuadre,
         m.activo,
         m.created_at as fecha_registro,
         c.id_cliente,
@@ -782,6 +786,7 @@ export async function getMascotasConCliente(req, res) {
       microchip: row.microchip,
       esterilizado: row.esterilizado,
       foto_url: row.foto_url,
+      foto_encuadre: row.foto_encuadre,
       activo: row.activo,
       fecha_registro: row.fecha_registro,
       edadCompleta: calculatePetAge(row.fecha_nacimiento),
@@ -990,11 +995,13 @@ export async function uploadFotoPaciente(req, res) {
 
     const fotoAnterior = mascotaResult.rows[0].foto_url;
     const nuevaFotoUrl = `/uploads/pacientes/${req.file.filename}`;
+    // El encuadre pertenece a cada foto: una foto nueva sin encuadre se ve centrada.
+    const encuadre = normalizarEncuadre(req.body?.encuadre);
 
     // Actualizar la URL de la foto en la base de datos
     const updateResult = await query(
-      'UPDATE clinical.mascotas SET foto_url = $1, updated_at = CURRENT_TIMESTAMP WHERE id_mascota = $2 RETURNING *',
-      [nuevaFotoUrl, id]
+      'UPDATE clinical.mascotas SET foto_url = $1, foto_encuadre = $3::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id_mascota = $2 RETURNING *',
+      [nuevaFotoUrl, id, encuadre ? JSON.stringify(encuadre) : null]
     );
 
     if (updateResult.rows.length === 0) {
@@ -1012,6 +1019,7 @@ export async function uploadFotoPaciente(req, res) {
       message: 'Foto subida exitosamente',
       data: {
         foto_url: nuevaFotoUrl,
+        foto_encuadre: encuadre,
         filename: req.file.filename
       }
     });
@@ -1050,6 +1058,52 @@ export async function uploadFotoPaciente(req, res) {
 }
 
 /**
+ * Guardar cómo se muestra la foto de un paciente. El archivo original no se modifica.
+ */
+export async function actualizarEncuadreFoto(req, res) {
+  try {
+    const { id } = req.params;
+    const valor = req.body?.encuadre ?? null;
+    const encuadre = normalizarEncuadre(valor);
+
+    if (valor !== null && !encuadre) {
+      return res.status(400).json({
+        success: false,
+        message: 'Encuadre inválido'
+      });
+    }
+
+    const result = await query(
+      `UPDATE clinical.mascotas
+       SET foto_encuadre = $1::jsonb, updated_at = CURRENT_TIMESTAMP
+       WHERE id_mascota = $2 AND id_tenant = $3
+       RETURNING foto_url, foto_encuadre`,
+      [encuadre ? JSON.stringify(encuadre) : null, id, req.tenantId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Mascota no encontrada'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Encuadre guardado',
+      data: result.rows[0]
+    });
+
+  } catch (error) {
+    console.error('Error guardando encuadre de foto:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+}
+
+/**
  * Eliminar foto de paciente y restaurar imagen por defecto
  */
 export async function eliminarFotoPaciente(req, res) {
@@ -1081,7 +1135,7 @@ export async function eliminarFotoPaciente(req, res) {
 
     // Actualizar con imagen por defecto
     const updateResult = await query(
-      'UPDATE clinical.mascotas SET foto_url = $1, updated_at = CURRENT_TIMESTAMP WHERE id_mascota = $2 RETURNING *',
+      'UPDATE clinical.mascotas SET foto_url = $1, foto_encuadre = NULL, updated_at = CURRENT_TIMESTAMP WHERE id_mascota = $2 RETURNING *',
       [fotoDefault, id]
     );
 
@@ -1099,7 +1153,8 @@ export async function eliminarFotoPaciente(req, res) {
       success: true,
       message: 'Foto eliminada y restaurada imagen por defecto',
       data: {
-        foto_url: fotoDefault
+        foto_url: fotoDefault,
+        foto_encuadre: null
       }
     });
 

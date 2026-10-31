@@ -49,6 +49,7 @@ CREATE TABLE clinical.mascotas (
     microchip VARCHAR(50),
     notas TEXT,
     foto_url TEXT,
+    foto_encuadre JSONB, -- {x, y, zoom}: cómo se muestra la foto; NULL = centrada
     activo BOOLEAN DEFAULT true,
     -- Multi-tenancy
     id_tenant UUID NOT NULL DEFAULT system.get_default_tenant()

@@ -84,6 +84,11 @@ export function isValidSexo(sexo: string): boolean {
 /**
  * Procesa los datos de respuesta del backend de forma robusta
  */
+/** true si es una foto subida por el usuario (no la imagen por defecto de la especie). */
+export function esFotoSubida(fotoUrl?: string | null): boolean {
+  return !!fotoUrl && fotoUrl.trim() !== '' && !fotoUrl.includes('/uploads/pacientes/default/');
+}
+
 export function processBackendResponse<T>(response: any): {
   data: T | null;
   success: boolean;

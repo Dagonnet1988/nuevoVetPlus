@@ -150,7 +150,17 @@ export async function getClients(req, res) {
             AND TRIM(m.foto_url) <> ''
           ORDER BY m.created_at ASC
           LIMIT 1
-        ) as foto_primer_mascota
+        ) as foto_primer_mascota,
+        (
+          SELECT m.foto_encuadre
+          FROM clinical.mascotas m
+          WHERE m.id_cliente = c.id_cliente
+            AND m.activo = true
+            AND m.foto_url IS NOT NULL
+            AND TRIM(m.foto_url) <> ''
+          ORDER BY m.created_at ASC
+          LIMIT 1
+        ) as foto_primer_mascota_encuadre
       FROM clinical.clientes c
       LEFT JOIN LATERAL (
         SELECT cs.estado
@@ -282,6 +292,7 @@ export async function getClientById(req, res) {
                 'sexo', m.sexo,
                 'peso', m.peso,
                 'foto_url', m.foto_url,
+                'foto_encuadre', m.foto_encuadre,
                 'edad_años', EXTRACT(YEAR FROM AGE(m.fecha_nacimiento)),
                 'activo', m.activo
               )

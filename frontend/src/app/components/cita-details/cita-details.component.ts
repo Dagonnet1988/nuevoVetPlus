@@ -29,11 +29,14 @@ import { HistoriaClinica, HistoriaClinicaService } from '../../services/historia
 import { Cita, TIPOS_CITA, ESTADOS_CITA } from '../../models/cita.interface';
 import { CancelacionMasivaDialogComponent, CancelacionMasivaData } from '../citas/cancelacion-masiva-dialog.component';
 
+import { FotoEncuadreDirective } from '../../directives/foto-encuadre.directive';
+
 @Component({
   selector: 'app-cita-details',
   standalone: true,
   imports: [
     CommonModule,
+    FotoEncuadreDirective,
     MatCardModule,
     MatButtonModule,
     MatIconModule,
@@ -1142,6 +1145,7 @@ export class CitaDetailsComponent implements OnInit {
         especie: citaData.especie || citaData.mascota_especie || 'No especificado',
         raza: citaData.raza || citaData.mascota_raza,
         foto_url: citaData.mascota_foto_url || citaData.foto_url,
+        foto_encuadre: citaData.mascota_foto_encuadre,
         cliente: {
           nombre: citaData.cliente_nombre || 'Sin nombre',
           documento: citaData.cliente_documento,

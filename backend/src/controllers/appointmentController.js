@@ -3056,6 +3056,7 @@ const getAppointmentWithDetails = async (id_cita, tenantId = null) => {
             m.especie,
             m.raza,
             m.foto_url as mascota_foto_url,
+            m.foto_encuadre as mascota_foto_encuadre,
             m.fecha_nacimiento,
             cl.nombre as cliente_nombre,
             cl.cedula as cliente_documento,

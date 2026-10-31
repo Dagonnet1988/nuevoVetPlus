@@ -147,6 +147,7 @@
                     <img [src]="getImageUrl(paciente.foto_url)"
                          [alt]="paciente.nombre"
                          class="patient-image"
+                         [appFotoEncuadre]="paciente.foto_encuadre"
                          crossorigin="anonymous"
                          (error)="onImageError($event)">
                   } @else {

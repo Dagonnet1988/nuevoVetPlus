@@ -136,11 +136,13 @@
               (click)="verPacientes(p)"
               matTooltip="Ver mascotas de este propietario">
               @if (p.foto_primer_mascota) {
-                <img
-                  class="mascota-preview-btn"
-                  [src]="getMascotaPreviewUrl(p.foto_primer_mascota)"
-                  alt="Mascota"
-                  (error)="$event.target.style.display='none'" />
+                <span class="mascota-preview-btn">
+                  <img
+                    [src]="getMascotaPreviewUrl(p.foto_primer_mascota)"
+                    alt="Mascota"
+                    [appFotoEncuadre]="p.foto_primer_mascota_encuadre"
+                    (error)="$event.target.style.display='none'" />
+                </span>
               } @else {
                 <mat-icon>pets</mat-icon>
               }

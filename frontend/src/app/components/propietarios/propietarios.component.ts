@@ -23,6 +23,8 @@ import { Mascota } from '../../models/paciente.interface';
 import { ConsentimientoStatusComponent } from '../consentimiento-status/consentimiento-status.component';
 import { environment } from '../../../environments/environment';
 
+import { FotoEncuadreDirective } from '../../directives/foto-encuadre.directive';
+
 // ── Dialog de edición ──────────────────────────────────────────────────────
 @Component({
   selector: 'app-editar-propietario-dialog',
@@ -157,6 +159,7 @@ export class EditarPropietarioDialogComponent {
   standalone: true,
   imports: [
     CommonModule,
+    FotoEncuadreDirective,
     MatButtonModule,
     MatIconModule,
     MatProgressSpinnerModule,
@@ -191,7 +194,7 @@ export class EditarPropietarioDialogComponent {
                  matTooltip="Ver ficha de {{ m.nombre }}">
               <div class="mascota-avatar">
                 @if (m.foto_url && m.foto_url.trim() !== '') {
-                  <img [src]="getImageUrl(m.foto_url)" [alt]="m.nombre" class="mascota-foto" (error)="onImgError($event)" />
+                  <img [src]="getImageUrl(m.foto_url)" [alt]="m.nombre" class="mascota-foto" [appFotoEncuadre]="m.foto_encuadre" (error)="onImgError($event)" />
                 } @else {
                   <mat-icon class="mascota-icon-placeholder">pets</mat-icon>
                 }
@@ -317,6 +320,7 @@ export class ConsentimientoPropietarioDialogComponent {
   standalone: true,
   imports: [
     CommonModule,
+    FotoEncuadreDirective,
     ReactiveFormsModule,
     MatCardModule,
     MatButtonModule,

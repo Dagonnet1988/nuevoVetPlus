@@ -11,6 +11,7 @@
           <img [src]="getImageUrl(paciente()?.foto_url!)"
                [alt]="paciente()?.nombre"
                class="patient-image clickable"
+               [appFotoEncuadre]="paciente()?.foto_encuadre"
                crossorigin="anonymous"
                (click)="openImageDialog(getImageUrl(paciente()?.foto_url!), paciente()?.nombre!)"
                (error)="onImageError($event)"
@@ -70,6 +71,12 @@
           <mat-icon>photo_camera</mat-icon>
           Cambiar Foto
         </button>
+        @if (puedeEncuadrar()) {
+          <button mat-menu-item (click)="encuadrarFoto()">
+            <mat-icon>crop</mat-icon>
+            Encuadrar Foto
+          </button>
+        }
         <mat-divider></mat-divider>
         <button mat-menu-item (click)="exportData()">
           <mat-icon>description</mat-icon>

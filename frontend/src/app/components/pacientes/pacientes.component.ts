@@ -26,11 +26,14 @@ import { PacientesService } from '../../services/pacientes.service';
 import { Mascota, PacienteFilter } from '../../models/paciente.interface';
 import { environment } from '../../../environments/environment';
 
+import { FotoEncuadreDirective } from '../../directives/foto-encuadre.directive';
+
 @Component({
   selector: 'app-pacientes',
   standalone: true,
   imports: [
     CommonModule,
+    FotoEncuadreDirective,
     ReactiveFormsModule,
     MatTableModule,
     MatPaginatorModule,
@@ -369,6 +372,7 @@ export class PacientesComponent implements OnInit, OnDestroy {
 
         if (mascotaIndex !== -1) {
           currentData[mascotaIndex].foto_url = photoUpdate.fotoUrl;
+          currentData[mascotaIndex].foto_encuadre = photoUpdate.encuadre ?? null;
           // Forzar actualización de la tabla
           this.dataSource.data = [...currentData];
         }

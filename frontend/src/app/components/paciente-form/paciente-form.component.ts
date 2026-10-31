@@ -2,6 +2,7 @@ import { Component, OnInit, signal, computed } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -22,8 +23,10 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { PacientesService } from '../../services/pacientes.service';
 import { ConsentimientosService } from '../../services/consentimientos.service';
 import { QRModalComponent, QRModalData } from '../qr-modal/qr-modal.component';
-import { Cliente, Mascota, PacienteFormData, CreatePacienteResponse } from '../../models/paciente.interface';
-import { sexoDbToFrontend, sexoFrontendToDb, processBackendResponse } from '../../utils/paciente.utils';
+import { Cliente, FotoEncuadre, Mascota, PacienteFormData, CreatePacienteResponse } from '../../models/paciente.interface';
+import { esFotoSubida, sexoDbToFrontend, sexoFrontendToDb, processBackendResponse } from '../../utils/paciente.utils';
+import { FotoEncuadreDirective } from '../../directives/foto-encuadre.directive';
+import { FotoEncuadreDialogComponent, FotoEncuadreDialogData } from '../foto-encuadre-dialog/foto-encuadre-dialog.component';
 import { environment } from '../../../environments/environment';
 import { sinTildes } from '../../utils/text.utils';
 
@@ -48,6 +51,7 @@ import { sinTildes } from '../../utils/text.utils';
     MatStepperModule,
     MatDividerModule,
     MatChipsModule,
+    FotoEncuadreDirective,
     MatDialogModule
   ],
   template: `
@@ -286,11 +290,12 @@ import { sinTildes } from '../../utils/text.utils';
                 <div class="photo-upload-container">
                   <div class="photo-preview">
                     @if (selectedPhoto()) {
-                      <img [src]="selectedPhoto()!" [alt]="pacienteForm.value.nombre_mascota" class="preview-image">
+                      <img [src]="selectedPhoto()!" [alt]="pacienteForm.value.nombre_mascota" class="preview-image" [appFotoEncuadre]="encuadre()">
                     } @else if (currentPhotoUrl()) {
                       <img [src]="getImageUrl(currentPhotoUrl()!)"
                            [alt]="pacienteForm.value.nombre_mascota"
                            class="preview-image"
+                           [appFotoEncuadre]="encuadre()"
                            (error)="onImageError($event)">
                     } @else {
                       <mat-icon class="default-pet-icon">pets</mat-icon>
@@ -315,7 +320,15 @@ import { sinTildes } from '../../utils/text.utils';
                       Subir Foto
                     </button>
 
-                    @if (selectedPhoto() || currentPhotoUrl()) {
+                    @if (tieneFoto()) {
+                      <button mat-stroked-button
+                              type="button"
+                              (click)="abrirEncuadre()"
+                              class="upload-button">
+                        <mat-icon>crop</mat-icon>
+                        Encuadrar
+                      </button>
+
                       <button mat-stroked-button
                               type="button"
                               (click)="removePhoto()"
@@ -709,6 +722,14 @@ export class PacienteFormComponent implements OnInit {
   selectedPhoto = signal<string | null>(null);
   currentPhotoUrl = signal<string | null>(null);
   selectedFile = signal<File | null>(null);
+  encuadre = signal<FotoEncuadre | null>(null);
+  encuadreCambiado = signal(false);
+  tieneFoto = computed(() => !!this.selectedPhoto() || esFotoSubida(this.currentPhotoUrl()));
+  // La foto subida solo se elimina del servidor al guardar el formulario.
+  fotoPorEliminar = computed(() =>
+    esFotoSubida(this.fotoGuardada()) && !this.currentPhotoUrl() && !this.selectedFile());
+  private fotoGuardada = signal<string | null>(null);
+  private encuadreGuardado: FotoEncuadre | null = null;
 
   // Formularios
   pacienteForm: FormGroup;
@@ -867,6 +888,9 @@ export class PacienteFormComponent implements OnInit {
           // Cargar foto actual si existe
           if (pacienteData.foto_url) {
             this.currentPhotoUrl.set(pacienteData.foto_url);
+            this.encuadre.set(pacienteData.foto_encuadre ?? null);
+            this.fotoGuardada.set(pacienteData.foto_url);
+            this.encuadreGuardado = pacienteData.foto_encuadre ?? null;
           }
 
           // Datos preparados para el formulario
@@ -1058,6 +1082,13 @@ export class PacienteFormComponent implements OnInit {
 
   onSubmit(): void {
     if (this.pacienteForm.valid) {
+      if (this.fotoPorEliminar() && !confirm('Se eliminará la foto actual del paciente y no se podrá recuperar. ¿Continuar?')) {
+        this.currentPhotoUrl.set(this.fotoGuardada());
+        this.encuadre.set(this.encuadreGuardado);
+        this.snackBar.open('La foto se conservó. Los cambios aún no se han guardado.', 'Cerrar', { duration: 4000 });
+        return;
+      }
+
       this.loading.set(true);
 
       let formData: PacienteFormData;
@@ -1146,6 +1177,10 @@ export class PacienteFormComponent implements OnInit {
               // Si hay una foto seleccionada, subirla
               if (this.selectedFile()) {
                 await this.uploadPhotoIfSelected(this.pacienteId!);
+              } else if (this.fotoPorEliminar()) {
+                await firstValueFrom(this.pacientesService.eliminarFotoPaciente(this.pacienteId!));
+              } else if (this.encuadreCambiado()) {
+                await firstValueFrom(this.pacientesService.actualizarEncuadreFoto(this.pacienteId!, this.encuadre()));
               }
 
               this.loading.set(false);
@@ -1159,7 +1194,7 @@ export class PacienteFormComponent implements OnInit {
               this.loading.set(false);
               // El paciente se actualizó pero la foto falló
               this.snackBar.open(
-                'Paciente actualizado, pero hubo un error al subir la foto',
+                'Paciente actualizado, pero hubo un error al guardar la foto',
                 'Cerrar',
                 { duration: 5000 }
               );
@@ -1297,6 +1332,8 @@ export class PacienteFormComponent implements OnInit {
   // Funciones para manejo de fotos
   onFileSelected(event: any): void {
     const file = event.target.files[0];
+    // Limpiar el input para poder volver a elegir el mismo archivo
+    event.target.value = '';
     if (file) {
       // Validar tipo de archivo
       if (!file.type.startsWith('image/')) {
@@ -1316,15 +1353,39 @@ export class PacienteFormComponent implements OnInit {
       const reader = new FileReader();
       reader.onload = (e: any) => {
         this.selectedPhoto.set(e.target.result);
+        this.encuadre.set(null);
+        this.encuadreCambiado.set(false);
+        this.abrirEncuadre();
       };
       reader.readAsDataURL(file);
     }
   }
 
   removePhoto(): void {
-    this.selectedPhoto.set(null);
-    this.selectedFile.set(null);
+    this.encuadreCambiado.set(false);
+
+    // Una foto nueva sin guardar solo se descarta: vuelve a verse la que había.
+    if (this.selectedFile()) {
+      this.selectedPhoto.set(null);
+      this.selectedFile.set(null);
+      this.encuadre.set(this.currentPhotoUrl() ? this.encuadreGuardado : null);
+      return;
+    }
+
     this.currentPhotoUrl.set(null);
+    this.encuadre.set(null);
+  }
+
+  abrirEncuadre(): void {
+    const src = this.selectedPhoto() ?? this.getImageUrl(this.currentPhotoUrl()!);
+    this.dialog.open<FotoEncuadreDialogComponent, FotoEncuadreDialogData, FotoEncuadre>(
+      FotoEncuadreDialogComponent,
+      { data: { src, encuadre: this.encuadre() }, width: '420px', maxWidth: '95vw' }
+    ).afterClosed().subscribe(encuadre => {
+      if (!encuadre) return;
+      this.encuadre.set(encuadre);
+      this.encuadreCambiado.set(!this.selectedFile());
+    });
   }
 
   // Funciones de utilidad para imágenes
@@ -1349,7 +1410,7 @@ export class PacienteFormComponent implements OnInit {
         return;
       }
 
-      this.pacientesService.uploadFotoPaciente(mascotaId, file).subscribe({
+      this.pacientesService.uploadFotoPaciente(mascotaId, file, this.encuadre()).subscribe({
         next: (response) => {
           this.currentPhotoUrl.set(response.data?.foto_url);
           this.selectedPhoto.set(null);

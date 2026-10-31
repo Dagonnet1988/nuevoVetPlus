@@ -15,6 +15,8 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { environment } from '../../../environments/environment';
+import { FotoEncuadre } from '../../models/paciente.interface';
+import { FotoEncuadreDirective } from '../../directives/foto-encuadre.directive';
 import {
   PacientesService,
   UnificacionPreview,
@@ -50,7 +52,7 @@ const esFotoReal = (v: unknown) => !vacio(v) && !esFotoPorDefecto(v);
   imports: [
     CommonModule, FormsModule, RouterModule, DatePipe, MatCardModule, MatButtonModule, MatIconModule,
     MatFormFieldModule, MatInputModule, MatAutocompleteModule, MatRadioModule, MatProgressSpinnerModule,
-    MatSnackBarModule, MatTooltipModule
+    MatSnackBarModule, MatTooltipModule, FotoEncuadreDirective
   ],
   template: `
     <div class="unificar-container">
@@ -126,7 +128,7 @@ const esFotoReal = (v: unknown) => !vacio(v) && !esFotoPorDefecto(v);
                           </mat-radio-button>
                         }
                         @if (c.key === 'foto_url' && urlFoto(lado); as src) {
-                          <div><img class="miniatura" [src]="src" alt="Foto"></div>
+                          <div class="miniatura"><img [src]="src" alt="Foto" [appFotoEncuadre]="encuadreFoto(lado)"></div>
                         }
                       </td>
                     }
@@ -269,7 +271,8 @@ const esFotoReal = (v: unknown) => !vacio(v) && !esFotoPorDefecto(v);
     td.campo { font-weight: 600; color: #455a64; white-space: nowrap; width: 160px; }
     td.elegido { background: #f1f8e9; }
     tr.conteo td { background: #fafafa; }
-    .miniatura { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; margin-top: 6px; border: 1px solid #eceff1; }
+    .miniatura { width: 56px; height: 56px; overflow: hidden; border-radius: 8px; margin-top: 6px; border: 1px solid #eceff1; }
+    .miniatura img { display: block; width: 100%; height: 100%; object-fit: cover; }
     .efectos ul { margin: 0 0 16px; padding-left: 20px; line-height: 1.6; }
     .full { width: 100%; }
     .acciones { display: flex; justify-content: flex-end; gap: 8px; }
@@ -346,6 +349,10 @@ export class UnificarPacientesComponent implements OnInit, OnDestroy {
     const v = (this.datos[lado]?.ficha as any)?.foto_url;
     if (vacio(v)) return null;
     return String(v).startsWith('http') ? String(v) : `${environment.backendUrl}${v}`;
+  }
+
+  encuadreFoto(lado: Lado): FotoEncuadre | null {
+    return (this.datos[lado]?.ficha as any)?.foto_encuadre ?? null;
   }
 
   onEscribir(lado: Lado, valor: string | Opcion): void {

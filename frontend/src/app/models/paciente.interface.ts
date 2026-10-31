@@ -1,3 +1,10 @@
+/** Cómo se muestra una foto: posición en porcentaje (0-100) y zoom (1-4). */
+export interface FotoEncuadre {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
 export interface Cliente {
   id_cliente?: string;
   nombre: string;
@@ -22,6 +29,7 @@ export interface Mascota {
   microchip?: string;
   notas?: string;
   foto_url?: string;
+  foto_encuadre?: FotoEncuadre | null;
   activo?: boolean;
   fecha_registro?: string;
   // Datos del cliente para la vista

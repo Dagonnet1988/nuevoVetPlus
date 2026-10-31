@@ -77,6 +77,7 @@ const cargarPaciente = async (db, tenantId, idMascota) => {
             nombre: m.nombre, especie: m.especie, raza: m.raza, sexo: m.sexo, edad: m.edad,
             peso: m.peso, color: m.color, fecha_nacimiento: m.fecha_nacimiento_txt,
             esterilizado: m.esterilizado, microchip: m.microchip, foto_url: m.foto_url,
+            foto_encuadre: m.foto_encuadre,
             activo: m.activo
         },
         propietario: {
@@ -257,6 +258,11 @@ export const ejecutarUnificacion = async (req, res) => {
                 vals.push(filaB[campo]);
                 sets.push(`${campo} = $${vals.length}`);
             }
+        }
+        // El encuadre acompaña a la foto elegida.
+        if (opciones.campos.foto_url === 'secundario') {
+            vals.push(filaB.foto_encuadre);
+            sets.push(`foto_encuadre = $${vals.length}`);
         }
         vals.push(efectos.propietario_final.id_cliente);
         sets.push(`id_cliente = $${vals.length}`);

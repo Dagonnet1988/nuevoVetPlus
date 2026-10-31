@@ -1,3 +1,5 @@
+import { FotoEncuadre } from './paciente.interface';
+
 export interface Cita {
   id_cita: string;
   codigo_cita: string;
@@ -23,6 +25,7 @@ export interface Cita {
     especie: string;
     raza?: string;
     foto_url?: string;
+    foto_encuadre?: FotoEncuadre | null;
     cliente?: {
       nombre: string;
       documento?: string;
@@ -43,6 +46,7 @@ export interface Cita {
   mascota_especie?: string;
   mascota_raza?: string;
   mascota_foto_url?: string;
+  mascota_foto_encuadre?: FotoEncuadre | null;
   cliente_nombre?: string;
   cliente_documento?: string;
   cliente_telefono?: string;

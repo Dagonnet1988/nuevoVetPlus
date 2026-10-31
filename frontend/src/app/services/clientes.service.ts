@@ -1,3 +1,4 @@
+import { FotoEncuadre } from '../models/paciente.interface';
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
@@ -16,6 +17,7 @@ export interface Cliente {
   consentimiento_firmado?: boolean;
   total_mascotas?: number;
   foto_primer_mascota?: string;
+  foto_primer_mascota_encuadre?: FotoEncuadre | null;
   created_at: string;
   updated_at: string;
 }
