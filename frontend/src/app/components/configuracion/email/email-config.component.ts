@@ -58,6 +58,10 @@ export class EmailConfigComponent implements OnInit {
     hasMore: false
   });
   oauthConnected = signal(false);
+  // Google rechazó la autorización guardada: los correos no salen hasta volver a conectar.
+  conexionVencida = signal(false);
+  ultimoError = signal<string | null>(null);
+  ultimoErrorAt = signal<string | null>(null);
   oauthEmail = signal<string | null>(null);
   oauthSecretStored = signal(false);
   showSmtpConfig = signal(false);
@@ -149,6 +153,9 @@ export class EmailConfigComponent implements OnInit {
           });
 
           this.oauthConnected.set(!!config.oauth_connected);
+          this.conexionVencida.set(!!config.conexion_vencida);
+          this.ultimoError.set(config.ultimo_error ?? null);
+          this.ultimoErrorAt.set(config.ultimo_error_at ?? null);
           this.oauthEmail.set(config.oauth_email || null);
           this.oauthSecretStored.set(Boolean(config.oauth_client_secret));
 

@@ -374,12 +374,13 @@ export const updateUser = async (req, res) => {
         }
 
         const { id } = req.params;
-        const { nombre, apellido, email, rol, especialidad, numero_licencia, activo, telefono, direccion, tipo_documento } = req.body;
+        const { nombre, apellido, email, rol, especialidad, numero_licencia, activo, telefono, direccion, tipo_documento, documento } = req.body;
+        const tenantId = req.tenantId ?? req.user?.tenant_id;
 
         // Verificar que el usuario existe
         const existingUser = await query(
-            'SELECT id_usuario, email, rol FROM vetplus_auth.usuarios WHERE id_usuario = $1',
-            [id]
+            'SELECT id_usuario, email, rol, documento FROM vetplus_auth.usuarios WHERE id_usuario = $1 AND id_tenant = $2',
+            [id, tenantId]
         );
 
         if (existingUser.rows.length === 0) {
@@ -420,6 +421,22 @@ export const updateUser = async (req, res) => {
                 return res.status(409).json({
                     success: false,
                     message: 'Ya existe otro usuario con ese email'
+                });
+            }
+        }
+
+        // El documento es el usuario de inicio de sesión: solo admin lo cambia y no puede repetirse en la clínica.
+        const documentoNuevo = isAdmin && documento ? String(documento).trim() : null;
+        if (documentoNuevo && documentoNuevo !== existingUser.rows[0].documento) {
+            const documentoExists = await query(
+                'SELECT id_usuario FROM vetplus_auth.usuarios WHERE documento = $1 AND id_tenant = $2 AND id_usuario != $3',
+                [documentoNuevo, tenantId, id]
+            );
+
+            if (documentoExists.rows.length > 0) {
+                return res.status(409).json({
+                    success: false,
+                    message: 'Ya existe otro usuario con ese documento'
                 });
             }
         }
@@ -490,6 +507,12 @@ export const updateUser = async (req, res) => {
                 updateFields.push(`tipo_documento = $${paramCount}`);
                 updateValues.push(tipo_documento);
             }
+
+            if (documentoNuevo) {
+                paramCount++;
+                updateFields.push(`documento = $${paramCount}`);
+                updateValues.push(documentoNuevo);
+            }
         }
 
         if (updateFields.length === 0) {
@@ -506,7 +529,7 @@ export const updateUser = async (req, res) => {
             UPDATE vetplus_auth.usuarios 
             SET ${updateFields.join(', ')}
             WHERE id_usuario = $${paramCount + 1}
-            RETURNING id_usuario, nombre, apellido, email, rol, especialidad, numero_licencia, activo, telefono, direccion, tipo_documento, avatar_url, updated_at
+            RETURNING id_usuario, nombre, apellido, email, documento, rol, especialidad, numero_licencia, activo, telefono, direccion, tipo_documento, avatar_url, updated_at
         `;
 
         const result = await query(updateQuery, updateValues);

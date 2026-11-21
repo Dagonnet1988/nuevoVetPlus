@@ -89,7 +89,12 @@
           <div class="oauth-panel">
             <div>
               <strong>Conexión con Google para Correo:</strong>
-              @if (oauthConnected()) {
+              @if (oauthConnected() && conexionVencida()) {
+                <span class="oauth-bad">Conexión vencida</span>
+                @if (oauthEmail()) {
+                  <span class="oauth-email">({{ oauthEmail() }})</span>
+                }
+              } @else if (oauthConnected()) {
                 <span class="oauth-ok">Conectado</span>
                 @if (oauthEmail()) {
                   <span class="oauth-email">({{ oauthEmail() }})</span>
@@ -97,11 +102,23 @@
               } @else {
                 <span class="oauth-bad">No conectado</span>
               }
+              @if (conexionVencida()) {
+                <p class="oauth-alert">
+                  Google rechazó la autorización y los correos no se están enviando
+                  @if (ultimoErrorAt()) { (último intento: {{ ultimoErrorAt() | date:'dd/MM/yyyy HH:mm' }}) }.
+                  Presiona "Conectar Google" para autorizar de nuevo.
+                </p>
+              } @else if (ultimoError()) {
+                <p class="oauth-alert">
+                  El último correo no se pudo enviar
+                  @if (ultimoErrorAt()) { ({{ ultimoErrorAt() | date:'dd/MM/yyyy HH:mm' }}) }: {{ ultimoError() }}
+                </p>
+              }
               <p class="oauth-help">Al conectar, Ramelo guarda la configuración actual y luego abre Google para autorizar.</p>
             </div>
 
             <div class="oauth-actions">
-              <button class="oauth-btn" mat-stroked-button color="primary" (click)="connectGoogle()" [disabled]="oauthLoading() || saving() || oauthConnected()">
+              <button class="oauth-btn" mat-stroked-button color="primary" (click)="connectGoogle()" [disabled]="oauthLoading() || saving() || (oauthConnected() && !conexionVencida())">
                 @if (oauthLoading()) {
                   <mat-spinner diameter="18"></mat-spinner>
                 } @else {

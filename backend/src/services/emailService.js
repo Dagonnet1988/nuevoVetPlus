@@ -257,15 +257,21 @@ export async function sendEmail({
     replyTo: config.correo_respuesta || null
   });
 
-  const info = await transporter.sendMail({
-    from: buildFrom(config),
-    to,
-    replyTo: config.correo_respuesta || undefined,
-    subject,
-    text: finalText,
-    html: finalHtml,
-    attachments: finalAttachments
-  });
+  let info;
+  try {
+    info = await transporter.sendMail({
+      from: buildFrom(config),
+      to,
+      replyTo: config.correo_respuesta || undefined,
+      subject,
+      text: finalText,
+      html: finalHtml,
+      attachments: finalAttachments
+    });
+  } catch (error) {
+    await registrarEnvioFallido({ tenantId, to, subject, error, logContext });
+    throw error;
+  }
 
   if (logContext && logContext.tipo_envio) {
     const logMetadata = {
@@ -313,11 +319,59 @@ export async function sendEmail({
   };
 }
 
+// Google rechazó la autorización (vencida o revocada): hay que volver a conectar.
+const esErrorDeAutorizacion = (mensaje) =>
+  /invalid_grant|EAUTH|Invalid login|Username and Password not accepted|unauthorized_client/i.test(String(mensaje || ''));
+
+/** Registra un envío fallido; así un correo caído no pasa desapercibido. Nunca lanza. */
+async function registrarEnvioFallido({ tenantId, to, subject, error, logContext }) {
+  try {
+    await query(
+      `INSERT INTO system.email_delivery_log (
+         tipo_envio, destinatario_email, asunto, estado, detalle_error, metadata, id_tenant, created_by
+       ) VALUES ($1,$2,$3,'fallido',$4,$5::jsonb,$6,$7)`,
+      [
+        logContext?.tipo_envio || 'sin_tipo',
+        String(to || 'sin-destino'),
+        subject || null,
+        String(error?.message || error).slice(0, 1000),
+        JSON.stringify({ ...(logContext?.metadata || {}), codigo_error: error?.code || null }),
+        tenantId,
+        logContext?.userId || null
+      ]
+    );
+  } catch (logError) {
+    console.error('Error registrando envío de correo fallido:', logError.message);
+  }
+}
+
+/** Último envío desde que se guardó la configuración: si falló por autorización, la conexión está vencida. */
+async function getEstadoEnvios(tenantId, desde) {
+  const result = await query(
+    `SELECT estado, detalle_error, created_at
+     FROM system.email_delivery_log
+     WHERE id_tenant = $1 AND created_at >= $2
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [tenantId, desde]
+  );
+  const ultimo = result.rows[0];
+  const fallido = ultimo?.estado === 'fallido';
+  return {
+    conexion_vencida: fallido && esErrorDeAutorizacion(ultimo.detalle_error),
+    ultimo_error: fallido ? ultimo.detalle_error : null,
+    ultimo_error_at: fallido ? ultimo.created_at : null
+  };
+}
+
 export async function getSafeEmailConfig(tenantId) {
   const config = await getActiveEmailConfig(tenantId);
   if (!config) return null;
 
+  const estadoEnvios = await getEstadoEnvios(tenantId, config.updated_at || config.created_at);
+
   return {
+    ...estadoEnvios,
     id_config_correo: config.id_config_correo,
     proveedor: config.proveedor,
     auth_mode: config.auth_mode || 'smtp',

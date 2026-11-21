@@ -145,6 +145,9 @@ export interface EmailConfig {
   oauth_client_secret?: string;
   oauth_email?: string;
   oauth_connected?: boolean;
+  conexion_vencida?: boolean;
+  ultimo_error?: string | null;
+  ultimo_error_at?: string | null;
   oauth_redirect_uri?: string;
   activa?: boolean;
   created_at?: string;

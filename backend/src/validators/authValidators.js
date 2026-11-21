@@ -190,5 +190,11 @@ export const validateUpdateUser = [
   body('activo')
     .optional()
     .isBoolean()
-    .withMessage('Activo debe ser true o false')
+    .withMessage('Activo debe ser true o false'),
+
+  body('documento')
+    .optional()
+    .trim()
+    .isLength({ min: 5, max: 20 })
+    .withMessage('Documento debe tener entre 5 y 20 caracteres')
 ];
