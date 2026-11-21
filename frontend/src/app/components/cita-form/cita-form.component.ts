@@ -33,6 +33,7 @@ import {
   SugerenciaHorario
 } from '../../models/cita.interface';
 import { sinTildes } from '../../utils/text.utils';
+import { opcionesHora } from '../../utils/hora.utils';
 
 interface EditableRecurringOccurrence {
   indice: number;
@@ -1048,6 +1049,8 @@ export class CitaFormComponent implements OnInit {
       this.router.navigate(['/citas']);
     }
   }
+
+  readonly opcionesHora = opcionesHora;
 
   private formatTimeFromDateTime(date: Date): string {
     // Valor para <input type="time">: exige "HH:mm" con ceros. toLocaleTimeString

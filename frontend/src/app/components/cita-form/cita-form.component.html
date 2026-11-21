@@ -127,11 +127,14 @@
 
               <mat-form-field appearance="outline" class="time-field">
                 <mat-label>Hora de inicio</mat-label>
-                <input matInput type="time" formControlName="hora_inicio" required
-                       (change)="onHoraChange()" min="07:00" max="20:00">
+                <mat-select formControlName="hora_inicio" required (selectionChange)="onHoraChange()">
+                  @for (op of opcionesHora(citaForm.get('hora_inicio')?.value); track op.value) {
+                    <mat-option [value]="op.value">{{ op.label }}</mat-option>
+                  }
+                </mat-select>
                 <mat-error>
                   @if (citaForm.get('hora_inicio')?.hasError('required')) {
-                    Selecciona la hora completa: hora, minutos y a. m./p. m. (entre 07:00 y 20:00)
+                    Selecciona la hora (entre 7:00 a. m. y 8:00 p. m.)
                   }
                 </mat-error>
               </mat-form-field>
@@ -260,11 +263,13 @@
 
                             <mat-form-field appearance="outline" class="preview-field preview-time">
                               <mat-label>Hora</mat-label>
-                              <input
-                                matInput
-                                type="time"
+                              <mat-select
                                 [value]="item.hora"
-                                (input)="updateOccurrenceHora($index, $any($event.target).value)">
+                                (selectionChange)="updateOccurrenceHora($index, $event.value)">
+                                @for (op of opcionesHora(item.hora); track op.value) {
+                                  <mat-option [value]="op.value">{{ op.label }}</mat-option>
+                                }
+                              </mat-select>
                             </mat-form-field>
 
                             <mat-form-field appearance="outline" class="preview-field preview-type">

@@ -12,6 +12,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Router } from '@angular/router';
 import { ConfiguracionService, DiaEspecial, EmpresaConfig, HorarioAtencion } from '../../../services/configuracion.service';
 import { sinTildes } from '../../../utils/text.utils';
+import { opcionesHora } from '../../../utils/hora.utils';
 
 const DDMMYYYY_REGEX = /^\d{2}-\d{2}-\d{4}$/;
 const CURRENT_YEAR = String(new Date().getFullYear());
@@ -79,6 +80,7 @@ export class EmpresaConfigComponent implements OnInit {
 
   empresaForm: FormGroup;
   diaEspecialForm: FormGroup;
+  readonly opcionesHora = opcionesHora;
 
   readonly tiposDiaEspecial = [
     { value: 'festivo', label: 'Festivo' },

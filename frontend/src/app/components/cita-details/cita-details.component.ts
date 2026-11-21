@@ -13,6 +13,8 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatBadgeModule } from '@angular/material/badge';
 import { MatListModule } from '@angular/material/list';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatSelectModule } from '@angular/material/select';
+import { opcionesHora } from '../../utils/hora.utils';
 import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { FormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -1261,7 +1263,8 @@ interface CitaReagendarDialogData {
     MatFormFieldModule,
     MatInputModule,
     MatDatepickerModule,
-    MatNativeDateModule
+    MatNativeDateModule,
+    MatSelectModule
   ],
   template: `
     <h2 mat-dialog-title>
@@ -1280,7 +1283,11 @@ interface CitaReagendarDialogData {
 
         <mat-form-field appearance="outline" class="time-field">
           <mat-label>Nueva hora</mat-label>
-          <input matInput type="time" [(ngModel)]="hora" required min="07:00" max="20:00">
+          <mat-select [(ngModel)]="hora" required>
+            @for (op of opcionesHora(hora); track op.value) {
+              <mat-option [value]="op.value">{{ op.label }}</mat-option>
+            }
+          </mat-select>
         </mat-form-field>
       </div>
     </mat-dialog-content>
@@ -1303,6 +1310,7 @@ interface CitaReagendarDialogData {
 export class CitaReagendarDialogComponent {
   fecha: Date;
   hora: string;
+  readonly opcionesHora = opcionesHora;
 
   constructor(
     public dialogRef: MatDialogRef<CitaReagendarDialogComponent>,

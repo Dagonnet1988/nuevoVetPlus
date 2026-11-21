@@ -220,12 +220,20 @@
           <div class="form-row">
             <mat-form-field appearance="outline" class="form-field">
               <mat-label>Hora inicio</mat-label>
-              <input matInput type="time" formControlName="hora_inicio">
+              <mat-select formControlName="hora_inicio">
+                @for (op of opcionesHora(diaEspecialForm.get('hora_inicio')?.value, '00:00', '23:45'); track op.value) {
+                  <mat-option [value]="op.value">{{ op.label }}</mat-option>
+                }
+              </mat-select>
             </mat-form-field>
 
             <mat-form-field appearance="outline" class="form-field">
               <mat-label>Hora fin</mat-label>
-              <input matInput type="time" formControlName="hora_fin">
+              <mat-select formControlName="hora_fin">
+                @for (op of opcionesHora(diaEspecialForm.get('hora_fin')?.value, '00:00', '23:45'); track op.value) {
+                  <mat-option [value]="op.value">{{ op.label }}</mat-option>
+                }
+              </mat-select>
             </mat-form-field>
           </div>
         }
